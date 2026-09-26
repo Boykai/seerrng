@@ -1,4 +1,4 @@
-import type { IssueType } from '@server/constants/issue';
+import type { IssueSubtype, IssueType } from '@server/constants/issue';
 import { IssueStatus } from '@server/constants/issue';
 import type { SeasonEpisodeSelection } from '@server/interfaces/api/seasonInterfaces';
 import { DbAwareColumn, resolveDbType } from '@server/utils/DbColumnHelper';
@@ -24,6 +24,9 @@ class Issue {
   @Column({ type: 'int' })
   @Index()
   public issueType: IssueType;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  public issueSubtype?: IssueSubtype | null;
 
   @Column({ type: 'int', default: IssueStatus.OPEN })
   public status: IssueStatus;

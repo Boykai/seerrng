@@ -11,6 +11,12 @@ follow provider-confirmed acquisition in **Requests > Request Status**. The
 connected providers perform the acquisition and expose imported files back to
 SeerrNG for download.
 
+Indexer searches happen in the provider. QuestarrNG supports Prowlarr-synced
+indexers for PC games; ROMarrNG can use Prowlarr, direct Torznab/Newznab, and
+plugin sources. SeerrNG does not search Prowlarr directly, and IGDB remains the
+catalog for game discovery. See [Indexer searches by media
+category](./indexer-searches.md) for the full routing map.
+
 This feature covers **Retro**, **Modern**, and **PC Games**. General desktop
 applications are a future wishlist item. SeerrNG does not install, launch, or
 play games and does not configure emulators, Proton, FEX, or other runtime
@@ -102,8 +108,10 @@ An administrator can set a global software request limit in **Settings >
 Users** and per-user overrides from that user's **General** profile settings.
 The quota counts each Retro, Modern, or PC game request as one item. Failed,
 declined, and withdrawn requests do not count. Users can withdraw their own
-request while it is pending approval; after approval, SeerrNG has no shared
-cancel operation across both acquisition providers.
+request while it is pending approval. The requester can also cancel an active
+request while they still have **Request** permission; administrators with
+**Manage Requests** can cancel any active software request. Cancelled requests
+are separate from requests withdrawn before approval.
 
 ## Follow progress
 
@@ -120,15 +128,35 @@ SeerrNG, so the status page can be reopened after a restart.
 | Searching | The provider is looking for an acquisition source. |
 | Downloading | The provider reports that a download is in progress. |
 | Verifying import | The provider reports acquisition, but SeerrNG is still waiting for an imported file. |
-| Available | The provider reports the request as available and SeerrNG has verified at least one deliverable file. |
+| Available | The provider reports the requested game in its library. A **Download copy** action appears only when SeerrNG can verify and stream a request-scoped local file. |
 | Failed | The provider reports that acquisition failed. The requester or an authorized administrator may be able to retry. |
 | Declined | An administrator declined the request. |
 | Withdrawn | The requester withdrew the request before approval. |
+| Cancelled | The provider confirmed that active work was cancelled. |
 
 SeerrNG refreshes active provider requests in the background once per minute
-and while Request Status is open. A provider-reported completion alone does
-not expose a download action: SeerrNG also needs a request-scoped imported file
-from that provider.
+and while Request Status is open. An available library item may not have a
+download action when its files are remote or unavailable to SeerrNG. A
+provider-reported completion alone never exposes a download action.
+
+### Cancel an active request
+
+QuestarrNG can cancel only downloads that its database links to this SeerrNG
+request. SeerrNG asks QuestarrNG to stop the tracked download while preserving
+the downloaded files. If an active download cannot be tied safely to this
+request, cancellation is refused; stop that download in QuestarrNG or its
+download client first.
+
+ROMarrNG can cancel while a request is still searching and has not handed a
+release to a download client. After handoff, cancel the transfer in ROMarrNG
+or the download client. Request Status explains this limit and hides the
+unavailable cancellation action. The provider remains authoritative and may
+refuse cancellation if its state changed while the page was open.
+
+The same action is exposed to authorized clients as
+`POST /api/v1/request/software/status/{id}/cancel`. The requester must retain
+**Request** permission; an administrator needs **Manage Requests**. The route
+returns `409` when the provider cannot safely cancel the current work.
 
 Request Status is paginated, so older software requests remain available after
 the first page.
@@ -196,12 +224,15 @@ alongside other media quotas.
 - **The request is still waiting:** An administrator may need to approve it,
   or the acquisition provider may still be searching, downloading, or
   verifying its import.
-- **The request is Available but has no download action:** The provider must
-  list and stream an imported file associated with that request. Check the
-  provider request and import state; an available title elsewhere in the
-  provider library does not count as this request's deliverable.
-- **The retry asks for confirmation:** Check the download client's queue and
-  history before confirming, to avoid starting a duplicate download.
+- **The request is Available but has no download action:** Available means the
+  provider has the title in its library. The download action additionally
+  requires a local, request-scoped file that SeerrNG can read and stream. Check
+  the provider's library mode, import state, and filesystem access.
+- **Retry or cancellation asks for confirmation:** Check the download client's
+  queue and history before confirming, to avoid leaving or starting a duplicate
+  download. QuestarrNG
+  also asks for this confirmation if it restarts during a download handoff and
+  cannot find a request-linked download record.
 
 For provider API and release details, use the [QuestarrNG
 documentation](https://github.com/snapetech/QuestarrNG) and [ROMarrNG

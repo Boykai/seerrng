@@ -45,6 +45,11 @@ The magazine details page shows issue dates and whether each issue has a file.
 Magazine cards and details show the latest LazyLibrarian cover when one is
 available.
 
+LazyLibrarian performs magazine acquisition searches. Prowlarr has a
+LazyLibrarian app adapter that can sync indexers, but compatibility depends on
+the LazyLibrarian build. After syncing, confirm the providers appear in
+LazyLibrarian and run a search there. SeerrNG does not query Prowlarr directly.
+
 Users can add magazines to a SeerrNG watchlist from magazine cards or details.
 With **Auto-Request** and **Auto-Request Magazines** permission, enable
 **Auto-Request Magazines** in your profile to submit a request when you add a
@@ -53,9 +58,11 @@ magazine from its card or details page, then find or remove it with the
 **Magazines** filter on the Blocklist page.
 
 Users with **Create Issues** can report a problem for an available tracked
-magazine. Magazine reports use the **Other** category. Users with **View
-Issues** or **Manage Issues** can see open reports on magazine details and use
-the magazine filter on the **Issues** page.
+magazine. Reports use the **Other** category with a structured reason for a
+missing issue, wrong issue or date, damaged file, or incorrect metadata. The
+reason is saved and shown on the issue card and details page. Users with
+**View Issues** or **Manage Issues** can see open reports on magazine details
+and use the magazine filter on the **Issues** page.
 
 ## Manage tracked magazines
 
@@ -92,11 +99,10 @@ Connection tests fail:
 
 ## Current boundaries
 
-- Magazine discovery uses titles already tracked by LazyLibrarian. SeerrNG can
-  request an untracked title by name, but it does not provide a separate public
-  magazine metadata catalog.
+- Magazine discovery searches titles already tracked by LazyLibrarian.
+  SeerrNG can request an untracked title by name, but it does not provide a
+  separate public magazine metadata catalog.
 - LazyLibrarian controls the magazine folder and search settings globally.
   SeerrNG does not offer per-request folders or profiles.
 - The LazyLibrarian API used here does not provide SeerrNG with individual
-  in-progress magazine search cancellation or live download progress. Reports
-  use the **Other** issue category.
+  in-progress magazine search cancellation or live download progress.

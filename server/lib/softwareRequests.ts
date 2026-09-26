@@ -62,7 +62,7 @@ const safeErrorMessage = (status: SoftwareProviderStatus): string | null =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 
-const isRomarrRetryConfirmationRequired = (error: unknown): boolean => {
+const isRetryConfirmationRequired = (error: unknown): boolean => {
   if (!isRecord(error) || !isRecord(error.response)) return false;
   const data = error.response.data;
   return (
@@ -97,12 +97,9 @@ const sanitizeSoftwareAssets = (value: unknown): SoftwareAsset[] => {
 };
 
 const mapProviderStatus = (
-  providerRequest: SoftwareProviderRequest,
-  assets: SoftwareAsset[]
+  providerRequest: SoftwareProviderRequest
 ): SoftwareRequestStatus => {
-  if (providerRequest.status === 'available') {
-    return assets.length > 0 ? 'available' : 'importing';
-  }
+  if (providerRequest.status === 'available') return 'available';
   if (providerRequest.status === 'accepted') return 'approved';
   return providerRequest.status;
 };
@@ -247,7 +244,8 @@ const getProviderRequest = async (
       ? getQuestarr().createRequest(
           request.externalRequestId,
           request.title,
-          variant
+          variant,
+          request.catalogId ?? undefined
         )
       : getRomarr().createRequest(
           request.externalRequestId,
@@ -323,7 +321,7 @@ export const refreshSoftwareRequest = async (
         }));
     }
 
-    const nextStatus = mapProviderStatus(providerRequest, assets);
+    const nextStatus = mapProviderStatus(providerRequest);
     const previousStatus = request.status;
     request.status = nextStatus;
     request.errorMessage = safeErrorMessage(providerRequest.status);
@@ -442,6 +440,52 @@ export const withdrawPendingSoftwareRequest = async (
   return request;
 };
 
+export const cancelSoftwareRequest = async (
+  request: SoftwareRequest,
+  confirmNoExistingDownload = false
+): Promise<SoftwareRequest> => {
+  if (
+    !['approved', 'searching', 'downloading', 'importing', 'failed'].includes(
+      request.status
+    )
+  ) {
+    throw new SoftwareRequestStateError(
+      'This software request cannot be cancelled in its current state.'
+    );
+  }
+  if (
+    request.provider === 'romarr' &&
+    ['downloading', 'importing'].includes(request.status)
+  ) {
+    throw new SoftwareRequestStateError(
+      'ROMarrNG cannot stop a download after it reaches the download client. Cancel it in ROMarrNG or the download client.'
+    );
+  }
+
+  const providerRequest =
+    request.provider === 'questarr'
+      ? await getQuestarr().cancelRequest(
+          request.externalRequestId,
+          confirmNoExistingDownload
+        )
+      : await getRomarr().cancelRequest(
+          request.externalRequestId,
+          confirmNoExistingDownload
+        );
+  if (providerRequest.status !== 'cancelled') {
+    throw new SoftwareRequestStateError(
+      'The provider did not confirm that the request was cancelled.'
+    );
+  }
+
+  request.status = 'cancelled';
+  request.errorMessage = null;
+  request.lastCheckedAt = new Date();
+  await getRepository(SoftwareRequest).save(request);
+  await recordStatusEvent(request, 'Request cancelled by requester.');
+  return request;
+};
+
 export const retrySoftwareRequest = async (
   request: SoftwareRequest,
   confirmNoExistingDownload = false
@@ -457,7 +501,7 @@ export const retrySoftwareRequest = async (
       providerRequest.status === 'available'
         ? sanitizeSoftwareAssets(await getAssets(request))
         : [];
-    const nextStatus = mapProviderStatus(providerRequest, assets);
+    const nextStatus = mapProviderStatus(providerRequest);
     request.attempt += 1;
     request.status = nextStatus;
     request.errorMessage = safeErrorMessage(providerRequest.status);
@@ -486,18 +530,17 @@ export const retrySoftwareRequest = async (
   try {
     const providerRequest =
       request.provider === 'questarr'
-        ? await getQuestarr().retryRequest(request.externalRequestId)
+        ? await getQuestarr().retryRequest(
+            request.externalRequestId,
+            confirmNoExistingDownload
+          )
         : await getRomarr().retryRequest(
             request.externalRequestId,
             confirmNoExistingDownload
           );
     return saveProviderStatus(providerRequest);
   } catch (error) {
-    if (
-      request.provider === 'romarr' &&
-      !confirmNoExistingDownload &&
-      isRomarrRetryConfirmationRequired(error)
-    ) {
+    if (!confirmNoExistingDownload && isRetryConfirmationRequired(error)) {
       throw new SoftwareRequestConfirmationRequiredError();
     }
 

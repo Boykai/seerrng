@@ -12,7 +12,10 @@ import IssueMediaSummary, {
   isIssueMusic,
   type IssueMediaDetails,
 } from '@app/components/IssueDetails/IssueMediaSummary';
-import { issueOptions } from '@app/components/IssueModal/constants';
+import {
+  getIssueSubtypeOptionsForMediaType,
+  issueOptions,
+} from '@app/components/IssueModal/constants';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -61,6 +64,7 @@ const messages = defineMessages('components.IssueDetails', {
   validationCommentLength:
     'Comment must be {maxLength, number} characters or fewer',
   unknownissuetype: 'Unknown',
+  issuereason: 'Reason',
 });
 
 const IssueDetails = () => {
@@ -121,6 +125,9 @@ const IssueDetails = () => {
   const issueOption = issueOptions.find(
     (option) => option.issueType === issueData.issueType
   );
+  const issueSubtypeOption = getIssueSubtypeOptionsForMediaType(
+    issueData.media.mediaType
+  ).find((option) => option.value === issueData.issueSubtype);
   const isMovie = isIssueMovie(data);
   const isMusic = isIssueMusic(data);
   const isBook = isIssueBook(data);
@@ -295,6 +302,14 @@ const IssueDetails = () => {
                     issueOption?.name ?? messages.unknownissuetype
                   ),
                 },
+                ...(issueSubtypeOption
+                  ? [
+                      {
+                        label: intl.formatMessage(messages.issuereason),
+                        value: intl.formatMessage(issueSubtypeOption.name),
+                      },
+                    ]
+                  : []),
               ]}
             />
 

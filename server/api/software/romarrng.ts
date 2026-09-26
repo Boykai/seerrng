@@ -88,6 +88,16 @@ export class ROMarrNGAPI extends ExternalAPI {
     );
   }
 
+  public cancelRequest(
+    externalRequestId: string,
+    confirmNoExistingDownload = false
+  ): Promise<SoftwareProviderRequest> {
+    return this.post(
+      `/api/v1/integration/requests/${encodeURIComponent(externalRequestId)}/cancel`,
+      { confirmNoExistingDownload }
+    );
+  }
+
   public getAssets(externalRequestId: string): Promise<SoftwareAssetsResponse> {
     return this.get(
       `/api/v1/integration/requests/${encodeURIComponent(externalRequestId)}/assets`,

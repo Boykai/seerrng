@@ -92,12 +92,14 @@ export class QuestarrNGAPI extends ExternalAPI {
   public createRequest(
     externalRequestId: string,
     title: string,
-    variant: PcGameVariant
+    variant: PcGameVariant,
+    igdbId?: number
   ): Promise<SoftwareProviderRequest> {
     return this.post('/api/integration/seerrng/v1/requests', {
       externalRequestId,
       title,
       variant,
+      ...(igdbId ? { igdbId } : {}),
     });
   }
 
@@ -112,11 +114,22 @@ export class QuestarrNGAPI extends ExternalAPI {
   }
 
   public retryRequest(
-    externalRequestId: string
+    externalRequestId: string,
+    confirmNoExistingDownload = false
   ): Promise<SoftwareProviderRequest> {
     return this.post(
       `/api/integration/seerrng/v1/requests/${encodeURIComponent(externalRequestId)}/retry`,
-      {}
+      { confirmNoExistingDownload }
+    );
+  }
+
+  public cancelRequest(
+    externalRequestId: string,
+    confirmNoExistingDownload = false
+  ): Promise<SoftwareProviderRequest> {
+    return this.post(
+      `/api/integration/seerrng/v1/requests/${encodeURIComponent(externalRequestId)}/cancel`,
+      { confirmNoExistingDownload }
     );
   }
 

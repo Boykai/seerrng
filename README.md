@@ -29,6 +29,7 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
   - [Software requests: ROMs and PC games](https://snapetech.github.io/seerrng/using-seerr/software-acquisition/)
   - [Request Status and Download copy](https://snapetech.github.io/seerrng/using-seerr/request-status/)
   - [Books, authors, and series](https://snapetech.github.io/seerrng/using-seerr/books-and-series/)
+  - [Indexer searches by media category](https://snapetech.github.io/seerrng/using-seerr/indexer-searches/)
   - [Configure services](https://snapetech.github.io/seerrng/using-seerr/settings/services/)
 - [Screenshots](#screenshots)
 - [Install](#install)
@@ -212,7 +213,7 @@ Software requests:
 
 - QuestarrNG provides the IGDB catalog and acquisition for PC game requests.
 - ROMarrNG is also required for emulation requests. In **Settings > Services > Software Acquisition**, connect each provider and assign supported ROMarrNG systems to **Retro** or **Modern** before users can request them.
-- Software requests support global and per-user quotas. Requesters can withdraw their own requests before approval; provider-wide cancellation after approval is not available across both integrations.
+- Software requests support global and per-user quotas. Requesters can withdraw pending requests and cancel active QuestarrNG work that is linked to their request. ROMarrNG requests can be cancelled before download-client handoff; active transfers must be stopped in ROMarrNG or the download client.
 - Provider hostnames and ports must be reachable from the SeerrNG server or container. Use each provider's SeerrNG integration API key; keys stay server-side.
 - See the [software requests guide](https://snapetech.github.io/seerrng/using-seerr/software-acquisition/) for provider setup, request targets, status, retries, notifications, and downloads. See [Request Status](https://snapetech.github.io/seerrng/using-seerr/request-status/) for the shared Download copy workflow.
 

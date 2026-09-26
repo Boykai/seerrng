@@ -47,7 +47,7 @@ const messages = defineMessages('components.Settings.LazyLibrarianModal', {
   syncEnabledHelp:
     'Scan LazyLibrarian magazines and issue files to show current availability.',
   enableSearchHelp:
-    'Start a search for this magazine in LazyLibrarian after its request is approved.',
+    'Start a search for this magazine in LazyLibrarian after its request is approved. Prowlarr can sync indexers to LazyLibrarian; SeerrNG does not search Prowlarr directly. Verify synced indexers appear and work in your LazyLibrarian build.',
 });
 
 interface LazyLibrarianModalProps {

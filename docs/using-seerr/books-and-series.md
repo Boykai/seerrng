@@ -36,6 +36,9 @@ You can also open a volume's book details and request it individually. The
 request dialog supports books, audiobooks, or both when matching services are
 configured. To keep a particular edition, choose it in the edition selector;
 see [Requesting a specific edition](./bookshelf-backend.md#requesting-a-specific-edition).
+Book issue reports include reasons for missing content, a wrong edition,
+damaged files, and incorrect metadata. The selected reason stays visible on
+the issue card and details page, alongside the requester's explanation.
 
 ## Set language preferences
 
@@ -53,3 +56,9 @@ want to offer. See the [Bookshelf backend guide](./bookshelf-backend.md) for
 service setup and
 [Bookshelf Metadata Sources](./bookshelf-metadata-sources.md) for catalog
 behavior and provider-specific requirements.
+
+Prowlarr can sync book indexers through its Readarr app adapter when the
+configured Bookshelf-compatible service accepts that indexer configuration.
+The exact support depends on the provider build. SeerrNG searches book
+metadata catalogs and does not send acquisition searches to Prowlarr; see
+[Indexer searches by media category](./indexer-searches.md).

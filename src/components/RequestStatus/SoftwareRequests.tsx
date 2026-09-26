@@ -29,7 +29,7 @@ const messages = defineMessages('components.RequestStatus.SoftwareRequests', {
   available: 'Available',
   failed: 'Failed',
   declined: 'Declined',
-  cancelled: 'Withdrawn',
+  cancelled: 'Cancelled',
   retro: 'Retro',
   modern: 'Modern',
   game: 'PC game',
@@ -46,14 +46,17 @@ const messages = defineMessages('components.RequestStatus.SoftwareRequests', {
   approve: 'Approve',
   decline: 'Decline',
   withdraw: 'Withdraw',
+  cancel: 'Cancel',
+  romarrCancelUnavailable:
+    'ROMarrNG cannot stop this download after it reaches the download client. Stop it in ROMarrNG or the download client.',
   retry: 'Retry',
   manageError: 'This software request could not be updated.',
   downloadCopy: 'Download copy',
   downloadCopies: 'Download copies',
   downloadNamed: 'Download {name}',
   retryCheckRequired:
-    'ROMarrNG cannot tell whether the previous download started. Check the download client’s queue and history. Continue only if no matching download exists.',
-  retryAfterCheck: 'I checked; confirm retry',
+    'The provider cannot confirm whether the previous download started. Check the download client’s queue and history. Continue only if no matching download exists.',
+  confirmAfterCheck: 'I checked; continue',
   cancelRetry: 'Cancel',
   loadError: 'Software request status could not be loaded.',
   noRequests: 'No software requests yet.',
@@ -213,9 +216,10 @@ const SoftwareRequests = ({
   });
   const [workingId, setWorkingId] = useState<number | null>(null);
   const [historyRequestId, setHistoryRequestId] = useState<number | null>(null);
-  const [retryConfirmationId, setRetryConfirmationId] = useState<number | null>(
-    null
-  );
+  const [handoffConfirmation, setHandoffConfirmation] = useState<{
+    requestId: number;
+    action: 'retry' | 'cancel';
+  } | null>(null);
   const historyEndpoint = historyRequestId
     ? `/api/v1/request/software/status/${historyRequestId}`
     : null;
@@ -235,38 +239,47 @@ const SoftwareRequests = ({
 
   const mutateRequest = async (
     requestId: number,
-    action: 'approve' | 'decline' | 'retry' | 'withdraw',
+    action: 'approve' | 'decline' | 'retry' | 'withdraw' | 'cancel',
     confirmNoExistingDownload = false
   ) => {
     setWorkingId(requestId);
     try {
       await axios.post(
         `/api/v1/request/software/status/${requestId}/${action}`,
-        action === 'retry' ? { confirmNoExistingDownload } : undefined
+        ['retry', 'cancel'].includes(action)
+          ? { confirmNoExistingDownload }
+          : undefined
       );
-      setRetryConfirmationId(null);
+      setHandoffConfirmation(null);
       await mutate();
     } catch (actionError) {
       const errorData =
         axios.isAxiosError(actionError) &&
         actionError.response?.data &&
         typeof actionError.response.data === 'object'
-          ? (actionError.response.data as { confirmationRequired?: unknown })
+          ? (actionError.response.data as {
+              confirmationRequired?: unknown;
+              error?: unknown;
+            })
           : undefined;
       if (
-        action === 'retry' &&
+        (action === 'retry' || action === 'cancel') &&
         !confirmNoExistingDownload &&
         errorData?.confirmationRequired === 'confirmNoExistingDownload'
       ) {
-        setRetryConfirmationId(requestId);
+        setHandoffConfirmation({ requestId, action });
         return;
       }
-      const errorMessage =
+      const fallbackMessage =
         axios.isAxiosError(actionError) &&
         actionError.response?.data?.error === 'SOFTWARE_QUOTA_EXCEEDED'
           ? messages.quotaExceeded
           : messages.manageError;
-      addToast(intl.formatMessage(errorMessage), {
+      const serverMessage =
+        typeof errorData?.error === 'string' && errorData.error.length <= 300
+          ? errorData.error
+          : undefined;
+      addToast(serverMessage ?? intl.formatMessage(fallbackMessage), {
         appearance: 'error',
       });
     } finally {
@@ -318,6 +331,15 @@ const SoftwareRequests = ({
 
   const canRetryRequest = (request: SoftwareRequestRow) =>
     canManage || (canRequest && request.requestedBy?.id === user?.id);
+  const canCancelRequest = (request: SoftwareRequestRow) =>
+    ['approved', 'searching', 'downloading', 'importing', 'failed'].includes(
+      request.status
+    ) &&
+    canRetryRequest(request) &&
+    !(
+      request.provider === 'romarr' &&
+      ['downloading', 'importing'].includes(request.status)
+    );
 
   return (
     <section
@@ -397,6 +419,12 @@ const SoftwareRequests = ({
                     {message && status === 'failed' && (
                       <p className="mt-2 text-xs text-amber-200">{message}</p>
                     )}
+                    {request.provider === 'romarr' &&
+                      ['downloading', 'importing'].includes(status) && (
+                        <p className="mt-2 text-xs text-gray-300">
+                          {intl.formatMessage(messages.romarrCancelUnavailable)}
+                        </p>
+                      )}
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     {canManage && status === 'pending' && (
@@ -431,6 +459,16 @@ const SoftwareRequests = ({
                           {intl.formatMessage(messages.withdraw)}
                         </Button>
                       )}
+                    {canCancelRequest(request) && (
+                      <Button
+                        buttonType="default"
+                        buttonSize="sm"
+                        disabled={workingId === request.id}
+                        onClick={() => mutateRequest(request.id, 'cancel')}
+                      >
+                        {intl.formatMessage(messages.cancel)}
+                      </Button>
+                    )}
                     {status === 'failed' && canRetryRequest(request) && (
                       <Button
                         buttonType="default"
@@ -448,7 +486,7 @@ const SoftwareRequests = ({
                     )}
                   </div>
                 </div>
-                {retryConfirmationId === request.id && (
+                {handoffConfirmation?.requestId === request.id && (
                   <div
                     className="mt-3 rounded-lg border border-amber-700 bg-amber-950/40 p-3"
                     role="alert"
@@ -461,7 +499,7 @@ const SoftwareRequests = ({
                         buttonType="default"
                         buttonSize="sm"
                         disabled={workingId === request.id}
-                        onClick={() => setRetryConfirmationId(null)}
+                        onClick={() => setHandoffConfirmation(null)}
                       >
                         {intl.formatMessage(messages.cancelRetry)}
                       </Button>
@@ -469,9 +507,15 @@ const SoftwareRequests = ({
                         buttonType="warning"
                         buttonSize="sm"
                         disabled={workingId === request.id}
-                        onClick={() => mutateRequest(request.id, 'retry', true)}
+                        onClick={() =>
+                          mutateRequest(
+                            request.id,
+                            handoffConfirmation.action,
+                            true
+                          )
+                        }
                       >
-                        {intl.formatMessage(messages.retryAfterCheck)}
+                        {intl.formatMessage(messages.confirmAfterCheck)}
                       </Button>
                     </div>
                   </div>
@@ -493,17 +537,17 @@ const SoftwareRequests = ({
                   </Button>
                 </div>
                 {historyRequestId === request.id && (
-                  <div className="mt-3 rounded-lg border border-gray-700 bg-gray-900/60 p-3">
+                  <div className="refreshed-inset-surface mt-3 rounded-lg border border-gray-700 p-3">
                     {historyError ? (
                       <p className="text-xs text-red-200">
                         {intl.formatMessage(messages.historyError)}
                       </p>
                     ) : !historyData ? (
-                      <p className="text-xs text-gray-400">
+                      <p className="refreshed-detail-text-muted text-xs">
                         {intl.formatMessage(messages.historyLoading)}
                       </p>
                     ) : historyData.history.length === 0 ? (
-                      <p className="text-xs text-gray-400">
+                      <p className="refreshed-detail-text-muted text-xs">
                         {intl.formatMessage(messages.noHistory)}
                       </p>
                     ) : (
@@ -513,14 +557,14 @@ const SoftwareRequests = ({
                             key={event.id}
                             className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs"
                           >
-                            <span className="font-medium text-gray-100">
+                            <span className="refreshed-detail-text font-medium">
                               {statusLabel(event.status)}
                               {event.percent !== null &&
                                 event.percent !== undefined &&
                                 ` · ${Math.round(event.percent)}%`}
                             </span>
                             <time
-                              className="text-gray-400"
+                              className="refreshed-detail-text-muted"
                               dateTime={event.createdAt}
                             >
                               {intl.formatDate(event.createdAt, {
@@ -529,7 +573,7 @@ const SoftwareRequests = ({
                               })}
                             </time>
                             {event.message && (
-                              <p className="w-full text-gray-400">
+                              <p className="refreshed-detail-text-muted w-full">
                                 {event.message}
                               </p>
                             )}

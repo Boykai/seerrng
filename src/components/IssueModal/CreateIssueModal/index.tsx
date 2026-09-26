@@ -7,7 +7,10 @@ import {
 import IssueMediaSummary from '@app/components/IssueDetails/IssueMediaSummary';
 import { getAvailableIssueQualities } from '@app/components/IssueDetails/issueMediaFormat';
 import SeriesEpisodeSelector from '@app/components/IssueModal/CreateIssueModal/SeriesEpisodeSelector';
-import { getIssueOptionsForMediaType } from '@app/components/IssueModal/constants';
+import {
+  getIssueOptionsForMediaType,
+  getIssueSubtypeOptionsForMediaType,
+} from '@app/components/IssueModal/constants';
 import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
 import { encodeApiPathSegment } from '@app/utils/apiPath';
@@ -40,6 +43,7 @@ const messages = defineMessages('components.IssueModal.CreateIssueModal', {
     'Please provide a detailed explanation of the issue you encountered.',
   quality: 'Quality',
   issueType: 'Issue Type',
+  issueReason: 'Reason',
   hd: 'HD',
   ultraHd: '4K',
   noAvailableQuality: 'No available quality',
@@ -143,6 +147,7 @@ const CreateIssueModal = ({
         : data.name
       : undefined);
   const issueOptions = getIssueOptionsForMediaType(mediaType);
+  const issueSubtypeOptions = getIssueSubtypeOptionsForMediaType(mediaType);
   const orderedIssueOptions = [
     IssueType.OTHER,
     IssueType.AUDIO,
@@ -158,6 +163,11 @@ const CreateIssueModal = ({
       label: intl.formatMessage(option.name),
     })
   );
+  const issueSubtypeSelectOptions: CompactSelectOption[] =
+    issueSubtypeOptions.map((option) => ({
+      value: option.value,
+      label: intl.formatMessage(option.name),
+    }));
   const availableQualities = getAvailableIssueQualities(data?.mediaInfo);
   const hasAvailableVideoQuality = availableQualities.length > 0;
   const initialIs4k = availableQualities[0] === '4k';
@@ -184,6 +194,11 @@ const CreateIssueModal = ({
     issueType: Yup.number()
       .oneOf(orderedIssueOptions.map((option) => option.issueType))
       .required(),
+    issueSubtype: issueSubtypeOptions.length
+      ? Yup.string()
+          .oneOf(issueSubtypeOptions.map((option) => option.value))
+          .required()
+      : Yup.string().notRequired(),
     message: Yup.string()
       .max(
         MAX_ISSUE_MESSAGE_LENGTH,
@@ -210,6 +225,7 @@ const CreateIssueModal = ({
       enableReinitialize
       initialValues={{
         issueType: defaultIssueType,
+        issueSubtype: issueSubtypeOptions.length ? 'other' : '',
         message: '',
         is4k: initialIs4k,
         activeSeason: initialAvailableSeasons[0] ?? -1,
@@ -220,6 +236,9 @@ const CreateIssueModal = ({
         try {
           const newIssue = await axios.post<Issue>('/api/v1/issue', {
             issueType: values.issueType,
+            ...(issueSubtypeOptions.length
+              ? { issueSubtype: values.issueSubtype }
+              : {}),
             message: values.message,
             mediaId: resolvedMediaId,
             is4k: values.is4k,
@@ -287,6 +306,17 @@ const CreateIssueModal = ({
             defaultValue={defaultIssueType.toString()}
           />
         );
+        const issueSubtypeSelect = issueSubtypeOptions.length ? (
+          <CompactSelect
+            label={intl.formatMessage(messages.issueReason)}
+            value={values.issueSubtype}
+            options={issueSubtypeSelectOptions}
+            onChange={(issueSubtype) =>
+              void setFieldValue('issueSubtype', issueSubtype)
+            }
+            defaultValue="other"
+          />
+        ) : null;
 
         return (
           <Modal
@@ -343,12 +373,14 @@ const CreateIssueModal = ({
                         />
                       )}
                     {issueTypeSelect}
+                    {issueSubtypeSelect}
                   </>
                 }
               />
             )}
 
             {!data && issueTypeSelect}
+            {!data && issueSubtypeSelect}
 
             {mediaType === 'tv' &&
               data &&

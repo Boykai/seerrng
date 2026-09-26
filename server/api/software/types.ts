@@ -45,7 +45,8 @@ export type SoftwareProviderStatus =
   | 'downloading'
   | 'importing'
   | 'available'
-  | 'failed';
+  | 'failed'
+  | 'cancelled';
 
 export interface SoftwareProviderRequest {
   externalRequestId: string;

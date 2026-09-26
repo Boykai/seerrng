@@ -4,7 +4,10 @@ import MediaTypeBadge, {
   getMediaTypeBadgeType,
 } from '@app/components/Common/MediaTypeBadge';
 import { getIssueMediaAndFormatLabel } from '@app/components/IssueDetails/issueMediaFormat';
-import { issueOptions } from '@app/components/IssueModal/constants';
+import {
+  getIssueSubtypeOptionsForMediaType,
+  issueOptions,
+} from '@app/components/IssueModal/constants';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import {
@@ -52,6 +55,7 @@ const messages = defineMessages('components.IssueList.IssueItem', {
   createdBy: 'Created By',
   createdDate: 'Created Date',
   issuetype: 'Type',
+  issuereason: 'Reason',
   issuestatus: 'Status',
   viewissue: 'View Issue',
   medianotfound: 'Media Not Found',
@@ -388,6 +392,11 @@ const IssueItem = ({ issue }: IssueItemProps) => {
   const issueOption = issueOptions.find(
     (opt) => opt.issueType === issue?.issueType
   );
+  const issueSubtypeOption = issue
+    ? getIssueSubtypeOptionsForMediaType(issue.media.mediaType).find(
+        (option) => option.value === issue.issueSubtype
+      )
+    : undefined;
 
   const description = issue.comments?.[0]?.message || '';
   const unavailable = intl.formatMessage(messages.unavailable);
@@ -579,6 +588,16 @@ const IssueItem = ({ issue }: IssueItemProps) => {
                   issueOption?.name ?? messages.unknownissuetype
                 )}
               </dd>
+              {issueSubtypeOption && (
+                <>
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.issuereason)}:
+                  </dt>
+                  <dd className="m-0 truncate">
+                    {intl.formatMessage(issueSubtypeOption.name)}
+                  </dd>
+                </>
+              )}
               <dt className="font-medium text-gray-100">
                 {intl.formatMessage(messages.issuestatus)}:
               </dt>

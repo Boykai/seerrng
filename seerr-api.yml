@@ -3584,6 +3584,10 @@ components:
         issueType:
           type: number
           example: 1
+        issueSubtype:
+          type: string
+          nullable: true
+          example: missing_issue
         problemSeason:
           type: number
           example: 2
@@ -11059,10 +11063,58 @@ paths:
           description: Request not found or caller is not the requester
         '409':
           description: Request is no longer pending
+  /request/software/status/{id}/cancel:
+    post:
+      summary: Cancel an active software request
+      description: Lets the original requester with REQUEST permission or an administrator with MANAGE_REQUESTS cancel provider work. QuestarrNG stops only downloads correlated to this request; ROMarrNG cancellation is available before download handoff. An interrupted handoff can require explicit confirmation after checking the download queue and history.
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                confirmNoExistingDownload:
+                  type: boolean
+                  description: Set true only after checking the download client queue and history for a matching download.
+      responses:
+        '200':
+          description: Provider confirmed that the request was cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoftwareRequestMutationResponse'
+        '403':
+          description: Caller does not have permission to manage this request
+        '404':
+          description: Request not found or caller may not view it
+        '409':
+          description: Provider cannot safely cancel the request in its current state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  confirmationRequired:
+                    type: string
+                    enum: [confirmNoExistingDownload]
+                  error:
+                    type: string
+        '502':
+          description: Acquisition provider is unavailable
   /request/software/status/{id}/retry:
     post:
       summary: Retry a failed software request
-      description: Retries a failed provider request using its existing idempotency key. The original requester must still have REQUEST permission, or the caller must have MANAGE_REQUESTS. ROMarrNG can require explicit confirmation when it cannot determine whether a previous download handoff started.
+      description: Retries a failed provider request using its existing idempotency key. The original requester must still have REQUEST permission, or the caller must have MANAGE_REQUESTS. QuestarrNG or ROMarrNG can require explicit confirmation when a restart interrupted a download handoff.
       tags:
         - request
       parameters:
@@ -12739,6 +12791,17 @@ paths:
               properties:
                 issueType:
                   type: number
+                issueSubtype:
+                  type: string
+                  maxLength: 64
+                  enum:
+                    - missing_content
+                    - missing_issue
+                    - wrong_edition
+                    - wrong_issue
+                    - damaged_file
+                    - incorrect_metadata
+                    - other
                 message:
                   type: string
                 mediaId:

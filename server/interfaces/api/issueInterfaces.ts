@@ -1,4 +1,4 @@
-import type { IssueType } from '@server/constants/issue';
+import type { IssueSubtype, IssueType } from '@server/constants/issue';
 import type Issue from '@server/entity/Issue';
 import type { PaginatedResponse } from './common';
 import type { SeasonEpisodeSelection } from './seasonInterfaces';
@@ -18,6 +18,7 @@ export type IssueRequestBody = {
   message: string;
   mediaId: number;
   issueType: IssueType;
+  issueSubtype?: IssueSubtype;
   problemSeason?: number;
   problemEpisode?: number;
   problemEpisodes?: number[];

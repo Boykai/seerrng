@@ -49,6 +49,11 @@ GetComics.org, has a known, unresolved upstream bug where direct-from-site
 downloads (as opposed to its mirror hosts such as MediaFire) frequently fail.
 Mirror-host downloads are generally reliable; direct-site downloads are not.
 
+Prowlarr can sync indexers to Mylar3. SeerrNG itself does not query Prowlarr;
+Mylar3 runs the search after request approval. After syncing, confirm the
+providers are enabled in Mylar3's search settings. Prowlarr does not add
+indexers to Kapowarr, which uses its direct-download sources.
+
 Both backends need their own, separately configured ComicVine API key for
 their own internal search — this is unrelated to the SeerrNG-level key above,
 and only affects features SeerrNG does not use (SeerrNG's own ComicVine client
@@ -121,9 +126,12 @@ a bug:
   with **Advanced Request** or **Manage Requests**; other requests use the
   folder configured for that Kapowarr server. Neither comic backend exposes a
   quality-profile choice.
-- Comic issue reports support the **Other** category only. Users with **Create
-  Issues** can report problems for an available tracked comic; users with
-  **View Issues** or **Manage Issues** can see open reports on comic details.
+- Comic reports use the **Other** issue type with a structured reason for a
+  missing issue, wrong edition or variant, damaged file, or incorrect
+  metadata. The reason is saved and shown on the issue card and details page.
+  Users with **Create Issues** can report problems for an available tracked
+  comic; users with **View Issues** or **Manage Issues** can see open reports
+  on comic details.
 
 Users with **Manage Blocklist** can blocklist a comic from its detail page or
 Discover card. Comic entries appear in the **Comics** filter on the Blocklist

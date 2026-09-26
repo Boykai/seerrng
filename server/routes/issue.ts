@@ -3,6 +3,7 @@ import {
   IssueType,
   MAX_ISSUE_COMMENTS,
   MAX_ISSUE_MESSAGE_LENGTH,
+  isIssueSubtypeForMediaType,
 } from '@server/constants/issue';
 import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
@@ -632,6 +633,19 @@ issueRoutes.post<Record<string, string>, Issue, IssueRequestBody>(
       return next({ status: 404, message: 'Media does not exist.' });
     }
 
+    const issueSubtype = body.issueSubtype;
+    if (
+      issueSubtype !== undefined &&
+      (typeof issueSubtype !== 'string' ||
+        issueSubtype.length > 64 ||
+        !isIssueSubtypeForMediaType(media.mediaType, issueSubtype))
+    ) {
+      return next({
+        status: 400,
+        message: `Issue reason is not valid for ${media.mediaType} reports.`,
+      });
+    }
+
     if (
       (problemEpisodes.value.length > 0 ||
         problemEpisodeSelections.value.length > 0) &&
@@ -676,6 +690,8 @@ issueRoutes.post<Record<string, string>, Issue, IssueRequestBody>(
             new Issue({
               createdBy,
               issueType: issueType.value,
+              issueSubtype:
+                typeof issueSubtype === 'string' ? issueSubtype : undefined,
               problemSeason:
                 problemEpisodeSelections.value[0]?.seasonNumber ??
                 problemSeason.value,
