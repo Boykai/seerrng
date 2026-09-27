@@ -263,6 +263,23 @@ test('multi-architecture publishers perform the real build once and verify the i
     ).run,
     /verify-container-manifest\.sh --require-provenance/u
   );
+  const digestResolver = release.jobs.publish.steps.find(
+    (step) => step.name === 'Resolve manifest digest'
+  );
+  assert.match(
+    digestResolver.run,
+    /image="ghcr\.io\/\$\{GITHUB_REPOSITORY\}:\$\{VERSION\}"/u,
+    'release digest resolution must use GHCR rather than the unreachable Docker Hub blob mirror'
+  );
+  assert.match(
+    digestResolver.run,
+    /docker buildx imagetools inspect "\$image"/u
+  );
+  assert.doesNotMatch(
+    digestResolver.run,
+    /DOCKER_HUB/u,
+    'the digest resolver must not fetch the Docker Hub CloudFront-backed manifests'
+  );
   assert.deepEqual(release.jobs['scan-release-image'].needs, 'publish');
   assert.deepEqual(release.jobs['scan-release-image'].strategy.matrix.include, [
     { platform: 'linux/amd64', suffix: 'amd64' },
