@@ -138,12 +138,6 @@ test('optional companion templates are separate standalone containers', async ()
       'bookshelfng',
       ['BookshelfNG-SeerrNG', 'ghcr.io/snapetech/bookshelfng:hardcover'],
     ],
-    [
-      'lazylibrarian',
-      ['LazyLibrarian-SeerrNG', 'lscr.io/linuxserver/lazylibrarian:latest'],
-    ],
-    ['mylar3', ['Mylar3-SeerrNG', 'lscr.io/linuxserver/mylar3:latest']],
-    ['kapowarr', ['Kapowarr-SeerrNG', 'mrcas/kapowarr:latest']],
     ['romarrng', ['ROMarrNG-SeerrNG', 'ghcr.io/snapetech/romarrng:latest']],
     [
       'questarrng',
@@ -157,6 +151,10 @@ test('optional companion templates are separate standalone containers', async ()
     assert.equal(template.Name, containerName);
     assert.match(template.Name, /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/u);
     assert.equal(template.Repository, image);
+    assert.equal(
+      template.Support,
+      'https://github.com/snapetech/seerrng/issues'
+    );
     assert.equal(template.Privileged, 'false');
     assert.match(template.Overview, /Standalone/u);
     assert.match(
@@ -183,6 +181,13 @@ test('optional companion templates are separate standalone containers', async ()
     );
     assert.ok(
       configs.every((config) => config.$.Target !== '/var/run/docker.sock')
+    );
+  }
+
+  for (const name of ['lazylibrarian', 'mylar3', 'kapowarr']) {
+    await assert.rejects(
+      fs.access(path.join(repositoryRoot, `packaging/unraid/${name}.xml`)),
+      { code: 'ENOENT' }
     );
   }
 });

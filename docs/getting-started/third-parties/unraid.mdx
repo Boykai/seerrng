@@ -26,41 +26,48 @@ listing is a different application. See the
 [SeerrNG repository](https://github.com/snapetech/seerrng) for this fork's
 code and documentation.
 
-The SeerrNG Community Apps listing installs SeerrNG only. Each companion is a
-separate, optional container that works independently. Install only what you
-need, configure it through its own web interface, then enter its API key in
-SeerrNG Settings → Services. This repository provides the templates under
-distinct companion names even when the upstream app already has an Unraid
-listing:
+The SeerrNG Community Apps listing installs SeerrNG only. Each optional service
+runs as its own standalone container. Install only what you need, configure it
+through its own web interface, then enter its API key in SeerrNG Settings →
+Services. The three NG forks have separate templates in this repository:
 
 | Optional service | Purpose | Template |
 | --- | --- | --- |
 | BookshelfNG | Ebooks and audiobooks; one instance can handle both | [BookshelfNG companion](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/bookshelfng.xml) |
-| LazyLibrarian | Magazines | [LazyLibrarian companion](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/lazylibrarian.xml) |
-| Mylar3 | Comics, including full volumes | [Mylar3 companion](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/mylar3.xml) |
-| Kapowarr | Comics, including full volumes | [Kapowarr companion](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/kapowarr.xml) |
 | ROMarrNG | ROMs and emulation | [ROMarrNG companion](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/romarrng.xml) |
 | QuestarrNG | PC games and IGDB catalog | [QuestarrNG companion](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/questarrng.xml) |
 
-BookshelfNG, ROMarrNG, and QuestarrNG are standalone NG forks with extra SeerrNG
-integration APIs. The LazyLibrarian, Mylar3, and Kapowarr templates use their
-upstream standalone images. Mylar3 and Kapowarr are alternatives for comic
-acquisition; neither is mandatory. On separate bridge networks, use the Unraid
-host address and each service's mapped web port when adding it in SeerrNG.
-The upstream [Bookshelf](https://ca.unraid.net/apps/bookshelf-1d1gz3s0hj3af8),
-[Questarr](https://ca.unraid.net/apps/questarr-0335hnh1oyuaqh),
-[Mylar3](https://ca.unraid.net/apps/mylar3-1avghds0trt4q4),
-[Kapowarr](https://ca.unraid.net/apps/kapowarr-1p27chu0mk08ni), and
-[LazyLibrarian](https://ca.unraid.net/apps/lazylibrarian-1o5cqti19ivs1e)
-entries remain available; their presence does not replace the NG fork images
-needed for SeerrNG's extended software and book contracts.
+BookshelfNG, ROMarrNG, and QuestarrNG are Snapetech NG forks that work
+independently and add SeerrNG integration APIs. Their companion templates link
+to the [SeerrNG issue tracker](https://github.com/snapetech/seerrng/issues)
+for support. The upstream [Bookshelf](https://ca.unraid.net/apps/bookshelf-1d1gz3s0hj3af8)
+and [Questarr](https://ca.unraid.net/apps/questarr-0335hnh1oyuaqh) listings
+are different apps and do not replace the NG forks for SeerrNG's extended
+contracts.
+
+LazyLibrarian, Mylar3, and Kapowarr are **third-party apps, not Snapetech NG
+forks**. They already have Unraid Community Apps packages, so install them
+directly from these existing listings rather than a SeerrNG package:
+
+| Optional service | Purpose | Existing Community Apps listing |
+| --- | --- | --- |
+| LazyLibrarian | Magazines | [Install LazyLibrarian](https://ca.unraid.net/apps/lazylibrarian-1o5cqti19ivs1e) |
+| Mylar3 | Comics, including full volumes | [Install Mylar3](https://ca.unraid.net/apps/mylar3-1avghds0trt4q4) |
+| Kapowarr | Comics, including full volumes | [Install Kapowarr](https://ca.unraid.net/apps/kapowarr-1p27chu0mk08ni) |
+
+Mylar3 and Kapowarr are alternatives for comic acquisition; neither is
+mandatory. On separate bridge networks, use the Unraid host address and each
+service's mapped web port when adding it in SeerrNG. For SeerrNG integration
+questions, use the [SeerrNG issue tracker](https://github.com/snapetech/seerrng/issues).
 
 For one managed project containing SeerrNG and its companion services, use the
 [SeerrNG Unraid Compose stack](https://github.com/snapetech/seerrng/tree/main/packaging/unraid).
-That stack includes BookshelfNG for ebooks and audiobooks, LazyLibrarian for
-magazines, Mylar3 and Kapowarr for comics, and the ROMarrNG and QuestarrNG
-forks for software. Choose only the service profiles you need. Unraid does not
-include Docker Compose natively, so install a Compose manager first.
+That stack includes BookshelfNG for ebooks and audiobooks, optional upstream
+LazyLibrarian for magazines, optional upstream Mylar3 and Kapowarr for comics,
+and the ROMarrNG and QuestarrNG forks for software. These Compose profiles do
+not create extra Community Apps listings. Choose only the service profiles you
+need. Unraid does not include Docker Compose natively, so install a Compose
+manager first.
 
 Copy `stack.compose.yaml` and `stack.env.example` to one directory on your
 Unraid host. Rename `stack.env.example` to `.env`, set your appdata, media, and

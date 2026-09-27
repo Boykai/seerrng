@@ -102,119 +102,6 @@ const templates = [
     ],
   },
   {
-    file: 'lazylibrarian.xml',
-    name: 'LazyLibrarian-SeerrNG',
-    image: 'lscr.io/linuxserver/lazylibrarian:latest',
-    registry:
-      'https://github.com/orgs/linuxserver/packages/container/package/lazylibrarian',
-    project: 'https://lazylibrarian.gitlab.io/',
-    support: 'https://github.com/linuxserver/docker-lazylibrarian/issues',
-    port: 5299,
-    category: 'MediaApp:Books',
-    overview:
-      'Standalone LazyLibrarian magazine and book automation, optionally connected to SeerrNG.',
-    description:
-      'LazyLibrarian runs independently and does not require SeerrNG. This companion template uses the upstream LinuxServer image and provides the magazine backend for SeerrNG when configured. Set up LazyLibrarian and its download client first, then enter its API key in SeerrNG Settings. It is not an NG fork.',
-    terms: 'lazylibrarian magazine book seerrng',
-    configs: [
-      port('Web UI Port', 5299),
-      mount(
-        'Appdata',
-        '/config',
-        '/mnt/user/appdata/seerrng-lazylibrarian',
-        'Persistent LazyLibrarian settings and database.'
-      ),
-      mount(
-        'Library',
-        '/books',
-        '/mnt/user/media',
-        'Book and magazine library root.'
-      ),
-      mount(
-        'Downloads',
-        '/downloads',
-        '/mnt/user/downloads',
-        'Downloads shared with the configured download client.'
-      ),
-      ...commonVariables,
-    ],
-  },
-  {
-    file: 'mylar3.xml',
-    name: 'Mylar3-SeerrNG',
-    image: 'lscr.io/linuxserver/mylar3:latest',
-    registry:
-      'https://github.com/orgs/linuxserver/packages/container/package/mylar3',
-    project: 'https://github.com/mylar3/mylar3',
-    support: 'https://github.com/linuxserver/docker-mylar3/issues',
-    port: 8090,
-    category: 'MediaApp:Books',
-    overview:
-      'Standalone Mylar3 comic acquisition and library management, optionally connected to SeerrNG.',
-    description:
-      'Mylar3 runs independently and does not require SeerrNG. This companion template uses the upstream LinuxServer image. Configure Mylar3 and its download client, then add its API key to SeerrNG for full-volume comic requests. It is not an NG fork.',
-    terms: 'mylar3 mylar comic seerrng',
-    configs: [
-      port('Web UI Port', 8090),
-      mount(
-        'Appdata',
-        '/config',
-        '/mnt/user/appdata/seerrng-mylar3',
-        'Persistent Mylar3 settings and database.'
-      ),
-      mount(
-        'Comics',
-        '/comics',
-        '/mnt/user/media/comics',
-        'Comic library root.'
-      ),
-      mount(
-        'Downloads',
-        '/downloads',
-        '/mnt/user/downloads',
-        'Downloads shared with the configured download client.'
-      ),
-      ...commonVariables,
-    ],
-  },
-  {
-    file: 'kapowarr.xml',
-    name: 'Kapowarr-SeerrNG',
-    image: 'mrcas/kapowarr:latest',
-    registry: 'https://hub.docker.com/r/mrcas/kapowarr',
-    project: 'https://github.com/Casvt/Kapowarr',
-    support: 'https://github.com/Casvt/Kapowarr/issues',
-    port: 5656,
-    category: 'MediaApp:Books',
-    overview:
-      'Standalone Kapowarr comic acquisition and library management, optionally connected to SeerrNG.',
-    description:
-      'Kapowarr runs independently and does not require SeerrNG. This companion template uses the upstream Kapowarr image. Configure its comic root and download sources, then add its API key to SeerrNG for full-volume comic requests. It is not an NG fork.',
-    terms: 'kapowarr comic seerrng',
-    configs: [
-      port('Web UI Port', 5656),
-      mount(
-        'Appdata',
-        '/app/db',
-        '/mnt/user/appdata/seerrng-kapowarr',
-        'Persistent Kapowarr database.'
-      ),
-      mount(
-        'Comics',
-        '/comics',
-        '/mnt/user/media/comics',
-        'Comic library root to configure in Kapowarr.'
-      ),
-      mount(
-        'Downloads',
-        '/app/temp_downloads',
-        '/mnt/user/downloads',
-        'Temporary downloads shared with the configured download client.'
-      ),
-      ...commonVariables,
-    ],
-  },
-  {
     file: 'romarrng.xml',
     name: 'ROMarrNG-SeerrNG',
     image: 'ghcr.io/snapetech/romarrng:latest',
@@ -322,7 +209,7 @@ const renderConfig = (config) => {
 const renderTemplate = (template) => {
   const tag = (name, value) =>
     value ? `  <${name}>${escapeXml(value)}</${name}>\n` : '';
-  return `<?xml version="1.0"?>\n<Container version="2">\n${tag('Name', template.name)}${tag('Repository', template.image)}${tag('Registry', template.registry)}${tag('Network', 'bridge')}${tag('Shell', 'sh')}${tag('Privileged', 'false')}${tag('Icon', template.icon)}${tag('WebUI', `http://[IP]:[PORT:${template.port}]/`)}${tag('Overview', template.overview)}${tag('Description', template.description)}${tag('Support', template.support ?? `${template.project}/issues`)}${tag('Project', template.project)}${tag('TemplateURL', `${base}/${template.file}`)}${tag('ReadMe', 'https://github.com/snapetech/seerrng/blob/main/docs/getting-started/third-parties/unraid.mdx')}${tag('Category', template.category)}${tag('ExtraSearchTerms', template.terms)}${tag('Changes', 'Standalone optional companion template for SeerrNG.')}${tag('Requires', 'Docker and persistent appdata. Configure this app independently before connecting it to SeerrNG.')}${tag('ExtraParams', '--restart=unless-stopped')}\n${template.configs.map(renderConfig).join('\n')}\n</Container>\n`;
+  return `<?xml version="1.0"?>\n<Container version="2">\n${tag('Name', template.name)}${tag('Repository', template.image)}${tag('Registry', template.registry)}${tag('Network', 'bridge')}${tag('Shell', 'sh')}${tag('Privileged', 'false')}${tag('Icon', template.icon)}${tag('WebUI', `http://[IP]:[PORT:${template.port}]/`)}${tag('Overview', template.overview)}${tag('Description', template.description)}${tag('Support', 'https://github.com/snapetech/seerrng/issues')}${tag('Project', template.project)}${tag('TemplateURL', `${base}/${template.file}`)}${tag('ReadMe', 'https://github.com/snapetech/seerrng/blob/main/docs/getting-started/third-parties/unraid.mdx')}${tag('Category', template.category)}${tag('ExtraSearchTerms', template.terms)}${tag('Changes', 'Standalone optional companion template for SeerrNG.')}${tag('Requires', 'Docker and persistent appdata. Configure this app independently before connecting it to SeerrNG.')}${tag('ExtraParams', '--restart=unless-stopped')}\n${template.configs.map(renderConfig).join('\n')}\n</Container>\n`;
 };
 
 const check = process.argv.includes('--check');

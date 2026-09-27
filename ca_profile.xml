@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <CommunityApplications>
-  <Profile>SeerrNG is a Seerr fork for requests across movies, TV, music, books, comics, magazines, ROMs, and PC games. This repository provides a standalone SeerrNG Community Applications template and individual optional companion templates for BookshelfNG, LazyLibrarian, Mylar3, Kapowarr, ROMarrNG, and QuestarrNG. BookshelfNG, ROMarrNG, and QuestarrNG are standalone NG forks with SeerrNG integration contracts; the other companion templates use standalone upstream images. Install only the services you use.</Profile>
+  <Profile>SeerrNG is a Seerr fork for requests across movies, TV, music, books, comics, magazines, ROMs, and PC games. This repository provides a standalone SeerrNG Community Applications template and optional standalone NG fork templates for BookshelfNG, ROMarrNG, and QuestarrNG. LazyLibrarian, Mylar3, and Kapowarr are third-party apps available through their existing Community Applications listings; SeerrNG can connect to them without repackaging them. Install only the services you use.</Profile>
   <Icon>https://raw.githubusercontent.com/snapetech/seerrng/main/public/android-chrome-512x512.png</Icon>
   <WebPage>https://github.com/snapetech/seerrng</WebPage>
   <Forum>https://github.com/snapetech/seerrng/issues</Forum>

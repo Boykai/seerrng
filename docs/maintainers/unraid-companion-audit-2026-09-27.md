@@ -1,6 +1,6 @@
 # Unraid companion template audit (2026-09-27)
 
-The SeerrNG Community Apps template remains a single standalone container. Community Apps Docker templates configure one container at a time; optional companions are separate XML templates in this repository. The Compose project remains an alternate deployment path.
+The SeerrNG Community Apps template remains a single standalone container. Community Apps Docker templates configure one container at a time. Only our three NG forks have separate companion XML templates in this repository; the upstream apps use their existing Community Apps listings. The Compose project remains an alternate deployment path.
 
 | Companion template | Image | Existing Community Apps entry | Standalone check |
 | --- | --- | --- | --- |
@@ -13,4 +13,4 @@ The SeerrNG Community Apps template remains a single standalone container. Commu
 
 Each image was started independently without SeerrNG on a local Docker host. The service and its temporary data volume were removed after checking. Metadata lookup and acquisition were not exercised because these require personal provider credentials and configured download clients. BookshelfNG's current fork supports ebooks and audiobooks in one instance; both SeerrNG service entries can point to its single API URL and key.
 
-The new template names include `-SeerrNG` so they remain distinguishable from upstream Community Apps entries, while their descriptions say which apps are NG forks and which use upstream images. Community Apps ingestion is separate from pushing the XML to GitHub; verify the listings after the appfeed scans the repository.
+BookshelfNG, ROMarrNG, and QuestarrNG template names include `-SeerrNG` so they remain distinguishable from upstream Community Apps entries. Their support links point to the SeerrNG issue tracker. The LazyLibrarian, Mylar3, and Kapowarr templates were removed because we do not fork those apps and their Community Apps listings already exist. Community Apps ingestion is separate from pushing XML to GitHub; submit the remaining templates through the portal and verify the public listings after its scan.
