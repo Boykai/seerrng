@@ -108,6 +108,86 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.31.0](https://github.com/snapetech/seerrng/compare/v3.30.0..v3.31.0) - 2026-09-27
+
+### User-facing changes
+
+#### Added
+
+- **Comics:** Comic detail pages now show back issues with covers and dates when available, loading more issues as you browse a volume.
+- **Software:** Game details now show IGDB ratings, screenshots, developer names, and video links when available, while catalog pages remain compact.
+  - **Action required:** Upgrade QuestarrNG to a build with enriched SeerrNG game details to see screenshots and videos.
+- **Software:** Software titles now open a shareable detail view with their summary, genres, release date, and supported request targets.
+- **Software:** Software catalog cards now show titles already tracked, downloading, or in the provider libraries, including ROM availability by system. Incomplete ROM inventories show unknown availability.
+  - **Action required:** Upgrade QuestarrNG and ROMarrNG to builds with library lookup support for existing-library badges.
+- **Software:** ROM and PC game catalogs now load more matching titles as you scroll, so searches are no longer limited to the first provider window after QuestarrNG is upgraded.
+  - **Action required:** Upgrade QuestarrNG to a build with paged SeerrNG catalog endpoints to use additional pages
+- **Software:** Main Search now includes a Software category with paged ROM and PC game results, plus a software preview in All results.
+- **Software:** ROM and PC game browsing now filters by emulation system or operating system, making it easier to find titles for a specific target.
+- **Software:** Software catalog searches and popular lists can now be narrowed by genre and release year across Retro, Modern, and PC Games. Filters apply before pagination so matching titles remain discoverable on later pages.
+  - **Action required:** Upgrade QuestarrNG to a build with genre and release-year catalog filters.
+
+#### Changed
+
+- **Discovery:** Comic and game covers now use SeerrNG's optional image cache, reducing repeat downloads while browsing discovery and request status.
+- **Software:** Software catalog browsing now searches a wider set of titles before filtering by PC or emulation system, and repeats fewer provider requests.
+- **Comics:** Comic requests target full ComicVine volumes; Mylar3 or Kapowarr manages back-issue searching, and SeerrNG shows issue availability after sync.
+- **Unraid:** The SeerrNG Community Apps listing now describes comic, magazine, ROM, and PC game requests and names BookshelfNG, ROMarrNG, QuestarrNG, Mylar3, Kapowarr, and LazyLibrarian integrations.
+
+#### Fixed
+
+- **Magazines:** Magazine detail lookups now stop after 20 seconds if configured LazyLibrarian services stall, so failover cannot leave a page request waiting on every service timeout.
+- **Magazines:** Tracked magazine discovery now returns results from responsive services within 20 seconds instead of waiting through every stalled LazyLibrarian timeout.
+- **Comics:** Returning to comic discovery now restores the loaded catalog pages and scroll position, matching movie browsing.
+- **Software:** IGDB game ratings now display on SeerrNG's 10-point scale, so typical catalog scores appear in software details.
+- **Comics:** Comic detail issue dates use the shared detail text styling, and loaded issues remain visible with a retry option if ComicVine fails on a later page.
+- **Software:** Software catalog paging now accepts opaque provider cursors and stops cleanly when a page token cannot advance, while keeping already loaded titles visible if a later page fails.
+- **Software:** Closing a software title detail now returns to the prior catalog state without leaving an extra browser history step.
+- **Search:** Global search now shows magazine titles from responsive LazyLibrarian services when another service stalls, while limiting simultaneous catalog lookups.
+- **Magazines:** Magazine details and issue availability now load from another configured LazyLibrarian service when the preferred service is unavailable or does not track the title.
+- **Magazines:** Tracked and public magazine discovery now accepts the selected catalog, allowing SeerrNG to return LazyLibrarian titles and Google Books results as intended.
+- **Magazines:** Tracked magazine discovery now shows titles from healthy LazyLibrarian services when another configured service is unavailable.
+- **Software:** An invalid software release year now shows a clear validation message and pauses catalog loading instead of silently displaying unfiltered titles.
+
+#### Security
+
+- **Logging:** LazyLibrarian connection failures now redact API key values and control characters before SeerrNG writes error details to its logs.
+- **Software:** Software provider errors now pass through credential redaction before logging, hiding API keys if an upstream failure echoes them.
+- **Software:** Software catalog covers are now accepted only from IGDB's image host, so a catalog response cannot send users' browsers to arbitrary image servers.
+- **Comics:** ComicVine covers now use only approved HTTPS origins, and ComicVine lookup failures no longer expose the API key in application logs.
+
+### 🚀 Features
+- *(comics)* Browse paged back issues on volume details - ([d0e7f0a](https://github.com/snapetech/seerrng/commit/d0e7f0a049101ddcc61cb159f54a1e5aa8462213))
+- *(discovery)* Cache comic and software artwork and catalogs - ([fab6c93](https://github.com/snapetech/seerrng/commit/fab6c939d5b23de0f71319b6fc0d226f4cd2dba3))
+- *(software)* Filter catalog by genre and release year - ([5abcffe](https://github.com/snapetech/seerrng/commit/5abcffec24389592a4f1eb2a4c25b679d2511021))
+- *(software)* Show IGDB detail screenshots and videos - ([0d587e0](https://github.com/snapetech/seerrng/commit/0d587e041bef0caffcdd700d9f2d24fecc50fc6a))
+- *(software)* Show catalog library availability - ([9905722](https://github.com/snapetech/seerrng/commit/99057225ffdcc999ea9c52f0664b682c47e041f8))
+- *(software)* Include catalog in global search - ([c5081d2](https://github.com/snapetech/seerrng/commit/c5081d2c7b585d4540bff1bd68031717904e61c5))
+- *(software)* Open shareable catalog title details - ([7e65106](https://github.com/snapetech/seerrng/commit/7e6510646e590ae8e402298c35f1566f094d5377))
+- *(software)* Filter catalogs by system and PC platform - ([eb2133a](https://github.com/snapetech/seerrng/commit/eb2133abadcb66e1db8041a424f24e107a1b2063))
+- *(software)* Page QuestarrNG game catalogs - ([1c8552d](https://github.com/snapetech/seerrng/commit/1c8552d1084c16190d8053535226c9f9100aa5e9))
+
+### 🐛 Bug Fixes
+- *(ci)* Restrict security-note correction to main - ([e70a2be](https://github.com/snapetech/seerrng/commit/e70a2be57df0e45da135751e284e7f25175c88bd))
+- *(i18n)* Add software catalog filter labels - ([4774533](https://github.com/snapetech/seerrng/commit/4774533d09a0439e04ba20653b125efd06d9c3a4))
+- *(i18n)* Extract software catalog messages - ([13fa927](https://github.com/snapetech/seerrng/commit/13fa9278400f746516cd0277dcd5d39d0240f69c))
+- *(magazines)* Bound tracked catalog discovery - ([e43bb22](https://github.com/snapetech/seerrng/commit/e43bb22db982e411af0a29882fbc9ea104bb8b5c))
+- *(magazines)* Fall back across detail services - ([fad3893](https://github.com/snapetech/seerrng/commit/fad38932b6f8ed4a44bcc8f1c5890555dbaa3b4e))
+- *(magazines)* Bound discovery service fan-out - ([6a7d5b9](https://github.com/snapetech/seerrng/commit/6a7d5b99c4c6e4c7fdb388535f49601aec039267))
+- *(magazines)* Preserve healthy catalogs during service failures - ([193aa84](https://github.com/snapetech/seerrng/commit/193aa84bb3117f323134f42ef5910c29ff5e8c84))
+- *(release)* Include every note in Discord announcements - ([e3589f5](https://github.com/snapetech/seerrng/commit/e3589f589bd266534799ce111da6366647dc2c89))
+- *(search)* Retain magazine matches when a service stalls - ([cae0ddf](https://github.com/snapetech/seerrng/commit/cae0ddf1df2b664cf959a518c39a66209c94bd1e))
+- *(security)* Normalize software ratings and redact errors - ([8c7ada5](https://github.com/snapetech/seerrng/commit/8c7ada59f998483ecde87701235160c45399d4ab))
+- *(security)* Constrain ComicVine provider data - ([f149636](https://github.com/snapetech/seerrng/commit/f149636d4e4db448ba0ad47860956c450d168114))
+- *(security)* Constrain catalog artwork and bound magazine fallback - ([f243c09](https://github.com/snapetech/seerrng/commit/f243c09685dc50ec86fe524c06a6498c151a744b))
+- *(software)* Explain invalid catalog release years - ([2e015c0](https://github.com/snapetech/seerrng/commit/2e015c0aae88b04af6046df2103969270aced28a))
+- *(software)* Avoid duplicate history for title details - ([0ddce80](https://github.com/snapetech/seerrng/commit/0ddce80a85af819368a4bb592c12ca96f5a36eda))
+- *(software)* Preserve paged catalog state on failures - ([2d9f045](https://github.com/snapetech/seerrng/commit/2d9f045c296dc07d7e2e0fc0468bf23079097a05))
+- *(ui)* Finish software and comic detail polish - ([563a07e](https://github.com/snapetech/seerrng/commit/563a07ee3d25dce99a78a2f228e5c5f1a7b81297))
+- Complete Unraid integrations and magazine discovery - ([e9c3989](https://github.com/snapetech/seerrng/commit/e9c3989fb388e3c88689636b8961d3cf04428e98))
+
 ## [3.30.0](https://github.com/snapetech/seerrng/compare/v3.29.0..v3.30.0) - 2026-09-27
 
 ### User-facing changes
