@@ -32,15 +32,17 @@ through its own web interface, then enter its API key in SeerrNG Settings →
 Services. This repository's Community Apps template installs only SeerrNG. Each
 NG fork has one canonical standalone template in its own repository:
 
-| Optional service | Purpose | Template |
-| --- | --- | --- |
-| BookshelfNG | Ebooks and audiobooks; one instance can handle both | [BookshelfNG standalone template](https://github.com/snapetech/bookshelfng/blob/main/packaging/unraid/bookshelfng.xml) |
-| ROMarrNG | ROMs and emulation | [ROMarrNG standalone template](https://github.com/snapetech/ROMarrNG/blob/main/packaging/unraid/romarrng.xml) |
-| QuestarrNG | PC games and IGDB catalog | [QuestarrNG standalone template](https://github.com/snapetech/QuestarrNG/blob/main/unraid/questarr.xml) |
+| Optional service | Purpose | Template source | Repository URL for Community Apps submission |
+| --- | --- | --- | --- |
+| BookshelfNG | Ebooks and audiobooks; one instance can handle both | [BookshelfNG XML](https://github.com/snapetech/bookshelfng/blob/main/packaging/unraid/bookshelfng.xml) | [snapetech/bookshelfng](https://github.com/snapetech/bookshelfng) |
+| ROMarrNG | ROMs and emulation | [ROMarrNG XML](https://github.com/snapetech/ROMarrNG/blob/main/packaging/unraid/romarrng.xml) | [snapetech/ROMarrNG](https://github.com/snapetech/ROMarrNG) |
+| QuestarrNG | PC games and IGDB catalog | [QuestarrNG XML](https://github.com/snapetech/QuestarrNG/blob/main/unraid/questarr.xml) | [snapetech/QuestarrNG](https://github.com/snapetech/QuestarrNG) |
 
-These links open the template source in each fork's repository. A template
-appears in Community Apps search only after that repository is submitted and
-indexed; a GitHub file alone is not a searchable listing.
+The submission form expects the repository URL, not a template file URL. If you
+paste a SeerrNG template file URL, the form resolves it to the already-listed
+SeerrNG repository and rejects a duplicate repository submission. A fork
+appears in Community Apps search only after its own repository is submitted
+and indexed; a GitHub XML file alone is not a searchable listing.
 
 BookshelfNG, ROMarrNG, and QuestarrNG are Snapetech NG forks that work
 independently and add SeerrNG integration APIs. Use the
