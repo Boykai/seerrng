@@ -110,6 +110,61 @@ that are not called out here.
 
 # Changelog
 
+## [3.32.0](https://github.com/snapetech/seerrng/compare/v3.31.0..v3.32.0) - 2026-09-27
+
+### User-facing changes
+
+#### Added
+
+- **Comics:** Comic discovery can now filter the full volume catalog by publisher, start year, and issue count. The first filtered search builds a resumable local index and shows progress; later searches use the completed index for accurate result counts and pages.
+- **Unraid:** Unraid operators can now deploy SeerrNG with BookshelfNG, LazyLibrarian, Mylar3, Kapowarr, ROMarrNG, and QuestarrNG as one managed Compose project.
+  - **Action required:** Install a Compose manager, select service profiles, and configure service API keys to use the stack.
+- **Unraid:** Unraid now has separate optional companion templates for BookshelfNG, LazyLibrarian, Mylar3, Kapowarr, ROMarrNG, and QuestarrNG. Each app runs independently; the NG forks also support SeerrNG integration.
+  - **Action required:** Install only the companion templates you need, finish each app's own setup, then enter its API key in SeerrNG.
+
+#### Changed
+
+- **Bookshelf:** Bookshelf setup now explains how to register one instance for both books and audiobooks. Book cards preserve the selected format and lookup title when opening requests, while catalog editions collapse into one result and recent detail lookups are reused.
+
+#### Fixed
+
+- **Bookshelf:** Book search now places closer title matches first, and typed search terms retry after filter navigation cancels a route change so the search is not lost.
+- **Comics:** An empty comic filter result no longer incorrectly says that a ComicVine API key is missing when the key is configured.
+- **Comics:** The comic catalog's Apply filters button now uses the same accessible, styled control as other actions.
+- **Comics:** Comic discovery's publisher, year, issue-count, and index-progress controls now have English catalog entries, so the new filters render with their labels and guidance.
+- **Comics:** The ComicVine volume index now keeps scanning when new volumes are added at the end of the catalog, avoiding a full restart during long initial scans.
+- **Comics:** An interrupted ComicVine volume index now resumes automatically when SeerrNG restarts, without waiting for someone to reopen filtered discovery.
+- **Release Pipeline:** Release retries now queue behind another run for the same tag instead of cancelling an active publication.
+- **Software:** Software browsing now explains when genre and release-year filters need a newer QuestarrNG version instead of suggesting the service is disconnected.
+  - **Action required:** Update QuestarrNG to use genre and release-year filters.
+- **Software:** Software browsing now shows all 50 titles returned by older QuestarrNG versions, so titles beyond the first 24 no longer disappear from their catalog window.
+- **Unraid:** SeerrNG's Unraid template and companion stack now use an init process so the service handles shutdown signals and child processes cleanly.
+  - **Action required:** Reapply the Community Apps template or recreate the Compose service to enable the init process.
+
+#### Security
+
+- **Library Removal:** Library-removal confirmation tokens are now keyed with SeerrNG's application API key, preventing the confirmation digest from exposing service credentials to offline guessing.
+
+### Technical history
+
+- feat(comics): index volumes for complete metadata filtering ([15d7d2089](https://github.com/snapetech/seerrng/commit/15d7d2089))
+- fix(comics): polish filters and resume index on startup ([807df436e](https://github.com/snapetech/seerrng/commit/807df436e))
+- chore(i18n): extract comic filter messages ([e9dab357f](https://github.com/snapetech/seerrng/commit/e9dab357f))
+- fix(i18n): add comic discovery filter labels ([6148a4ead](https://github.com/snapetech/seerrng/commit/6148a4ead))
+- fix(release): resolve image digest from GHCR ([810a6b0f4](https://github.com/snapetech/seerrng/commit/810a6b0f4))
+- fix(software): preserve legacy catalog window and explain filter upgrade ([51b7b6abb](https://github.com/snapetech/seerrng/commit/51b7b6abb))
+- feat(unraid): provide companion service Compose project ([60c9e9b77](https://github.com/snapetech/seerrng/commit/60c9e9b77))
+- fix(comics): tolerate volume additions during index scans ([6a204cd71](https://github.com/snapetech/seerrng/commit/6a204cd71))
+- style: format release readiness regression tests ([b9cd5f463](https://github.com/snapetech/seerrng/commit/b9cd5f463))
+- fix(security): sign library removal plan tokens ([5ba05e7e6](https://github.com/snapetech/seerrng/commit/5ba05e7e6))
+- fix(codeql): clarify comics index selection check ([418296c0d](https://github.com/snapetech/seerrng/commit/418296c0d))
+- test(release): cover invalid area slug ([6dc272d8f](https://github.com/snapetech/seerrng/commit/6dc272d8f))
+- chore(codeql): remove ineffective inline suppression ([9fda7cb88](https://github.com/snapetech/seerrng/commit/9fda7cb88))
+- fix(unraid): enable init for clean SeerrNG shutdown ([dc6866c3f](https://github.com/snapetech/seerrng/commit/dc6866c3f))
+- feat(bookshelf): improve catalog search and format guidance ([6fd9671c3](https://github.com/snapetech/seerrng/commit/6fd9671c3))
+- feat(unraid): package optional standalone companions individually ([c438d309f](https://github.com/snapetech/seerrng/commit/c438d309f))
+- fix(release): queue same-tag publication attempts ([27d03db31](https://github.com/snapetech/seerrng/commit/27d03db31))
+
 ## [3.31.0](https://github.com/snapetech/seerrng/compare/v3.30.0..v3.31.0) - 2026-09-27
 
 ### User-facing changes
