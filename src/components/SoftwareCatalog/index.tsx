@@ -41,6 +41,7 @@ const messages = defineMessages('components.SoftwareCatalog', {
   popular: 'Popular titles',
   noResults: 'No titles match this search.',
   loadMore: 'Load more titles',
+  retryLoad: 'Retry loading titles',
   loadError: 'The software catalog could not be loaded.',
   configureHint:
     'Ask an administrator to connect QuestarrNG and the required acquisition service in Settings → Services.',
@@ -201,6 +202,7 @@ const SoftwareCatalog = () => {
     isLoading,
     size,
     setSize,
+    mutate,
   } = useSWRInfinite<CatalogResponse>(getCatalogKey, {
     revalidateFirstPage: false,
     revalidateOnFocus: false,
@@ -220,13 +222,13 @@ const SoftwareCatalog = () => {
   const hasMore = query
     ? Boolean(lastPage?.nextCursor)
     : lastPage?.nextOffset != null;
-  const isLoadingMore = size > (pages?.length ?? 0);
+  const isLoadingMore = !error && size > (pages?.length ?? 0);
 
   useEffect(() => {
-    if (loadMoreInView && hasMore && !isLoadingMore) {
+    if (loadMoreInView && hasMore && !isLoadingMore && !error) {
       void setSize((current) => current + 1);
     }
-  }, [hasMore, isLoadingMore, loadMoreInView, setSize]);
+  }, [error, hasMore, isLoadingMore, loadMoreInView, setSize]);
 
   const openRequest = (game: CatalogGame) => {
     setSelectedGame(game);
@@ -436,7 +438,7 @@ const SoftwareCatalog = () => {
           <div className="py-16">
             <LoadingSpinner />
           </div>
-        ) : error ? (
+        ) : error && !games.length ? (
           <div className="mt-5 rounded-lg border border-gray-700 bg-gray-800 px-5 py-6 text-sm text-gray-300">
             <p>{intl.formatMessage(messages.loadError)}</p>
             <p className="mt-2 text-gray-400">
@@ -444,56 +446,64 @@ const SoftwareCatalog = () => {
             </p>
           </div>
         ) : games.length ? (
-          <ul className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {games.map((game) => (
-              <li key={game.igdbId}>
-                <article className="group h-full overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow transition hover:border-gray-500 hover:shadow-lg">
-                  <div className="relative aspect-[2/3] overflow-hidden bg-gray-900">
-                    <CachedImage
-                      type="tmdb"
-                      src={
-                        game.coverUrl || '/images/seerr_poster_not_found.png'
-                      }
-                      alt=""
-                      className="object-cover transition duration-200 group-hover:scale-[1.02]"
-                      fill
-                    />
-                  </div>
-                  <div className="flex h-[10.5rem] flex-col p-3">
-                    <h3 className="line-clamp-2 min-h-10 text-sm font-semibold text-white">
-                      {game.title}
-                    </h3>
-                    <p className="mt-1 truncate text-xs text-gray-400">
-                      {game.releaseDate || game.genres.slice(0, 2).join(' · ')}
-                    </p>
-                    <p className="mt-2 line-clamp-2 min-h-8 text-xs text-gray-300">
-                      {selectedCategory === 'game'
-                        ? game.platforms
-                            .filter((platform) =>
-                              /windows|linux|mac/i.test(platform)
-                            )
-                            .slice(0, 2)
-                            .join(' · ')
-                        : game.emulationSystems
-                            ?.map((system) => system.name)
-                            .slice(0, 2)
-                            .join(' · ')}
-                    </p>
-                    {canRequest && (
-                      <Button
-                        buttonType="detailRequest"
-                        buttonSize="sm"
-                        className="mt-auto w-full justify-center"
-                        onClick={() => openRequest(game)}
-                      >
-                        {intl.formatMessage(messages.request)}
-                      </Button>
-                    )}
-                  </div>
-                </article>
-              </li>
-            ))}
-          </ul>
+          <>
+            {error && (
+              <p role="alert" className="mt-4 text-sm text-amber-300">
+                {intl.formatMessage(messages.loadError)}
+              </p>
+            )}
+            <ul className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              {games.map((game) => (
+                <li key={game.igdbId}>
+                  <article className="group h-full overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow transition hover:border-gray-500 hover:shadow-lg">
+                    <div className="relative aspect-[2/3] overflow-hidden bg-gray-900">
+                      <CachedImage
+                        type="tmdb"
+                        src={
+                          game.coverUrl || '/images/seerr_poster_not_found.png'
+                        }
+                        alt=""
+                        className="object-cover transition duration-200 group-hover:scale-[1.02]"
+                        fill
+                      />
+                    </div>
+                    <div className="flex h-[10.5rem] flex-col p-3">
+                      <h3 className="line-clamp-2 min-h-10 text-sm font-semibold text-white">
+                        {game.title}
+                      </h3>
+                      <p className="mt-1 truncate text-xs text-gray-400">
+                        {game.releaseDate ||
+                          game.genres.slice(0, 2).join(' · ')}
+                      </p>
+                      <p className="mt-2 line-clamp-2 min-h-8 text-xs text-gray-300">
+                        {selectedCategory === 'game'
+                          ? game.platforms
+                              .filter((platform) =>
+                                /windows|linux|mac/i.test(platform)
+                              )
+                              .slice(0, 2)
+                              .join(' · ')
+                          : game.emulationSystems
+                              ?.map((system) => system.name)
+                              .slice(0, 2)
+                              .join(' · ')}
+                      </p>
+                      {canRequest && (
+                        <Button
+                          buttonType="detailRequest"
+                          buttonSize="sm"
+                          className="mt-auto w-full justify-center"
+                          onClick={() => openRequest(game)}
+                        >
+                          {intl.formatMessage(messages.request)}
+                        </Button>
+                      )}
+                    </div>
+                  </article>
+                </li>
+              ))}
+            </ul>
+          </>
         ) : !hasMore ? (
           <div className="mt-5 rounded-lg border border-gray-700 bg-gray-800 px-5 py-8 text-center text-sm text-gray-300">
             {intl.formatMessage(messages.noResults)}
@@ -507,9 +517,13 @@ const SoftwareCatalog = () => {
               <Button
                 buttonType="primary"
                 buttonSize="standard"
-                onClick={() => void setSize((current) => current + 1)}
+                onClick={() =>
+                  void (error ? mutate() : setSize((current) => current + 1))
+                }
               >
-                {intl.formatMessage(messages.loadMore)}
+                {intl.formatMessage(
+                  error ? messages.retryLoad : messages.loadMore
+                )}
               </Button>
             )}
           </div>

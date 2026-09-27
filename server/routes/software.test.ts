@@ -324,7 +324,7 @@ describe('software request routes', () => {
             ],
           },
         ],
-        nextCursor: 'next-page',
+        nextCursor: 'next-page+/=',
       })
     );
     mock.method(ROMarrNGAPI.prototype, 'getPlatforms', async () => [
@@ -350,7 +350,7 @@ describe('software request routes', () => {
         category: 'retro',
         q: 'Test Game',
         limit: 1,
-        cursor: 'prior-page',
+        cursor: 'prior.cursor+/=',
         system: 'nes',
       });
 
@@ -358,10 +358,10 @@ describe('software request routes', () => {
     assert.deepStrictEqual(searchPage.mock.calls[0].arguments, [
       'Test Game',
       1,
-      'prior-page',
+      'prior.cursor+/=',
       [130],
     ]);
-    assert.strictEqual(response.body.nextCursor, 'next-page');
+    assert.strictEqual(response.body.nextCursor, 'next-page+/=');
     assert.deepStrictEqual(
       response.body.results.map((game: { igdbId: number }) => game.igdbId),
       [100]
@@ -443,6 +443,36 @@ describe('software request routes', () => {
 
     assert.strictEqual(game.status, 400);
     assert.strictEqual(retro.status, 400);
+  });
+
+  it('stops pagination when QuestarrNG returns a repeated cursor or offset', async () => {
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 6, name: 'PC (Microsoft Windows)' },
+    ]);
+    mock.method(QuestarrNGAPI.prototype, 'searchCatalogPage', async () => ({
+      results: [pcGame],
+      nextCursor: 'same.cursor+/=',
+    }));
+    mock.method(QuestarrNGAPI.prototype, 'getPopularCatalogPage', async () => ({
+      results: [pcGame],
+      nextOffset: 24,
+    }));
+
+    const searchResponse = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({
+        category: 'game',
+        q: 'Test Game',
+        cursor: 'same.cursor+/=',
+      });
+    const popularResponse = await request(createApp())
+      .get('/request/software/catalog/popular')
+      .query({ category: 'game', offset: 24 });
+
+    assert.strictEqual(searchResponse.status, 200);
+    assert.strictEqual(searchResponse.body.nextCursor, null);
+    assert.strictEqual(popularResponse.status, 200);
+    assert.strictEqual(popularResponse.body.nextOffset, null);
   });
 
   it('persists the selected PC target and sends it to QuestarrNG on approval', async () => {

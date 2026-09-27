@@ -11232,6 +11232,14 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                  nextCursor:
+                    type: string
+                    nullable: true
   /request/software/catalog/popular:
     get:
       summary: List popular ROM and PC game catalog titles
@@ -11277,6 +11285,14 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                  nextOffset:
+                    type: integer
+                    nullable: true
   /request/software/status:
     get:
       summary: List software request status

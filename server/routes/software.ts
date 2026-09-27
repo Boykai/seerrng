@@ -48,6 +48,8 @@ import path from 'node:path';
 const softwareRoutes = Router();
 const MAX_CATALOG_LIMIT = 50;
 const CATALOG_PROVIDER_FETCH_LIMIT = 50;
+const MAX_CATALOG_CURSOR_LENGTH = 20000;
+const MAX_CATALOG_OFFSET = 10000;
 const QUESTARR_CATALOG_IMAGE_ORIGIN = 'https://images.igdb.com';
 const ACTIVE_STATUSES: SoftwareRequestStatus[] = [
   'pending',
@@ -102,6 +104,29 @@ const parseCatalogFilters = (
   };
 };
 
+const isValidCatalogCursor = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  value.length > 0 &&
+  value.length <= MAX_CATALOG_CURSOR_LENGTH &&
+  // eslint-disable-next-line no-control-regex
+  !/[\u0000-\u001f\u007f-\u009f]/.test(value);
+
+const normalizeNextCatalogCursor = (
+  value: unknown,
+  currentCursor?: string
+): string | null =>
+  isValidCatalogCursor(value) && value !== currentCursor ? value : null;
+
+const normalizeNextCatalogOffset = (
+  value: unknown,
+  currentOffset: number
+): number | null =>
+  Number.isSafeInteger(value) &&
+  (value as number) > currentOffset &&
+  (value as number) <= MAX_CATALOG_OFFSET
+    ? (value as number)
+    : null;
+
 const parseCatalogQuery = (
   value: unknown
 ): {
@@ -123,14 +148,19 @@ const parseCatalogQuery = (
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
     limit > MAX_CATALOG_LIMIT ||
-    (cursor !== undefined &&
-      (typeof cursor !== 'string' || !/^[A-Za-z0-9_-]{1,20000}$/.test(cursor)))
+    (cursor !== undefined && !isValidCatalogCursor(cursor))
   ) {
     return null;
   }
   const filters = parseCatalogFilters(value, category);
   return filters
-    ? { query, category, limit, cursor: cursor as string | undefined, filters }
+    ? {
+        query,
+        category,
+        limit,
+        ...(typeof cursor === 'string' ? { cursor } : {}),
+        filters,
+      }
     : null;
 };
 
@@ -461,7 +491,7 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
         platformIds
       );
       games = page.results;
-      nextCursor = page.nextCursor;
+      nextCursor = normalizeNextCatalogCursor(page.nextCursor, parsed.cursor);
     } catch (error) {
       if (
         parsed.cursor ||
@@ -501,7 +531,7 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
     limit > MAX_CATALOG_LIMIT ||
     !Number.isSafeInteger(offset) ||
     offset < 0 ||
-    offset > 10000
+    offset > MAX_CATALOG_OFFSET
   ) {
     return res
       .status(400)
@@ -530,7 +560,7 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
     try {
       const page = await api.getPopularCatalogPage(limit, offset, platformIds);
       games = page.results;
-      nextOffset = page.nextOffset;
+      nextOffset = normalizeNextCatalogOffset(page.nextOffset, offset);
     } catch (error) {
       if (
         offset > 0 ||
