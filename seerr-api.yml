@@ -11334,7 +11334,7 @@ paths:
   /request/software/catalog/games/{id}:
     get:
       summary: Get one ROM or PC game catalog title
-      description: Returns QuestarrNG catalog metadata, supported request targets, and provider or SeerrNG request availability for a shareable software title.
+      description: Returns QuestarrNG catalog metadata, supported request targets, screenshots, video IDs, rating, and provider or SeerrNG request availability for a shareable software title.
       tags:
         - request
       parameters:

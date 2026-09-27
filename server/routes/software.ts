@@ -222,6 +222,42 @@ const sanitizeGame = (game: SoftwareCatalogGame): SoftwareCatalogGame => ({
         .slice(0, 40)
         .map((genre) => genre.slice(0, 128))
     : [],
+  rating:
+    typeof game.rating === 'number' &&
+    Number.isFinite(game.rating) &&
+    game.rating >= 0 &&
+    game.rating <= 10
+      ? game.rating
+      : null,
+  publishers: Array.isArray(game.publishers)
+    ? game.publishers
+        .filter((name): name is string => typeof name === 'string')
+        .slice(0, 20)
+        .map((name) => name.slice(0, 128))
+    : [],
+  developers: Array.isArray(game.developers)
+    ? game.developers
+        .filter((name): name is string => typeof name === 'string')
+        .slice(0, 20)
+        .map((name) => name.slice(0, 128))
+    : [],
+  screenshots: Array.isArray(game.screenshots)
+    ? game.screenshots.filter(isSafeCatalogCoverUrl).slice(0, 12)
+    : [],
+  videos: Array.isArray(game.videos)
+    ? game.videos
+        .filter(
+          (video) =>
+            video &&
+            typeof video.videoId === 'string' &&
+            /^[A-Za-z0-9_-]{11}$/.test(video.videoId)
+        )
+        .slice(0, 6)
+        .map((video) => ({
+          name: typeof video.name === 'string' ? video.name.slice(0, 120) : '',
+          videoId: video.videoId,
+        }))
+    : [],
 });
 
 const isPcPlatformName = (value: string): boolean => {

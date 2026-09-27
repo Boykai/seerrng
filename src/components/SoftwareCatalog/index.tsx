@@ -81,6 +81,10 @@ const messages = defineMessages('components.SoftwareCatalog', {
   tracked: 'Tracked',
   downloading: 'Downloading',
   availabilityUnknown: 'Availability unknown',
+  screenshots: 'Screenshots',
+  watchVideo: 'Watch {name}',
+  gameVideo: 'Game video',
+  rating: 'Rating: {rating}/10',
 });
 
 type Category = 'retro' | 'modern' | 'game';
@@ -116,6 +120,11 @@ interface CatalogGame {
   availability?:
     'available' | 'tracked' | 'downloading' | 'missing' | 'unknown';
   availableSystems?: string[];
+  rating?: number | null;
+  publishers?: string[];
+  developers?: string[];
+  screenshots?: string[];
+  videos?: { name: string; videoId: string }[];
 }
 
 interface CatalogResponse {
@@ -188,16 +197,14 @@ const SoftwareCatalog = ({
       openedFromCatalog.current = false;
       hydratedGameId.current = undefined;
       setSelectedGame(null);
-    } else if (
-      linkedGame?.game &&
-      linkedGame.game.igdbId === linkedGameId &&
-      hydratedGameId.current !== linkedGameId
-    ) {
-      hydratedGameId.current = linkedGameId;
+    } else if (linkedGame?.game && linkedGame.game.igdbId === linkedGameId) {
+      if (hydratedGameId.current !== linkedGameId) {
+        hydratedGameId.current = linkedGameId;
+        setSelectedSystem(linkedGame.game.emulationSystems?.[0]?.slug ?? '');
+        setVariant({ operatingSystem: '', architecture: '' });
+        setRequestError('');
+      }
       setSelectedGame(linkedGame.game);
-      setSelectedSystem(linkedGame.game.emulationSystems?.[0]?.slug ?? '');
-      setVariant({ operatingSystem: '', architecture: '' });
-      setRequestError('');
     }
   }, [linkedGame?.game, linkedGameId, router.isReady]);
 
@@ -718,8 +725,61 @@ const SoftwareCatalog = ({
                       {selectedGame.genres.join(' · ')}
                     </p>
                   )}
+                  {selectedGame.rating != null && (
+                    <p className="mt-2 text-gray-400">
+                      {intl.formatMessage(messages.rating, {
+                        rating: selectedGame.rating,
+                      })}
+                    </p>
+                  )}
+                  {selectedGame.developers?.length ? (
+                    <p className="mt-2 text-gray-400">
+                      {selectedGame.developers.join(' · ')}
+                    </p>
+                  ) : null}
                 </div>
               </div>
+              {(selectedGame.screenshots?.length ?? 0) > 0 && (
+                <div>
+                  <h3 className="mb-2 font-semibold text-white">
+                    {intl.formatMessage(messages.screenshots)}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedGame.screenshots?.slice(0, 4).map((src) => (
+                      <div
+                        key={src}
+                        className="relative aspect-video overflow-hidden rounded bg-gray-900"
+                      >
+                        <CachedImage
+                          type="tmdb"
+                          src={src}
+                          alt=""
+                          fill
+                          className="object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(selectedGame.videos?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {selectedGame.videos?.map((video) => (
+                    <a
+                      key={video.videoId}
+                      href={`https://www.youtube.com/watch?v=${video.videoId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-indigo-300 hover:text-indigo-200"
+                    >
+                      {intl.formatMessage(messages.watchVideo, {
+                        name:
+                          video.name || intl.formatMessage(messages.gameVideo),
+                      })}
+                    </a>
+                  ))}
+                </div>
+              )}
               {canRequest && (quota?.software?.limit ?? 0) > 0 && (
                 <QuotaDisplay quota={quota?.software} mediaType="software" />
               )}

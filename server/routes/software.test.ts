@@ -272,7 +272,18 @@ describe('software request routes', () => {
     const getGame = mock.method(
       QuestarrNGAPI.prototype,
       'getCatalogGame',
-      async () => ({ ...pcGame, coverUrl: 'https://evil.example/cover.jpg' })
+      async () => ({
+        ...pcGame,
+        coverUrl: 'https://evil.example/cover.jpg',
+        screenshots: [
+          'https://images.igdb.com/igdb/image/upload/screenshot.jpg',
+          'https://evil.example/screenshot.jpg',
+        ],
+        videos: [
+          { name: 'Trailer', videoId: 'abcdefghijk' },
+          { name: 'Invalid', videoId: 'bad-id' },
+        ],
+      })
     );
 
     const response = await request(createOpenApiValidatedApp())
@@ -283,6 +294,12 @@ describe('software request routes', () => {
     assert.strictEqual(getGame.mock.calls[0].arguments[0], 42);
     assert.strictEqual(response.body.game.title, 'Test Game');
     assert.strictEqual(response.body.game.coverUrl, '');
+    assert.deepStrictEqual(response.body.game.screenshots, [
+      'https://images.igdb.com/igdb/image/upload/screenshot.jpg',
+    ]);
+    assert.deepStrictEqual(response.body.game.videos, [
+      { name: 'Trailer', videoId: 'abcdefghijk' },
+    ]);
   });
 
   it('rejects a catalog detail outside the selected category', async () => {

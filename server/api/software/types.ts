@@ -12,6 +12,11 @@ export interface SoftwareCatalogGame {
   platforms: string[];
   platformOptions: { id: number; name: string }[];
   genres: string[];
+  rating?: number | null;
+  publishers?: string[];
+  developers?: string[];
+  screenshots?: string[];
+  videos?: { name: string; videoId: string }[];
 }
 
 export interface SoftwareCatalogPlatform {

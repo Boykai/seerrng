@@ -114,7 +114,9 @@ title-and-platform lookup; older builds leave availability unknown until
 upgraded.
 
 Open a title's cover or name to see its summary, genres, release date, and
-supported request targets. The title URL can be copied and reopened directly;
+supported request targets. When IGDB supplies them, the detail view also shows
+a rating, screenshots, developer names, and links to game videos. Screenshots
+load only when the detail view opens. The title URL can be copied and reopened directly;
 users without request permission can still inspect its details.
 
 When requesting an emulation title, choose one of the supported systems shown
