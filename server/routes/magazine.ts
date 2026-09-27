@@ -104,22 +104,52 @@ magazineRoutes.get('/:title', async (req, res, next) => {
         )[0]
       : undefined;
     const settings = getExternalRuntimeConfig();
-    const service =
-      settings.lazylibrarian.find(
-        (candidate) => candidate.id === media?.serviceId
-      ) ?? settings.lazylibrarian.find((candidate) => candidate.isDefault);
+    const serviceRank = (service: (typeof settings.lazylibrarian)[number]) =>
+      service.id === media?.serviceId ? 0 : service.isDefault ? 1 : 2;
+    const services = [...settings.lazylibrarian].sort(
+      (left, right) => serviceRank(left) - serviceRank(right)
+    );
 
     let magazine = { title };
     let issues: Awaited<ReturnType<LazyLibrarianAPI['getIssues']>>['issues'] =
       [];
-    if (service) {
-      const api = new LazyLibrarianAPI({
-        url: LazyLibrarianAPI.buildUrl(service),
-        apiKey: service.apiKey,
+    let serviceId: number | undefined;
+    let reachedService = false;
+    for (const service of services) {
+      try {
+        const detail = await runWithServarrServiceSnapshot(
+          'lazylibrarian',
+          service,
+          (current) =>
+            new LazyLibrarianAPI({
+              url: LazyLibrarianAPI.buildUrl(current),
+              apiKey: current.apiKey,
+            }).getIssues(
+              current.id === media?.serviceId
+                ? (media?.externalServiceSlug ?? title)
+                : title
+            )
+        );
+        reachedService = true;
+        if (detail.magazine || detail.issues.length > 0) {
+          magazine = detail.magazine ?? { title };
+          issues = detail.issues;
+          serviceId = service.id;
+          break;
+        }
+      } catch (error) {
+        logger.warn('Failed to retrieve magazine details from service', {
+          label: 'Magazine',
+          serviceId: service.id,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    if (services.length > 0 && !reachedService) {
+      return next({
+        status: 503,
+        message: 'Unable to retrieve magazine details.',
       });
-      const detail = await api.getIssues(media?.externalServiceSlug ?? title);
-      magazine = detail.magazine ?? { title };
-      issues = detail.issues;
     }
 
     return res
@@ -131,7 +161,7 @@ magazineRoutes.get('/:title', async (req, res, next) => {
             issues,
             media,
             onUserWatchlist,
-            service?.id
+            serviceId
           ),
           req.user
         )
