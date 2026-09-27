@@ -69,6 +69,10 @@ describe('Books and Music discover parity', () => {
 
   beforeEach(() => {
     cy.loginAsAdmin();
+    cy.mockConfiguredMediaAvailability({
+      booksEnabled: true,
+      musicEnabled: true,
+    });
   });
 
   it('opens the theme picker and persists document theme attributes', () => {

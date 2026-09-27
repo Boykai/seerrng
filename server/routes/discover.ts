@@ -1,6 +1,7 @@
 import ComicVineAPI from '@server/api/comicvine';
 import { getCoverArtArchiveThumbnailUrl } from '@server/api/coverartarchive/urls';
 import { DEFAULT_EXTERNAL_API_TIMEOUT_MS } from '@server/api/externalapi';
+import GoogleBooksAPI from '@server/api/googlebooks';
 import LazyLibrarianAPI from '@server/api/lazylibrarian';
 import ListenBrainzAPI from '@server/api/listenbrainz';
 import type {
@@ -51,6 +52,7 @@ import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import { extractImageCacheUrls } from '@server/lib/imageCacheUrls';
 import { enqueueImageCacheWarm } from '@server/lib/imageCacheWarmer';
 import { normalizeMagazineTitle } from '@server/lib/magazineIdentity';
+import { findMagazineMediaByTitles } from '@server/lib/magazineMediaMatcher';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { hydrateMediaSummaryRelations } from '@server/lib/mediaSummaryHydration';
 import {
@@ -77,7 +79,10 @@ import { getCombinedWatchlist } from '@server/lib/watchlist';
 import logger from '@server/logger';
 import { mapOpenLibrarySearchDoc } from '@server/models/Book';
 import { mapComicVineVolumeResult } from '@server/models/Comic';
-import { mapLazyLibrarianMagazine } from '@server/models/Magazine';
+import {
+  mapGoogleBooksMagazine,
+  mapLazyLibrarianMagazine,
+} from '@server/models/Magazine';
 import { mapProductionCompany } from '@server/models/Movie';
 import {
   mapAlbumResult,
@@ -206,7 +211,7 @@ discoverRoutes.use((req, res, next) => {
 
 discoverRoutes.use('/home', discoverHomeRoutes);
 discoverRoutes.use(
-  ['/music', '/books'],
+  ['/music', '/books', '/magazines'],
   rateLimit({
     ...EXTERNAL_DISCOVER_RATE_LIMIT,
     standardHeaders: true,
@@ -3615,13 +3620,6 @@ discoverRoutes.get('/comics', async (req, res) => {
 });
 
 discoverRoutes.get('/magazines', async (req, res) => {
-  const settings = getExternalRuntimeConfig();
-  if (settings.lazylibrarian.length === 0) {
-    return res
-      .status(200)
-      .json({ page: 1, totalPages: 0, totalResults: 0, results: [] });
-  }
-
   const parsedSearchQuery = parseOptionalDiscoverString(
     req.query.query,
     'Query',
@@ -3633,8 +3631,80 @@ discoverRoutes.get('/magazines', async (req, res) => {
       .json({ status: 400, message: parsedSearchQuery.error });
   }
   const query = parsedSearchQuery.value?.trim().toLowerCase() ?? '';
+  const publicQuery = parsedSearchQuery.value?.trim() ?? '';
+  const catalog = req.query.catalog ?? 'tracked';
+  if (catalog !== 'tracked' && catalog !== 'public') {
+    return res
+      .status(400)
+      .json({ status: 400, message: 'Catalog must be tracked or public.' });
+  }
   const page = parsePositiveInt(req.query.page, 1, 500);
   const itemsPerPage = 20;
+  const settings = getExternalRuntimeConfig();
+
+  if (catalog === 'public') {
+    if (!publicQuery) {
+      return res
+        .status(200)
+        .json({ page, totalPages: 0, totalResults: 0, results: [] });
+    }
+
+    const googleBooksApiKey = getSettings().main.googleBooksApiKey?.trim();
+    if (!googleBooksApiKey) {
+      return res.status(503).json({
+        status: 503,
+        message:
+          'Public magazine search requires a Google Books API key. Configure it in Settings > Main.',
+      });
+    }
+
+    try {
+      const response = await new GoogleBooksAPI(
+        googleBooksApiKey
+      ).searchMagazines({
+        query: publicQuery,
+        page,
+        limit: itemsPerPage,
+      });
+      const mediaByTitle = await findMagazineMediaByTitles(
+        response.results.map((magazine) => magazine.title),
+        req.user
+      );
+      const results = response.results.map((magazine) => {
+        const media = mediaByTitle.get(normalizeMagazineTitle(magazine.title));
+        return mapGoogleBooksMagazine(
+          magazine,
+          media,
+          settings.lazylibrarian.length > 0
+        );
+      });
+
+      return res.status(200).json({
+        page,
+        totalPages: Math.max(
+          Math.ceil(response.totalItems / itemsPerPage),
+          response.totalItems > 0 ? 1 : 0
+        ),
+        totalResults: response.totalItems,
+        results: filterEntityResponse(results, req.user),
+      });
+    } catch (error) {
+      logger.error('Failed to fetch public magazine discovery results', {
+        label: 'Discover Magazines',
+        ...getErrorLogFields(error),
+      });
+      return res.status(503).json({
+        status: 503,
+        message: 'Google Books is unavailable. Try again shortly.',
+      });
+    }
+  }
+
+  if (settings.lazylibrarian.length === 0) {
+    return res
+      .status(200)
+      .json({ page, totalPages: 0, totalResults: 0, results: [] });
+  }
 
   try {
     const magazinesByTitle = new Map<

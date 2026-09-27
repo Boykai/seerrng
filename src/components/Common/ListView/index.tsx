@@ -308,11 +308,14 @@ const ListView = ({
                 status={title.mediaInfo?.status}
                 title={title.title}
                 artist={
-                  title.latestIssue
+                  title.publisher ??
+                  (title.latestIssue
                     ? `Latest issue ${title.latestIssue}`
-                    : undefined
+                    : undefined)
                 }
+                year={title.firstPublishYear?.toString()}
                 mediaType={title.mediaType}
+                requestable={title.requestable}
                 canExpand
               />
             );

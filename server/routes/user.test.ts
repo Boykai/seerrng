@@ -931,7 +931,7 @@ describe('User route input validation', () => {
       .post('/user/2/settings/notifications')
       .send({ telegramSendSilently: 'true' });
     const maskRes = await agent.post('/user/2/settings/notifications').send({
-      notificationTypes: { pushbullet: 16384 },
+      notificationTypes: { pushbullet: Number.MAX_SAFE_INTEGER },
     });
     const unknownBitRes = await agent
       .post('/user/2/settings/notifications')

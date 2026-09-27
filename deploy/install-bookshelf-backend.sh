@@ -463,10 +463,12 @@ resolve_backend() {
   local existing_native
   local existing_profiles
   local existing_backend
+  local existing_instance_mode
 
   case "$BOOKSHELF_BACKEND" in
     auto)
       existing_backend="$(env_file_value "${INSTALL_DIR}/.env" "BOOKSHELF_BACKEND")"
+      existing_instance_mode="$(env_file_value "${INSTALL_DIR}/.env" "BOOKSHELF_INSTANCE_MODE")"
       if [ "$BOOKSHELF_BACKEND_EXPLICIT" != "x" ] &&
         [ -n "$existing_instance_mode" ] &&
         { [ "$existing_backend" = "hardcover" ] || [ "$existing_backend" = "softcover" ]; }; then

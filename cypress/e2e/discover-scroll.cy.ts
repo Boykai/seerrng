@@ -70,6 +70,7 @@ describe('Discover Back navigation geometry', () => {
   beforeEach(() => {
     cy.viewport(1440, 900);
     cy.loginAsAdmin();
+    cy.mockConfiguredMediaAvailability({ booksEnabled: true });
   });
 
   [

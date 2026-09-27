@@ -4,6 +4,7 @@ import { afterEach, before, describe, it, mock } from 'node:test';
 import ComicVineAPI from '@server/api/comicvine';
 import CoverArtArchive from '@server/api/coverartarchive';
 import ExternalAPI from '@server/api/externalapi';
+import GoogleBooksAPI from '@server/api/googlebooks';
 import ListenBrainzAPI from '@server/api/listenbrainz';
 import MusicBrainz from '@server/api/musicbrainz';
 import OpenLibraryAPI from '@server/api/openlibrary';
@@ -4090,6 +4091,81 @@ describe('GET /discover/comics', () => {
       res.body.results[0].mediaInfo.status,
       MediaStatus.AVAILABLE
     );
+  });
+});
+
+describe('GET /discover/magazines', () => {
+  afterEach(() => {
+    getSettings().main.googleBooksApiKey = '';
+  });
+
+  it('explains how to enable public catalog search when no key is configured', async () => {
+    const agent = await login();
+    const res = await agent
+      .get('/discover/magazines')
+      .query({ catalog: 'public', query: 'Science' });
+
+    assert.strictEqual(res.status, 503);
+    assert.match(res.body.message, /Google Books API key/);
+  });
+
+  it('searches the public magazine catalog and keeps request identity title-based', async () => {
+    getSettings().main.googleBooksApiKey = 'google-books-test-key';
+    const searchMagazines = mock.method(
+      GoogleBooksAPI.prototype,
+      'searchMagazines',
+      async ({
+        query,
+        page,
+        limit,
+      }: {
+        query: string;
+        page?: number;
+        limit?: number;
+      }) => {
+        assert.strictEqual(query, 'The New Yorker');
+        assert.strictEqual(page, 2);
+        assert.strictEqual(limit, 20);
+
+        return {
+          totalItems: 21,
+          results: [
+            {
+              id: 'new-yorker-2026',
+              title: 'The New Yorker',
+              publisher: 'Condé Nast',
+              publishedDate: '2026-09',
+              imageUrl:
+                'https://books.google.com/books/content?id=new-yorker-2026',
+              infoUrl: 'https://books.google.com/books?id=new-yorker-2026',
+            },
+          ],
+        };
+      }
+    );
+
+    const agent = await login();
+    const res = await agent.get('/discover/magazines').query({
+      catalog: 'public',
+      query: 'The New Yorker',
+      page: 2,
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(searchMagazines.mock.callCount(), 1);
+    assert.strictEqual(res.body.totalResults, 21);
+    assert.strictEqual(res.body.totalPages, 2);
+    assert.deepStrictEqual(res.body.results[0], {
+      id: 'The New Yorker',
+      provider: 'googlebooks',
+      mediaType: 'magazine',
+      title: 'The New Yorker',
+      posterPath: 'https://books.google.com/books/content?id=new-yorker-2026',
+      publisher: 'Condé Nast',
+      firstPublishYear: 2026,
+      latestIssue: '2026-09',
+      requestable: false,
+    });
   });
 });
 

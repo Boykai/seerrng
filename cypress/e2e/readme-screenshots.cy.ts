@@ -97,6 +97,10 @@ const installMocks = () => {
   cy.intercept('GET', /\/imageproxy\//, (req) => {
     req.redirect('/logo_full.png');
   });
+  cy.mockConfiguredMediaAvailability({
+    booksEnabled: true,
+    musicEnabled: true,
+  });
   cy.intercept('GET', '/api/v1/settings/discover', [
     { id: 1, type: 4, enabled: true, isBuiltIn: true, order: 0 },
     { id: 2, type: 22, enabled: true, isBuiltIn: true, order: 1 },

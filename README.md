@@ -29,6 +29,8 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
   - [Software requests: ROMs and PC games](https://snapetech.github.io/seerrng/using-seerr/software-acquisition/)
   - [Request Status and Download copy](https://snapetech.github.io/seerrng/using-seerr/request-status/)
   - [Books, authors, and series](https://snapetech.github.io/seerrng/using-seerr/books-and-series/)
+  - [Configure comics](https://snapetech.github.io/seerrng/using-seerr/comics-backend/)
+  - [Configure magazines](https://snapetech.github.io/seerrng/using-seerr/magazines-backend/)
   - [Indexer searches by media category](https://snapetech.github.io/seerrng/using-seerr/indexer-searches/)
   - [Configure services](https://snapetech.github.io/seerrng/using-seerr/settings/services/)
 - [Screenshots](#screenshots)
@@ -50,11 +52,12 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
 
 ## What SeerrNG Does
 
-- Requests and approvals for movies, shows, music, ebooks, audiobooks, and combined ebook/audiobook book requests.
+- Requests and approvals for movies, shows, music, ebooks, audiobooks, comics, magazines, emulation ROMs, and PC games.
 - Media-server integration with Plex, Jellyfin, and Emby.
 - Automation service integration with Radarr, Sonarr, Lidarr, and Bookshelf/Readarr-compatible APIs.
 - Music discovery and metadata through MusicBrainz, ListenBrainz, Cover Art Archive, TheAudioDB, and archive-backed artwork sources.
 - Book discovery and identity matching through Open Library, ISBN-10/ISBN-13 normalization, foreign book IDs, and edition IDs.
+- Comic discovery through ComicVine and magazine discovery through Google Books or LazyLibrarian, with Mylar3/Kapowarr and LazyLibrarian handling acquisition.
 - Separate ebook and audiobook service routing so both formats can be requested, approved, scanned, retried, and removed independently.
 - One BookshelfNG instance can manage both formats on the same book record.
   When both formats are enabled, their separate SeerrNG service entries can
@@ -105,6 +108,8 @@ starting points:
 - [Install SeerrNG](https://snapetech.github.io/seerrng/getting-started/)
 - [Install on Unraid](https://snapetech.github.io/seerrng/getting-started/third-parties/unraid)
 - [Find books, authors, and series](https://snapetech.github.io/seerrng/using-seerr/books-and-series/)
+- [Discover and request comics](https://snapetech.github.io/seerrng/using-seerr/comics-backend/)
+- [Discover and request magazines](https://snapetech.github.io/seerrng/using-seerr/magazines-backend/)
 - [Track requests and status history](https://snapetech.github.io/seerrng/using-seerr/request-status/)
 - [Browse and request emulation games and PC games](https://snapetech.github.io/seerrng/using-seerr/software-acquisition/)
 - [Download verified files from Request Status](https://snapetech.github.io/seerrng/using-seerr/request-status/)

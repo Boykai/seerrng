@@ -652,6 +652,7 @@ describe('Settings route input validation', () => {
       spotifyClientId: settings.main.spotifyClientId,
       spotifyClientSecret: settings.main.spotifyClientSecret,
       youtubeApiKey: settings.main.youtubeApiKey,
+      googleBooksApiKey: settings.main.googleBooksApiKey,
     };
 
     try {
@@ -659,6 +660,7 @@ describe('Settings route input validation', () => {
         spotifyClientId: 'spotify-client-id',
         spotifyClientSecret: 'spotify-client-secret',
         youtubeApiKey: 'youtube-api-key',
+        googleBooksApiKey: 'google-books-api-key',
       });
 
       assert.strictEqual(res.status, 200);
@@ -668,13 +670,19 @@ describe('Settings route input validation', () => {
         'spotify-client-secret'
       );
       assert.strictEqual(settings.main.youtubeApiKey, 'youtube-api-key');
+      assert.strictEqual(
+        settings.main.googleBooksApiKey,
+        'google-books-api-key'
+      );
       assert.strictEqual(res.body.spotifyClientId, 'spotify-client-id');
       assert.strictEqual(res.body.spotifyClientSecret, '[REDACTED]');
       assert.strictEqual(res.body.youtubeApiKey, '[REDACTED]');
+      assert.strictEqual(res.body.googleBooksApiKey, '[REDACTED]');
     } finally {
       settings.main.spotifyClientId = original.spotifyClientId;
       settings.main.spotifyClientSecret = original.spotifyClientSecret;
       settings.main.youtubeApiKey = original.youtubeApiKey;
+      settings.main.googleBooksApiKey = original.googleBooksApiKey;
     }
   });
 

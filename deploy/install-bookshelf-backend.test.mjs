@@ -229,6 +229,7 @@ describe('Bookshelf backup permissions', () => {
     assert.match(compose, /profiles: \['rreading-glasses'\]/);
     assert.match(compose, /entrypoint: \['\/main', 'serve'\]/);
     assert.doesNotMatch(compose, /\/bin\/sh/);
+    assert.match(env, /BOOKSHELF_INSTANCE_MODE=single/);
     assert.match(env, /BOOKSHELF_METADATA_MODE=compatibility/);
     assert.match(env, /BOOKSHELF_HARDCOVER_NATIVE=false/);
     assert.match(env, /COMPOSE_PROFILES=rreading-glasses/);
@@ -238,7 +239,7 @@ describe('Bookshelf backup permissions', () => {
     assert.match(env, /BOOKSHELF_METADATA_SOURCES=\n/);
     assert.match(
       env,
-      /BOOKSHELF_EBOOKS_METADATA_SOURCES=gutendex,googlebooks,europeana/
+      /BOOKSHELF_EBOOKS_METADATA_SOURCES=loc,gutendex,googlebooks,europeana/
     );
     assert.match(
       env,
@@ -287,7 +288,11 @@ describe('Bookshelf backup permissions', () => {
     environment.BOOKSHELF_EBOOKS_PORT = '9787';
     environment.BOOKSHELF_AUDIOBOOKS_PORT = '9788';
 
-    const result = await runInstaller(environment, '--skip-pull');
+    const result = await runInstaller(
+      environment,
+      '--skip-pull',
+      '--split-instances'
+    );
 
     assert.equal(result.code, 0, result.stderr);
     const compose = await readFile(
@@ -469,7 +474,11 @@ describe('Bookshelf backup permissions', () => {
       'BOOKSHELF_METADATA_SOURCES=loc,googlebooks,europeana\n'
     );
 
-    const result = await runInstaller(environment, '--skip-pull');
+    const result = await runInstaller(
+      environment,
+      '--skip-pull',
+      '--split-instances'
+    );
 
     assert.equal(result.code, 0, result.stderr);
     const env = await readFile(

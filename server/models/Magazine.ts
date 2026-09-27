@@ -1,3 +1,4 @@
+import type { GoogleBooksMagazineResult } from '@server/api/googlebooks';
 import type {
   LazyLibrarianIssue,
   LazyLibrarianMagazine,
@@ -7,14 +8,17 @@ import { normalizeMagazineTitle } from '@server/lib/magazineIdentity';
 
 export interface MagazineResult {
   id: string;
-  provider: 'lazylibrarian';
+  provider: 'lazylibrarian' | 'googlebooks';
   mediaType: 'magazine';
   title: string;
   posterPath?: string;
   backdropPath?: string;
+  publisher?: string;
+  firstPublishYear?: number;
   status?: string;
   latestIssue?: string;
   issueCount?: number;
+  requestable?: boolean;
   mediaInfo?: Media;
 }
 
@@ -58,8 +62,30 @@ export const mapLazyLibrarianMagazine = (
   status: magazine.status,
   latestIssue: magazine.issueDate,
   issueCount: issues.length,
+  requestable: true,
   mediaInfo: media,
 });
+
+export const mapGoogleBooksMagazine = (
+  magazine: GoogleBooksMagazineResult,
+  media?: Media,
+  requestable = false
+): MagazineResult => {
+  const publishedYear = magazine.publishedDate?.match(/^\d{4}/)?.[0];
+
+  return {
+    id: magazine.title,
+    provider: 'googlebooks',
+    mediaType: 'magazine',
+    title: magazine.title,
+    posterPath: magazine.imageUrl,
+    publisher: magazine.publisher,
+    firstPublishYear: publishedYear ? Number(publishedYear) : undefined,
+    latestIssue: magazine.publishedDate,
+    requestable,
+    mediaInfo: media,
+  };
+};
 
 export const mapLazyLibrarianMagazineDetails = (
   magazine: LazyLibrarianMagazine,

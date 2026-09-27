@@ -37,6 +37,7 @@ const makeBook = (title: string, id: string) => ({
 describe('Theme picker and seeded discovery refresh', () => {
   beforeEach(() => {
     cy.loginAsAdmin();
+    cy.mockConfiguredMediaAvailability({ booksEnabled: true });
   });
 
   it('changes themes through the picker and persists across reloads', () => {

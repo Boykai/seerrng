@@ -1,5 +1,6 @@
 /// <reference types="cypress" />
 import 'cy-mobile-commands';
+import { mockConfiguredMediaAvailability } from './configuredMedia';
 
 Cypress.Commands.add('login', (email, password) => {
   cy.session(
@@ -67,3 +68,8 @@ Cypress.Commands.add('loginAsUser', () => {
     cy.login(USER_EMAIL, USER_PASSWORD);
   });
 });
+
+Cypress.Commands.add(
+  'mockConfiguredMediaAvailability',
+  mockConfiguredMediaAvailability
+);

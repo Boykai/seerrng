@@ -65,6 +65,7 @@ interface TitleCardProps {
   status?: MediaStatus;
   status4k?: MediaStatus;
   canExpand?: boolean;
+  requestable?: boolean;
   inProgress?: boolean;
   inProgress4k?: boolean;
   canRequestAdditionalFormat?: boolean;
@@ -105,6 +106,7 @@ const TitleCard = ({
   inProgress4k = false,
   canRequestAdditionalFormat = false,
   canExpand = false,
+  requestable = true,
   mutateParent,
   showText = false,
   hideAssociationWhenEmpty = false,
@@ -496,6 +498,7 @@ const TitleCard = ({
   }
 
   const showRequestButton =
+    requestable &&
     canUseRequestActions &&
     hasPermission(requestPermissions, { type: 'or' }) &&
     !isArtist;

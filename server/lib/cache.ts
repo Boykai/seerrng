@@ -20,6 +20,7 @@ export type AvailableCacheIds =
   | 'coverartarchive'
   | 'openlibrary'
   | 'comicvine'
+  | 'googlebooks'
   | 'wikidata'
   | 'tadb'
   | 'associations';
@@ -39,6 +40,7 @@ const GITHUB_MAX_KEYS = 16;
 const PLEX_TV_MAX_KEYS = 5000;
 const PLEX_WATCHLIST_MAX_KEYS = 500;
 const TVDB_MAX_KEYS = 500;
+const GOOGLE_BOOKS_MAX_KEYS = 1000;
 
 export interface CacheStats {
   hits: number;
@@ -201,6 +203,11 @@ class CacheManager {
     comicvine: new Cache('comicvine', 'ComicVine API', {
       stdTtl: 43200,
       checkPeriod: 60 * 30,
+    }),
+    googlebooks: new Cache('googlebooks', 'Google Books API', {
+      stdTtl: 900,
+      maxKeys: GOOGLE_BOOKS_MAX_KEYS,
+      checkPeriod: 60 * 5,
     }),
     wikidata: new Cache('wikidata', 'Wikidata API', {
       stdTtl: 43200,

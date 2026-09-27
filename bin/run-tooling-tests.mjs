@@ -14,6 +14,7 @@ const portableTests = [
   'scripts/check-workflow-boundaries.test.mjs',
   'scripts/release-notes.test.mjs',
   'scripts/release-workflow.test.mjs',
+  'scripts/replace-server-import-aliases.test.mjs',
   'scripts/verify-container-manifest.test.mjs',
   'packaging/unraid/unraid-template.test.mjs',
 ];

@@ -1204,6 +1204,7 @@ const parseMainSettingsBody = (
     ['spotifyClientSecret', 'spotifyClientSecret'],
     ['youtubeApiKey', 'youtubeApiKey'],
     ['comicVineApiKey', 'comicVineApiKey'],
+    ['googleBooksApiKey', 'googleBooksApiKey'],
   ] as const) {
     const parsed = parsePatchBoundedString(body, key, {
       fieldName,

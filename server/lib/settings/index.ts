@@ -272,6 +272,7 @@ export interface MainSettings {
   spotifyClientSecret?: string;
   youtubeApiKey?: string;
   comicVineApiKey?: string;
+  googleBooksApiKey?: string;
 }
 
 export interface ProxySettings {
@@ -597,6 +598,7 @@ class Settings {
         spotifyClientSecret: '',
         youtubeApiKey: '',
         comicVineApiKey: '',
+        googleBooksApiKey: '',
       },
       plex: {
         name: '',

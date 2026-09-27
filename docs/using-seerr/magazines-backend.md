@@ -29,15 +29,26 @@ it (or immediately when the request is auto-approved).
 
 ## Discover and request titles
 
-The Magazines page lists titles already tracked by configured LazyLibrarian
-instances. Global Search also has a **Magazines** category that searches the
-tracked title catalogs across configured instances. Enter a main search query
-to find titles; the category can further narrow the displayed matches by title
-or latest issue. To request a title that is not listed, choose **Request
-Magazine** and enter its title. LazyLibrarian adds that title to its own
-magazine list. Users with **Advanced Request** or **Manage Requests** can choose
-which LazyLibrarian instance receives the request when multiple instances are
-configured; other requesters use the default instance.
+The **Tracked titles** catalog lists magazines already tracked by configured
+LazyLibrarian instances. Global Search also has a **Magazines** category for
+searching those tracked title catalogs. Enter a title to filter the results.
+
+To search titles that are not already in LazyLibrarian, select **Public
+catalog**. This searches Google's [Books API](https://developers.google.com/books/docs/v1/using)
+with its magazine-only publication filter. An administrator must first create
+an API key for public data in Google Cloud Console and save it in **Settings >
+Main > Magazine Catalog > Google Books API Key**. The key stays on the server;
+SeerrNG does not send it to browsers. Results include the title, publisher,
+publication date, and cover when Google provides them. Google Books is a
+discovery catalog; SeerrNG does not copy its records into the LazyLibrarian
+library.
+
+Requests and issue tracking still use LazyLibrarian. Configure at least one
+LazyLibrarian service to submit a request from a public-catalog result. To
+request a title manually from the tracked catalog, choose **Request Magazine**
+and enter its title. Users with **Advanced Request** or **Manage Requests** can
+choose which LazyLibrarian instance receives the request when multiple
+instances are configured; other requesters use the default instance.
 
 SeerrNG checks requests and availability by a normalized title, so requests
 that differ only in case or repeated whitespace resolve to the same magazine.
@@ -84,12 +95,20 @@ Users see their current usage in the request form and profile.
 
 ## Troubleshooting
 
-Magazine discovery is empty:
+Tracked magazine discovery is empty:
 
 - Confirm that at least one LazyLibrarian server is configured in **Settings >
   Services**.
 - Enable **Library Scan** and add or import magazine titles in LazyLibrarian.
 - For a title not already tracked, enter its name with **Request Magazine**.
+
+Public catalog search is unavailable:
+
+- Add a Google Books API key in **Settings > Main > Magazine Catalog**.
+- Confirm the Books API is enabled for the Google Cloud project and the key's
+  restrictions allow SeerrNG's server to use it.
+- Public catalog search needs a title query; it does not load an unfiltered
+  magazine shelf.
 
 Connection tests fail:
 
@@ -99,9 +118,9 @@ Connection tests fail:
 
 ## Current boundaries
 
-- Magazine discovery searches titles already tracked by LazyLibrarian.
-  SeerrNG can request an untracked title by name, but it does not provide a
-  separate public magazine metadata catalog.
+- Google Books metadata is used for live public-catalog search results. The
+  LazyLibrarian catalog remains the source for requests, issue dates, and file
+  availability.
 - LazyLibrarian controls the magazine folder and search settings globally.
   SeerrNG does not offer per-request folders or profiles.
 - The LazyLibrarian API used here does not provide SeerrNG with individual

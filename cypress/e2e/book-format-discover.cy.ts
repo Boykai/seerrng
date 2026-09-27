@@ -1,6 +1,7 @@
 describe('Book discovery formats', () => {
   beforeEach(() => {
     cy.loginAsAdmin();
+    cy.mockConfiguredMediaAvailability({ booksEnabled: true });
   });
 
   it('separates Books and Audiobooks while preserving discovery filters', () => {

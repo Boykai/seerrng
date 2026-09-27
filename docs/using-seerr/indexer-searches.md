@@ -18,7 +18,7 @@ replace the catalog used by SeerrNG.
 | Music | MusicBrainz and music metadata sources | Lidarr | Sync compatible music indexers to Lidarr. |
 | Ebooks and audiobooks | Open Library, configured Bookshelf catalogs, and book metadata providers | BookshelfNG, Chaptarr, or another configured Readarr-compatible service | Prowlarr's Readarr app can sync book indexers to a compatible destination. Confirm that the specific Bookshelf build accepts and uses synced indexers. SeerrNG sends no Prowlarr search request. |
 | Comics | ComicVine | Mylar3, or Kapowarr's direct-download sources | Prowlarr can sync indexers to Mylar3. Kapowarr uses GetComics and its mirror hosts, so adding Prowlarr does not add indexers to Kapowarr. |
-| Magazines | Tracked LazyLibrarian catalogs; untracked titles can be requested by name | LazyLibrarian | Prowlarr has a LazyLibrarian app adapter. Sync supported categories and verify the indexers appear and search in your LazyLibrarian build. |
+| Magazines | Google Books public catalog or titles tracked by LazyLibrarian | LazyLibrarian | Prowlarr has a LazyLibrarian app adapter. Sync supported categories and verify the indexers appear and search in your LazyLibrarian build. |
 | PC games | IGDB through QuestarrNG | QuestarrNG | QuestarrNG supports Prowlarr-synced indexers. The game catalog remains IGDB. |
 | Retro and Modern ROMs | IGDB through QuestarrNG, matched to ROMarrNG systems | ROMarrNG | ROMarrNG can use Prowlarr or direct Torznab/Newznab sources; plugin sources are also available. |
 
