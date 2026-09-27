@@ -54,6 +54,8 @@ const messages = defineMessages('components.SoftwareCatalog', {
   loadMore: 'Load more titles',
   retryLoad: 'Retry loading titles',
   loadError: 'The software catalog could not be loaded.',
+  upgradeQuestarr:
+    'Update QuestarrNG to browse software by genre or release year.',
   configureHint:
     'Ask an administrator to connect QuestarrNG and the required acquisition service in Settings → Services.',
   request: 'Request',
@@ -326,6 +328,13 @@ const SoftwareCatalog = ({
     ? Boolean(lastPage?.nextCursor)
     : lastPage?.nextOffset != null;
   const isLoadingMore = !error && size > (pages?.length ?? 0);
+  const catalogErrorMessage =
+    axios.isAxiosError(error) &&
+    error.response?.status === 503 &&
+    error.response.data?.error ===
+      'Upgrade QuestarrNG to use software genre and year filters.'
+      ? messages.upgradeQuestarr
+      : messages.loadError;
 
   useEffect(() => {
     if (loadMoreInView && hasMore && !isLoadingMore && !error) {
@@ -617,16 +626,18 @@ const SoftwareCatalog = ({
           </div>
         ) : error && !games.length ? (
           <div className="mt-5 rounded-lg border border-gray-700 bg-gray-800 px-5 py-6 text-sm text-gray-300">
-            <p>{intl.formatMessage(messages.loadError)}</p>
-            <p className="mt-2 text-gray-400">
-              {intl.formatMessage(messages.configureHint)}
-            </p>
+            <p>{intl.formatMessage(catalogErrorMessage)}</p>
+            {catalogErrorMessage === messages.loadError && (
+              <p className="mt-2 text-gray-400">
+                {intl.formatMessage(messages.configureHint)}
+              </p>
+            )}
           </div>
         ) : games.length ? (
           <>
             {error && (
               <p role="alert" className="mt-4 text-sm text-amber-300">
-                {intl.formatMessage(messages.loadError)}
+                {intl.formatMessage(catalogErrorMessage)}
               </p>
             )}
             <ul className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">

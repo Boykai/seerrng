@@ -21,6 +21,7 @@ import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
+import { AxiosError } from 'axios';
 import type { Express } from 'express';
 import express from 'express';
 import * as OpenApiValidator from 'express-openapi-validator';
@@ -663,6 +664,45 @@ describe('software request routes', () => {
     assert.strictEqual(searchResponse.status, 200);
     assert.strictEqual(searchResponse.body.nextCursor, null);
     assert.strictEqual(popularResponse.status, 200);
+    assert.strictEqual(popularResponse.body.nextOffset, null);
+  });
+
+  it('shows the complete legacy QuestarrNG window when paged endpoints are unavailable', async () => {
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 6, name: 'PC (Microsoft Windows)' },
+    ]);
+    const unavailable = Object.assign(new AxiosError('Not found'), {
+      response: { status: 404 },
+    });
+    mock.method(QuestarrNGAPI.prototype, 'searchCatalogPage', async () => {
+      throw unavailable;
+    });
+    mock.method(QuestarrNGAPI.prototype, 'getPopularCatalogPage', async () => {
+      throw unavailable;
+    });
+    const legacyGames = Array.from({ length: 50 }, (_, index) => ({
+      ...pcGame,
+      igdbId: index + 1,
+    }));
+    mock.method(QuestarrNGAPI.prototype, 'searchCatalog', async () =>
+      legacyGames
+    );
+    mock.method(QuestarrNGAPI.prototype, 'getPopularCatalog', async () =>
+      legacyGames
+    );
+
+    const searchResponse = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'game', q: 'Test Game', limit: 24 });
+    const popularResponse = await request(createApp())
+      .get('/request/software/catalog/popular')
+      .query({ category: 'game', limit: 24 });
+
+    assert.strictEqual(searchResponse.status, 200);
+    assert.strictEqual(searchResponse.body.results.length, 50);
+    assert.strictEqual(searchResponse.body.nextCursor, null);
+    assert.strictEqual(popularResponse.status, 200);
+    assert.strictEqual(popularResponse.body.results.length, 50);
     assert.strictEqual(popularResponse.body.nextOffset, null);
   });
 

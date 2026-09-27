@@ -708,6 +708,7 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
     }
     let games: SoftwareCatalogGame[];
     let nextCursor: string | null;
+    let legacyCatalog = false;
     try {
       const page = await api.searchCatalogPage(
         parsed.query,
@@ -744,13 +745,14 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
         CATALOG_PROVIDER_FETCH_LIMIT
       );
       nextCursor = null;
+      legacyCatalog = true;
     }
     const results = mapCategoryGames(
       games,
       parsed.category,
       systems,
       parsed.filters
-    ).slice(0, parsed.limit);
+    ).slice(0, legacyCatalog ? CATALOG_PROVIDER_FETCH_LIMIT : parsed.limit);
     enqueueImageCacheWarm(extractImageCacheUrls(results));
     return res.status(200).json({
       results: await catalogResultsWithAvailability(results, parsed.category),
@@ -798,6 +800,7 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
     }
     let games: SoftwareCatalogGame[];
     let nextOffset: number | null;
+    let legacyCatalog = false;
     try {
       const page = await api.getPopularCatalogPage(
         limit,
@@ -829,10 +832,11 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
       }
       games = await api.getPopularCatalog(CATALOG_PROVIDER_FETCH_LIMIT);
       nextOffset = null;
+      legacyCatalog = true;
     }
     const results = mapCategoryGames(games, category, systems, filters).slice(
       0,
-      limit
+      legacyCatalog ? CATALOG_PROVIDER_FETCH_LIMIT : limit
     );
     enqueueImageCacheWarm(extractImageCacheUrls(results));
     return res.status(200).json({

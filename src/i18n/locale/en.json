@@ -3097,6 +3097,7 @@
   "components.SoftwareCatalog.titleUnavailable": "This catalog title could not be loaded.",
   "components.SoftwareCatalog.tracked": "Tracked",
   "components.SoftwareCatalog.universal": "Universal",
+  "components.SoftwareCatalog.upgradeQuestarr": "Update QuestarrNG to browse software by genre or release year.",
   "components.SoftwareCatalog.watchVideo": "Watch {name}",
   "components.SoftwareCatalog.windows": "Windows",
   "components.SoftwareCatalog.x64": "x64",
