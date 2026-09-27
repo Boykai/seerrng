@@ -24,10 +24,11 @@ const messages = defineMessages('components.Search.SoftwarePreview', {
 const SoftwareSearchPreview = ({ query }: { query: string }) => {
   const intl = useIntl();
   const { currentSettings } = useSettings();
-  const categories = (['retro', 'modern', 'game'] as const).filter((category) =>
-    currentSettings.softwareEnabled &&
-    (category === 'game' || currentSettings.romarrEnabled) &&
-    isConfiguredMediaCategoryEnabled(category, currentSettings)
+  const categories = (['retro', 'modern', 'game'] as const).filter(
+    (category) =>
+      currentSettings.softwareEnabled &&
+      (category === 'game' || currentSettings.romarrEnabled) &&
+      isConfiguredMediaCategoryEnabled(category, currentSettings)
   );
   const categoryKey = categories.join(',');
   const { data } = useSWR<PreviewItem[]>(

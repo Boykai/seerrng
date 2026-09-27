@@ -635,7 +635,7 @@ const ComicDetails = () => {
                                 {issue.name ? ` · ${issue.name}` : ''}
                               </p>
                               {issue.coverDate && (
-                                <p className="text-xs text-gray-400">
+                                <p className="refreshed-detail-text-muted text-xs">
                                   {issue.coverDate}
                                 </p>
                               )}

@@ -5,4 +5,4 @@ area: comics
 action: none
 breaking: false
 ---
-If ComicVine fails while loading later issue pages, the issues already loaded remain visible and users can retry the list.
+Comic detail issue dates use the shared detail text styling, and loaded issues remain visible with a retry option if ComicVine fails on a later page.
