@@ -45,6 +45,7 @@ import path from 'node:path';
 const softwareRoutes = Router();
 const MAX_CATALOG_LIMIT = 50;
 const CATALOG_PROVIDER_FETCH_LIMIT = 50;
+const QUESTARR_CATALOG_IMAGE_ORIGIN = 'https://images.igdb.com';
 const ACTIVE_STATUSES: SoftwareRequestStatus[] = [
   'pending',
   'approved',
@@ -110,17 +111,30 @@ const gameOptions = (game: SoftwareCatalogGame) =>
       platform.name.length <= 128
   );
 
+const isSafeCatalogCoverUrl = (value: unknown): value is string => {
+  if (typeof value !== 'string' || value.length > 2048) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === 'https:' &&
+      url.origin === QUESTARR_CATALOG_IMAGE_ORIGIN &&
+      !url.username &&
+      !url.password
+    );
+  } catch {
+    return false;
+  }
+};
+
 const sanitizeGame = (game: SoftwareCatalogGame): SoftwareCatalogGame => ({
   id: `igdb-${game.igdbId}`,
   igdbId: game.igdbId,
   title: game.title.slice(0, 512),
   summary: typeof game.summary === 'string' ? game.summary.slice(0, 5000) : '',
-  coverUrl:
-    typeof game.coverUrl === 'string' &&
-    /^https:\/\//i.test(game.coverUrl) &&
-    game.coverUrl.length <= 2048
-      ? game.coverUrl
-      : '',
+  coverUrl: isSafeCatalogCoverUrl(game.coverUrl) ? game.coverUrl : '',
   releaseDate:
     typeof game.releaseDate === 'string' ? game.releaseDate.slice(0, 32) : '',
   platforms: Array.isArray(game.platforms)

@@ -3,6 +3,7 @@ import { afterEach, before, describe, it, mock } from 'node:test';
 
 import LazyLibrarianAPI from '@server/api/lazylibrarian';
 import { getSettings, type LazyLibrarianSettings } from '@server/lib/settings';
+import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
 import type { Express } from 'express';
 import express from 'express';
@@ -109,5 +110,54 @@ describe('GET /magazine/:title', () => {
     const res = await request(app).get('/magazine/Science%20Monthly');
 
     assert.strictEqual(res.status, 503);
+  });
+
+  it('stops service fallback when the shared detail lookup deadline expires', async () => {
+    getSettings().lazylibrarian = [magazineService(1), magazineService(2)];
+    const controller = new AbortController();
+    const timeout = mock.method(
+      AbortSignal,
+      'timeout',
+      () => controller.signal
+    );
+    const getIssues = mock.method(
+      LazyLibrarianAPI.prototype,
+      'getIssues',
+      async (_title: string, signal?: AbortSignal) => {
+        assert.strictEqual(signal, controller.signal);
+        controller.abort();
+        return { issues: [] };
+      }
+    );
+
+    const res = await request(app).get('/magazine/Science%20Monthly');
+
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(timeout.mock.callCount(), 1);
+    assert.strictEqual(timeout.mock.calls[0].arguments[0], 20_000);
+    assert.strictEqual(getIssues.mock.callCount(), 1);
+  });
+
+  it('redacts API keys and control characters from service failure logs', async () => {
+    getSettings().lazylibrarian = [magazineService(1)];
+    const warning = mock.method(logger, 'warn', () => logger);
+    mock.method(LazyLibrarianAPI.prototype, 'getIssues', async () => {
+      throw new Error(
+        'LazyLibrarian request failed: apikey=super-secret\r\nfailed'
+      );
+    });
+
+    const res = await request(app).get('/magazine/Science%20Monthly');
+
+    assert.strictEqual(res.status, 503);
+    const [, logContext] = warning.mock.calls[0].arguments as unknown as [
+      string,
+      Record<string, unknown>,
+    ];
+    assert.strictEqual(
+      logContext.errorMessage,
+      'LazyLibrarian request failed: apikey=[redacted] failed'
+    );
+    assert.doesNotMatch(JSON.stringify(logContext), /super-secret/);
   });
 });

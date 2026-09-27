@@ -12,12 +12,14 @@ import { runWithServarrServiceSnapshot } from '@server/lib/serviceAdmission';
 import logger from '@server/logger';
 import { mapLazyLibrarianMagazineDetails } from '@server/models/Magazine';
 import { filterEntityResponse } from '@server/utils/entityResponse';
+import { getHttpErrorDetails } from '@server/utils/httpError';
 import { parsePositiveRouteId } from '@server/utils/routeId';
 import { parseBoundedString } from '@server/utils/validation';
 import { Router } from 'express';
 
 const magazineRoutes = Router();
 const maxServiceId = 1_000_000_000;
+const maxMagazineDetailLookupMs = 20_000;
 
 magazineRoutes.get('/cover/:serviceId/:coverId', async (req, res) => {
   const serviceId = parsePositiveRouteId(req.params.serviceId, maxServiceId);
@@ -52,7 +54,7 @@ magazineRoutes.get('/cover/:serviceId/:coverId', async (req, res) => {
     logger.warn('Failed to retrieve LazyLibrarian magazine cover', {
       label: 'Magazine',
       serviceId,
-      errorMessage: error instanceof Error ? error.message : String(error),
+      errorMessage: getHttpErrorDetails(error).errorMessage,
     });
     return res.status(404).send('Magazine cover not found.');
   }
@@ -109,13 +111,20 @@ magazineRoutes.get('/:title', async (req, res, next) => {
     const services = [...settings.lazylibrarian].sort(
       (left, right) => serviceRank(left) - serviceRank(right)
     );
+    const detailLookupSignal = AbortSignal.timeout(maxMagazineDetailLookupMs);
 
     let magazine = { title };
     let issues: Awaited<ReturnType<LazyLibrarianAPI['getIssues']>>['issues'] =
       [];
     let serviceId: number | undefined;
     let reachedService = false;
+    let foundDetails = false;
+    let lookupTimedOut = false;
     for (const service of services) {
+      if (detailLookupSignal.aborted) {
+        lookupTimedOut = true;
+        break;
+      }
       try {
         const detail = await runWithServarrServiceSnapshot(
           'lazylibrarian',
@@ -127,25 +136,31 @@ magazineRoutes.get('/:title', async (req, res, next) => {
             }).getIssues(
               current.id === media?.serviceId
                 ? (media?.externalServiceSlug ?? title)
-                : title
+                : title,
+              detailLookupSignal
             )
         );
         reachedService = true;
         if (detail.magazine || detail.issues.length > 0) {
+          foundDetails = true;
           magazine = detail.magazine ?? { title };
           issues = detail.issues;
           serviceId = service.id;
           break;
         }
       } catch (error) {
+        lookupTimedOut ||= detailLookupSignal.aborted;
         logger.warn('Failed to retrieve magazine details from service', {
           label: 'Magazine',
           serviceId: service.id,
-          errorMessage: error instanceof Error ? error.message : String(error),
+          errorMessage: getHttpErrorDetails(error).errorMessage,
         });
       }
     }
-    if (services.length > 0 && !reachedService) {
+    if (
+      services.length > 0 &&
+      (!reachedService || (lookupTimedOut && !foundDetails))
+    ) {
       return next({
         status: 503,
         message: 'Unable to retrieve magazine details.',
@@ -169,7 +184,7 @@ magazineRoutes.get('/:title', async (req, res, next) => {
   } catch (error) {
     logger.error('Failed to retrieve magazine details', {
       label: 'Magazine',
-      errorMessage: error instanceof Error ? error.message : String(error),
+      errorMessage: getHttpErrorDetails(error).errorMessage,
     });
     return next({
       status: 503,

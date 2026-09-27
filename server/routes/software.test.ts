@@ -303,7 +303,7 @@ describe('software request routes', () => {
     mock.method(
       QuestarrNGAPI.prototype,
       'searchCatalog',
-      async (_query, limit) => {
+      async (_query: string, limit: number = 20) => {
         providerLimit = limit;
         return [
           ...Array.from({ length: 24 }, (_, index) => ({

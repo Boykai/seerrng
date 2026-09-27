@@ -6,6 +6,7 @@ import {
   type SafeRemoteImage,
 } from '@server/utils/safeRemoteImage';
 import { buildServiceUrl } from '@server/utils/serviceUrl';
+import type { AxiosRequestConfig } from 'axios';
 
 export interface LazyLibrarianMagazine {
   title: string;
@@ -140,11 +141,13 @@ class LazyLibrarianAPI extends ExternalAPI {
   private async runCommand<T>(
     command: string,
     params: Record<string, string | number | boolean> = {},
-    ttl = 0
+    ttl = 0,
+    requestConfig: Pick<AxiosRequestConfig, 'signal'> = {}
   ): Promise<T> {
     const response = await this.get<unknown>(
       '/api',
       {
+        ...requestConfig,
         params: {
           apikey: this.apiKey,
           cmd: command,
@@ -179,10 +182,18 @@ class LazyLibrarianAPI extends ExternalAPI {
       : [];
   }
 
-  public async getIssues(title: string): Promise<LazyLibrarianMagazineDetail> {
-    const response = await this.runCommand<unknown>('getIssues', {
-      name: title,
-    });
+  public async getIssues(
+    title: string,
+    signal?: AbortSignal
+  ): Promise<LazyLibrarianMagazineDetail> {
+    const response = await this.runCommand<unknown>(
+      'getIssues',
+      {
+        name: title,
+      },
+      0,
+      { signal }
+    );
     if (!isRecord(response)) {
       return { issues: [] };
     }
