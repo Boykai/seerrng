@@ -48,6 +48,7 @@ interface ModalProps {
   alignTop?: boolean;
   actionsClass?: string;
   actionButtonSize?: 'standard' | 'default' | 'md' | 'sm';
+  manageHistory?: boolean;
 }
 
 const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
@@ -87,12 +88,13 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
       tertiaryButtonProps,
       actionsClass = '',
       actionButtonSize = 'sm',
+      manageHistory = true,
     },
     parentRef
   ) => {
     const intl = useIntl();
     const modalRef = useRef<HTMLDivElement>(null);
-    useModalBackNavigation(onCancel);
+    useModalBackNavigation(manageHistory ? onCancel : undefined);
     const backgroundClickableRef = useRef(backgroundClickable); // This ref is used to detect state change inside the useClickOutside hook
     useEffect(() => {
       backgroundClickableRef.current = backgroundClickable;

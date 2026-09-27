@@ -146,6 +146,7 @@ const SoftwareCatalog = () => {
   const [requestSuccess, setRequestSuccess] = useState('');
   const [requesting, setRequesting] = useState(false);
   const hydratedGameId = useRef<number | undefined>(undefined);
+  const openedFromCatalog = useRef(false);
   const linkedCategory =
     typeof router.query.category === 'string' &&
     categories.includes(router.query.category as Category)
@@ -171,6 +172,7 @@ const SoftwareCatalog = () => {
   useEffect(() => {
     if (!router.isReady) return;
     if (!linkedGameId) {
+      openedFromCatalog.current = false;
       hydratedGameId.current = undefined;
       setSelectedGame(null);
     } else if (
@@ -282,6 +284,7 @@ const SoftwareCatalog = () => {
   }, [error, hasMore, isLoadingMore, loadMoreInView, setSize]);
 
   const openRequest = (game: CatalogGame) => {
+    openedFromCatalog.current = true;
     hydratedGameId.current = game.igdbId;
     setSelectedGame(game);
     setSelectedSystem(game.emulationSystems?.[0]?.slug ?? '');
@@ -305,6 +308,11 @@ const SoftwareCatalog = () => {
   };
 
   const closeRequest = () => {
+    if (openedFromCatalog.current) {
+      openedFromCatalog.current = false;
+      router.back();
+      return;
+    }
     const nextQuery = { ...router.query };
     delete nextQuery.game;
     void router.replace(
@@ -623,6 +631,7 @@ const SoftwareCatalog = () => {
       {selectedGame && (
         <Transition as={Fragment} show={Boolean(selectedGame)}>
           <Modal
+            manageHistory={false}
             title={selectedGame.title}
             subTitle={
               canRequest
