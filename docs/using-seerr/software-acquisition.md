@@ -88,6 +88,12 @@ navigation. The page has three tabs:
 - Search filters the current tab; popular titles appear when no search is
   submitted.
 
+Software titles load as you scroll, with a **Load more titles** button available
+when another page exists. SeerrNG filters by the selected PC or emulation
+platform before showing each page. This requires a QuestarrNG build with the
+paged SeerrNG catalog endpoints. Older QuestarrNG builds continue to show the
+first available catalog window until upgraded.
+
 When requesting an emulation title, choose one of the supported systems shown
 for that title. SeerrNG stores the chosen system with the request and sends it
 to ROMarrNG. The request is not silently redirected to a different system.

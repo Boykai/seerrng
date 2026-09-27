@@ -11184,7 +11184,7 @@ paths:
   /request/software/catalog/search:
     get:
       summary: Search ROM and PC game catalog
-      description: Searches the authenticated QuestarrNG IGDB catalog and filters results to the requested emulation group or PC platform.
+      description: Searches the authenticated QuestarrNG IGDB catalog and filters results to the requested emulation group or PC platform. Pass the returned nextCursor to load the next page.
       tags:
         - request
       parameters:
@@ -11208,6 +11208,11 @@ paths:
             minimum: 1
             maximum: 50
             default: 24
+        - in: query
+          name: cursor
+          schema:
+            type: string
+            maxLength: 20000
       responses:
         '200':
           description: Matching catalog titles returned
@@ -11218,7 +11223,7 @@ paths:
   /request/software/catalog/popular:
     get:
       summary: List popular ROM and PC game catalog titles
-      description: Returns popular QuestarrNG catalog titles filtered to the selected emulation group or PC platform.
+      description: Returns popular QuestarrNG catalog titles filtered to the selected emulation group or PC platform. Pass the returned nextOffset to load the next page.
       tags:
         - request
       parameters:
@@ -11235,6 +11240,12 @@ paths:
             minimum: 1
             maximum: 50
             default: 24
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 10000
       responses:
         '200':
           description: Popular catalog titles returned

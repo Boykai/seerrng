@@ -2,7 +2,10 @@ import QuestarrNGAPI from '@server/api/software/questarrng';
 import ROMarrNGAPI, {
   type RomarrPlatform,
 } from '@server/api/software/romarrng';
-import type { SoftwareCatalogGame } from '@server/api/software/types';
+import type {
+  SoftwareCatalogGame,
+  SoftwareCatalogPlatform,
+} from '@server/api/software/types';
 import { getRepository } from '@server/datasource';
 import SoftwareRequest, {
   type SoftwareRequestCategory,
@@ -75,22 +78,26 @@ const parseCatalogQuery = (
   query: string;
   category: SoftwareRequestCategory;
   limit: number;
+  cursor?: string;
 } | null => {
   if (!isRecord(value)) return null;
   const query = typeof value.q === 'string' ? value.q.trim() : '';
   const category = value.category;
   const limit = value.limit === undefined ? 24 : Number(value.limit);
+  const cursor = value.cursor;
   if (
     !query ||
     query.length > 200 ||
     (category !== 'retro' && category !== 'modern' && category !== 'game') ||
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
-    limit > MAX_CATALOG_LIMIT
+    limit > MAX_CATALOG_LIMIT ||
+    (cursor !== undefined &&
+      (typeof cursor !== 'string' || !/^[A-Za-z0-9_-]{1,20000}$/.test(cursor)))
   ) {
     return null;
   }
-  return { query, category, limit };
+  return { query, category, limit, cursor: cursor as string | undefined };
 };
 
 const normalizePlatformName = (value: string): string =>
@@ -213,6 +220,69 @@ const systemMatchesGame = (
   );
 };
 
+const systemMatchesPlatform = (system: RomarrPlatform, name: string): boolean =>
+  [system.name, system.slug, ...(system.aliases ?? [])].some(
+    (candidate) =>
+      normalizePlatformName(candidate) === normalizePlatformName(name)
+  );
+
+const getCatalogCategoryContext = async (
+  api: QuestarrNGAPI,
+  category: SoftwareRequestCategory
+) => {
+  const [platforms, systems] = await Promise.all([
+    api.getCatalogPlatforms(),
+    category === 'game'
+      ? Promise.resolve([])
+      : getEmulationPlatforms().then((all) =>
+          all.filter((system) => system.group === category)
+        ),
+  ]);
+  const matches = (platform: SoftwareCatalogPlatform) =>
+    category === 'game'
+      ? isPcPlatformName(platform.name)
+      : systems.some((system) => systemMatchesPlatform(system, platform.name));
+  return {
+    platformIds: platforms
+      .filter(matches)
+      .map((platform) => platform.id)
+      .filter((id) => Number.isSafeInteger(id) && id > 0)
+      .slice(0, 100),
+    systems,
+  };
+};
+
+const mapCategoryGames = (
+  games: SoftwareCatalogGame[],
+  category: SoftwareRequestCategory,
+  systems: (RomarrPlatform & { group: 'retro' | 'modern' | null })[]
+) => {
+  const sanitized = games.map(sanitizeGame);
+  if (category === 'game') {
+    return sanitized.filter((game) =>
+      game.platformOptions.some(({ name }) => isPcPlatformName(name))
+    );
+  }
+  return sanitized.flatMap((game) => {
+    const systemsForGame = systems.flatMap((system) => {
+      const platform = systemMatchesGame(system, game);
+      return platform
+        ? [
+            {
+              slug: system.slug,
+              name: system.name,
+              group: system.group,
+              catalogPlatformId: platform.id,
+            },
+          ]
+        : [];
+    });
+    return systemsForGame.length
+      ? [{ ...game, emulationSystems: systemsForGame }]
+      : [];
+  });
+};
+
 const getQuestarrApi = (): QuestarrNGAPI => {
   const settings = getSettings().softwareAcquisition.questarr;
   if (!settings.hostname || !settings.apiKey) {
@@ -316,48 +386,45 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
 
   try {
     const api = getQuestarrApi();
-    // The provider does not filter by SeerrNG category. Fetch its full bounded
-    // window before filtering so the first mixed titles do not crowd out ROMs.
-    const games = (
-      await api.searchCatalog(parsed.query, CATALOG_PROVIDER_FETCH_LIMIT)
-    ).map(sanitizeGame);
-    if (parsed.category === 'game') {
-      const results = games
-        .filter((game) =>
-          game.platformOptions.some(({ name }) => isPcPlatformName(name))
-        )
-        .slice(0, parsed.limit);
-      enqueueImageCacheWarm(extractImageCacheUrls(results));
-      return res.status(200).json({
-        results,
-      });
-    }
-
-    const systems = (await getEmulationPlatforms()).filter(
-      (system) => system.group === parsed.category
+    const { platformIds, systems } = await getCatalogCategoryContext(
+      api,
+      parsed.category
     );
-    const results = games
-      .flatMap((game) => {
-        const systemsForGame = systems.flatMap((system) => {
-          const platform = systemMatchesGame(system, game);
-          return platform
-            ? [
-                {
-                  slug: system.slug,
-                  name: system.name,
-                  group: system.group,
-                  catalogPlatformId: platform.id,
-                },
-              ]
-            : [];
-        });
-        return systemsForGame.length > 0
-          ? [{ ...game, emulationSystems: systemsForGame }]
-          : [];
-      })
-      .slice(0, parsed.limit);
+    if (!platformIds.length) {
+      return res.status(200).json({ results: [], nextCursor: null });
+    }
+    let games: SoftwareCatalogGame[];
+    let nextCursor: string | null;
+    try {
+      const page = await api.searchCatalogPage(
+        parsed.query,
+        parsed.limit,
+        parsed.cursor,
+        platformIds
+      );
+      games = page.results;
+      nextCursor = page.nextCursor;
+    } catch (error) {
+      if (
+        parsed.cursor ||
+        !axios.isAxiosError(error) ||
+        error.response?.status !== 404
+      ) {
+        throw error;
+      }
+      // Older QuestarrNG installs have only the capped array endpoint.
+      games = await api.searchCatalog(
+        parsed.query,
+        CATALOG_PROVIDER_FETCH_LIMIT
+      );
+      nextCursor = null;
+    }
+    const results = mapCategoryGames(games, parsed.category, systems).slice(
+      0,
+      parsed.limit
+    );
     enqueueImageCacheWarm(extractImageCacheUrls(results));
-    return res.status(200).json({ results });
+    return res.status(200).json({ results, nextCursor });
   } catch (error) {
     return respondProviderError(res, error);
   }
@@ -366,11 +433,15 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
 softwareRoutes.get('/catalog/popular', async (req, res) => {
   const category = req.query.category;
   const limit = req.query.limit === undefined ? 24 : Number(req.query.limit);
+  const offset = req.query.offset === undefined ? 0 : Number(req.query.offset);
   if (
     (category !== 'retro' && category !== 'modern' && category !== 'game') ||
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
-    limit > MAX_CATALOG_LIMIT
+    limit > MAX_CATALOG_LIMIT ||
+    !Number.isSafeInteger(offset) ||
+    offset < 0 ||
+    offset > 10000
   ) {
     return res
       .status(400)
@@ -381,46 +452,34 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
   }
 
   try {
-    const games = (
-      await getQuestarrApi().getPopularCatalog(CATALOG_PROVIDER_FETCH_LIMIT)
-    ).map(sanitizeGame);
-    if (category === 'game') {
-      const results = games
-        .filter((game) =>
-          game.platformOptions.some(({ name }) => isPcPlatformName(name))
-        )
-        .slice(0, limit);
-      enqueueImageCacheWarm(extractImageCacheUrls(results));
-      return res.status(200).json({
-        results,
-      });
-    }
-
-    const systems = (await getEmulationPlatforms()).filter(
-      (system) => system.group === category
+    const api = getQuestarrApi();
+    const { platformIds, systems } = await getCatalogCategoryContext(
+      api,
+      category
     );
-    const results = games
-      .flatMap((game) => {
-        const systemsForGame = systems.flatMap((system) => {
-          const platform = systemMatchesGame(system, game);
-          return platform
-            ? [
-                {
-                  slug: system.slug,
-                  name: system.name,
-                  group: system.group,
-                  catalogPlatformId: platform.id,
-                },
-              ]
-            : [];
-        });
-        return systemsForGame.length > 0
-          ? [{ ...game, emulationSystems: systemsForGame }]
-          : [];
-      })
-      .slice(0, limit);
+    if (!platformIds.length) {
+      return res.status(200).json({ results: [], nextOffset: null });
+    }
+    let games: SoftwareCatalogGame[];
+    let nextOffset: number | null;
+    try {
+      const page = await api.getPopularCatalogPage(limit, offset, platformIds);
+      games = page.results;
+      nextOffset = page.nextOffset;
+    } catch (error) {
+      if (
+        offset > 0 ||
+        !axios.isAxiosError(error) ||
+        error.response?.status !== 404
+      ) {
+        throw error;
+      }
+      games = await api.getPopularCatalog(CATALOG_PROVIDER_FETCH_LIMIT);
+      nextOffset = null;
+    }
+    const results = mapCategoryGames(games, category, systems).slice(0, limit);
     enqueueImageCacheWarm(extractImageCacheUrls(results));
-    return res.status(200).json({ results });
+    return res.status(200).json({ results, nextOffset });
   } catch (error) {
     return respondProviderError(res, error);
   }

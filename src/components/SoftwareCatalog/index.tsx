@@ -21,9 +21,11 @@ import type {
 } from '@server/api/software/types';
 import type { QuotaResponse } from '@server/interfaces/api/userInterfaces';
 import axios from 'axios';
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useInView } from 'react-intersection-observer';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
+import useSWRInfinite from 'swr/infinite';
 
 const messages = defineMessages('components.SoftwareCatalog', {
   title: 'Software',
@@ -36,6 +38,7 @@ const messages = defineMessages('components.SoftwareCatalog', {
   search: 'Search',
   popular: 'Popular titles',
   noResults: 'No titles match this search.',
+  loadMore: 'Load more titles',
   loadError: 'The software catalog could not be loaded.',
   configureHint:
     'Ask an administrator to connect QuestarrNG and the required acquisition service in Settings → Services.',
@@ -91,6 +94,8 @@ interface CatalogGame {
 
 interface CatalogResponse {
   results: CatalogGame[];
+  nextCursor?: string | null;
+  nextOffset?: number | null;
 }
 
 const categories: Category[] = ['retro', 'modern', 'game'];
@@ -134,19 +139,65 @@ const SoftwareCatalog = () => {
     : (visibleCategories[0] ?? category);
 
   const query = submittedQuery.trim();
-  const url = useMemo(() => {
-    if (visibleCategories.length === 0) return null;
-    const params = new URLSearchParams({
-      category: selectedCategory,
-      limit: '50',
-    });
-    if (query) {
-      params.set('q', query);
-      return `/api/v1/request/software/catalog/search?${params.toString()}`;
+  const { ref: loadMoreRef, inView: loadMoreInView } = useInView({
+    rootMargin: '600px',
+  });
+  const getCatalogKey = useCallback(
+    (pageIndex: number, previousPage: CatalogResponse | null) => {
+      if (visibleCategories.length === 0) return null;
+      if (pageIndex > 0 && !previousPage) return null;
+      const params = new URLSearchParams({
+        category: selectedCategory,
+        limit: '24',
+      });
+      if (query) {
+        params.set('q', query);
+        if (pageIndex > 0) {
+          if (!previousPage?.nextCursor) return null;
+          params.set('cursor', previousPage.nextCursor);
+        }
+        return `/api/v1/request/software/catalog/search?${params.toString()}`;
+      }
+      if (pageIndex > 0) {
+        if (previousPage?.nextOffset == null) return null;
+        params.set('offset', String(previousPage.nextOffset));
+      }
+      return `/api/v1/request/software/catalog/popular?${params.toString()}`;
+    },
+    [query, selectedCategory, visibleCategories.length]
+  );
+  const {
+    data: pages,
+    error,
+    isLoading,
+    size,
+    setSize,
+  } = useSWRInfinite<CatalogResponse>(getCatalogKey, {
+    revalidateFirstPage: false,
+    revalidateOnFocus: false,
+    dedupingInterval: 30000,
+  });
+  const games = useMemo(() => {
+    const seen = new Set<number>();
+    return (pages ?? []).flatMap((page) =>
+      page.results.filter((game) => {
+        if (seen.has(game.igdbId)) return false;
+        seen.add(game.igdbId);
+        return true;
+      })
+    );
+  }, [pages]);
+  const lastPage = pages?.[pages.length - 1];
+  const hasMore = query
+    ? Boolean(lastPage?.nextCursor)
+    : lastPage?.nextOffset != null;
+  const isLoadingMore = size > (pages?.length ?? 0);
+
+  useEffect(() => {
+    if (loadMoreInView && hasMore && !isLoadingMore) {
+      void setSize((current) => current + 1);
     }
-    return `/api/v1/request/software/catalog/popular?${params.toString()}`;
-  }, [query, selectedCategory, visibleCategories.length]);
-  const { data, error, isLoading } = useSWR<CatalogResponse>(url);
+  }, [hasMore, isLoadingMore, loadMoreInView, setSize]);
 
   const openRequest = (game: CatalogGame) => {
     setSelectedGame(game);
@@ -310,9 +361,9 @@ const SoftwareCatalog = () => {
               {intl.formatMessage(messages.configureHint)}
             </p>
           </div>
-        ) : data?.results.length ? (
+        ) : games.length ? (
           <ul className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {data.results.map((game) => (
+            {games.map((game) => (
               <li key={game.igdbId}>
                 <article className="group h-full overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow transition hover:border-gray-500 hover:shadow-lg">
                   <div className="relative aspect-[2/3] overflow-hidden bg-gray-900">
@@ -361,9 +412,24 @@ const SoftwareCatalog = () => {
               </li>
             ))}
           </ul>
-        ) : (
+        ) : !hasMore ? (
           <div className="mt-5 rounded-lg border border-gray-700 bg-gray-800 px-5 py-8 text-center text-sm text-gray-300">
             {intl.formatMessage(messages.noResults)}
+          </div>
+        ) : null}
+        {hasMore && (
+          <div ref={loadMoreRef} className="mt-6 flex justify-center">
+            {isLoadingMore ? (
+              <LoadingSpinner />
+            ) : (
+              <Button
+                buttonType="primary"
+                buttonSize="standard"
+                onClick={() => void setSize((current) => current + 1)}
+              >
+                {intl.formatMessage(messages.loadMore)}
+              </Button>
+            )}
           </div>
         )}
       </main>

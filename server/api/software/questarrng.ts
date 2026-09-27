@@ -17,6 +17,16 @@ export interface QuestarrHandshake {
   requestContractVersion: number;
 }
 
+export interface SoftwareCatalogSearchPage {
+  results: SoftwareCatalogGame[];
+  nextCursor: string | null;
+}
+
+export interface SoftwareCatalogPopularPage {
+  results: SoftwareCatalogGame[];
+  nextOffset: number | null;
+}
+
 export interface SoftwareAssetStream {
   stream: Readable;
   filename?: string;
@@ -71,10 +81,48 @@ export class QuestarrNGAPI extends ExternalAPI {
     );
   }
 
+  public searchCatalogPage(
+    query: string,
+    limit = 20,
+    cursor?: string,
+    platformIds: number[] = []
+  ): Promise<SoftwareCatalogSearchPage> {
+    return this.get(
+      '/api/integration/seerrng/v1/catalog/search-page',
+      {
+        params: {
+          q: query,
+          limit,
+          ...(cursor ? { cursor } : {}),
+          ...(platformIds.length ? { platformIds: platformIds.join(',') } : {}),
+        },
+      },
+      600
+    );
+  }
+
   public getPopularCatalog(limit = 20): Promise<SoftwareCatalogGame[]> {
     return this.get(
       '/api/integration/seerrng/v1/catalog/popular',
       { params: { limit } },
+      600
+    );
+  }
+
+  public getPopularCatalogPage(
+    limit = 20,
+    offset = 0,
+    platformIds: number[] = []
+  ): Promise<SoftwareCatalogPopularPage> {
+    return this.get(
+      '/api/integration/seerrng/v1/catalog/popular-page',
+      {
+        params: {
+          limit,
+          offset,
+          ...(platformIds.length ? { platformIds: platformIds.join(',') } : {}),
+        },
+      },
       600
     );
   }

@@ -265,13 +265,19 @@ describe('software request routes', () => {
   });
 
   it('maps ROMarr aliases into the assigned emulation catalog', async () => {
-    mock.method(QuestarrNGAPI.prototype, 'searchCatalog', async () => [
-      {
-        ...pcGame,
-        platforms: ['Nintendo Entertainment System'],
-        platformOptions: [{ id: 130, name: 'Nintendo Entertainment System' }],
-      },
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 130, name: 'Nintendo Entertainment System' },
     ]);
+    mock.method(QuestarrNGAPI.prototype, 'searchCatalogPage', async () => ({
+      results: [
+        {
+          ...pcGame,
+          platforms: ['Nintendo Entertainment System'],
+          platformOptions: [{ id: 130, name: 'Nintendo Entertainment System' }],
+        },
+      ],
+      nextCursor: null,
+    }));
     mock.method(ROMarrNGAPI.prototype, 'getPlatforms', async () => [
       {
         slug: 'nes',
@@ -298,19 +304,16 @@ describe('software request routes', () => {
     ]);
   });
 
-  it('filters the full provider window before applying the requested catalog limit', async () => {
-    let providerLimit = 0;
-    mock.method(
+  it('passes ROM platform IDs and a search cursor to QuestarrNG', async () => {
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 6, name: 'PC (Microsoft Windows)' },
+      { id: 130, name: 'Nintendo Entertainment System' },
+    ]);
+    const searchPage = mock.method(
       QuestarrNGAPI.prototype,
-      'searchCatalog',
-      async (_query: string, limit: number = 20) => {
-        providerLimit = limit;
-        return [
-          ...Array.from({ length: 24 }, (_, index) => ({
-            ...pcGame,
-            igdbId: index + 1,
-            platformOptions: [{ id: 6, name: 'PC (Microsoft Windows)' }],
-          })),
+      'searchCatalogPage',
+      async () => ({
+        results: [
           {
             ...pcGame,
             igdbId: 100,
@@ -318,8 +321,9 @@ describe('software request routes', () => {
               { id: 130, name: 'Nintendo Entertainment System' },
             ],
           },
-        ];
-      }
+        ],
+        nextCursor: 'next-page',
+      })
     );
     mock.method(ROMarrNGAPI.prototype, 'getPlatforms', async () => [
       {
@@ -333,10 +337,21 @@ describe('software request routes', () => {
 
     const response = await request(createApp())
       .get('/request/software/catalog/search')
-      .query({ category: 'retro', q: 'Test Game', limit: 1 });
+      .query({
+        category: 'retro',
+        q: 'Test Game',
+        limit: 1,
+        cursor: 'prior-page',
+      });
 
     assert.strictEqual(response.status, 200);
-    assert.strictEqual(providerLimit, 50);
+    assert.deepStrictEqual(searchPage.mock.calls[0].arguments, [
+      'Test Game',
+      1,
+      'prior-page',
+      [130],
+    ]);
+    assert.strictEqual(response.body.nextCursor, 'next-page');
     assert.deepStrictEqual(
       response.body.results.map((game: { igdbId: number }) => game.igdbId),
       [100]
@@ -344,19 +359,25 @@ describe('software request routes', () => {
   });
 
   it('only returns catalog cover URLs from the IGDB image host', async () => {
-    mock.method(QuestarrNGAPI.prototype, 'searchCatalog', async () => [
-      pcGame,
-      {
-        ...pcGame,
-        igdbId: 2,
-        coverUrl: 'https://images.igdb.com.attacker.test/cover.jpg',
-      },
-      {
-        ...pcGame,
-        igdbId: 3,
-        coverUrl: 'https://127.0.0.1/cover.jpg',
-      },
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 6, name: 'PC (Microsoft Windows)' },
     ]);
+    mock.method(QuestarrNGAPI.prototype, 'searchCatalogPage', async () => ({
+      results: [
+        pcGame,
+        {
+          ...pcGame,
+          igdbId: 2,
+          coverUrl: 'https://images.igdb.com.attacker.test/cover.jpg',
+        },
+        {
+          ...pcGame,
+          igdbId: 3,
+          coverUrl: 'https://127.0.0.1/cover.jpg',
+        },
+      ],
+      nextCursor: null,
+    }));
 
     const response = await request(createApp())
       .get('/request/software/catalog/search')
@@ -371,6 +392,26 @@ describe('software request routes', () => {
         '',
       ]
     );
+  });
+
+  it('passes the next popular offset and PC platform IDs to QuestarrNG', async () => {
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 6, name: 'PC (Microsoft Windows)' },
+      { id: 130, name: 'Nintendo Entertainment System' },
+    ]);
+    const popularPage = mock.method(
+      QuestarrNGAPI.prototype,
+      'getPopularCatalogPage',
+      async () => ({ results: [pcGame], nextOffset: 48 })
+    );
+
+    const response = await request(createApp())
+      .get('/request/software/catalog/popular')
+      .query({ category: 'game', limit: 24, offset: 24 });
+
+    assert.strictEqual(response.status, 200);
+    assert.deepStrictEqual(popularPage.mock.calls[0].arguments, [24, 24, [6]]);
+    assert.strictEqual(response.body.nextOffset, 48);
   });
 
   it('persists the selected PC target and sends it to QuestarrNG on approval', async () => {
