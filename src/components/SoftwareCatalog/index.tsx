@@ -46,6 +46,7 @@ const messages = defineMessages('components.SoftwareCatalog', {
   allPcPlatforms: 'All PC platforms',
   genreFilter: 'Genre',
   releaseYearFilter: 'Release year',
+  invalidReleaseYear: 'Enter a release year from 1950 to 2200.',
   searchPlaceholder: 'Search software titles',
   search: 'Search',
   popular: 'Popular titles',
@@ -237,6 +238,11 @@ const SoftwareCatalog = ({
   );
 
   const query = (externalQuery ?? submittedQuery).trim();
+  const validReleaseYear =
+    releaseYearInput === '' ||
+    (/^[0-9]{4}$/.test(releaseYearInput) &&
+      Number(releaseYearInput) >= 1950 &&
+      Number(releaseYearInput) <= 2200);
   useEffect(() => {
     const timer = setTimeout(() => {
       setGenreFilter(genreInput.trim());
@@ -255,7 +261,7 @@ const SoftwareCatalog = ({
   });
   const getCatalogKey = useCallback(
     (pageIndex: number, previousPage: CatalogResponse | null) => {
-      if (visibleCategories.length === 0) return null;
+      if (visibleCategories.length === 0 || !validReleaseYear) return null;
       if (pageIndex > 0 && !previousPage) return null;
       const params = new URLSearchParams({
         category: selectedCategory,
@@ -289,6 +295,7 @@ const SoftwareCatalog = ({
       releaseYearFilter,
       selectedCategory,
       systemFilter,
+      validReleaseYear,
       visibleCategories.length,
     ]
   );
@@ -536,10 +543,16 @@ const SoftwareCatalog = ({
               type="number"
               min={1950}
               max={2200}
+              aria-invalid={!validReleaseYear}
               value={releaseYearInput}
               onChange={(event) => setReleaseYearInput(event.target.value)}
             />
           </div>
+        )}
+        {!validReleaseYear && (
+          <p className="mt-2 text-sm text-red-300" role="alert">
+            {intl.formatMessage(messages.invalidReleaseYear)}
+          </p>
         )}
 
         {externalQuery === undefined && (
