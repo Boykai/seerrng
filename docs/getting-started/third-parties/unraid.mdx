@@ -29,18 +29,19 @@ code and documentation.
 The SeerrNG Community Apps listing installs SeerrNG only. Each optional service
 runs as its own standalone container. Install only what you need, configure it
 through its own web interface, then enter its API key in SeerrNG Settings →
-Services. The three NG forks have separate templates in this repository:
+Services. This repository's Community Apps template installs only SeerrNG. Each
+NG fork has one canonical standalone template in its own repository:
 
 | Optional service | Purpose | Template |
 | --- | --- | --- |
-| BookshelfNG | Ebooks and audiobooks; one instance can handle both | [BookshelfNG companion](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/bookshelfng.xml) |
-| ROMarrNG | ROMs and emulation | [ROMarrNG companion](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/romarrng.xml) |
-| QuestarrNG | PC games and IGDB catalog | [QuestarrNG companion](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/questarrng.xml) |
+| BookshelfNG | Ebooks and audiobooks; one instance can handle both | [BookshelfNG standalone template](https://github.com/snapetech/bookshelfng/blob/main/packaging/unraid/bookshelfng.xml) |
+| ROMarrNG | ROMs and emulation | [ROMarrNG standalone template](https://github.com/snapetech/ROMarrNG/blob/main/packaging/unraid/romarrng.xml) |
+| QuestarrNG | PC games and IGDB catalog | [QuestarrNG standalone template](https://github.com/snapetech/QuestarrNG/blob/main/unraid/questarr.xml) |
 
 BookshelfNG, ROMarrNG, and QuestarrNG are Snapetech NG forks that work
-independently and add SeerrNG integration APIs. Their companion templates link
-to the [SeerrNG issue tracker](https://github.com/snapetech/seerrng/issues)
-for support. The upstream [Bookshelf](https://ca.unraid.net/apps/bookshelf-1d1gz3s0hj3af8)
+independently and add SeerrNG integration APIs. Use the
+[SeerrNG issue tracker](https://github.com/snapetech/seerrng/issues) for
+integration support. The upstream [Bookshelf](https://ca.unraid.net/apps/bookshelf-1d1gz3s0hj3af8)
 and [Questarr](https://ca.unraid.net/apps/questarr-0335hnh1oyuaqh) listings
 are different apps and do not replace the NG forks for SeerrNG's extended
 contracts.
