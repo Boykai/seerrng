@@ -79,6 +79,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 type CatalogFilters = {
   systemSlug?: string;
   pcPlatform?: 'windows' | 'linux' | 'macos';
+  genre?: string;
+  releaseYear?: number;
 };
 
 const parseCatalogFilters = (
@@ -87,6 +89,10 @@ const parseCatalogFilters = (
 ): CatalogFilters | null => {
   const systemSlug = value.system;
   const pcPlatform = value.platform;
+  const genre = value.genre;
+  const releaseYear = value.releaseYear;
+  const parsedYear =
+    releaseYear === undefined ? undefined : Number(releaseYear);
   if (
     (systemSlug !== undefined &&
       (category === 'game' ||
@@ -96,13 +102,26 @@ const parseCatalogFilters = (
       (category !== 'game' ||
         (pcPlatform !== 'windows' &&
           pcPlatform !== 'linux' &&
-          pcPlatform !== 'macos')))
+          pcPlatform !== 'macos'))) ||
+    (genre !== undefined &&
+      (typeof genre !== 'string' ||
+        genre.trim().length < 1 ||
+        genre.trim().length > 64)) ||
+    (releaseYear !== undefined &&
+      (typeof releaseYear !== 'string' ||
+        !/^[0-9]{4}$/.test(releaseYear) ||
+        parsedYear === undefined ||
+        !Number.isSafeInteger(parsedYear) ||
+        parsedYear < 1950 ||
+        parsedYear > 2200))
   ) {
     return null;
   }
   return {
     systemSlug: systemSlug as string | undefined,
     pcPlatform: pcPlatform as CatalogFilters['pcPlatform'],
+    genre: typeof genre === 'string' ? genre.trim() : undefined,
+    releaseYear: parsedYear,
   };
 };
 
@@ -694,13 +713,26 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
         parsed.query,
         parsed.limit,
         parsed.cursor,
-        platformIds
+        platformIds,
+        parsed.filters.genre,
+        parsed.filters.releaseYear
       );
       games = page.results;
       nextCursor = normalizeNextCatalogCursor(page.nextCursor, parsed.cursor);
     } catch (error) {
       if (
+        (parsed.filters.genre || parsed.filters.releaseYear) &&
+        axios.isAxiosError(error) &&
+        error.response?.status === 404
+      ) {
+        return res.status(503).json({
+          error: 'Upgrade QuestarrNG to use software genre and year filters.',
+        });
+      }
+      if (
         parsed.cursor ||
+        parsed.filters.genre ||
+        parsed.filters.releaseYear ||
         !axios.isAxiosError(error) ||
         error.response?.status !== 404
       ) {
@@ -767,12 +799,29 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
     let games: SoftwareCatalogGame[];
     let nextOffset: number | null;
     try {
-      const page = await api.getPopularCatalogPage(limit, offset, platformIds);
+      const page = await api.getPopularCatalogPage(
+        limit,
+        offset,
+        platformIds,
+        filters.genre,
+        filters.releaseYear
+      );
       games = page.results;
       nextOffset = normalizeNextCatalogOffset(page.nextOffset, offset);
     } catch (error) {
       if (
+        (filters.genre || filters.releaseYear) &&
+        axios.isAxiosError(error) &&
+        error.response?.status === 404
+      ) {
+        return res.status(503).json({
+          error: 'Upgrade QuestarrNG to use software genre and year filters.',
+        });
+      }
+      if (
         offset > 0 ||
+        filters.genre ||
+        filters.releaseYear ||
         !axios.isAxiosError(error) ||
         error.response?.status !== 404
       ) {

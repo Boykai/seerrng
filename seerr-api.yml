@@ -11266,6 +11266,20 @@ paths:
             type: string
             enum: [windows, linux, macos]
         - in: query
+          name: genre
+          description: IGDB genre name, matched before pagination.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - in: query
+          name: releaseYear
+          description: UTC release year, matched before pagination.
+          schema:
+            type: integer
+            minimum: 1950
+            maximum: 2200
+        - in: query
           name: limit
           schema:
             type: integer
@@ -11317,6 +11331,20 @@ paths:
           schema:
             type: string
             enum: [windows, linux, macos]
+        - in: query
+          name: genre
+          description: IGDB genre name, matched before pagination.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - in: query
+          name: releaseYear
+          description: UTC release year, matched before pagination.
+          schema:
+            type: integer
+            minimum: 1950
+            maximum: 2200
         - in: query
           name: limit
           schema:

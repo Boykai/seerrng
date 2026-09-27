@@ -515,6 +515,8 @@ describe('software request routes', () => {
         limit: 1,
         cursor: 'prior.cursor+/=',
         system: 'nes',
+        genre: 'Adventure',
+        releaseYear: '1992',
       });
 
     assert.strictEqual(response.status, 200);
@@ -523,6 +525,8 @@ describe('software request routes', () => {
       1,
       'prior.cursor+/=',
       [130],
+      'Adventure',
+      1992,
     ]);
     assert.strictEqual(response.body.nextCursor, 'next-page+/=');
     assert.deepStrictEqual(
@@ -589,10 +593,23 @@ describe('software request routes', () => {
 
     const response = await request(createApp())
       .get('/request/software/catalog/popular')
-      .query({ category: 'game', limit: 24, offset: 24, platform: 'linux' });
+      .query({
+        category: 'game',
+        limit: 24,
+        offset: 24,
+        platform: 'linux',
+        genre: 'Strategy',
+        releaseYear: '2020',
+      });
 
     assert.strictEqual(response.status, 200);
-    assert.deepStrictEqual(popularPage.mock.calls[0].arguments, [24, 24, [3]]);
+    assert.deepStrictEqual(popularPage.mock.calls[0].arguments, [
+      24,
+      24,
+      [3],
+      'Strategy',
+      2020,
+    ]);
     assert.strictEqual(response.body.nextOffset, 48);
   });
 
@@ -606,6 +623,17 @@ describe('software request routes', () => {
 
     assert.strictEqual(game.status, 400);
     assert.strictEqual(retro.status, 400);
+  });
+
+  it('rejects invalid catalog metadata filters', async () => {
+    const invalidGenre = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'game', q: 'Test Game', genre: ' ' });
+    const invalidYear = await request(createApp())
+      .get('/request/software/catalog/popular')
+      .query({ category: 'game', releaseYear: '2020abc' });
+    assert.strictEqual(invalidGenre.status, 400);
+    assert.strictEqual(invalidYear.status, 400);
   });
 
   it('stops pagination when QuestarrNG returns a repeated cursor or offset', async () => {

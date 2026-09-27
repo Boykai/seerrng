@@ -89,7 +89,9 @@ export class QuestarrNGAPI extends ExternalAPI {
     query: string,
     limit = 20,
     cursor?: string,
-    platformIds: number[] = []
+    platformIds: number[] = [],
+    genre?: string,
+    releaseYear?: number
   ): Promise<SoftwareCatalogSearchPage> {
     return this.get(
       '/api/integration/seerrng/v1/catalog/search-page',
@@ -99,6 +101,8 @@ export class QuestarrNGAPI extends ExternalAPI {
           limit,
           ...(cursor ? { cursor } : {}),
           ...(platformIds.length ? { platformIds: platformIds.join(',') } : {}),
+          ...(genre ? { genre } : {}),
+          ...(releaseYear ? { releaseYear } : {}),
         },
       },
       600
@@ -116,7 +120,9 @@ export class QuestarrNGAPI extends ExternalAPI {
   public getPopularCatalogPage(
     limit = 20,
     offset = 0,
-    platformIds: number[] = []
+    platformIds: number[] = [],
+    genre?: string,
+    releaseYear?: number
   ): Promise<SoftwareCatalogPopularPage> {
     return this.get(
       '/api/integration/seerrng/v1/catalog/popular-page',
@@ -125,6 +131,8 @@ export class QuestarrNGAPI extends ExternalAPI {
           limit,
           offset,
           ...(platformIds.length ? { platformIds: platformIds.join(',') } : {}),
+          ...(genre ? { genre } : {}),
+          ...(releaseYear ? { releaseYear } : {}),
         },
       },
       600

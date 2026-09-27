@@ -44,6 +44,8 @@ const messages = defineMessages('components.SoftwareCatalog', {
   games: 'PC Games',
   allSystems: 'All systems',
   allPcPlatforms: 'All PC platforms',
+  genreFilter: 'Genre',
+  releaseYearFilter: 'Release year',
   searchPlaceholder: 'Search software titles',
   search: 'Search',
   popular: 'Popular titles',
@@ -158,6 +160,10 @@ const SoftwareCatalog = ({
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [systemFilter, setSystemFilter] = useState('');
   const [pcPlatformFilter, setPcPlatformFilter] = useState('');
+  const [genreFilter, setGenreFilter] = useState('');
+  const [genreInput, setGenreInput] = useState('');
+  const [releaseYearFilter, setReleaseYearFilter] = useState('');
+  const [releaseYearInput, setReleaseYearInput] = useState('');
   const [selectedGame, setSelectedGame] = useState<CatalogGame | null>(null);
   const [selectedSystem, setSelectedSystem] = useState('');
   const [variant, setVariant] = useState<PcVariant>({
@@ -231,6 +237,19 @@ const SoftwareCatalog = ({
   );
 
   const query = (externalQuery ?? submittedQuery).trim();
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setGenreFilter(genreInput.trim());
+      setReleaseYearFilter(
+        /^[0-9]{4}$/.test(releaseYearInput) &&
+          Number(releaseYearInput) >= 1950 &&
+          Number(releaseYearInput) <= 2200
+          ? releaseYearInput
+          : ''
+      );
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [genreInput, releaseYearInput]);
   const { ref: loadMoreRef, inView: loadMoreInView } = useInView({
     rootMargin: '600px',
   });
@@ -247,6 +266,8 @@ const SoftwareCatalog = ({
       } else if (selectedCategory !== 'game' && systemFilter) {
         params.set('system', systemFilter);
       }
+      if (genreFilter.trim()) params.set('genre', genreFilter.trim());
+      if (releaseYearFilter) params.set('releaseYear', releaseYearFilter);
       if (query) {
         params.set('q', query);
         if (pageIndex > 0) {
@@ -263,7 +284,9 @@ const SoftwareCatalog = ({
     },
     [
       pcPlatformFilter,
+      genreFilter,
       query,
+      releaseYearFilter,
       selectedCategory,
       systemFilter,
       visibleCategories.length,
@@ -454,9 +477,9 @@ const SoftwareCatalog = ({
         </div>
 
         {visibleCategories.length > 0 && (
-          <div className="mt-4 max-w-xs">
+          <div className="mt-4 flex max-w-2xl flex-wrap gap-2">
             <select
-              className="input input-lite w-full"
+              className="input input-lite min-w-48 flex-1"
               aria-label={intl.formatMessage(
                 selectedCategory === 'game'
                   ? messages.allPcPlatforms
@@ -498,6 +521,24 @@ const SoftwareCatalog = ({
                     </option>
                   ))}
             </select>
+            <input
+              className="input input-lite min-w-40 flex-1"
+              aria-label={intl.formatMessage(messages.genreFilter)}
+              placeholder={intl.formatMessage(messages.genreFilter)}
+              maxLength={64}
+              value={genreInput}
+              onChange={(event) => setGenreInput(event.target.value)}
+            />
+            <input
+              className="input input-lite w-36"
+              aria-label={intl.formatMessage(messages.releaseYearFilter)}
+              placeholder={intl.formatMessage(messages.releaseYearFilter)}
+              type="number"
+              min={1950}
+              max={2200}
+              value={releaseYearInput}
+              onChange={(event) => setReleaseYearInput(event.target.value)}
+            />
           </div>
         )}
 
