@@ -11331,6 +11331,37 @@ paths:
                   nextOffset:
                     type: integer
                     nullable: true
+  /request/software/catalog/games/{id}:
+    get:
+      summary: Get one ROM or PC game catalog title
+      description: Returns QuestarrNG catalog metadata and supported request targets for a shareable software title.
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: category
+          required: true
+          schema:
+            type: string
+            enum: [retro, modern, game]
+      responses:
+        '200':
+          description: Software catalog title returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  game:
+                    type: object
+        '404':
+          description: Title not found in the selected category
   /request/software/status:
     get:
       summary: List software request status

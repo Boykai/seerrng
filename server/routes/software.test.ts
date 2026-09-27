@@ -197,6 +197,53 @@ afterEach(() => {
 });
 
 describe('software request routes', () => {
+  it('returns a sanitized, shareable catalog detail for a PC game', async () => {
+    const getGame = mock.method(
+      QuestarrNGAPI.prototype,
+      'getCatalogGame',
+      async () => ({ ...pcGame, coverUrl: 'https://evil.example/cover.jpg' })
+    );
+
+    const response = await request(createOpenApiValidatedApp())
+      .get('/api/v1/request/software/catalog/games/42')
+      .query({ category: 'game' });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(getGame.mock.calls[0].arguments[0], 42);
+    assert.strictEqual(response.body.game.title, 'Test Game');
+    assert.strictEqual(response.body.game.coverUrl, '');
+  });
+
+  it('rejects a catalog detail outside the selected category', async () => {
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogGame', async () => pcGame);
+    mock.method(ROMarrNGAPI.prototype, 'getPlatforms', async () => [
+      {
+        slug: 'nes',
+        name: 'Nintendo Entertainment System',
+        media: 'rom',
+        extensions: ['.nes'],
+        max_size_mb: 16,
+      },
+    ]);
+
+    const response = await request(createApp())
+      .get('/request/software/catalog/games/42')
+      .query({ category: 'retro' });
+
+    assert.strictEqual(response.status, 404);
+  });
+
+  it('rejects a malformed catalog detail ID before calling QuestarrNG', async () => {
+    const getGame = mock.method(QuestarrNGAPI.prototype, 'getCatalogGame');
+
+    const response = await request(createApp())
+      .get('/request/software/catalog/games/42oops')
+      .query({ category: 'game' });
+
+    assert.strictEqual(response.status, 400);
+    assert.strictEqual(getGame.mock.callCount(), 0);
+  });
+
   it('blocks catalog access and new requests for a disabled software category', async () => {
     const settings = getSettings();
     const original = { ...settings.main.enabledMediaCategories };

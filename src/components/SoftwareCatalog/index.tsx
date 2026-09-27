@@ -21,7 +21,15 @@ import type {
 } from '@server/api/software/types';
 import type { QuotaResponse } from '@server/interfaces/api/userInterfaces';
 import axios from 'axios';
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/router';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useInView } from 'react-intersection-observer';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
@@ -46,6 +54,7 @@ const messages = defineMessages('components.SoftwareCatalog', {
   configureHint:
     'Ask an administrator to connect QuestarrNG and the required acquisition service in Settings → Services.',
   request: 'Request',
+  details: 'Details',
   requestTitle: 'Request {title}',
   requestDescription:
     'Choose the target for this request. The selected target stays fixed after submission.',
@@ -67,6 +76,7 @@ const messages = defineMessages('components.SoftwareCatalog', {
   existingRequest: 'This title is already requested for that target.',
   chooseAll: 'Choose an operating system and architecture to continue.',
   noCategories: 'No software categories are currently available.',
+  titleUnavailable: 'This catalog title could not be loaded.',
 });
 
 type Category = 'retro' | 'modern' | 'game';
@@ -112,6 +122,7 @@ const operatingSystems: PcOperatingSystem[] = ['windows', 'linux', 'macos'];
 const architectures: PcArchitecture[] = ['x64', 'arm64', 'x86', 'universal'];
 
 const SoftwareCatalog = () => {
+  const router = useRouter();
   const intl = useIntl();
   const { user, hasPermission } = useUser();
   const { currentSettings } = useSettings();
@@ -134,6 +145,46 @@ const SoftwareCatalog = () => {
   const [requestError, setRequestError] = useState('');
   const [requestSuccess, setRequestSuccess] = useState('');
   const [requesting, setRequesting] = useState(false);
+  const hydratedGameId = useRef<number | undefined>(undefined);
+  const linkedCategory =
+    typeof router.query.category === 'string' &&
+    categories.includes(router.query.category as Category)
+      ? (router.query.category as Category)
+      : undefined;
+  const linkedGameId =
+    typeof router.query.game === 'string' &&
+    /^[1-9]\d*$/.test(router.query.game)
+      ? Number(router.query.game)
+      : undefined;
+  const { data: linkedGame, error: linkedGameError } = useSWR<{
+    game: CatalogGame;
+  }>(
+    linkedCategory && Number.isSafeInteger(linkedGameId)
+      ? `/api/v1/request/software/catalog/games/${linkedGameId}?category=${linkedCategory}`
+      : null
+  );
+
+  useEffect(() => {
+    if (router.isReady && linkedCategory) setCategory(linkedCategory);
+  }, [linkedCategory, router.isReady]);
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    if (!linkedGameId) {
+      hydratedGameId.current = undefined;
+      setSelectedGame(null);
+    } else if (
+      linkedGame?.game &&
+      linkedGame.game.igdbId === linkedGameId &&
+      hydratedGameId.current !== linkedGameId
+    ) {
+      hydratedGameId.current = linkedGameId;
+      setSelectedGame(linkedGame.game);
+      setSelectedSystem(linkedGame.game.emulationSystems?.[0]?.slug ?? '');
+      setVariant({ operatingSystem: '', architecture: '' });
+      setRequestError('');
+    }
+  }, [linkedGame?.game, linkedGameId, router.isReady]);
 
   const visibleCategories = categories.filter((value) => {
     if (!isAnySoftwareCategoryEnabled(currentSettings)) return false;
@@ -231,6 +282,7 @@ const SoftwareCatalog = () => {
   }, [error, hasMore, isLoadingMore, loadMoreInView, setSize]);
 
   const openRequest = (game: CatalogGame) => {
+    hydratedGameId.current = game.igdbId;
     setSelectedGame(game);
     setSelectedSystem(game.emulationSystems?.[0]?.slug ?? '');
     setVariant({
@@ -238,6 +290,28 @@ const SoftwareCatalog = () => {
       architecture: '',
     });
     setRequestError('');
+    void router.push(
+      {
+        pathname: router.pathname,
+        query: {
+          ...router.query,
+          category: selectedCategory,
+          game: game.igdbId,
+        },
+      },
+      undefined,
+      { shallow: true, scroll: false }
+    );
+  };
+
+  const closeRequest = () => {
+    const nextQuery = { ...router.query };
+    delete nextQuery.game;
+    void router.replace(
+      { pathname: router.pathname, query: nextQuery },
+      undefined,
+      { shallow: true, scroll: false }
+    );
   };
 
   const submitRequest = async () => {
@@ -274,7 +348,7 @@ const SoftwareCatalog = () => {
             : messages.requestSuccess
         )
       );
-      setSelectedGame(null);
+      closeRequest();
     } catch (submitError) {
       const requestFailure =
         axios.isAxiosError(submitError) &&
@@ -421,6 +495,12 @@ const SoftwareCatalog = () => {
           </div>
         )}
 
+        {linkedGameError && !selectedGame && (
+          <p role="alert" className="mt-4 text-sm text-red-300">
+            {intl.formatMessage(messages.titleUnavailable)}
+          </p>
+        )}
+
         <div className="mt-8 flex items-baseline justify-between gap-3">
           <h2 className="text-xl font-semibold text-gray-100">
             {query
@@ -457,19 +537,29 @@ const SoftwareCatalog = () => {
                 <li key={game.igdbId}>
                   <article className="group h-full overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow transition hover:border-gray-500 hover:shadow-lg">
                     <div className="relative aspect-[2/3] overflow-hidden bg-gray-900">
-                      <CachedImage
-                        type="tmdb"
-                        src={
-                          game.coverUrl || '/images/seerr_poster_not_found.png'
-                        }
-                        alt=""
-                        className="object-cover transition duration-200 group-hover:scale-[1.02]"
-                        fill
-                      />
+                      <button
+                        type="button"
+                        className="relative block h-full w-full"
+                        aria-label={`${intl.formatMessage(messages.details)}: ${game.title}`}
+                        onClick={() => openRequest(game)}
+                      >
+                        <CachedImage
+                          type="tmdb"
+                          src={
+                            game.coverUrl ||
+                            '/images/seerr_poster_not_found.png'
+                          }
+                          alt=""
+                          className="object-cover transition duration-200 group-hover:scale-[1.02]"
+                          fill
+                        />
+                      </button>
                     </div>
                     <div className="flex h-[10.5rem] flex-col p-3">
                       <h3 className="line-clamp-2 min-h-10 text-sm font-semibold text-white">
-                        {game.title}
+                        <button type="button" onClick={() => openRequest(game)}>
+                          {game.title}
+                        </button>
                       </h3>
                       <p className="mt-1 truncate text-xs text-gray-400">
                         {game.releaseDate ||
@@ -533,14 +623,18 @@ const SoftwareCatalog = () => {
       {selectedGame && (
         <Transition as={Fragment} show={Boolean(selectedGame)}>
           <Modal
-            title={intl.formatMessage(messages.requestTitle, {
-              title: selectedGame.title,
-            })}
-            subTitle={intl.formatMessage(messages.requestDescription)}
-            onCancel={() => setSelectedGame(null)}
-            onOk={submitRequest}
+            title={selectedGame.title}
+            subTitle={
+              canRequest
+                ? intl.formatMessage(messages.requestDescription)
+                : undefined
+            }
+            onCancel={closeRequest}
+            onOk={canRequest ? submitRequest : undefined}
             okText={intl.formatMessage(messages.request)}
-            cancelText={intl.formatMessage(globalMessages.cancel)}
+            cancelText={intl.formatMessage(
+              canRequest ? globalMessages.cancel : globalMessages.close
+            )}
             okDisabled={
               requesting ||
               (quota?.software?.restricted && !canManageRequests) ||
@@ -552,84 +646,114 @@ const SoftwareCatalog = () => {
             dialogClass="max-w-xl"
           >
             <div className="space-y-4">
-              {(quota?.software?.limit ?? 0) > 0 && (
+              <div className="flex gap-4">
+                <div className="relative aspect-[2/3] w-24 shrink-0 overflow-hidden rounded bg-gray-900">
+                  <CachedImage
+                    type="tmdb"
+                    src={
+                      selectedGame.coverUrl ||
+                      '/images/seerr_poster_not_found.png'
+                    }
+                    alt=""
+                    fill
+                    className="object-cover"
+                  />
+                </div>
+                <div className="min-w-0 text-sm text-gray-300">
+                  {selectedGame.summary && <p>{selectedGame.summary}</p>}
+                  {selectedGame.releaseDate && (
+                    <p className="mt-2 text-gray-400">
+                      {selectedGame.releaseDate}
+                    </p>
+                  )}
+                  {selectedGame.genres.length > 0 && (
+                    <p className="mt-2 text-gray-400">
+                      {selectedGame.genres.join(' · ')}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {canRequest && (quota?.software?.limit ?? 0) > 0 && (
                 <QuotaDisplay quota={quota?.software} mediaType="software" />
               )}
-              {selectedCategory === 'game' ? (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <label className="text-sm text-gray-200">
-                    {intl.formatMessage(messages.chooseOperatingSystem)}
+              {canRequest &&
+                (selectedCategory === 'game' ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <label className="text-sm text-gray-200">
+                      {intl.formatMessage(messages.chooseOperatingSystem)}
+                      <select
+                        className="input input-lite mt-1 w-full"
+                        value={variant.operatingSystem}
+                        onChange={(event) =>
+                          setVariant((current) => ({
+                            ...current,
+                            operatingSystem: event.target
+                              .value as PcVariant['operatingSystem'],
+                          }))
+                        }
+                      >
+                        <option value="" />
+                        {operatingSystems.map((os) => (
+                          <option key={os} value={os}>
+                            {intl.formatMessage(
+                              os === 'macos'
+                                ? messages.macos
+                                : os === 'linux'
+                                  ? messages.linux
+                                  : messages.windows
+                            )}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-sm text-gray-200">
+                      {intl.formatMessage(messages.chooseArchitecture)}
+                      <select
+                        className="input input-lite mt-1 w-full"
+                        value={variant.architecture}
+                        onChange={(event) =>
+                          setVariant((current) => ({
+                            ...current,
+                            architecture: event.target
+                              .value as PcVariant['architecture'],
+                          }))
+                        }
+                      >
+                        <option value="" />
+                        {architectures.map((architecture) => (
+                          <option key={architecture} value={architecture}>
+                            {intl.formatMessage(
+                              architecture === 'arm64'
+                                ? messages.arm64
+                                : architecture === 'x86'
+                                  ? messages.x86
+                                  : architecture === 'universal'
+                                    ? messages.universal
+                                    : messages.x64
+                            )}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                ) : (
+                  <label className="block text-sm text-gray-200">
+                    {intl.formatMessage(messages.chooseSystem)}
                     <select
                       className="input input-lite mt-1 w-full"
-                      value={variant.operatingSystem}
+                      value={selectedSystem}
                       onChange={(event) =>
-                        setVariant((current) => ({
-                          ...current,
-                          operatingSystem: event.target
-                            .value as PcVariant['operatingSystem'],
-                        }))
+                        setSelectedSystem(event.target.value)
                       }
                     >
-                      <option value="" />
-                      {operatingSystems.map((os) => (
-                        <option key={os} value={os}>
-                          {intl.formatMessage(
-                            os === 'macos'
-                              ? messages.macos
-                              : os === 'linux'
-                                ? messages.linux
-                                : messages.windows
-                          )}
+                      {selectedGame.emulationSystems?.map((system) => (
+                        <option key={system.slug} value={system.slug}>
+                          {system.name}
                         </option>
                       ))}
                     </select>
                   </label>
-                  <label className="text-sm text-gray-200">
-                    {intl.formatMessage(messages.chooseArchitecture)}
-                    <select
-                      className="input input-lite mt-1 w-full"
-                      value={variant.architecture}
-                      onChange={(event) =>
-                        setVariant((current) => ({
-                          ...current,
-                          architecture: event.target
-                            .value as PcVariant['architecture'],
-                        }))
-                      }
-                    >
-                      <option value="" />
-                      {architectures.map((architecture) => (
-                        <option key={architecture} value={architecture}>
-                          {intl.formatMessage(
-                            architecture === 'arm64'
-                              ? messages.arm64
-                              : architecture === 'x86'
-                                ? messages.x86
-                                : architecture === 'universal'
-                                  ? messages.universal
-                                  : messages.x64
-                          )}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              ) : (
-                <label className="block text-sm text-gray-200">
-                  {intl.formatMessage(messages.chooseSystem)}
-                  <select
-                    className="input input-lite mt-1 w-full"
-                    value={selectedSystem}
-                    onChange={(event) => setSelectedSystem(event.target.value)}
-                  >
-                    {selectedGame.emulationSystems?.map((system) => (
-                      <option key={system.slug} value={system.slug}>
-                        {system.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
+                ))}
               {requestError && (
                 <p role="alert" className="text-sm text-red-300">
                   {requestError}

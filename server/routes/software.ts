@@ -583,6 +583,48 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
   }
 });
 
+softwareRoutes.get('/catalog/games/:id', async (req, res) => {
+  const category = req.query.category;
+  const catalogId = Number(req.params.id);
+  if (
+    (category !== 'retro' && category !== 'modern' && category !== 'game') ||
+    !/^[1-9]\d*$/.test(req.params.id) ||
+    !Number.isSafeInteger(catalogId)
+  ) {
+    return res
+      .status(400)
+      .json({ error: 'A valid title and category are required.' });
+  }
+  if (!isSoftwareCategoryEnabled(category)) {
+    return disabledCategoryResponse(res, category);
+  }
+
+  try {
+    const [game, systems] = await Promise.all([
+      getQuestarrApi().getCatalogGame(catalogId),
+      category === 'game' ? Promise.resolve([]) : getEmulationPlatforms(),
+    ]);
+    const result = mapCategoryGames(
+      [game],
+      category,
+      systems.filter((system) => system.group === category),
+      {}
+    )[0];
+    if (!result) {
+      return res
+        .status(404)
+        .json({ error: 'Title not found in this category.' });
+    }
+    enqueueImageCacheWarm(extractImageCacheUrls([result]));
+    return res.status(200).json({ game: result });
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return res.status(404).json({ error: 'Catalog title not found.' });
+    }
+    return respondProviderError(res, error);
+  }
+});
+
 softwareRoutes.post('/', async (req, res) => {
   const body = isRecord(req.body) ? req.body : {};
   const category = body.category;

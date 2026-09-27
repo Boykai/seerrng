@@ -99,6 +99,10 @@ platform before showing each page. This requires a QuestarrNG build with the
 paged SeerrNG catalog endpoints. Older QuestarrNG builds continue to show the
 first available catalog window until upgraded.
 
+Open a title's cover or name to see its summary, genres, release date, and
+supported request targets. The title URL can be copied and reopened directly;
+users without request permission can still inspect its details.
+
 When requesting an emulation title, choose one of the supported systems shown
 for that title. SeerrNG stores the chosen system with the request and sends it
 to ROMarrNG. The request is not silently redirected to a different system.
