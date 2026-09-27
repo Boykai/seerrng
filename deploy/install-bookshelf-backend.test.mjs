@@ -258,6 +258,31 @@ describe('Bookshelf backup permissions', () => {
     assert.match(env, /HARDCOVER_AUTH=Bearer test-token/);
   });
 
+  it('keeps an existing audiobook database split and refuses an implicit merge', async () => {
+    const root = await createTemporaryDirectory();
+    const environment = await createDeploymentEnvironment(root);
+    await writeFile(
+      path.join(environment.BOOKSHELF_AUDIOBOOKS_CONFIG_DIR, 'readarr.db'),
+      'existing audiobook library'
+    );
+
+    const upgrade = await runInstaller(environment, '--skip-pull');
+    assert.equal(upgrade.code, 0, upgrade.stderr);
+    const env = await readFile(
+      path.join(environment.INSTALL_DIR, '.env'),
+      'utf8'
+    );
+    assert.match(env, /BOOKSHELF_INSTANCE_MODE=split/);
+
+    const combine = await runInstaller(
+      environment,
+      '--skip-pull',
+      '--single-instance'
+    );
+    assert.notEqual(combine.code, 0);
+    assert.match(combine.stderr, /does not merge databases/);
+  });
+
   it('supports explicit native Hardcover mode without starting the proxy', async () => {
     const root = await createTemporaryDirectory();
     const environment = await createDeploymentEnvironment(root);

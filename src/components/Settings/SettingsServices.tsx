@@ -74,6 +74,16 @@ const messages = defineMessages('components.Settings', {
     'Configure your {serverType} server(s) below. You can connect multiple {serverType} servers, but only one of them can be marked as default. Administrators are able to override the server used to process new requests prior to approval.',
   bookServiceSettingsDescription:
     'Add one connection for Books and one for Audiobooks to enable both request formats. Both connections can point to the same {serverType} instance; select a different Book Format on each and mark one default for each format. Administrators can override the server before approval.',
+  bookFreshSetup:
+    'Recommended for a new setup: run one BookshelfNG instance for both formats. Add the Book connection first, then use the same instance for Audiobooks.',
+  bookAddMissingFormat:
+    'This Bookshelf can handle both formats. Add the missing {format} connection using the same instance, or add a different server.',
+  bookAddOtherFormat: 'Use this instance for {format} requests',
+  bookSharedSetup:
+    'These two SeerrNG connections route requests to one BookshelfNG instance and share its library.',
+  bookSplitUpgrade:
+    'Your Book and Audiobook connections use different addresses. Upgrades keep them as configured. If they use separate databases, migrate the audiobook library before pointing both connections to one BookshelfNG instance.',
+  bookCombineGuide: 'Bookshelf deployment options',
   deleteserverconfirm: 'Are you sure you want to delete this server?',
   ssl: 'SSL',
   default: 'Default',
@@ -361,6 +371,8 @@ const SettingsServices = () => {
   const [editReadarrModal, setEditReadarrModal] = useState<{
     open: boolean;
     readarr: ReadarrSettings | null;
+    copyFrom?: ReadarrSettings | null;
+    copyFormat?: 'ebook' | 'audiobook';
   }>({
     open: false,
     readarr: null,
@@ -436,6 +448,30 @@ const SettingsServices = () => {
   );
   const hasDefaultReadarrAudiobook = readarrData?.some(
     (readarr) => readarr.serviceType === 'audiobook' && readarr.isDefault
+  );
+  const missingBookFormat =
+    hasReadarrEbook && !hasReadarrAudiobook
+      ? 'audiobook'
+      : hasReadarrAudiobook && !hasReadarrEbook
+        ? 'ebook'
+        : undefined;
+  const bookConnectionToCopy =
+    readarrData?.find((readarr) => readarr.isDefault) ?? readarrData?.[0];
+  const ebookConnections =
+    readarrData?.filter(
+      (readarr) => (readarr.serviceType ?? 'ebook') === 'ebook'
+    ) ?? [];
+  const audiobookConnections =
+    readarrData?.filter((readarr) => readarr.serviceType === 'audiobook') ?? [];
+  const hasSharedBookshelf = ebookConnections.some((ebook) =>
+    audiobookConnections.some(
+      (audiobook) =>
+        ebook.hostname.trim().toLowerCase() ===
+          audiobook.hostname.trim().toLowerCase() &&
+        ebook.port === audiobook.port &&
+        ebook.useSsl === audiobook.useSsl &&
+        (ebook.baseUrl ?? '') === (audiobook.baseUrl ?? '')
+    )
   );
 
   const deleteServer = async () => {
@@ -513,6 +549,8 @@ const SettingsServices = () => {
       {editReadarrModal.open && (
         <ReadarrModal
           readarr={editReadarrModal.readarr}
+          copyFrom={editReadarrModal.copyFrom}
+          copyFormat={editReadarrModal.copyFormat}
           onClose={() => setEditReadarrModal({ open: false, readarr: null })}
           onSave={() => {
             revalidateReadarr();
@@ -839,6 +877,63 @@ const SettingsServices = () => {
         {!readarrData && !readarrError && <LoadingSpinner />}
         {readarrData && !readarrError && (
           <>
+            {readarrData.length === 0 && (
+              <p className="mb-4 text-sm text-gray-300">
+                {intl.formatMessage(messages.bookFreshSetup)}
+              </p>
+            )}
+            {missingBookFormat && bookConnectionToCopy && (
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <p className="text-sm text-gray-300">
+                  {intl.formatMessage(messages.bookAddMissingFormat, {
+                    format: intl.formatMessage(
+                      missingBookFormat === 'ebook'
+                        ? messages.ebook
+                        : messages.audiobook
+                    ),
+                  })}
+                </p>
+                <Button
+                  buttonType="primary"
+                  buttonSize="sm"
+                  onClick={() =>
+                    setEditReadarrModal({
+                      open: true,
+                      readarr: null,
+                      copyFrom: bookConnectionToCopy,
+                      copyFormat: missingBookFormat,
+                    })
+                  }
+                >
+                  {intl.formatMessage(messages.bookAddOtherFormat, {
+                    format: intl.formatMessage(
+                      missingBookFormat === 'ebook'
+                        ? messages.ebook
+                        : messages.audiobook
+                    ),
+                  })}
+                </Button>
+              </div>
+            )}
+            {hasReadarrEbook && hasReadarrAudiobook && (
+              <p className="mb-4 text-sm text-gray-300">
+                {intl.formatMessage(
+                  hasSharedBookshelf
+                    ? messages.bookSharedSetup
+                    : messages.bookSplitUpgrade
+                )}{' '}
+                {!hasSharedBookshelf && (
+                  <a
+                    className="text-primary-400 hover:underline"
+                    href="https://docs.seerr.dev/using-seerr/bookshelf-backend"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {intl.formatMessage(messages.bookCombineGuide)}
+                  </a>
+                )}
+              </p>
+            )}
             {readarrData.length > 0 && (
               <>
                 {hasReadarrEbook && !hasDefaultReadarrEbook && (

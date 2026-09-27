@@ -134,11 +134,19 @@ interface DiagnosticResponse {
 
 interface ReadarrModalProps {
   readarr: ReadarrSettings | null;
+  copyFrom?: ReadarrSettings | null;
+  copyFormat?: 'ebook' | 'audiobook';
   onClose: () => void;
   onSave: () => void;
 }
 
-const ReadarrModal = ({ onClose, readarr, onSave }: ReadarrModalProps) => {
+const ReadarrModal = ({
+  onClose,
+  readarr,
+  copyFrom,
+  copyFormat,
+  onSave,
+}: ReadarrModalProps) => {
   const intl = useIntl();
   const initialLoad = useRef(false);
   const { addToast } = useToasts();
@@ -278,18 +286,19 @@ const ReadarrModal = ({ onClose, readarr, onSave }: ReadarrModalProps) => {
   );
 
   useEffect(() => {
-    if (readarr) {
+    const connection = readarr ?? copyFrom;
+    if (connection) {
       testConnection({
-        id: readarr.id,
-        apiKey: readarr.apiKey,
-        hostname: readarr.hostname,
-        port: readarr.port,
-        baseUrl: readarr.baseUrl,
-        useSsl: readarr.useSsl,
-        serviceType: readarr.serviceType ?? 'ebook',
+        id: readarr?.id,
+        apiKey: connection.apiKey,
+        hostname: connection.hostname,
+        port: connection.port,
+        baseUrl: connection.baseUrl,
+        useSsl: connection.useSsl,
+        serviceType: copyFormat ?? connection.serviceType ?? 'ebook',
       });
     }
-  }, [readarr, testConnection]);
+  }, [copyFormat, copyFrom, readarr, testConnection]);
 
   return (
     <Transition
@@ -306,19 +315,19 @@ const ReadarrModal = ({ onClose, readarr, onSave }: ReadarrModalProps) => {
       <Formik
         initialValues={{
           name: readarr?.name ?? '',
-          hostname: readarr?.hostname ?? '',
-          port: readarr?.port ?? 8787,
-          ssl: readarr?.useSsl ?? false,
-          apiKey: readarr?.apiKey ?? '',
-          baseUrl: readarr?.baseUrl ?? '',
+          hostname: readarr?.hostname ?? copyFrom?.hostname ?? '',
+          port: readarr?.port ?? copyFrom?.port ?? 8787,
+          ssl: readarr?.useSsl ?? copyFrom?.useSsl ?? false,
+          apiKey: readarr?.apiKey ?? copyFrom?.apiKey ?? '',
+          baseUrl: readarr?.baseUrl ?? copyFrom?.baseUrl ?? '',
           activeProfileId: readarr?.activeProfileId ?? '',
           rootFolder: readarr?.activeDirectory ?? '',
-          isDefault: readarr?.isDefault ?? false,
-          externalUrl: readarr?.externalUrl ?? '',
-          syncEnabled: readarr?.syncEnabled ?? false,
-          enableSearch: !readarr?.preventSearch,
+          isDefault: readarr?.isDefault ?? Boolean(copyFrom),
+          externalUrl: readarr?.externalUrl ?? copyFrom?.externalUrl ?? '',
+          syncEnabled: readarr?.syncEnabled ?? copyFrom?.syncEnabled ?? false,
+          enableSearch: !(readarr?.preventSearch ?? copyFrom?.preventSearch),
           activeMetadataProfileId: readarr?.activeMetadataProfileId ?? '',
-          serviceType: readarr?.serviceType ?? 'ebook',
+          serviceType: readarr?.serviceType ?? copyFormat ?? 'ebook',
         }}
         validationSchema={ReadarrSettingsSchema}
         onSubmit={async (values) => {

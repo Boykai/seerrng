@@ -28,10 +28,26 @@ to **Audiobook**, and point both entries to the same BookshelfNG URL and API
 key. The entries let SeerrNG route each format; they are not separate
 BookshelfNG instances.
 
+For a new deployment, run `deploy/install-bookshelf-backend.sh` without an
+instance flag. It selects one combined BookshelfNG process by default. In
+SeerrNG's first-run **Configure Services** step, add a **Book** connection,
+then choose **Use this instance for Audiobooks** to create the second service
+entry with the same connection details. Select its root folder and profiles
+before saving. Use `--split-instances` only if you want isolated processes.
+
+On upgrade, the installer keeps an existing split audiobook database and
+SeerrNG keeps the configured service entries. To combine later, migrate the
+separate audiobook library into the instance you will keep, verify its files
+and requests, and back up the old database. After the separate database is no
+longer at its configured path, run the installer with `--single-instance` and
+point both SeerrNG entries to that instance. The installer refuses to ignore
+an existing separate audiobook database; changing the two URLs alone does not
+merge it.
+
 Each BookshelfNG author can optionally set different ebook and audiobook
 folders in the author editor. These overrides apply to future imports,
-upgrades, and renames; existing files are not moved automatically. Quality and metadata
-profiles remain shared by both formats. Separate BookshelfNG instances are
+upgrades, and renames; existing files are not moved automatically. Quality and
+metadata profiles remain shared by both formats. Separate BookshelfNG instances are
 optional when you need isolated databases or different settings for the same
 author.
 
