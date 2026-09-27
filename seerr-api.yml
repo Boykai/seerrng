@@ -52,6 +52,27 @@ servers:
 
 components:
   schemas:
+    MusicSourceRating:
+      type: object
+      required: [score, votes, url, source]
+      properties:
+        score:
+          type: number
+          minimum: 0
+          maximum: 10
+        votes:
+          type: integer
+          minimum: 0
+        url:
+          type: string
+        source:
+          type: string
+          enum: [musicbrainz, lidarr, theaudiodb, discogs]
+        scale:
+          type: integer
+          enum: [5, 10]
+        edition:
+          type: string
     Blocklist:
       type: object
       properties:
@@ -362,6 +383,14 @@ components:
     DetailDisclosurePinSettings:
       type: object
       properties:
+        details:
+          type: boolean
+          description: Keeps the additional details card open for the selected media type. Supported by the media-scoped endpoint.
+          example: false
+        collection:
+          type: boolean
+          description: Keeps movie collection panels open. Supported by the movie-scoped detail-disclosures endpoint.
+          example: false
         cast:
           type: boolean
           example: false
@@ -4072,6 +4101,65 @@ components:
         - serverType
         - is4k
         - groups
+    WatchEpisodeStatus:
+      type: object
+      properties:
+        seasonNumber:
+          type: integer
+          minimum: 0
+        episodeNumber:
+          type: integer
+          minimum: 0
+        watched:
+          type: boolean
+      required:
+        - seasonNumber
+        - episodeNumber
+        - watched
+    WatchSeasonStatus:
+      type: object
+      properties:
+        seasonNumber:
+          type: integer
+          minimum: 0
+        availableCount:
+          type: integer
+          minimum: 0
+        watchedCount:
+          type: integer
+          minimum: 0
+        episodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchEpisodeStatus'
+      required:
+        - seasonNumber
+        - availableCount
+        - watchedCount
+        - episodes
+    WatchStatusResponse:
+      type: object
+      properties:
+        serverType:
+          type: integer
+        availableCount:
+          type: integer
+          minimum: 0
+        watchedCount:
+          type: integer
+          minimum: 0
+        unwatchedCount:
+          type: integer
+          minimum: 0
+        seasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchSeasonStatus'
+      required:
+        - serverType
+        - availableCount
+        - watchedCount
+        - unwatchedCount
     PlaybackCommand:
       type: object
       properties:
@@ -4113,6 +4201,10 @@ components:
     CollectionPlaybackCommand:
       type: object
       properties:
+        is4k:
+          type: boolean
+          default: false
+          description: Use only the selected quality (false for HD, true for 4K). Unavailable titles are skipped, never substituted with another quality.
         deviceId:
           type: string
           maxLength: 512
@@ -4127,6 +4219,10 @@ components:
     CollectionPlaylistCommand:
       type: object
       properties:
+        is4k:
+          type: boolean
+          default: false
+          description: Use only the selected quality (false for HD, true for 4K). Unavailable titles are skipped, never substituted with another quality.
         mediaIds:
           type: array
           minItems: 1
@@ -7795,6 +7891,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetailDisclosurePinSettings'
+  /user/{userId}/settings/media-filter-pins/{scope}:
+    post:
+      summary: Remember or unpin a media filter selection for one page
+      tags: [users]
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: scope
+          required: true
+          schema:
+            type: string
+            enum: [books, trending, search, blocklist, issues, requests]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [value]
+              properties:
+                value:
+                  type: string
+                  nullable: true
+                  enum: [all, movie, tv, music, book, ebook, audiobook, null]
+      responses:
+        '200':
+          description: Updated account media filter pins
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
   /user/{userId}/settings/password:
     get:
       summary: Get password page informatiom
@@ -8207,7 +8341,27 @@ paths:
           name: resultFilter
           schema:
             type: string
-          description: Refine music search results by album title while preserving the main search query.
+            description: Refine music search results by album title while preserving the main search query.
+        - in: query
+          name: artist
+          schema: { type: string, maxLength: 256 }
+          description: Restrict Music results to the credited artist before pagination.
+        - in: query
+          name: artistId
+          schema: { type: string, maxLength: 36 }
+          description: Exact MusicBrainz artist identifier selected from autocomplete.
+        - in: query
+          name: genre
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: releaseType
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: primaryReleaseDateGte
+          schema: { type: string, maxLength: 10 }
+        - in: query
+          name: primaryReleaseDateLte
+          schema: { type: string, maxLength: 10 }
       responses:
         '200':
           description: Results
@@ -9206,6 +9360,14 @@ paths:
             type: string
             example: kind of blue
         - in: query
+          name: artist
+          schema: { type: string, maxLength: 256 }
+          description: Restrict results to the credited artist before pagination.
+        - in: query
+          name: artistId
+          schema: { type: string, maxLength: 36 }
+          description: Exact MusicBrainz artist identifier selected from autocomplete.
+        - in: query
           name: availability
           description: Selects the client-side scanned Lidarr quality view
           schema:
@@ -9241,7 +9403,7 @@ paths:
   /discover/books:
     get:
       summary: Discover books
-      description: Returns book discovery results from Open Library.
+      description: Returns book discovery results from Open Library, or audiobook narrator matches from configured Bookshelf catalogs.
       tags:
         - search
       parameters:
@@ -9257,6 +9419,18 @@ paths:
             type: string
             example: subject:fiction
             default: subject:fiction
+        - in: query
+          name: author
+          schema:
+            type: string
+            maxLength: 256
+          description: Author terms sent to the book provider alongside the other search constraints.
+        - in: query
+          name: narrator
+          schema:
+            type: string
+            maxLength: 256
+          description: Audiobook-only narrator terms matched against populated Bookshelf narrator metadata. Only books in configured audiobook libraries can match.
         - in: query
           name: subject
           schema:
@@ -9583,6 +9757,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MusicResult'
+  /music/{musicId}/artwork:
+    get:
+      summary: Resolve cached album artwork without loading album details
+      tags:
+        - search
+      parameters:
+        - in: path
+          name: musicId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resolved artwork, or null when no cover exists
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [posterPath]
+                properties:
+                  posterPath:
+                    type: string
+                    nullable: true
+        '400':
+          description: Invalid album identifier
+        '503':
+          description: Artwork provider temporarily unavailable
+  /music/{musicId}/rating:
+    get:
+      summary: Get album ratings from MusicBrainz, TheAudioDB and Discogs, with a Lidarr fallback
+      tags:
+        - search
+      parameters:
+        - in: path
+          name: musicId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Separate provider ratings; failedSources identifies retryable provider failures
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ratings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MusicSourceRating'
+                  failedSources:
+                    type: array
+                    items:
+                      type: string
+                      enum: [musicbrainz, lidarr, theaudiodb, discogs]
+                  rating:
+                    type: object
+                    required: [score, votes, url, source]
+                    properties:
+                      score:
+                        type: number
+                        minimum: 0
+                        maximum: 10
+                      votes:
+                        type: integer
+                        minimum: 0
+                      url:
+                        type: string
+                      source:
+                        type: string
+                        enum: [musicbrainz, lidarr]
+        '404':
+          description: Album identifier not found
   /music/{musicId}/artist:
     get:
       summary: Get the primary artist for an album
@@ -9810,6 +10057,12 @@ paths:
           schema:
             type: string
             example: OL27448W
+        - in: query
+          name: lookupTitle
+          description: Fallback title used to resolve provider-qualified Bookshelf records.
+          schema:
+            type: string
+            maxLength: 512
       responses:
         '200':
           description: Book details returned
@@ -9817,6 +10070,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BookResult'
+        '404':
+          description: Book not found
+  /book/{bookId}/ratings:
+    get:
+      summary: Get book ratings
+      tags:
+        - search
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          schema:
+            type: string
+            example: OL27448W
+        - in: query
+          name: lookupTitle
+          description: Fallback title used to resolve provider-qualified Bookshelf records.
+          schema:
+            type: string
+            maxLength: 512
+      responses:
+        '200':
+          description: Book ratings returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - count
+                  - source
+                properties:
+                  average:
+                    type: number
+                    minimum: 0
+                    maximum: 5
+                  count:
+                    type: integer
+                    minimum: 0
+                  source:
+                    type: string
+                    enum: [openlibrary, bookshelf]
+                  workId:
+                    type: string
+        '404':
+          description: Book not found
+        '503':
+          description: Book ratings provider is unavailable
   /series/{seriesId}:
     get:
       summary: Get a Bookshelf book series
@@ -12283,6 +12583,93 @@ paths:
       responses:
         '204':
           description: Succesfully removed media item
+  /media/{mediaId}/library:
+    parameters:
+      - in: path
+        name: mediaId
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Resolve all verified library copies
+      description: Read-only inventory across configured services. Requires MANAGE_REQUESTS. Returns a confirmation token bound to the exact media, targets and service configuration. No default-service guessing or deletion.
+      tags: [media]
+      responses:
+        '200':
+          description: Verified library copies and confirmation token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [targets, token]
+                properties:
+                  token:
+                    type: string
+                  targets:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        [
+                          key,
+                          serviceId,
+                          serviceType,
+                          externalId,
+                          service,
+                          quality,
+                          url,
+                        ]
+                      properties:
+                        key:
+                          type: string
+                        serviceId:
+                          type: integer
+                        serviceType:
+                          type: string
+                          enum: [radarr, sonarr, lidarr, readarr]
+                        externalId:
+                          type: integer
+                        service:
+                          type: string
+                        quality:
+                          type: string
+                        url:
+                          type: string
+        '403':
+          description: Not authorized
+        '404':
+          description: Media not found
+        '502':
+          description: Could not verify the complete library scope
+    delete:
+      summary: Delete all confirmed library copies
+      description: Requires MANAGE_REQUESTS. Revalidates the exact confirmation scope before deleting files and entries from every listed service. Stops on failure and preserves requests, issues, other titles, authors and artists.
+      tags: [media]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  pattern: '^[a-f0-9]{64}$'
+      responses:
+        '204':
+          description: All confirmed copies removed
+        '400':
+          description: Missing or invalid confirmation
+        '403':
+          description: No longer authorized
+        '404':
+          description: Media not found
+        '409':
+          description: Scope changed or deletion failed; review refreshed state
+        '502':
+          description: Could not verify services before deletion
   /media/{mediaId}/file:
     delete:
       summary: Delete media file
@@ -12433,6 +12820,323 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Collection'
+  /collection/{collectionId}/availability:
+    post:
+      summary: Check indexed collection members and linked media-server collections
+      description: Performs bounded identity lookups and additive synchronization of explicitly managed collections. Does not scan media files or create collections.
+      tags: [collection]
+      parameters:
+        - in: path
+          name: collectionId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000000
+      responses:
+        '200':
+          description: Fresh availability and collection destinations (destinations are admin-only)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  collection:
+                    $ref: '#/components/schemas/Collection'
+                  sync:
+                    type: object
+        '503':
+          description: Media server could not be verified; cached availability must be retained
+  /collection/{collectionId}/server:
+    post:
+      summary: Add a collection to Plex, Jellyfin or Emby
+      description: Admin-only. Creates missing collections from selected indexed members. Selection applies to creation only; newly available members are added automatically. Existing unrelated collections are not modified.
+      tags: [collection]
+      parameters:
+        - in: path
+          name: collectionId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [libraryIds]
+              additionalProperties: false
+              properties:
+                selectedIds:
+                  description: Initial member selection only, not a filter for automatic updates. Omit to select all.
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: '^[1-9]\d{0,9}$'
+                libraryIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: '^[a-zA-Z0-9-]{1,128}$'
+      responses:
+        '200':
+          description: Per-library result; unknown destinations may require a later retry
+          content:
+            application/json:
+              schema:
+                type: object
+        '403':
+          description: Administrator permission required
+        '503':
+          description: Unable to verify the media server
+    delete:
+      summary: Remove a collection without deleting media
+      description: Admin-only. Rechecks each confirmed remote collection identity, stops automatic updates, and removes the collection container only. Movies and media files are preserved.
+      tags: [collection]
+      parameters:
+        - in: path
+          name: collectionId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destinations]
+              additionalProperties: false
+              properties:
+                destinations:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [libraryId, removalToken]
+                    properties:
+                      libraryId:
+                        type: string
+                        pattern: '^[a-zA-Z0-9-]{1,128}$'
+                      removalToken:
+                        type: string
+                        pattern: '^[a-f0-9]{64}$'
+      responses:
+        '200':
+          description: Verified removal result per destination
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid confirmation
+        '403':
+          description: Administrator permission required
+        '503':
+          description: Collection identity or removal could not be verified
+  /collection-catalog/tv/for-series/{id}:
+    get:
+      summary: Find official TV franchise collections for a series
+      tags: [collection]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 999999999
+      responses:
+        '200':
+          description: Verified collection result
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid selection or confirmation
+        '403':
+          description: Administrator permission required for changes
+        '404':
+          description: Collection not found
+        '503':
+          description: Provider or media server could not be verified
+  /collection-catalog/{kind}/{id}:
+    parameters:
+      - in: path
+        name: kind
+        required: true
+        schema:
+          type: string
+          enum: [tv, music]
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9-]{1,128}$'
+    get:
+      summary: Get a TV franchise or artist album collection
+      tags: [collection]
+      responses:
+        '200':
+          description: Verified collection result
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid selection or confirmation
+        '403':
+          description: Administrator permission required for changes
+        '404':
+          description: Collection not found
+        '503':
+          description: Provider or media server could not be verified
+  /collection-catalog/{kind}/{id}/availability:
+    parameters:
+      - in: path
+        name: kind
+        required: true
+        schema:
+          type: string
+          enum: [tv, music]
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9-]{1,128}$'
+    post:
+      summary: Check available collection members and synchronize existing managed collections
+      tags: [collection]
+      responses:
+        '200':
+          description: Verified collection result
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid selection or confirmation
+        '403':
+          description: Administrator permission required for changes
+        '404':
+          description: Collection not found
+        '503':
+          description: Provider or media server could not be verified
+  /collection-catalog/{kind}/{id}/server:
+    parameters:
+      - in: path
+        name: kind
+        required: true
+        schema:
+          type: string
+          enum: [tv, music]
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9-]{1,128}$'
+    post:
+      summary: Create a collection from the selected available members
+      description: Admin-only. Selection affects initial creation, not future automatic additions.
+      tags: [collection]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [libraryIds, selectedIds]
+              properties:
+                libraryIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: '^[a-zA-Z0-9-]{1,128}$'
+                selectedIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  uniqueItems: true
+                  items:
+                    type: string
+                    pattern: '^[a-zA-Z0-9-]{1,128}$'
+      responses:
+        '200':
+          description: Verified collection result
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid selection or confirmation
+        '403':
+          description: Administrator permission required for changes
+        '404':
+          description: Collection not found
+        '503':
+          description: Provider or media server could not be verified
+    delete:
+      summary: Remove a verified collection without deleting media files
+      tags: [collection]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [destinations]
+              properties:
+                destinations:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [libraryId, removalToken]
+                    properties:
+                      libraryId:
+                        type: string
+                        pattern: '^[a-zA-Z0-9-]{1,128}$'
+                      removalToken:
+                        type: string
+                        pattern: '^[a-f0-9]{64}$'
+      responses:
+        '200':
+          description: Verified collection result
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid selection or confirmation
+        '403':
+          description: Administrator permission required for changes
+        '404':
+          description: Collection not found
+        '503':
+          description: Provider or media server could not be verified
   /service/radarr:
     get:
       summary: Get non-sensitive Radarr server list
@@ -13442,6 +14146,45 @@ paths:
                   $ref: '#/components/schemas/PlaybackDevice'
         '502':
           description: Playback devices could not be retrieved.
+  /playback/watched/{mediaType}/{tmdbId}:
+    get:
+      summary: Get the current user's watched status for a movie or series
+      tags:
+        - playback
+      parameters:
+        - in: path
+          name: mediaType
+          required: true
+          schema:
+            type: string
+            enum:
+              - movie
+              - tv
+        - in: path
+          name: tmdbId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000000
+        - in: query
+          name: details
+          required: false
+          schema:
+            type: string
+            enum:
+              - '1'
+      responses:
+        '200':
+          description: Watched status for the current user and available media-server items.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchStatusResponse'
+        '404':
+          description: The media type or TMDB ID is invalid.
+        '502':
+          description: Watched status could not be retrieved from the media server.
   /playback/media/{mediaId}:
     get:
       summary: Get the playable catalog for a media item

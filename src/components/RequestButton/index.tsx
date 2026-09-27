@@ -1,5 +1,6 @@
 import Button, { type ButtonType } from '@app/components/Common/Button';
 import FormatRequestControl from '@app/components/Common/FormatRequestControl';
+import { isVideoQualityAvailable } from '@app/components/RequestModal/requestAvailability';
 import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
@@ -320,14 +321,8 @@ const RequestButton = ({
     !!user &&
     !!active4kRequest &&
     hasAutoApprovePermission(user.permissions, mediaType, true);
-  const standardIsAvailable =
-    media?.status === MediaStatus.AVAILABLE ||
-    (mediaType === 'movie' &&
-      media?.status === MediaStatus.PARTIALLY_AVAILABLE);
-  const fourKIsAvailable =
-    media?.status4k === MediaStatus.AVAILABLE ||
-    (mediaType === 'movie' &&
-      media?.status4k === MediaStatus.PARTIALLY_AVAILABLE);
+  const standardIsAvailable = isVideoQualityAvailable(media, mediaType);
+  const fourKIsAvailable = isVideoQualityAvailable(media, mediaType, true);
   const canOpenStandardAlternate =
     canChooseAlternateTarget && hasStandardService && !isBlocklisted;
   const canOpen4kAlternate =
@@ -347,20 +342,23 @@ const RequestButton = ({
                     setShowRequestModal(true);
                   },
             disabled:
+              standardIsAvailable ||
               !hasStandardService ||
               isBlocklisted ||
               (!standardRequestButton &&
                 !(canApproveStandard && activeRequest) &&
                 !canOpenStandardAlternate),
-            disabledReason: !hasStandardService
-              ? intl.formatMessage(messages.noService)
-              : isBlocklisted
-                ? intl.formatMessage(messages.blocklisted)
-                : activeRequest
-                  ? intl.formatMessage(messages.pendingFormat)
-                  : standardIsAvailable
-                    ? intl.formatMessage(messages.availableFormat)
-                    : intl.formatMessage(messages.unavailableFormat),
+            disabledReason: standardIsAvailable
+              ? intl.formatMessage(messages.availableFormat)
+              : !hasStandardService
+                ? intl.formatMessage(messages.noService)
+                : isBlocklisted
+                  ? intl.formatMessage(messages.blocklisted)
+                  : activeRequest
+                    ? intl.formatMessage(messages.pendingFormat)
+                    : standardIsAvailable
+                      ? intl.formatMessage(messages.availableFormat)
+                      : intl.formatMessage(messages.unavailableFormat),
           },
         ]
       : []),
@@ -378,20 +376,23 @@ const RequestButton = ({
                     setShowRequest4kModal(true);
                   },
             disabled:
+              fourKIsAvailable ||
               !has4kService ||
               isBlocklisted ||
               (!request4kButton &&
                 !(canApprove4k && active4kRequest) &&
                 !canOpen4kAlternate),
-            disabledReason: !has4kService
-              ? intl.formatMessage(messages.noService)
-              : isBlocklisted
-                ? intl.formatMessage(messages.blocklisted)
-                : active4kRequest
-                  ? intl.formatMessage(messages.pendingFormat)
-                  : fourKIsAvailable
-                    ? intl.formatMessage(messages.availableFormat)
-                    : intl.formatMessage(messages.unavailableFormat),
+            disabledReason: fourKIsAvailable
+              ? intl.formatMessage(messages.availableFormat)
+              : !has4kService
+                ? intl.formatMessage(messages.noService)
+                : isBlocklisted
+                  ? intl.formatMessage(messages.blocklisted)
+                  : active4kRequest
+                    ? intl.formatMessage(messages.pendingFormat)
+                    : fourKIsAvailable
+                      ? intl.formatMessage(messages.availableFormat)
+                      : intl.formatMessage(messages.unavailableFormat),
           },
         ]
       : []),

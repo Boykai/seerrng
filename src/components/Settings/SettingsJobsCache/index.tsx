@@ -13,12 +13,7 @@ import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { formatBytes } from '@app/utils/numberHelpers';
 import { Transition } from '@headlessui/react';
-import {
-  NoSymbolIcon,
-  PlayIcon,
-  StopIcon,
-  TrashIcon,
-} from '@heroicons/react/24/outline';
+import { NoSymbolIcon, PlayIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { CheckIcon, PencilIcon } from '@heroicons/react/24/solid';
 import { MediaServerType } from '@server/constants/server';
 import type {
@@ -393,7 +388,7 @@ const SettingsJobs = () => {
           okDisabled={isSaving}
           onOk={() => scheduleJob()}
         >
-          <div className="section">
+          <div className="app-card-sub section">
             <form className="mb-6">
               <div className="form-row">
                 <label className="text-label">
@@ -522,7 +517,7 @@ const SettingsJobs = () => {
           {intl.formatMessage(messages.jobsDescription)}
         </p>
       </div>
-      <div className="section">
+      <div className="app-card-sub section">
         <Table className="settings-jobs-table">
           <thead>
             <tr>
@@ -612,8 +607,8 @@ const SettingsJobs = () => {
                         buttonType="danger"
                         buttonSize="standard"
                         onClick={() => cancelJob(job)}
+                        buttonIcon="cancel"
                       >
-                        <StopIcon />
                         <span>{intl.formatMessage(messages.canceljob)}</span>
                       </Button>
                     ) : (
@@ -639,7 +634,7 @@ const SettingsJobs = () => {
           {intl.formatMessage(messages.cacheDescription)}
         </p>
       </div>
-      <div className="section">
+      <div className="app-card-sub section">
         <Table>
           <thead>
             <tr>
@@ -680,7 +675,7 @@ const SettingsJobs = () => {
               {intl.formatMessage(messages.dnsCacheDescription)}
             </p>
           </div>
-          <div className="section">
+          <div className="app-card-sub section">
             <Table>
               <thead>
                 <tr>
@@ -760,7 +755,7 @@ const SettingsJobs = () => {
               {intl.formatMessage(messages.dnsCacheGlobalStatsDescription)}
             </p>
           </div>
-          <div className="section">
+          <div className="app-card-sub section">
             {!cacheData ? (
               <LoadingSpinner />
             ) : (
@@ -812,7 +807,7 @@ const SettingsJobs = () => {
           })}
         </p>
       </div>
-      <div className="section">
+      <div className="app-card-sub section">
         <Table>
           <thead>
             <tr>

@@ -52,7 +52,7 @@ now pass.
 
 | Route/state | State | Evidence or finding |
 | --- | --- | --- |
-| Request Status `/requests/status` base | Verified | All Users is the default, filters and sorting render, media cards and lifecycle timeline render. |
+| Requests `/requests` base | Verified | All Users is the default, filters and sorting render, media cards and lifecycle timeline render. |
 | Request Status history | Verified | Expanded Hold On history rendered distinct aligned date, time, action, and description columns without overlap; long descriptions wrap only in the description column. |
 | Request Status lifecycle edge states | Verified with documented live-data limit | Real records rendered Available, Failed, Unavailable/No Release Found, Importing/Picard hold, and Adding to library states. The user selector defaults to All Users. The prior pending Music Edit check opened the correct refreshed title, service, root folder, and approval action; there is no approval-pending record left in the current database to reopen. No current record is in Downloading. Regression tests cover requested/approved, Lidarr no-grab interactive-search guidance, Picard holds, Arr manual-import holds, Bookshelf holds, and retry transitions without fabricating live state. |
 | User request history `/users/[userId]/requests` (`/requests` redirects to Status) | Verified | Pending empty state, Show All Requests action, populated Music cards, media/status/sort controls, destructive actions, and shared pagination footer inspected. The legacy card design is outside the current redesign; no requested behavior was removed. |

@@ -15,7 +15,7 @@ const messages = defineMessages('components.Login', {
   title: 'Add Email',
   description:
     'Add a valid email address to complete your profile. This will be used for notifications and local sign-in.',
-  email: 'Email address',
+  email: 'Email Address',
   emailAlreadyTaken: 'This email is already in use.',
   validationEmailRequired: 'You must provide an email',
   validationEmailFormat: 'Invalid email',

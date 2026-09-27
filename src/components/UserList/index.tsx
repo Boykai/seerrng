@@ -369,6 +369,7 @@ const UserList = () => {
           }
           okDisabled={isDeleting}
           okButtonType="danger"
+          okButtonProps={{ buttonIcon: 'delete' }}
           onCancel={() =>
             setDeleteModal({ isOpen: false, user: deleteModal.user })
           }
@@ -622,7 +623,7 @@ const UserList = () => {
       </Transition>
 
       <Header>{intl.formatMessage(messages.userlist)}</Header>
-      <article className="refreshed-card-surface mt-5 rounded-xl border border-gray-700 p-3 shadow-lg shadow-gray-950/20">
+      <article className="app-card-main refreshed-card-surface mt-5 rounded-xl border border-gray-700 p-3 shadow-lg shadow-gray-950/20">
         <div className="text-sm text-gray-300">
           {intl.formatMessage(messages.filters)}
         </div>
@@ -683,7 +684,7 @@ const UserList = () => {
           })}
         </div>
 
-        <div className="refreshed-inset-surface mt-5 overflow-hidden rounded-lg border border-gray-700">
+        <div className="app-card-inset refreshed-inset-surface card-spacing-before overflow-hidden rounded-lg border border-gray-700">
           <div className="user-list-table-scroll scrollable-card overflow-auto">
             <table className="app-data-table user-list-data-table">
               <thead className="app-data-table-head">

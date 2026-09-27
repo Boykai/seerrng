@@ -170,7 +170,7 @@ const SettingsNetwork = () => {
           {intl.formatMessage(messages.networksettingsDescription)}
         </p>
       </div>
-      <div className="section">
+      <div className="app-card-sub section">
         <Formik
           initialValues={{
             csrfProtection: data?.csrfProtection,
@@ -263,7 +263,10 @@ const SettingsNetwork = () => {
             setFieldValue,
           }) => {
             return (
-              <Form className="section" data-testid="settings-network-form">
+              <Form
+                className="app-card-sub section"
+                data-testid="settings-network-form"
+              >
                 <div className="mb-6">
                   <h4 className="heading">
                     {intl.formatMessage(messages.transportSecurity)}

@@ -1,15 +1,17 @@
-import type { ButtonType } from '@app/components/Common/Button';
+import type { ButtonProps, ButtonType } from '@app/components/Common/Button';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import useClickOutside from '@app/hooks/useClickOutside';
 import { useLockBodyScroll } from '@app/hooks/useLockBodyScroll';
+import useModalBackNavigation from '@app/hooks/useModalBackNavigation';
 import globalMessages from '@app/i18n/globalMessages';
 import { Transition, TransitionChild } from '@headlessui/react';
 import type { MouseEvent } from 'react';
 import React, { Fragment, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useIntl } from 'react-intl';
+import { isOwnedListboxClick } from './isOwnedListboxClick';
 
 interface ModalProps {
   title?: string;
@@ -30,10 +32,10 @@ interface ModalProps {
   secondaryDisabled?: boolean;
   tertiaryDisabled?: boolean;
   tertiaryButtonType?: ButtonType;
-  okButtonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
-  cancelButtonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
-  secondaryButtonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
-  tertiaryButtonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
+  okButtonProps?: ButtonProps<'button'>;
+  cancelButtonProps?: ButtonProps<'button'>;
+  secondaryButtonProps?: ButtonProps<'button'>;
+  tertiaryButtonProps?: ButtonProps<'button'>;
   disableScrollLock?: boolean;
   backgroundClickable?: boolean;
   loading?: boolean;
@@ -41,6 +43,7 @@ interface ModalProps {
   backdropFull?: boolean;
   children?: React.ReactNode;
   dialogClass?: string;
+  contentClass?: string;
   hideActions?: boolean;
   alignTop?: boolean;
   actionsClass?: string;
@@ -75,6 +78,7 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
       backdrop,
       backdropFull = false,
       dialogClass,
+      contentClass = '',
       hideActions = false,
       alignTop = false,
       okButtonProps,
@@ -88,11 +92,13 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
   ) => {
     const intl = useIntl();
     const modalRef = useRef<HTMLDivElement>(null);
+    useModalBackNavigation(onCancel);
     const backgroundClickableRef = useRef(backgroundClickable); // This ref is used to detect state change inside the useClickOutside hook
     useEffect(() => {
       backgroundClickableRef.current = backgroundClickable;
     }, [backgroundClickable]);
-    useClickOutside(modalRef, () => {
+    useClickOutside(modalRef, (event) => {
+      if (isOwnedListboxClick(modalRef.current, event.target)) return;
       if (onCancel && backgroundClickableRef.current) {
         onCancel();
       }
@@ -165,13 +171,13 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
                   <div className="refreshed-artwork-gradient" />
                 </>
               ) : (
-                <div className="absolute inset-0 bg-gray-800/75" />
+                <div className="app-modal-loading-overlay absolute inset-0" />
               )}
             </div>
           )}
-          <div className="relative -mx-4 overflow-x-hidden px-4 pt-0.5 sm:flex sm:items-center">
+          <div className="relative min-w-0 pt-0.5 sm:flex sm:items-center">
             <div
-              className={`mt-3 truncate text-center text-white sm:mt-0 sm:text-left`}
+              className={`mt-3 min-w-0 truncate text-center text-white sm:mt-0 sm:text-left`}
             >
               {(title || subTitle) && (
                 <div className="flex flex-col space-y-1">
@@ -199,7 +205,7 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
           </div>
           {children && (
             <div
-              className={`relative mt-4 text-sm leading-5 text-gray-300 ${
+              className={`relative mt-4 text-sm leading-5 text-gray-300 ${contentClass} ${
                 !(onCancel || onOk || onSecondary || onTertiary) ? 'mb-3' : ''
               }`}
             >
@@ -208,14 +214,13 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
           )}
           {!hideActions && (onCancel || onOk || onSecondary || onTertiary) && (
             <div
-              className={`relative mt-5 flex flex-row-reverse justify-center sm:mt-4 sm:justify-start ${actionsClass}`}
+              className={`app-modal-actions relative flex flex-row-reverse justify-center sm:justify-start ${actionsClass}`}
             >
               {typeof onOk === 'function' && (
                 <Button
                   buttonType={okButtonType}
                   buttonSize={actionButtonSize}
                   onClick={onOk}
-                  className="ml-3"
                   disabled={okDisabled}
                   data-testid="modal-ok-button"
                   {...okButtonProps}
@@ -228,7 +233,6 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
                   buttonType={secondaryButtonType}
                   buttonSize={actionButtonSize}
                   onClick={onSecondary}
-                  className="ml-3"
                   disabled={secondaryDisabled}
                   data-testid="modal-secondary-button"
                   {...secondaryButtonProps}
@@ -241,7 +245,6 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
                   buttonType={tertiaryButtonType}
                   buttonSize={actionButtonSize}
                   onClick={onTertiary}
-                  className="ml-3"
                   disabled={tertiaryDisabled}
                   {...tertiaryButtonProps}
                 >
@@ -251,9 +254,15 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
               {typeof onCancel === 'function' && (
                 <Button
                   buttonType={cancelButtonType}
+                  buttonIcon={
+                    !cancelText ||
+                    cancelText === intl.formatMessage(globalMessages.cancel) ||
+                    cancelText === intl.formatMessage(globalMessages.close)
+                      ? 'cancel'
+                      : undefined
+                  }
                   buttonSize={actionButtonSize}
                   onClick={onCancel}
-                  className="ml-3 sm:ml-0"
                   data-testid="modal-cancel-button"
                   {...cancelButtonProps}
                 >

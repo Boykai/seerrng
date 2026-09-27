@@ -15,10 +15,42 @@ afterEach(() => {
 });
 
 class TestJellyfinAPI extends JellyfinAPI {
+  public getTransport() {
+    return this.axios;
+  }
   public getLookup() {
     return this.axios.defaults.lookup;
   }
 }
+
+describe('Jellyfin deletion-check evidence', () => {
+  it('accepts only a well-formed successful empty item list as absence', async () => {
+    const api = new TestJellyfinAPI('http://localhost:8096', 'test');
+    const get = mock.method(api.getTransport(), 'get', async () => ({
+      data: { Items: [] },
+    }));
+    assert.equal(await api.getItemDataForDeletionCheck('movie-id'), undefined);
+    get.mock.restore();
+    for (const data of [
+      {},
+      { Items: [null] },
+      { Items: [{ Id: 'different-id', Name: 'Wrong', Type: 'Movie' }] },
+    ]) {
+      const invalid = mock.method(api.getTransport(), 'get', async () => ({
+        data,
+      }));
+      await assert.rejects(api.getItemDataForDeletionCheck('movie-id'));
+      invalid.mock.restore();
+    }
+  });
+  it('does not convert server errors to missing items', async () => {
+    const api = new TestJellyfinAPI('http://localhost:8096', 'test');
+    mock.method(api.getTransport(), 'get', async () => {
+      throw { response: { status: 500 } };
+    });
+    await assert.rejects(api.getItemDataForDeletionCheck('movie-id'));
+  });
+});
 
 const runLookup = (
   lookup: ReturnType<TestJellyfinAPI['getLookup']>,

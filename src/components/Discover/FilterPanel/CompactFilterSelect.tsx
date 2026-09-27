@@ -1,5 +1,8 @@
 import { Listbox, Transition } from '@headlessui/react';
-import { StarIcon as OutlineStarIcon } from '@heroicons/react/24/outline';
+import {
+  NoSymbolIcon,
+  StarIcon as OutlineStarIcon,
+} from '@heroicons/react/24/outline';
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -7,15 +10,56 @@ import {
 } from '@heroicons/react/24/solid';
 import { Fragment } from 'react';
 
+let closingOtherFilterMenus = false;
+
+const closeOtherFilterMenus = (current: HTMLButtonElement) => {
+  if (closingOtherFilterMenus) return;
+
+  closingOtherFilterMenus = true;
+  try {
+    document
+      .querySelectorAll<HTMLButtonElement>(
+        'button.app-filter-select-trigger[aria-expanded="true"]'
+      )
+      .forEach((button) => {
+        if (button !== current) button.click();
+      });
+  } finally {
+    closingOtherFilterMenus = false;
+  }
+};
+
 export const getFilterResetButtonClass = (selected: boolean) =>
   `app-filter-button ${
-    selected ? 'app-filter-button-active' : 'app-filter-reset-button-idle'
+    selected ? 'app-filter-button-active' : 'app-filter-button-idle'
   }`;
 
 export const getFilterToggleButtonClass = (selected: boolean) =>
   `app-filter-button ${
     selected ? 'app-filter-button-active' : 'app-filter-button-idle'
   }`;
+
+export const FilterResetButton = ({
+  label,
+  selected = false,
+  onClick,
+  className = '',
+}: {
+  label: string;
+  selected?: boolean;
+  onClick: () => void;
+  className?: string;
+}) => (
+  <button
+    type="button"
+    aria-pressed={selected}
+    className={`${getFilterResetButtonClass(selected)} ${className}`.trim()}
+    onClick={onClick}
+  >
+    <NoSymbolIcon className="h-4 w-4" aria-hidden="true" />
+    {label}
+  </button>
+);
 
 export type CompactSelectOption = {
   label: string;
@@ -65,6 +109,7 @@ export const CompactSelect = ({
         <Listbox.Button
           aria-label={label}
           className="app-control-shadow-exempt app-filter-select-trigger"
+          onClickCapture={(event) => closeOtherFilterMenus(event.currentTarget)}
         >
           <span className="max-w-48 truncate">{selected.label}</span>
           <ChevronDownIcon
@@ -78,7 +123,12 @@ export const CompactSelect = ({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <Listbox.Options className="app-filter-select-menu">
+          <Listbox.Options
+            anchor="bottom start"
+            portal
+            modal={false}
+            className="app-filter-select-menu app-filter-select-menu-floating"
+          >
             {options.map((option) => (
               <Listbox.Option
                 key={option.value}
@@ -174,6 +224,7 @@ export const CompactRatingSelect = ({
         <Listbox.Button
           aria-label={label}
           className="app-control-shadow-exempt app-filter-select-trigger app-filter-select-trigger-rating"
+          onClickCapture={(event) => closeOtherFilterMenus(event.currentTarget)}
         >
           {selectedHasScore ? (
             <RatingStars score={selected.score ?? 0} maxScore={maxScore} />
@@ -193,7 +244,12 @@ export const CompactRatingSelect = ({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <Listbox.Options className="app-filter-select-menu app-filter-rating-menu">
+          <Listbox.Options
+            anchor="bottom start"
+            portal
+            modal={false}
+            className="app-filter-select-menu app-filter-select-menu-floating"
+          >
             {options.map((option) => {
               const hasScore = option.score !== undefined;
 

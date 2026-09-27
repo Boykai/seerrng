@@ -319,7 +319,7 @@ const ComicDetails = () => {
         />
       )}
       <div className="media-page">
-        <article className="media-detail-card refreshed-card-surface refreshed-detail-text relative overflow-hidden rounded-xl border border-gray-700 p-3 shadow-lg shadow-gray-950/20">
+        <article className="media-detail-card app-card-main refreshed-card-surface refreshed-detail-text relative overflow-hidden rounded-xl border border-gray-700 p-3 shadow-lg shadow-gray-950/20">
           {data.posterPath && (
             <MediaDetailArtwork src={data.posterPath} type="tmdb" />
           )}
@@ -525,7 +525,7 @@ const ComicDetails = () => {
               )}
             </div>
 
-            <section className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
+            <section className="app-card-inset refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
               <h2 className="media-inset-heading">
                 {intl.formatMessage(messages.overview)}
               </h2>
@@ -539,7 +539,7 @@ const ComicDetails = () => {
               type: 'or',
             }) &&
               openIssues.length > 0 && (
-                <section className="refreshed-inset-surface mt-[5px] overflow-hidden rounded-lg border border-gray-700">
+                <section className="app-card-inset refreshed-inset-surface mt-[5px] overflow-hidden rounded-lg border border-gray-700">
                   <h2 className="media-inset-heading px-3 py-2">
                     {intl.formatMessage(messages.openissues)}
                   </h2>

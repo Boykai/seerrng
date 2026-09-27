@@ -154,7 +154,7 @@ const NotificationsSlack = () => {
         };
 
         return (
-          <Form className="section">
+          <Form className="app-card-sub section">
             <div className="form-row">
               <label htmlFor="isDefault" className="checkbox-label">
                 {intl.formatMessage(messages.agentenabled)}

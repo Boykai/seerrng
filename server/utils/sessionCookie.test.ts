@@ -13,6 +13,8 @@ const createApp = (development = false, allowHttpAuth = true) => {
     allowHttpAuth
   );
   app.use(
+    // This synthetic app verifies the explicit HTTP compatibility mode.
+    // codeql[js/clear-text-cookie]
     session({
       secret: '01234567890123456789012345678901',
       resave: false,

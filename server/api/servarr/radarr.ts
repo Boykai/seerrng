@@ -258,17 +258,42 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
     }
   }
 
-  public getMovies = async (): Promise<RadarrMovie[]> => {
+  public getMovies = async ({
+    strict = false,
+    tmdbId,
+  }: { strict?: boolean; tmdbId?: number } = {}): Promise<RadarrMovie[]> => {
     try {
-      const response = await this.request<RadarrMovie[]>('GET', '/movie');
+      const response = await this.request<RadarrMovie[]>(
+        'GET',
+        '/movie',
+        undefined,
+        tmdbId ? { params: { tmdbId } } : undefined
+      );
 
-      return sanitizeServarrRecordArray<Record<string, unknown>>(
+      const movies = sanitizeServarrRecordArray<Record<string, unknown>>(
         response.data,
         MAX_SERVARR_LIBRARY_RESULTS
       ).flatMap((movie) => {
         const normalized = sanitizeRadarrMovie(movie);
         return normalized ? [normalized] : [];
       });
+      if (
+        strict &&
+        (!Array.isArray(response.data) ||
+          movies.length !== response.data.length ||
+          movies.some(
+            (movie) =>
+              !Number.isSafeInteger(movie.tmdbId) ||
+              movie.tmdbId <= 0 ||
+              !Number.isSafeInteger(movie.id) ||
+              movie.id <= 0
+          ))
+      ) {
+        throw new Error(
+          'Incomplete or invalid Radarr inventory; deletion reconciliation is not safe.'
+        );
+      }
+      return movies;
     } catch (e) {
       throw new Error(`[Radarr] Failed to retrieve movies: ${e.message}`, {
         cause: e,
@@ -673,6 +698,14 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
       throw e;
     }
   };
+
+  public async removeMovieById(id: number): Promise<void> {
+    if (!Number.isSafeInteger(id) || id <= 0)
+      throw new Error('Invalid movie ID.');
+    await this.request('DELETE', `/movie/${id}`, undefined, {
+      params: { deleteFiles: true, addImportExclusion: false },
+    });
+  }
 
   public clearCache = ({
     tmdbId,

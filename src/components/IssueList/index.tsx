@@ -4,15 +4,19 @@ import PageTitle from '@app/components/Common/PageTitle';
 import PaginationFooter from '@app/components/Common/PaginationFooter';
 import {
   CompactSelect,
-  getFilterResetButtonClass,
+  FilterResetButton,
   getFilterToggleButtonClass,
   type CompactSelectOption,
 } from '@app/components/Discover/FilterPanel/CompactFilterSelect';
 import { BOOK_GENRES } from '@app/components/Discover/FilterPanel/libraryFilterUtils';
+import MediaFilterOption from '@app/components/Discover/MediaFilterOption';
 import { tvNetworks } from '@app/components/Discover/NetworkSlider';
+import PinnedFilterSection from '@app/components/Discover/PinnedFilterSection';
 import { studios } from '@app/components/Discover/StudioSlider';
+import FocusedIssue from '@app/components/IssueList/FocusedIssue';
 import IssueItem from '@app/components/IssueList/IssueItem';
 import useDebouncedState from '@app/hooks/useDebouncedState';
+import useMediaFilterPin from '@app/hooks/useMediaFilterPin';
 import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
 import {
   getPositiveQueryParamNumber,
@@ -25,7 +29,6 @@ import {
   BarsArrowDownIcon,
   BarsArrowUpIcon,
   MagnifyingGlassIcon,
-  NoSymbolIcon,
 } from '@heroicons/react/24/outline';
 import type { TmdbGenre } from '@server/api/themoviedb/interfaces';
 import type { IssueResultsResponse } from '@server/interfaces/api/issueInterfaces';
@@ -90,11 +93,18 @@ type IssueTypeFilter = 'all' | 'audio' | 'video' | 'subtitle' | 'other';
 const IssueList = () => {
   const intl = useIntl();
   const router = useRouter();
+  const focusedIssueId = getPositiveQueryParamNumber(router.query.issue);
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<Sort>('added');
   const [direction, setDirection] = useState<Direction>('desc');
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('all');
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
+  const mediaPin = useMediaFilterPin<MediaFilter>({
+    scope: 'issues',
+    selected: mediaFilter,
+    values: ['all', 'movie', 'tv', 'music', 'book'],
+    restore: setMediaFilter,
+  });
   const [issueTypeFilter, setIssueTypeFilter] =
     useState<IssueTypeFilter>('all');
   const [releaseYearFilter, setReleaseYearFilter] = useState('any');
@@ -240,19 +250,32 @@ const IssueList = () => {
           {intl.formatMessage(messages.issues)}
         </span>
       </h2>
+      {focusedIssueId && (
+        <FocusedIssue key={focusedIssueId} issueId={focusedIssueId} />
+      )}
       <section className="app-filter-section-gap mt-4">
         <div className="mb-2 text-sm text-gray-300">
           {intl.formatMessage(messages.taskFilters)}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
+          <FilterResetButton
+            label={intl.formatMessage(messages.clearFilters)}
+            selected={
+              filter === 'all' &&
+              timeFrame === 'all' &&
+              mediaFilter === 'all' &&
+              issueTypeFilter === 'all' &&
+              releaseYearFilter === 'any' &&
+              !genreFilter &&
+              !studioFilter &&
+              !networkFilter &&
+              !albumTypeFilter &&
+              !search &&
+              sort === 'added' &&
+              direction === 'desc'
+            }
             onClick={clearFilters}
-            className={getFilterResetButtonClass(false)}
-          >
-            <NoSymbolIcon className="h-4 w-4" aria-hidden="true" />
-            {intl.formatMessage(messages.clearFilters)}
-          </button>
+          />
           {(
             [
               ['all', messages.allIssues, data.counts?.all ?? 0],
@@ -271,7 +294,7 @@ const IssueList = () => {
               className={getFilterToggleButtonClass(filter === value)}
             >
               {intl.formatMessage(label)}
-              <span className="rounded-full bg-black/25 px-1.5 text-[10px]">
+              <span className="rounded-full bg-black/35 px-1.5 text-[10px]">
                 {count}
               </span>
             </button>
@@ -287,13 +310,19 @@ const IssueList = () => {
           />
         </div>
       </section>
-      <section
-        className="app-filter-section-gap"
-        aria-label={intl.formatMessage(messages.mediaFilters)}
+      <PinnedFilterSection
+        mediaType={
+          mediaFilter === 'tv'
+            ? 'tv'
+            : mediaFilter === 'music'
+              ? 'music'
+              : mediaFilter === 'book'
+                ? 'book'
+                : 'movie'
+        }
+        section="mediaFilters"
+        label={intl.formatMessage(messages.mediaFilters)}
       >
-        <div className="mb-2 text-sm text-gray-300">
-          {intl.formatMessage(messages.mediaFilters)}
-        </div>
         <div className="flex flex-wrap items-center gap-2">
           {(
             [
@@ -306,22 +335,29 @@ const IssueList = () => {
               ['magazine', messages.magazines],
             ] as const
           ).map(([value, label]) => (
-            <button
+            <MediaFilterOption
               key={value}
-              type="button"
-              aria-pressed={mediaFilter === value}
-              onClick={() => {
-                setMediaFilter(value);
-                clearMediaSpecificFilters();
-                resetPage();
-              }}
-              className={getFilterToggleButtonClass(mediaFilter === value)}
+              pin={mediaPin}
+              value={value}
+              label={intl.formatMessage(label)}
+              selected={mediaFilter === value}
             >
-              {intl.formatMessage(label)}
-            </button>
+              <button
+                type="button"
+                aria-pressed={mediaFilter === value}
+                onClick={() => {
+                  setMediaFilter(value);
+                  clearMediaSpecificFilters();
+                  resetPage();
+                }}
+                className="app-control-shadow-exempt app-filter-segment-focus flex h-full items-center px-2"
+              >
+                {intl.formatMessage(label)}
+              </button>
+            </MediaFilterOption>
           ))}
         </div>
-      </section>
+      </PinnedFilterSection>
       <section
         className="app-filter-section-gap"
         aria-label={intl.formatMessage(messages.filters)}
@@ -474,13 +510,15 @@ const IssueList = () => {
           })}
         </div>
       </section>
-      {data.results.map((issue) => (
-        <div className="py-2" key={`issue-item-${issue.id}`}>
-          <IssueItem issue={issue} />
-        </div>
-      ))}
+      <div className="card-stack card-spacing-before">
+        {data.results
+          .filter((issue) => issue.id !== focusedIssueId)
+          .map((issue) => (
+            <IssueItem key={`issue-item-${issue.id}`} issue={issue} />
+          ))}
+      </div>
       {data.results.length === 0 && (
-        <div className="refreshed-card-surface flex min-h-16 w-full flex-col items-center justify-center rounded-xl border border-gray-700 px-4 py-4 text-white">
+        <div className="app-card-main refreshed-card-surface flex min-h-16 w-full flex-col items-center justify-center rounded-xl border border-gray-700 px-4 py-4 text-white">
           <span className="refreshed-detail-text text-sm">
             {intl.formatMessage(globalMessages.noresults)}
           </span>

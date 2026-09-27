@@ -22,7 +22,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY bin/prepare.mjs ./bin/prepare.mjs
 COPY patches ./patches
 
-RUN --mount=type=cache,id=pnpm-prod,target=/pnpm/store CI=true pnpm install --prod --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-prod,target=/pnpm/store CI=true pnpm --config.engine-strict=true install --prod --frozen-lockfile
 
 # Remove large native modules for linux-x64-gnu platform (we use alpine which is musl-based)
 # not supported in pnpm for now due to this bug: https://github.com/pnpm/pnpm/issues/9654
@@ -68,13 +68,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY bin/prepare.mjs ./bin/prepare.mjs
 COPY patches ./patches
 
-RUN --mount=type=cache,id=pnpm-build,target=/pnpm/store CI=true CYPRESS_INSTALL_BINARY=0 pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-build,target=/pnpm/store CI=true CYPRESS_INSTALL_BINARY=0 pnpm --config.engine-strict=true install --frozen-lockfile
 
 COPY . .
 
-# The repository-wide current-batch contract is validated before the image build.
-# Its inputs intentionally include files excluded from the secure Docker context,
-# so run the in-context i18n check and the two application compilers directly.
 RUN pnpm i18n:check && pnpm build:next && pnpm build:server
 
 RUN rm -rf .next/cache

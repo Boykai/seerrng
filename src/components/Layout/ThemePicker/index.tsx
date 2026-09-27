@@ -32,7 +32,7 @@ const ThemePicker = () => {
         transition
         className="absolute right-0 z-50 mt-2 w-80 origin-top-right rounded-md shadow-lg transition duration-100 ease-out data-closed:scale-95 data-closed:opacity-0"
       >
-        <div className="rounded-md bg-gray-800/95 p-3 ring-1 ring-gray-700 backdrop-blur">
+        <div className="app-theme-picker-surface rounded-md p-3 ring-1 ring-gray-700 backdrop-blur">
           <Menu.Item
             as="button"
             type="button"

@@ -77,7 +77,7 @@ const IssueAffectedEpisodes = ({ issue, tvId }: IssueAffectedEpisodesProps) => {
   const legacyEntireSeries = isLegacyEntireSeriesIssue(issue);
 
   return (
-    <section className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
+    <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
       <h4 className="mb-2 text-xs font-semibold text-gray-200">
         Affected Episodes
       </h4>

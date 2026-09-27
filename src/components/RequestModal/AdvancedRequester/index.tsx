@@ -23,7 +23,7 @@ import {
 } from '@server/utils/preferredLanguage';
 import axios from 'axios';
 import { isEqual } from 'lodash';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useIntl } from 'react-intl';
 import Select from 'react-select';
@@ -61,7 +61,7 @@ const formatServiceLabel = (value: string) =>
 const controlLabelClass = (active: boolean) =>
   `request-listbox-label ${active ? 'request-listbox-label-active' : ''}`;
 
-const RequestListboxControl = <T extends RequestListboxValue>({
+export const RequestListboxControl = <T extends RequestListboxValue>({
   id,
   label,
   value,
@@ -95,6 +95,7 @@ const RequestListboxControl = <T extends RequestListboxValue>({
             />
           </Listbox.Button>
           <Transition
+            as={Fragment}
             show={open}
             enter="transition-opacity ease-in duration-150"
             enterFrom="opacity-0"
@@ -103,7 +104,12 @@ const RequestListboxControl = <T extends RequestListboxValue>({
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <Listbox.Options static className="request-listbox-menu">
+            <Listbox.Options
+              anchor="bottom start"
+              portal
+              modal={false}
+              className="request-listbox-menu"
+            >
               {options.map((option) => (
                 <Listbox.Option key={option.value} value={option.value}>
                   {({ selected, active: optionActive }) => (
@@ -113,7 +119,7 @@ const RequestListboxControl = <T extends RequestListboxValue>({
                       }`}
                     >
                       <span
-                        className={selected ? 'font-semibold' : 'font-normal'}
+                        className={`block truncate ${selected ? 'font-semibold' : 'font-normal'}`}
                       >
                         {option.label}
                       </span>
@@ -183,6 +189,8 @@ type ClientUserResultsResponse = PaginatedResponse & {
 interface AdvancedRequesterProps {
   type: 'movie' | 'tv' | 'music' | 'book';
   tmdbId?: number;
+  musicId?: string;
+  bookId?: string;
   is4k: boolean;
   isAnime?: boolean;
   bookFormat?: 'ebook' | 'audiobook' | 'both';
@@ -209,6 +217,8 @@ interface AdvancedRequesterProps {
 const AdvancedRequester = ({
   type,
   tmdbId,
+  musicId,
+  bookId,
   is4k = false,
   isAnime = false,
   bookFormat,
@@ -263,6 +273,8 @@ const AdvancedRequester = ({
   const [selectedLanguage, setSelectedLanguage] = useState<number>(
     defaultOverrides?.language ?? -1
   );
+  const profileManuallySelected = useRef(false);
+  const languageManuallySelected = useRef(false);
 
   const [selectedTags, setSelectedTags] = useState<number[]>(
     defaultOverrides?.tags ?? []
@@ -417,7 +429,8 @@ const AdvancedRequester = ({
       if (
         defaultProfile &&
         defaultProfile.id !== selectedProfile &&
-        (!applyOverrides || defaultOverrides.profile === null)
+        !profileManuallySelected.current &&
+        (!applyOverrides || defaultOverrides.profile == null)
       ) {
         setSelectedProfile(defaultProfile.id);
       }
@@ -425,7 +438,7 @@ const AdvancedRequester = ({
       if (
         defaultMetadataProfile &&
         defaultMetadataProfile.id !== selectedMetadataProfile &&
-        (!applyOverrides || defaultOverrides.metadataProfile === null)
+        (!applyOverrides || defaultOverrides.metadataProfile == null)
       ) {
         setSelectedMetadataProfile(defaultMetadataProfile.id);
       }
@@ -441,7 +454,8 @@ const AdvancedRequester = ({
       if (
         defaultLanguage &&
         defaultLanguage.id !== selectedLanguage &&
-        (!applyOverrides || defaultOverrides.language === null)
+        !languageManuallySelected.current &&
+        (!applyOverrides || defaultOverrides.language == null)
       ) {
         setSelectedLanguage(defaultLanguage.id);
       }
@@ -449,7 +463,7 @@ const AdvancedRequester = ({
       if (
         defaultTags &&
         !areNumberArraysEqual(defaultTags, selectedTags) &&
-        (!applyOverrides || defaultOverrides.tags === null)
+        (!applyOverrides || defaultOverrides.tags == null)
       ) {
         setSelectedTags(defaultTags);
       }
@@ -459,7 +473,12 @@ const AdvancedRequester = ({
   useEffect(() => {
     if (!serverData || !preferredLanguage) return;
 
-    if (defaultOverrides?.profile == null && type !== 'book' && type !== 'tv') {
+    if (
+      defaultOverrides?.profile == null &&
+      !profileManuallySelected.current &&
+      type !== 'book' &&
+      type !== 'tv'
+    ) {
       const preferredProfile = serverData.profiles.find((profile) =>
         languageNameMatchesCode(profile.language, preferredLanguage)
       );
@@ -469,7 +488,10 @@ const AdvancedRequester = ({
     }
 
     if (type === 'tv') {
-      if (defaultOverrides?.profile == null) {
+      if (
+        defaultOverrides?.profile == null &&
+        !profileManuallySelected.current
+      ) {
         const preferredQualityProfile = serverData.profiles.find((profile) =>
           languageNameMatchesCode(profile.language, preferredLanguage)
         );
@@ -478,7 +500,10 @@ const AdvancedRequester = ({
         }
       }
 
-      if (defaultOverrides?.language == null) {
+      if (
+        defaultOverrides?.language == null &&
+        !languageManuallySelected.current
+      ) {
         const preferredLanguageProfile = serverData.languageProfiles?.find(
           (profile) =>
             (profile.languages ?? []).some((language) =>
@@ -592,8 +617,10 @@ const AdvancedRequester = ({
     let cancelled = false;
     (async () => {
       if (
-        tmdbId &&
-        (type === 'movie' || type === 'tv') &&
+        ((tmdbId && (type === 'movie' || type === 'tv')) ||
+          type === 'music' ||
+          (type === 'book' && bookFormat !== 'both')) &&
+        !currentHasPermission([Permission.MANAGE_REQUESTS]) &&
         serverData?.server.id === selectedServer
       ) {
         try {
@@ -605,6 +632,9 @@ const AdvancedRequester = ({
               requestUser:
                 selectedUser?.id ?? requestUser?.id ?? currentUser?.id,
               tmdbId,
+              musicId,
+              bookId,
+              bookFormat: type === 'book' ? bookServiceType : undefined,
               tags: selectedTags.length > 0 ? selectedTags : undefined,
               serviceId: selectedServer ?? undefined,
               requestId: requestId ?? undefined,
@@ -642,6 +672,10 @@ const AdvancedRequester = ({
     };
   }, [
     tmdbId,
+    musicId,
+    bookId,
+    bookServiceType,
+    bookFormat,
     type,
     is4k,
     serverData?.server.id,
@@ -718,42 +752,26 @@ const AdvancedRequester = ({
               setIgnoreQuota(false);
               setSelectedUser(value);
             }}
-            className="request-form-control compact-control relative inline-flex max-w-full flex-shrink-0 items-stretch overflow-visible rounded-md border"
+            className="request-listbox-control"
           >
             {({ open }) => (
               <>
                 <Listbox.Label
-                  className={`inline-flex h-full flex-shrink-0 items-center justify-center rounded-l-[5px] border-r border-gray-600 px-2 py-0 font-semibold whitespace-nowrap text-indigo-100 transition-colors ${
+                  className={controlLabelClass(
                     selectedUser.id !== currentUser?.id
-                      ? 'bg-indigo-500/35 text-white'
-                      : ''
-                  } text-[11px] leading-none`}
+                  )}
                 >
-                  <span className="relative top-px">
-                    {intl.formatMessage(messages.requestedBy)}
-                  </span>
+                  <span>{intl.formatMessage(messages.requestedBy)}</span>
                 </Listbox.Label>
-                <Listbox.Button className="inline-grid h-full max-w-[min(24rem,55vw)] grid-cols-[minmax(6rem,max-content)_auto] items-center gap-2 rounded-r-[5px] px-2 py-0 text-[11px] leading-none font-semibold text-gray-300 focus:ring-2 focus:ring-indigo-400 focus:outline-none focus:ring-inset">
-                  <span className="grid min-w-0">
-                    {(selectableUserData ?? []).map((candidate) => (
-                      <span
-                        key={candidate.id}
-                        aria-hidden="true"
-                        className="invisible col-start-1 row-start-1 whitespace-nowrap"
-                      >
-                        {candidate.displayName}
-                      </span>
-                    ))}
-                    <span className="relative top-px col-start-1 row-start-1 truncate">
-                      {selectedUser.displayName}
-                    </span>
-                  </span>
+                <Listbox.Button className="request-listbox-button">
+                  <span className="truncate">{selectedUser.displayName}</span>
                   <ChevronDownIcon
-                    className="h-3.5 w-3.5 flex-shrink-0 text-gray-500"
+                    className="request-listbox-chevron"
                     aria-hidden="true"
                   />
                 </Listbox.Button>
                 <Transition
+                  as={Fragment}
                   show={open}
                   enter="transition-opacity ease-in duration-150"
                   enterFrom="opacity-0"
@@ -763,17 +781,17 @@ const AdvancedRequester = ({
                   leaveTo="opacity-0"
                 >
                   <Listbox.Options
-                    static
-                    className="absolute right-0 bottom-full z-50 mb-1 max-h-60 min-w-full overflow-auto rounded-md border border-gray-600 bg-gray-800 py-1 text-xs shadow-xl focus:outline-none"
+                    anchor="top end"
+                    portal
+                    modal={false}
+                    className="request-listbox-menu"
                   >
                     {(selectableUserData ?? []).map((candidate) => (
                       <Listbox.Option key={candidate.id} value={candidate}>
                         {({ selected, active }) => (
                           <div
-                            className={`relative cursor-default py-1.5 pr-3 pl-7 whitespace-nowrap select-none ${
-                              active
-                                ? 'bg-indigo-600 text-white'
-                                : 'text-gray-300'
+                            className={`request-listbox-option ${
+                              active ? 'request-listbox-option-active' : ''
                             }`}
                           >
                             <span
@@ -785,7 +803,7 @@ const AdvancedRequester = ({
                             </span>
                             {selected && (
                               <CheckIcon
-                                className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2"
+                                className="request-listbox-check"
                                 aria-hidden="true"
                               />
                             )}
@@ -812,7 +830,7 @@ const AdvancedRequester = ({
             ? expanded
               ? 'group mt-2'
               : 'group'
-            : 'refreshed-inset-surface group mt-4 rounded-lg border border-gray-700'
+            : 'app-card-inset refreshed-inset-surface card-spacing-before group rounded-lg border border-gray-700'
         }
       >
         <summary
@@ -838,7 +856,7 @@ const AdvancedRequester = ({
             <div className="truncate text-sm font-semibold text-white">
               {mediaTitle || intl.formatMessage(messages.advancedoptions)}
             </div>
-            <dl className="refreshed-detail-text mt-1 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 text-xs leading-5">
+            <dl className="media-detail-rows detail-card-heading-spacing refreshed-detail-text grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 text-xs">
               <dt className="font-medium text-gray-200">
                 {intl.formatMessage(messages.status)}:
               </dt>
@@ -866,7 +884,7 @@ const AdvancedRequester = ({
           <ChevronDownIcon className="refreshed-detail-text-muted h-5 w-5 flex-shrink-0 transition group-open:rotate-180" />
         </summary>
         <div
-          className={`${panelOnly ? 'refreshed-inset-surface rounded-lg border border-gray-700 p-3' : 'border-t border-gray-700 p-3'} ${!rootFolderTable && serviceOptionsHidden ? 'hidden' : ''}`}
+          className={`${panelOnly ? 'app-card-inset refreshed-inset-surface rounded-lg border border-gray-700 p-3' : 'border-t border-gray-700 p-3'} ${!rootFolderTable && serviceOptionsHidden ? 'hidden' : ''}`}
         >
           {!!data && selectedServer !== null && serviceOverridesEnabled && (
             <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -879,7 +897,11 @@ const AdvancedRequester = ({
                     value: server.id,
                     label: formatServiceLabel(server.name),
                   }))}
-                  onChange={setSelectedServer}
+                  onChange={(serverId) => {
+                    profileManuallySelected.current = false;
+                    languageManuallySelected.current = false;
+                    setSelectedServer(serverId);
+                  }}
                   active={
                     defaultService !== undefined &&
                     selectedServer !== defaultService.id
@@ -891,53 +913,29 @@ const AdvancedRequester = ({
                 (isValidating ||
                   !serverData ||
                   (serverData.metadataProfiles ?? []).length > 0) && (
-                  <label className="inline-flex h-8 flex-shrink-0 overflow-hidden rounded-md border border-gray-600 bg-gray-900/70">
-                    <span
-                      className={controlLabelClass(
-                        defaultMetadataProfileId !== undefined &&
-                          selectedMetadataProfile !== defaultMetadataProfileId
-                      )}
-                    >
-                      {intl.formatMessage(messages.metadataprofile)}
-                    </span>
-                    <select
-                      id="metadataProfile"
-                      name="metadataProfile"
-                      value={selectedMetadataProfile}
-                      onChange={(e) =>
-                        setSelectedMetadataProfile(Number(e.target.value))
-                      }
-                      onBlur={(e) =>
-                        setSelectedMetadataProfile(Number(e.target.value))
-                      }
-                      aria-label={intl.formatMessage(messages.metadataprofile)}
-                      className="min-w-36 border-0 bg-gray-900/70 px-1.5 py-1 text-xs font-medium text-gray-300 focus:ring-2 focus:ring-indigo-400 focus:ring-inset"
-                      disabled={isValidating || !serverData}
-                    >
-                      {(isValidating || !serverData) && (
-                        <option value="">
-                          {intl.formatMessage(globalMessages.loading)}
-                        </option>
-                      )}
-                      {!isValidating &&
-                        serverData &&
-                        serverData.metadataProfiles
-                          ?.toSorted((a, b) =>
-                            a.name.localeCompare(b.name, intl.locale, {
-                              numeric: true,
-                              sensitivity: 'base',
-                            })
-                          )
-                          .map((profile) => (
-                            <option
-                              key={`metadata-profile-list${profile.id}`}
-                              value={profile.id}
-                            >
-                              {formatServiceLabel(profile.name)}
-                            </option>
-                          ))}
-                    </select>
-                  </label>
+                  <RequestListboxControl
+                    id="metadataProfile"
+                    label={intl.formatMessage(messages.metadataprofile)}
+                    value={selectedMetadataProfile}
+                    options={(serverData?.metadataProfiles ?? [])
+                      .toSorted((a, b) =>
+                        a.name.localeCompare(b.name, intl.locale, {
+                          numeric: true,
+                          sensitivity: 'base',
+                        })
+                      )
+                      .map((profile) => ({
+                        value: profile.id,
+                        label: formatServiceLabel(profile.name),
+                      }))}
+                    onChange={setSelectedMetadataProfile}
+                    active={
+                      defaultMetadataProfileId !== undefined &&
+                      selectedMetadataProfile !== defaultMetadataProfileId
+                    }
+                    disabled={isValidating || !serverData}
+                    loadingLabel={intl.formatMessage(globalMessages.loading)}
+                  />
                 )}
               {(isValidating ||
                 !serverData ||
@@ -957,7 +955,10 @@ const AdvancedRequester = ({
                       value: profile.id,
                       label: formatServiceLabel(profile.name),
                     }))}
-                  onChange={setSelectedProfile}
+                  onChange={(profileId) => {
+                    profileManuallySelected.current = true;
+                    setSelectedProfile(profileId);
+                  }}
                   active={
                     defaultProfileId !== undefined &&
                     selectedProfile !== defaultProfileId
@@ -994,46 +995,27 @@ const AdvancedRequester = ({
                 (isValidating ||
                   !serverData ||
                   (serverData.languageProfiles ?? []).length > 0) && (
-                  <label className="inline-flex h-8 flex-shrink-0 overflow-hidden rounded-md border border-gray-600 bg-gray-900/70">
-                    <span
-                      className={controlLabelClass(
-                        defaultLanguageId !== undefined &&
-                          selectedLanguage !== defaultLanguageId
-                      )}
-                    >
-                      {intl.formatMessage(messages.languageprofile)}
-                    </span>
-                    <select
-                      id="language"
-                      name="language"
-                      value={selectedLanguage}
-                      onChange={(e) =>
-                        setSelectedLanguage(parseInt(e.target.value))
-                      }
-                      onBlur={(e) =>
-                        setSelectedLanguage(parseInt(e.target.value))
-                      }
-                      aria-label={intl.formatMessage(messages.languageprofile)}
-                      className="min-w-36 border-0 bg-gray-900/70 px-1.5 py-1 text-xs font-medium text-gray-300 focus:ring-2 focus:ring-indigo-400 focus:ring-inset"
-                      disabled={isValidating || !serverData}
-                    >
-                      {(isValidating || !serverData) && (
-                        <option value="">
-                          {intl.formatMessage(globalMessages.loading)}
-                        </option>
-                      )}
-                      {!isValidating &&
-                        serverData &&
-                        serverData.languageProfiles?.map((language) => (
-                          <option
-                            key={`folder-list${language.id}`}
-                            value={language.id}
-                          >
-                            {language.name}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
+                  <RequestListboxControl
+                    id="language"
+                    label={intl.formatMessage(messages.languageprofile)}
+                    value={selectedLanguage ?? 0}
+                    onChange={(languageId) => {
+                      languageManuallySelected.current = true;
+                      setSelectedLanguage(languageId);
+                    }}
+                    options={(serverData?.languageProfiles ?? []).map(
+                      (language) => ({
+                        value: language.id,
+                        label: language.name,
+                      })
+                    )}
+                    active={
+                      defaultLanguageId !== undefined &&
+                      selectedLanguage !== defaultLanguageId
+                    }
+                    disabled={isValidating || !serverData}
+                    loadingLabel={intl.formatMessage(globalMessages.loading)}
+                  />
                 )}
             </div>
           )}
@@ -1070,11 +1052,12 @@ const AdvancedRequester = ({
                         <button
                           type="button"
                           key={`folder-card-${folder.id}`}
+                          data-button-help="off"
                           onClick={() => setSelectedFolder(folder.path ?? '')}
-                          className={`col-span-2 grid grid-cols-subgrid rounded px-1 py-1 text-left transition focus:ring-2 focus:ring-indigo-400 focus:outline-none ${
+                          className={`col-span-2 grid grid-cols-subgrid rounded border px-1 py-1 text-left transition focus:ring-2 focus:ring-indigo-400 focus:outline-none ${
                             isSelected
-                              ? 'bg-indigo-500/20 text-indigo-200'
-                              : 'text-gray-300 hover:bg-gray-800/80 hover:text-white'
+                              ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200'
+                              : 'border-transparent text-gray-300 hover:border-indigo-400 hover:bg-gray-800/80 hover:text-white'
                           }`}
                         >
                           <span className="truncate">{folder.path}</span>
@@ -1091,7 +1074,8 @@ const AdvancedRequester = ({
           )}
           {selectedServer !== null &&
             serviceOverridesEnabled &&
-            (isValidating || !serverData || !!serverData?.tags?.length) && (
+            !isValidating &&
+            !!serverData?.tags?.length && (
               <div className="discover-filter-control mb-2 max-w-xl">
                 <label
                   htmlFor="tags"
@@ -1109,12 +1093,7 @@ const AdvancedRequester = ({
                     value: tag.id,
                   }))}
                   isMulti
-                  isDisabled={isValidating || !serverData}
-                  placeholder={
-                    isValidating || !serverData
-                      ? intl.formatMessage(globalMessages.loading)
-                      : intl.formatMessage(messages.selecttags)
-                  }
+                  placeholder={intl.formatMessage(messages.selecttags)}
                   className="react-select-container react-select-container-dark discover-compact-select"
                   classNamePrefix="react-select"
                   value={

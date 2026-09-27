@@ -16,12 +16,7 @@ export const getSettingsBackupPath = (settingsPath: string): string => {
 
 export const getSettingsMigrationFiles = (files: string[]): string[] =>
   files
-    .filter(
-      (file) =>
-        (file.endsWith('.js') || file.endsWith('.ts')) &&
-        !file.endsWith('.test.ts') &&
-        !file.endsWith('.test.js')
-    )
+    .filter((file) => /^\d+_[^.]+\.(?:js|ts)$/.test(file))
     .sort((left, right) => left.localeCompare(right));
 
 export const runMigrations = async (

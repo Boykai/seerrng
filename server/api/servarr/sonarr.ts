@@ -417,17 +417,43 @@ class SonarrAPI extends ServarrBase<{
     }
   }
 
-  public async getSeries(): Promise<SonarrSeries[]> {
+  public async getSeries({
+    strict = false,
+    tvdbId,
+  }: { strict?: boolean; tvdbId?: number } = {}): Promise<SonarrSeries[]> {
     try {
-      const response = await this.request<SonarrSeries[]>('GET', '/series');
+      const response = await this.request<SonarrSeries[]>(
+        'GET',
+        '/series',
+        undefined,
+        tvdbId ? { params: { tvdbId } } : undefined
+      );
 
-      return sanitizeServarrRecordArray<Record<string, unknown>>(
+      const series = sanitizeServarrRecordArray<Record<string, unknown>>(
         response.data,
         MAX_SERVARR_LIBRARY_RESULTS
       ).flatMap((series) => {
         const normalized = sanitizeSonarrSeries(series);
         return normalized ? [normalized] : [];
       });
+      if (
+        strict &&
+        (!Array.isArray(response.data) ||
+          series.length !== response.data.length ||
+          series.some(
+            (item) =>
+              !Number.isSafeInteger(item.tvdbId) ||
+              item.tvdbId <= 0 ||
+              typeof item.id !== 'number' ||
+              !Number.isSafeInteger(item.id) ||
+              item.id <= 0
+          ))
+      ) {
+        throw new Error(
+          'Incomplete or invalid Sonarr inventory; deletion reconciliation is not safe.'
+        );
+      }
+      return series;
     } catch (e) {
       throw new Error(`[Sonarr] Failed to retrieve series: ${e.message}`, {
         cause: e,
@@ -1063,6 +1089,14 @@ class SonarrAPI extends ServarrBase<{
       throw e;
     }
   };
+
+  public async removeSeriesById(id: number): Promise<void> {
+    if (!Number.isSafeInteger(id) || id <= 0)
+      throw new Error('Invalid series ID.');
+    await this.request('DELETE', `/series/${id}`, undefined, {
+      params: { deleteFiles: true, addImportExclusion: false },
+    });
+  }
 
   public clearCache = ({
     tvdbId,

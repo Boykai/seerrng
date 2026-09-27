@@ -612,7 +612,7 @@ const RequestCard = ({
         />
       )}
       <div
-        className={`relative flex w-72 overflow-hidden rounded-xl bg-gray-800 bg-cover bg-center p-4 text-gray-400 shadow ring-1 ring-gray-700 sm:w-96 ${
+        className={`app-card-main relative flex w-72 overflow-hidden rounded-xl bg-gray-800 bg-cover bg-center p-4 text-gray-400 shadow ring-1 ring-gray-700 sm:w-96 ${
           compact ? 'min-h-0' : 'min-h-[17rem]'
         }`}
         data-testid="request-card"

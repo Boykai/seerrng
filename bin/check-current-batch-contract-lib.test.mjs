@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 
@@ -7,9 +8,124 @@ const {
   validateCurrentBatchContract,
 } = require('./check-current-batch-contract-lib.js');
 
+const repositoryFilesWith = (overrides = {}) =>
+  new Proxy(overrides, {
+    has: (target, key) =>
+      typeof key === 'string' &&
+      (Object.hasOwn(target, key) ||
+        existsSync(new URL(`../${key}`, import.meta.url))),
+    get: (target, key) => {
+      if (typeof key !== 'string') return undefined;
+      if (Object.hasOwn(target, key)) return target[key];
+      return readFileSync(new URL(`../${key}`, import.meta.url), 'utf8');
+    },
+  });
+
+test('current shared owners pass their checks and functional mutations fail', () => {
+  const cases = [
+    [
+      'src/components/MediaDetails/MusicRatings.tsx',
+      'getSafeHref(rating?.url)',
+      'rating?.url',
+      'music rating links must pass through the shared safe URL boundary',
+    ],
+    [
+      'src/components/MediaDetails/MediaQualitySelect.tsx',
+      'if (!option.disabled) onChange(option.value);',
+      'onChange(option.value);',
+      'detail quality options must not activate unavailable formats',
+    ],
+    [
+      'src/components/Requests/destructiveActions.tsx',
+      'okDisabled={disabled || busy}',
+      'okDisabled={disabled}',
+      'request deletion confirmations must preserve shared surfaces and busy-write guards',
+    ],
+    [
+      'src/components/ManageSlideOver/ManageMediaActions.tsx',
+      'issuesExpanded && canViewIssues && issues.length > 0',
+      'issuesExpanded && issues.length > 0',
+      'media management must guard the expandable Issue list by permission and availability',
+    ],
+    [
+      'src/components/CollectionDetails/index.tsx',
+      '(part) => !hasManualPlaybackSelection || selectedMediaIds.includes(part.id)',
+      '() => true',
+      'Collection playback must preserve oldest-first ordering and an intentionally empty selection',
+    ],
+  ];
+  for (const [fileName, original, replacement, reason] of cases) {
+    const source = readFileSync(
+      new URL(`../${fileName}`, import.meta.url),
+      'utf8'
+    );
+    assert.ok(source.includes(original), `${fileName}: mutation target exists`);
+    assert.ok(
+      !validateCurrentBatchContract(
+        repositoryFilesWith({ [fileName]: source })
+      ).some((error) => error.includes(reason)),
+      reason
+    );
+    assert.ok(
+      validateCurrentBatchContract(
+        repositoryFilesWith({
+          [fileName]: source.replace(original, replacement),
+        })
+      ).some((error) => error.includes(reason)),
+      reason
+    );
+  }
+});
+
 test('reports missing files instead of silently skipping contract checks', () => {
   const errors = validateCurrentBatchContract({});
   assert.ok(errors.some((error) => error.includes('Missing contract input:')));
+});
+
+test('Docker keeps the host npm configuration out of the build context', () => {
+  const dockerfile = readFileSync(
+    new URL('../Dockerfile', import.meta.url),
+    'utf8'
+  );
+  const ignoreRules = readFileSync(
+    new URL('../.dockerignore', import.meta.url),
+    'utf8'
+  );
+  const validErrors = validateCurrentBatchContract(
+    repositoryFilesWith({
+      Dockerfile: dockerfile,
+      '.dockerignore': ignoreRules,
+    })
+  );
+  assert.ok(
+    !validErrors.some((error) => error.includes('without copying .npmrc')),
+    validErrors.join('\n')
+  );
+
+  const weakInstallErrors = validateCurrentBatchContract(
+    repositoryFilesWith({
+      Dockerfile: dockerfile.replace(
+        'pnpm --config.engine-strict=true install --prod --frozen-lockfile',
+        'pnpm install --prod --frozen-lockfile'
+      ),
+    })
+  );
+  assert.ok(
+    weakInstallErrors.some((error) =>
+      error.includes(
+        'production dependency installation must keep strict engine checks'
+      )
+    )
+  );
+
+  const exposedConfigErrors = validateCurrentBatchContract(
+    repositoryFilesWith({ '.dockerignore': `${ignoreRules}\n!/.npmrc\n` })
+  );
+  assert.ok(
+    exposedConfigErrors.some((error) =>
+      error.includes('must not re-include host package-manager configuration')
+    )
+  );
 });
 
 test('reports a button-order regression', () => {
@@ -439,7 +555,7 @@ test('reports persistent detail disclosure pin contract drift', () => {
     'detail disclosure pins must expose their selected state',
     'detail disclosure pins must use the authenticated category-scoped per-user settings endpoint',
     'detail disclosure pin settings must expose one read and one write route',
-    'the disclosure row must keep the same five-pixel gap above and below',
+    'the disclosure row must consume the shared spacing role',
     'the Subject Tags pin must carry into Music details',
     'refreshed inset cards must use the darker translucent control surface without changing outer cards',
   ]) {
@@ -457,7 +573,7 @@ test('reports request-card contrast and Advanced Options contract drift', () => 
       has: () => true,
       get: (_target, key) =>
         String(key).endsWith('src/components/RequestModal/TvRequestModal.tsx')
-          ? '<RequestMediaCard'
+          ? '<RequestMediaCard backdropFull'
           : '',
     }
   );
@@ -469,14 +585,14 @@ test('reports request-card contrast and Advanced Options contract drift', () => 
     'detail columns must own their responsive divider border',
     'detail columns must resolve through the shared divider class',
     'root-folder scrolling must begin only after five rows',
-    'Destination Server, Quality Profile, and Root Folder must all use the shared request listbox',
+    'Destination Server, Metadata Profile, Quality Profile, Root Folder, and Language must all use the shared request listbox',
     'Root Folder must use the shared request listbox with its selected path',
     'request listbox menus must mark their selected option with a check icon',
     'request dropdown color, geometry, and selection styling must live in shared global classes',
     'fresh request forms must open Advanced Options by default',
     'full-size request cards must use the site background gradient',
-    'Request Series must reuse the Report Issue main-card artwork, border, and inset-card layout',
-    'Request Series must not restore a nested artwork card inside the main modal card',
+    'Request Series must reuse the shared request site canvas and inset artwork card',
+    'Request Series must keep artwork in the media card, not behind the page heading',
     'Report Issue and Request Series must share one main-card layout class',
     'Report Issue and Request Series must consume the same main-card layout class',
     'artwork forms must leave vertical scrolling on the full modal viewport rather than the main card',
@@ -579,7 +695,9 @@ test('reports refreshed Manage, Issue action, availability, and Association card
         if (fileName.includes('ManageSlideOver')) {
           return 'className="w-full" buttonSize="sm" actionButtonSize="default" intl.formatMessage(messages.manageModalMedia)';
         }
-        if (fileName.endsWith('src/components/IssueDetails/index.tsx')) {
+        if (
+          fileName.endsWith('src/components/IssueDetails/IssueDiscussion.tsx')
+        ) {
           return 'buttonSize="default"';
         }
         return '';
@@ -591,14 +709,14 @@ test('reports refreshed Manage, Issue action, availability, and Association card
   for (const expected of [
     'media management actions must never use a full-width button override',
     'media management actions must not use the ambiguously named small size',
-    'the management Cancel action must use the explicit 30-pixel standard size',
-    'every media management content action must use the explicit 30-pixel standard size',
+    'the management Cancel action must use the shared standard size',
+    'media management must delegate common actions to their shared owner',
     'media management must not retain a standalone Media card heading',
-    'the management Cancel action must sit at bottom right with the standard five-pixel gap',
+    'the management Cancel action must retain the approved alignment without local spacing',
     'Report an Issue actions must preserve the standard icon-to-label gap',
-    'every Issue Details action must use the shared 30-pixel action size',
+    'both inline issue actions must use the shared small action size',
     'the ratings row must not add bottom spacing before the primary actions',
-    'ratings and primary actions must retain exactly one standard five-pixel gap',
+    'ratings and primary actions must retain the shared card-spacing gap',
     'availability headings and status icons must share one centered cell style',
     'scrolling media table headers must reserve the shared thin scrollbar width',
     'both series selector headers must reserve the same right-side space as their rows',
@@ -615,6 +733,36 @@ test('reports refreshed Manage, Issue action, availability, and Association card
       expected
     );
   }
+});
+
+test('shared CSS checks accept grouped selectors but reject unrelated declarations', () => {
+  const validate = (css) =>
+    validateCurrentBatchContract({
+      'src/styles/globals.css': css,
+    });
+  const reason = 'manage button must turn white on hover';
+  assert.ok(
+    !validate(
+      '.app-button-manage, .detail-disclosure-control { @apply hover:text-white; }'
+    ).some((error) => error.includes(reason))
+  );
+  assert.ok(
+    validate(
+      '.app-button-manage { @apply text-violet-300; } .unrelated { @apply hover:text-white; }'
+    ).some((error) => error.includes(reason))
+  );
+  const spacing =
+    'wrapped discovery filter rows must use the shared card spacing';
+  assert.ok(
+    !validate(
+      '.discover-filter-secondary-row, .other { gap: var(--card-spacing); margin-top: var(--card-spacing); }'
+    ).some((error) => error.includes(spacing))
+  );
+  assert.ok(
+    validate(
+      '.discover-filter-secondary-row { gap: 5px; } .other { gap: var(--card-spacing); margin-top: var(--card-spacing); }'
+    ).some((error) => error.includes(spacing))
+  );
 });
 
 test('reports related-media controls, inset-heading, and duplicate icon-gap regressions', () => {

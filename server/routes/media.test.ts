@@ -739,6 +739,32 @@ describe('POST /media/:id/:status', () => {
   });
 });
 
+describe('library deletion authorization', () => {
+  it('denies request managers who are not admins from listing or deleting library copies', async () => {
+    const userRepository = getRepository(User);
+    const friend = await userRepository.findOneByOrFail({
+      email: 'friend@seerr.dev',
+    });
+    const originalPermissions = friend.permissions;
+    friend.permissions = Permission.MANAGE_REQUESTS;
+    await userRepository.save(friend);
+
+    try {
+      const agent = await loginAs('friend@seerr.dev', 'test1234');
+      const plan = await agent.get('/media/not-a-number/library');
+      const deletion = await agent
+        .delete('/media/not-a-number/library')
+        .send({ token: 'a'.repeat(64) });
+
+      assert.strictEqual(plan.status, 403);
+      assert.strictEqual(deletion.status, 403);
+    } finally {
+      friend.permissions = originalPermissions;
+      await userRepository.save(friend);
+    }
+  });
+});
+
 describe('DELETE /media/:id/file', () => {
   it('accepts book format removals through the production OpenAPI boundary', async () => {
     const validatedApp = express();

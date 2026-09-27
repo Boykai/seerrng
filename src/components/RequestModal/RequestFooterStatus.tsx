@@ -5,7 +5,7 @@ import { CheckIcon } from '@heroicons/react/24/outline';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.RequestModal.RequestFooterStatus', {
-  approvedAutomatically: 'Approved Automatically',
+  approvedAutomatically: 'Automatically',
   approvalRequired: 'Approval Required',
   requested: 'Requested',
 });

@@ -278,7 +278,7 @@ const SettingsMetadata = () => {
         ]}
       />
 
-      <section className="settings-group-card mb-6">
+      <section className="app-card-sub settings-group-card mb-6">
         <h3 className="heading">
           {intl.formatMessage(messages.bookshelfCatalogSettings)}
         </h3>
@@ -308,7 +308,7 @@ const SettingsMetadata = () => {
         </a>
       </section>
 
-      <section className="settings-group-card">
+      <section className="app-card-sub settings-group-card">
         <h3 className="heading">
           {intl.formatMessage(messages.metadataProviderSettings)}
         </h3>
@@ -316,7 +316,7 @@ const SettingsMetadata = () => {
           {intl.formatMessage(messages.metadataSettings)}
         </p>
         <div className="settings-group-content">
-          <div className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
+          <div className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
             <h4 className="settings-group-heading">
               {intl.formatMessage(messages.providerStatus)}
             </h4>
@@ -346,7 +346,7 @@ const SettingsMetadata = () => {
             </div>
           </div>
 
-          <div className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
+          <div className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
             <Formik
               initialValues={{ metadata: initialValues }}
               onSubmit={async (values) => {

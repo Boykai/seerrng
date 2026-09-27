@@ -22,7 +22,7 @@ const messages = defineMessages('components.Login', {
   username: 'Username',
   password: 'Password',
   validationusernamerequired: 'Username required',
-  validationpasswordrequired: 'Password required',
+  validationpasswordrequired: 'You must provide a password',
   loginerror: 'Something went wrong while trying to sign in.',
   sessionerror:
     'Sign-in succeeded, but SeerrNG could not establish a browser session. Use HTTPS or enable authenticated HTTP sessions, then try again.',

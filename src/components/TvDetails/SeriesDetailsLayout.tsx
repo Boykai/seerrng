@@ -3,19 +3,23 @@ import RTAudRotten from '@app/assets/rt_aud_rotten.svg';
 import RTFresh from '@app/assets/rt_fresh.svg';
 import RTRotten from '@app/assets/rt_rotten.svg';
 import TmdbLogo from '@app/assets/tmdb_logo.svg';
+import CollectionNavigation from '@app/components/CollectionDetails/CollectionNavigation';
 import CachedImage from '@app/components/Common/CachedImage';
 import PlayOnDeviceButton from '@app/components/Common/PlayOnDeviceButton';
 import Tooltip from '@app/components/Common/Tooltip';
+import WatchedBadge from '@app/components/Common/WatchedBadge';
 import AvailabilityValue from '@app/components/MediaDetails/AvailabilityValue';
 import DetailDisclosureButton from '@app/components/MediaDetails/DetailDisclosureButton';
 import ExpandableCreditList from '@app/components/MediaDetails/ExpandableCreditList';
 import MediaDetailArtwork from '@app/components/MediaDetails/MediaDetailArtwork';
 import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
 import SeriesSeasonEpisodeBrowser from '@app/components/MediaDetails/SeriesSeasonEpisodeBrowser';
+import { subjectTagClassName } from '@app/components/MediaDetails/subjectTagStyle';
 import MediaSlider from '@app/components/MediaSlider';
 import useDetailDisclosurePins from '@app/hooks/useDetailDisclosurePins';
 import useLocale from '@app/hooks/useLocale';
 import usePlaybackCatalog from '@app/hooks/usePlaybackCatalog';
+import useWatchStatus from '@app/hooks/useWatchStatus';
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
 import { resolveCanonicalPlaybackSelection } from '@app/utils/playbackSelection';
@@ -37,17 +41,18 @@ const messages = defineMessages('components.TvDetails.Layout', {
   seriesType: 'Series Type',
   hd: 'HD',
   ultraHd: '4K',
+  watched: 'Watched',
   overview: 'Overview',
   overviewUnavailable: 'Overview unavailable',
-  viewCast: 'View Cast',
-  viewCrew: 'View Crew',
+  viewCast: 'Cast',
+  viewCrew: 'Crew',
   subjectTags: 'Subject Tags',
   fullCastList: 'Full Cast List',
   fullCrewList: 'Full Crew List',
   noCast: 'No cast information available',
   noCrew: 'No crew information available',
   noTags: 'No subject tags available',
-  seriesDetails: 'Series Details',
+  seriesDetails: 'Details',
   status: 'Status',
   airDates: 'Air Dates',
   first: 'First',
@@ -56,7 +61,7 @@ const messages = defineMessages('components.TvDetails.Layout', {
   language: 'Language',
   country: 'Country',
   networks: 'Networks',
-  notAvailable: 'Not available',
+  notAvailable: 'Not Available',
   minutes: '{minutes} minutes',
   recommendations: 'Recommendations',
   similar: 'Similar Series',
@@ -102,15 +107,6 @@ const getAvailabilityText = (
   }
 };
 
-const subjectTagTones = [
-  'border-indigo-400/80 bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/35',
-  'border-purple-400/80 bg-purple-500/20 text-purple-100 hover:bg-purple-500/35',
-  'border-emerald-400/80 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35',
-  'border-amber-400/80 bg-amber-500/20 text-amber-100 hover:bg-amber-500/35',
-  'border-sky-400/80 bg-sky-500/20 text-sky-100 hover:bg-sky-500/35',
-  'border-rose-400/80 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35',
-] as const;
-
 const SeriesDetailsLayout = ({
   data,
   ratingData,
@@ -123,7 +119,17 @@ const SeriesDetailsLayout = ({
 }: SeriesDetailsLayoutProps) => {
   const intl = useIntl();
   const { locale } = useLocale();
+  const { data: watchedStatus } = useWatchStatus(
+    'tv',
+    data.id,
+    Boolean(data.mediaInfo),
+    true
+  );
   const { pins, togglePinned } = useDetailDisclosurePins('tv');
+  const [showDetails, setShowDetails] = useState(false);
+  useEffect(() => {
+    setShowDetails(pins.details);
+  }, [pins.details, data.id]);
   const [showCast, setShowCast] = useState(false);
   const [showCrew, setShowCrew] = useState(false);
   const [showTags, setShowTags] = useState(false);
@@ -248,7 +254,7 @@ const SeriesDetailsLayout = ({
 
   return (
     <div className="media-page">
-      <article className="media-detail-card refreshed-card-surface refreshed-detail-text relative overflow-hidden rounded-xl border border-gray-700 p-3 shadow-lg shadow-gray-950/20">
+      <article className="media-detail-card app-card-main refreshed-card-surface refreshed-detail-text relative overflow-hidden rounded-xl border border-gray-700 p-3 shadow-lg shadow-gray-950/20">
         {data.backdropPath && (
           <MediaDetailArtwork
             type="tmdb"
@@ -257,7 +263,7 @@ const SeriesDetailsLayout = ({
         )}
 
         <div className="relative z-10">
-          <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[80px_minmax(0,1fr)]">
+          <div className="app-card-inset refreshed-inset-surface detail-summary-card grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[80px_minmax(0,1fr)]">
             <div
               className="relative h-24 w-16 overflow-hidden rounded-lg ring-1 ring-gray-600 sm:h-[120px] sm:w-20"
               data-testid="media-details-poster"
@@ -278,16 +284,16 @@ const SeriesDetailsLayout = ({
 
             <div className="flex min-w-0 flex-col">
               <h1
-                className="text-lg leading-5 font-semibold text-white"
+                className="detail-summary-title text-lg leading-5 font-semibold text-white"
                 data-testid="media-title"
               >
                 {data.name}
                 {data.firstAirDate ? ` (${data.firstAirDate.slice(0, 4)})` : ''}
               </h1>
 
-              <div className="card:grid-cols-3 mt-4 grid min-w-0 flex-1 grid-cols-1">
-                <div className="card:col-span-2 card:pr-3 min-w-0">
-                  <dl className="card:grid-cols-[max-content_0.75rem_6rem_0.75rem_minmax(0,1fr)] card:gap-x-0 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-0.5 text-xs leading-4">
+              <div className="detail-card-heading-spacing detail-three-column-grid grid min-w-0 flex-1">
+                <div className="detail-paired-column-span min-w-0">
+                  <dl className="media-detail-rows detail-paired-columns grid min-w-0 content-start text-xs">
                     <dt className="card:col-start-1 card:row-start-1 font-medium text-gray-100">
                       {intl.formatMessage(messages.mediaAndFormat)}:
                     </dt>
@@ -317,7 +323,7 @@ const SeriesDetailsLayout = ({
                           })
                         : unavailable}
                     </dd>
-                    <div className="media-detail-column-divider card:col-span-1 card:col-start-5 card:row-span-3 card:row-start-1 col-span-2 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-0.5">
+                    <div className="media-detail-rows media-detail-column-divider card:col-span-1 card:col-start-5 card:row-span-3 card:row-start-1 col-span-2 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3">
                       <dt className="font-medium text-gray-100">
                         {intl.formatMessage(messages.creator)}:
                       </dt>
@@ -359,11 +365,11 @@ const SeriesDetailsLayout = ({
                       </dd>
                     </div>
 
-                    <dt className="card:col-start-1 card:row-start-4 mt-0.5 font-medium text-gray-100">
+                    <dt className="card:col-start-1 card:row-start-4 font-medium text-gray-100">
                       {intl.formatMessage(messages.genres)}:
                     </dt>
                     <dd
-                      className="card:col-span-3 card:col-start-3 card:row-start-4 m-0 mt-0.5 min-w-0 break-words"
+                      className="card:col-span-3 card:col-start-3 card:row-start-4 m-0 min-w-0 break-words"
                       data-testid="media-details-genres"
                     >
                       {data.genres.length > 0
@@ -384,7 +390,7 @@ const SeriesDetailsLayout = ({
                 </div>
 
                 <div className="media-detail-column-divider flex min-w-0 flex-col text-xs leading-4">
-                  <dl className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-0.5">
+                  <dl className="media-detail-rows grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3">
                     <dt className="font-medium text-gray-100">
                       {intl.formatMessage(messages.hd)}:
                     </dt>
@@ -411,6 +417,28 @@ const SeriesDetailsLayout = ({
                         </dd>
                       </>
                     )}
+                    {!!watchedStatus?.availableCount && (
+                      <>
+                        <dt className="card:row-start-5 font-medium text-gray-100">
+                          {intl.formatMessage(messages.watched)}:
+                        </dt>
+                        <dd className="card:row-start-5 m-0">
+                          <WatchedBadge
+                            status={watchedStatus}
+                            className="detail-watched-button"
+                            showUnwatched
+                            incompleteLibrary={
+                              data.mediaInfo?.status ===
+                                MediaStatus.PARTIALLY_AVAILABLE ||
+                              (data.mediaInfo?.status !==
+                                MediaStatus.AVAILABLE &&
+                                data.mediaInfo?.status4k ===
+                                  MediaStatus.PARTIALLY_AVAILABLE)
+                            }
+                          />
+                        </dd>
+                      </>
+                    )}
                   </dl>
                 </div>
               </div>
@@ -421,6 +449,7 @@ const SeriesDetailsLayout = ({
             tvId={data.id}
             seasons={visibleSeasons}
             catalog={playbackCatalog}
+            watchedStatus={watchedStatus}
             selectedItemIds={selectedPlaybackItemIds}
             onSelectionChange={setSelectedPlaybackItemIds}
           />
@@ -430,17 +459,27 @@ const SeriesDetailsLayout = ({
             ratingData?.audienceScore !== undefined ||
             data.voteCount > 0) && (
             <div className="media-rating-row">
-              {show4kAvailability && (
-                <MediaQualitySelect
-                  value={effectiveSelectedQuality}
-                  options={[
-                    { label: 'HD', value: 'hd' },
-                    { label: '4K', value: '4k' },
-                  ]}
-                  onChange={setSelectedQuality}
-                  label={intl.formatMessage(messages.quality)}
-                />
-              )}
+              <MediaQualitySelect
+                value={effectiveSelectedQuality}
+                options={[
+                  {
+                    label: 'HD',
+                    value: 'hd',
+                    disabled: !availableFormats.includes('HD'),
+                  },
+                  ...(show4kAvailability
+                    ? ([
+                        {
+                          label: '4K',
+                          value: '4k',
+                          disabled: !availableFormats.includes('4K'),
+                        },
+                      ] as const)
+                    : []),
+                ]}
+                onChange={setSelectedQuality}
+                label={intl.formatMessage(messages.quality)}
+              />
               {playbackActions?.(
                 effectivePlaybackItemIds,
                 effectiveSelectedQuality === '4k'
@@ -519,7 +558,7 @@ const SeriesDetailsLayout = ({
             {secondaryActions}
           </div>
 
-          <section className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
+          <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
             <h2 className="media-inset-heading">
               {intl.formatMessage(messages.overview)}
             </h2>
@@ -534,11 +573,11 @@ const SeriesDetailsLayout = ({
             </p>
 
             {featuredCrew.length > 0 && (
-              <div className="card:grid-cols-3 card:border-t-0 card:pt-0 mt-4 grid grid-cols-1 border-t border-gray-600 pt-3">
+              <div className="detail-three-column-grid card:border-t-0 card:pt-0 mt-4 grid border-t border-gray-600 pt-3">
                 {featuredCrewGroups.map((group, groupIndex) => (
                   <dl
                     key={`featured-crew-${groupIndex}`}
-                    className={`grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-1 text-xs leading-4 ${
+                    className={`media-detail-rows grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs ${
                       groupIndex > 0
                         ? `media-detail-column-divider ${groupIndex === 1 ? 'card:pr-3' : ''}`
                         : 'card:pr-3'
@@ -568,7 +607,8 @@ const SeriesDetailsLayout = ({
             )}
           </section>
 
-          <div className="mt-[5px] flex flex-wrap items-center gap-2">
+          <div className="media-detail-disclosure-row">
+            <CollectionNavigation kind="tv" id={String(data.id)} />
             <DetailDisclosureButton
               label={intl.formatMessage(messages.viewCast)}
               open={showCast}
@@ -590,6 +630,14 @@ const SeriesDetailsLayout = ({
               pinned={pins.subjectTags}
               onPinClick={() => void togglePinned('subjectTags')}
             />
+            <DetailDisclosureButton
+              label={intl.formatMessage(messages.seriesDetails)}
+              open={showDetails}
+              onClick={() => setShowDetails((open) => !open)}
+              pinned={pins.details}
+              onPinClick={() => void togglePinned('details')}
+              controls="tv-additional-details"
+            />
           </div>
 
           {showCast && (
@@ -607,7 +655,7 @@ const SeriesDetailsLayout = ({
             />
           )}
           {showTags && (
-            <section className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
+            <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
               <h2 className="media-inset-heading mb-2">
                 {intl.formatMessage(messages.subjectTags)}
               </h2>
@@ -617,13 +665,11 @@ const SeriesDetailsLayout = ({
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
-                  {data.keywords.map((keyword) => (
+                  {data.keywords.map((keyword, index) => (
                     <Link
                       key={keyword.id}
                       href={`/discover/tv/keyword?keywords=${keyword.id}`}
-                      className={`compact-control inline-flex items-center rounded-full border px-2 text-[11px] font-medium transition focus:ring-2 focus:ring-indigo-400 focus:outline-none ${
-                        subjectTagTones[keyword.id % subjectTagTones.length]
-                      }`}
+                      className={subjectTagClassName(index)}
                     >
                       {keyword.name}
                     </Link>
@@ -633,105 +679,110 @@ const SeriesDetailsLayout = ({
             </section>
           )}
 
-          <section className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
-            <h2 className="media-inset-heading mb-3">
-              {intl.formatMessage(messages.seriesDetails)}
-            </h2>
-            <div className="card:grid-cols-3 grid grid-cols-1">
-              <dl className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-1 text-xs leading-4">
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.status)}:
-                </dt>
-                <dd className="m-0">{data.status || unavailable}</dd>
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.airDates)}:
-                </dt>
-                <dd className="m-0 min-w-0">
-                  {airDates.length > 0
-                    ? airDates.map((airDate) => (
-                        <span className="block" key={airDate.label.id}>
-                          {intl.formatMessage(airDate.label)} ·{' '}
-                          {intl.formatDate(airDate.value, {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            timeZone: 'UTC',
-                          })}
-                        </span>
-                      ))
-                    : unavailable}
-                </dd>
-              </dl>
+          {showDetails && (
+            <section
+              id="tv-additional-details"
+              className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3"
+            >
+              <h2 className="media-inset-heading detail-card-heading-after">
+                {intl.formatMessage(messages.seriesDetails)}
+              </h2>
+              <div className="detail-three-column-grid grid">
+                <dl className="media-detail-rows grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.status)}:
+                  </dt>
+                  <dd className="m-0">{data.status || unavailable}</dd>
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.airDates)}:
+                  </dt>
+                  <dd className="m-0 min-w-0">
+                    {airDates.length > 0
+                      ? airDates.map((airDate) => (
+                          <span className="block" key={airDate.label.id}>
+                            {intl.formatMessage(airDate.label)} ·{' '}
+                            {intl.formatDate(airDate.value, {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              timeZone: 'UTC',
+                            })}
+                          </span>
+                        ))
+                      : unavailable}
+                  </dd>
+                </dl>
 
-              <dl className="media-detail-column-divider card:pr-3 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-1 text-xs leading-4">
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.seriesType)}:
-                </dt>
-                <dd className="m-0 truncate">{data.type || unavailable}</dd>
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.episodeRuntime)}:
-                </dt>
-                <dd className="m-0 truncate">
-                  {data.episodeRunTime[0]
-                    ? intl.formatMessage(messages.minutes, {
-                        minutes: data.episodeRunTime[0],
-                      })
-                    : unavailable}
-                </dd>
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.language)}:
-                </dt>
-                <dd className="m-0 truncate">
-                  <Link
-                    href={`/discover/tv/language/${data.originalLanguage}`}
-                    className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                  >
-                    {originalLanguage}
-                  </Link>
-                </dd>
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.country)}:
-                </dt>
-                <dd className="m-0 min-w-0">
-                  {data.productionCountries.length > 0
-                    ? data.productionCountries.map((country, index) => (
-                        <span key={country.iso_3166_1}>
-                          {index > 0 && ', '}
+                <dl className="media-detail-rows media-detail-column-divider card:pr-3 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.seriesType)}:
+                  </dt>
+                  <dd className="m-0 truncate">{data.type || unavailable}</dd>
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.episodeRuntime)}:
+                  </dt>
+                  <dd className="m-0 truncate">
+                    {data.episodeRunTime[0]
+                      ? intl.formatMessage(messages.minutes, {
+                          minutes: data.episodeRunTime[0],
+                        })
+                      : unavailable}
+                  </dd>
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.language)}:
+                  </dt>
+                  <dd className="m-0 truncate">
+                    <Link
+                      href={`/discover/tv/language/${data.originalLanguage}`}
+                      className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                    >
+                      {originalLanguage}
+                    </Link>
+                  </dd>
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.country)}:
+                  </dt>
+                  <dd className="m-0 min-w-0">
+                    {data.productionCountries.length > 0
+                      ? data.productionCountries.map((country, index) => (
+                          <span key={country.iso_3166_1}>
+                            {index > 0 && ', '}
+                            <Link
+                              href={`/discover/tv?country=${country.iso_3166_1}`}
+                              className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                            >
+                              {intl.formatDisplayName(country.iso_3166_1, {
+                                type: 'region',
+                                fallback: 'none',
+                              }) ?? country.name}
+                            </Link>
+                          </span>
+                        ))
+                      : unavailable}
+                  </dd>
+                </dl>
+
+                <dl className="media-detail-rows media-detail-column-divider grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.networks)}:
+                  </dt>
+                  <dd className="m-0 min-w-0">
+                    {data.networks.length > 0
+                      ? data.networks.slice(0, 4).map((network) => (
                           <Link
-                            href={`/discover/tv?country=${country.iso_3166_1}`}
-                            className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                            key={network.id}
+                            href={`/discover/tv/network/${network.id}`}
+                            className="block truncate text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                           >
-                            {intl.formatDisplayName(country.iso_3166_1, {
-                              type: 'region',
-                              fallback: 'none',
-                            }) ?? country.name}
+                            {network.name}
                           </Link>
-                        </span>
-                      ))
-                    : unavailable}
-                </dd>
-              </dl>
-
-              <dl className="media-detail-column-divider grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-1 text-xs leading-4">
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.networks)}:
-                </dt>
-                <dd className="m-0 min-w-0">
-                  {data.networks.length > 0
-                    ? data.networks.slice(0, 4).map((network) => (
-                        <Link
-                          key={network.id}
-                          href={`/discover/tv/network/${network.id}`}
-                          className="block truncate text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                        >
-                          {network.name}
-                        </Link>
-                      ))
-                    : unavailable}
-                </dd>
-              </dl>
-            </div>
-          </section>
+                        ))
+                      : unavailable}
+                  </dd>
+                </dl>
+              </div>
+            </section>
+          )}
         </div>
       </article>
 

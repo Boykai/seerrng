@@ -20,7 +20,7 @@ const Tag = memo(({ children, iconSvg }: TagProps) => {
   );
 
   return (
-    <div className="inline-flex cursor-pointer items-center rounded-full bg-gray-800 px-2 py-1 text-sm leading-snug text-gray-200 ring-1 ring-gray-600 transition ring-inset hover:bg-gray-700">
+    <div className="inline-flex cursor-pointer items-center rounded-full bg-gray-800/35 px-2 py-1 text-sm leading-snug text-gray-200 ring-1 ring-gray-600 transition ring-inset hover:bg-gray-700/55 active:bg-gray-700/70">
       {icon}
       <span>{children}</span>
     </div>

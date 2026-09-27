@@ -1,29 +1,19 @@
-import BlocklistBlock from '@app/components/BlocklistBlock';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
-import ConfirmButton from '@app/components/Common/ConfirmButton';
 import Modal from '@app/components/Common/Modal';
 import Tooltip from '@app/components/Common/Tooltip';
 import DownloadBlock from '@app/components/DownloadBlock';
 import IssueMediaSummary from '@app/components/IssueDetails/IssueMediaSummary';
-import IssueItem from '@app/components/IssueList/IssueItem';
 import AvailabilityValue from '@app/components/MediaDetails/AvailabilityValue';
 import RequestBlock from '@app/components/RequestBlock';
 import SelectableDownloadList from '@app/components/SelectableDownloadList';
 import useSettings from '@app/hooks/useSettings';
-import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { getSafeHref } from '@app/utils/safeUrl';
 import { Transition } from '@headlessui/react';
-import { Bars4Icon, ServerIcon } from '@heroicons/react/24/outline';
-import {
-  CheckCircleIcon,
-  DocumentMinusIcon,
-  TrashIcon,
-} from '@heroicons/react/24/solid';
-import { IssueStatus } from '@server/constants/issue';
+import { Bars4Icon } from '@heroicons/react/24/outline';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -32,15 +22,14 @@ import {
 import { MediaServerType } from '@server/constants/server';
 import type { MediaWatchDataResponse } from '@server/interfaces/api/mediaInterfaces';
 import type { DownloadingItem } from '@server/lib/downloadtracker';
-import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
 import type { MovieDetails } from '@server/models/Movie';
 import type { TvDetails } from '@server/models/Tv';
-import axios from 'axios';
 import Link from 'next/link';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
+import ManageMediaActions from './ManageMediaActions';
 
-import { Fragment, type JSX } from 'react';
+import { Fragment, useState, type JSX } from 'react';
 
 const filterDuplicateDownloads = (
   items: DownloadingItem[] = []
@@ -57,24 +46,10 @@ const messages = defineMessages('components.ManageSlideOver', {
   manageModalTitle: 'Manage {mediaType}',
   manageModalIssues: 'Open Issues',
   manageModalRequests: 'Requests',
-  manageModalAdvanced: 'Advanced',
   manageModalNoRequests: 'No requests',
-  manageModalClearMedia: 'Clear Data',
-  manageModalClearMediaWarning:
-    '* This will irreversibly remove all data for this {mediaType}, including any requests. If this item exists in your {mediaServerName} library, the media information will be recreated during the next scan.',
-  manageModalRemoveMediaWarning:
-    '* This will irreversibly remove this {mediaType} from {arr}, including all files.',
   openarr: 'Open in {arr}',
-  removearr: 'Remove from {arr}',
   openarr4k: 'Open in 4K {arr}',
-  removearr4k: 'Remove from 4K {arr}',
-  clearmediadataerror: 'Something went wrong while clearing the media data.',
-  removemediaerror: 'Something went wrong while removing the media.',
   downloadstatus: 'Downloads',
-  markavailable: 'Mark as Available',
-  mark4kavailable: 'Mark as Available in 4K',
-  markallseasonsavailable: 'Mark All Seasons as Available',
-  markallseasons4kavailable: 'Mark All Seasons as Available in 4K',
   opentautulli: 'Open in Tautulli',
   plays:
     '<strong>{playCount, number}</strong> {playCount, plural, one {play} other {plays}}',
@@ -111,7 +86,7 @@ const ManageSlideOver = ({
 }: ManageSlideOverMovieProps | ManageSlideOverTvProps) => {
   const { user: currentUser, hasPermission } = useUser();
   const intl = useIntl();
-  const { addToast } = useToasts();
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
   const settings = useSettings();
   const { data: watchData } = useSWR<MediaWatchDataResponse>(
     settings.currentSettings.mediaServerType === MediaServerType.PLEX &&
@@ -119,12 +94,6 @@ const ManageSlideOver = ({
       hasPermission(Permission.ADMIN)
       ? `/api/v1/media/${data.mediaInfo.id}/watch_data`
       : null
-  );
-  const { data: radarrData } = useSWR<RadarrSettings[]>(
-    hasPermission(Permission.ADMIN) ? '/api/v1/settings/radarr' : null
-  );
-  const { data: sonarrData } = useSWR<SonarrSettings[]>(
-    hasPermission(Permission.ADMIN) ? '/api/v1/settings/sonarr' : null
   );
   const safeServiceUrl = getSafeHref(data.mediaInfo?.serviceUrl);
   const safeServiceUrl4k = getSafeHref(data.mediaInfo?.serviceUrl4k);
@@ -134,113 +103,10 @@ const ManageSlideOver = ({
     ? `https://image.tmdb.org/t/p/original${data.backdropPath}`
     : undefined;
 
-  const deleteMedia = async () => {
-    if (data.mediaInfo) {
-      try {
-        await axios.delete(`/api/v1/media/${data.mediaInfo.id}`);
-        revalidate();
-        onClose();
-      } catch {
-        addToast(intl.formatMessage(messages.clearmediadataerror), {
-          appearance: 'error',
-          autoDismiss: true,
-        });
-      }
-    }
-  };
-
-  const deleteMediaFile = async (is4k = false) => {
-    if (data.mediaInfo) {
-      try {
-        await axios.delete(
-          `/api/v1/media/${data.mediaInfo.id}/file?is4k=${is4k}`
-        );
-      } catch (e) {
-        if (!axios.isAxiosError(e) || e.response?.status !== 404) {
-          addToast(intl.formatMessage(messages.removemediaerror), {
-            appearance: 'error',
-            autoDismiss: true,
-          });
-          revalidate();
-          return;
-        }
-      }
-      revalidate();
-      onClose();
-    }
-  };
-
-  const isDefaultService = () => {
-    if (data.mediaInfo) {
-      if (data.mediaInfo.mediaType === MediaType.MOVIE) {
-        return (
-          radarrData?.find(
-            (radarr) =>
-              radarr.isDefault && radarr.id === data.mediaInfo?.serviceId
-          ) !== undefined
-        );
-      } else {
-        return (
-          sonarrData?.find(
-            (sonarr) =>
-              sonarr.isDefault && sonarr.id === data.mediaInfo?.serviceId
-          ) !== undefined
-        );
-      }
-    }
-    return false;
-  };
-
-  const isDefault4kService = () => {
-    if (data.mediaInfo) {
-      if (data.mediaInfo.mediaType === MediaType.MOVIE) {
-        return (
-          radarrData?.find(
-            (radarr) =>
-              radarr.isDefault &&
-              radarr.is4k &&
-              radarr.id === data.mediaInfo?.serviceId4k
-          ) !== undefined
-        );
-      } else {
-        return (
-          sonarrData?.find(
-            (sonarr) =>
-              sonarr.isDefault &&
-              sonarr.is4k &&
-              sonarr.id === data.mediaInfo?.serviceId4k
-          ) !== undefined
-        );
-      }
-    }
-    return false;
-  };
-
-  const markAvailable = async (is4k = false) => {
-    if (data.mediaInfo) {
-      await axios.post(`/api/v1/media/${data.mediaInfo?.id}/available`, {
-        is4k,
-        ...(mediaType === 'tv' && {
-          seasons: data.seasons.filter((season) => season.seasonNumber !== 0),
-        }),
-      });
-      revalidate();
-    }
-  };
-
   const requests =
     data.mediaInfo?.requests?.filter(
       (request) => request.status !== MediaRequestStatus.DECLINED
     ) ?? [];
-
-  const openIssues =
-    data.mediaInfo?.issues?.filter(
-      (issue) => issue.status === IssueStatus.OPEN
-    ) ?? [];
-  const canViewIssues = hasPermission(
-    [Permission.MANAGE_ISSUES, Permission.VIEW_ISSUES],
-    { type: 'or' }
-  );
 
   const getManageStatus = (status: MediaStatus | undefined) => {
     switch (status) {
@@ -281,54 +147,40 @@ const ManageSlideOver = ({
           ),
         })}
         onCancel={onClose}
+        backgroundClickable={!confirmationOpen}
         cancelButtonType="danger"
         actionButtonSize="standard"
-        actionsClass="!mt-[5px] !justify-start"
+        actionsClass="!justify-start"
         backdrop={manageBackdrop}
         backdropFull
-        dialogClass="refreshed-card-surface refreshed-detail-text !w-[calc(100%-2rem)] rounded-xl border border-gray-700 shadow-lg shadow-gray-950/20 sm:!max-w-5xl"
+        dialogClass="app-card-main refreshed-card-surface refreshed-detail-text manage-media-dialog"
+        contentClass="manage-dialog-content"
       >
-        <div className="-mt-4 space-y-[5px]">
-          {canViewIssues && openIssues.length > 0 ? (
-            <div className="space-y-[5px]">
-              {openIssues.map((issue) => (
-                <IssueItem key={`manage-issue-${issue.id}`} issue={issue} />
-              ))}
-            </div>
-          ) : (
-            <IssueMediaSummary
-              data={data}
-              mediaType={mediaType}
-              embedded
-              rightDetails={[
-                {
-                  label: 'HD',
-                  value: (
-                    <AvailabilityValue status={data.mediaInfo?.status}>
-                      {getManageStatus(data.mediaInfo?.status)}
-                    </AvailabilityValue>
-                  ),
-                },
-                {
-                  label: '4K',
-                  value: (
-                    <AvailabilityValue status={data.mediaInfo?.status4k}>
-                      {getManageStatus(data.mediaInfo?.status4k)}
-                    </AvailabilityValue>
-                  ),
-                },
-                {
-                  label: 'Requests',
-                  value: intl.formatNumber(requests.length),
-                },
-                {
-                  label: intl.formatMessage(messages.manageModalIssues),
-                  value: intl.formatNumber(openIssues.length),
-                },
-              ]}
-            />
-          )}
-          <div className="manage-media-card-sections space-y-[5px]">
+        <div className="manage-media-stack">
+          <IssueMediaSummary
+            data={data}
+            mediaType={mediaType}
+            embedded
+            rightDetails={[
+              {
+                label: 'HD',
+                value: (
+                  <AvailabilityValue status={data.mediaInfo?.status}>
+                    {getManageStatus(data.mediaInfo?.status)}
+                  </AvailabilityValue>
+                ),
+              },
+              {
+                label: '4K',
+                value: (
+                  <AvailabilityValue status={data.mediaInfo?.status4k}>
+                    {getManageStatus(data.mediaInfo?.status4k)}
+                  </AvailabilityValue>
+                ),
+              },
+            ]}
+          />
+          <div className="manage-media-card-sections card-stack">
             {((data?.mediaInfo?.downloadStatus ?? []).length > 0 ||
               (data?.mediaInfo?.downloadStatus4k ?? []).length > 0) && (
               <div>
@@ -370,27 +222,13 @@ const ManageSlideOver = ({
                         className="border-b border-gray-700 last:border-b-0"
                       >
                         <RequestBlock
+                          hideDeleteAction
                           request={request}
                           onUpdate={() => revalidate()}
                         />
                       </li>
                     ))}
                   </ul>
-                </div>
-              </div>
-            )}
-            {data.mediaInfo?.status === MediaStatus.BLOCKLISTED && (
-              <div>
-                <h3 className="manage-media-section-title">
-                  {intl.formatMessage(globalMessages.blocklist)}
-                </h3>
-                <div className="overflow-hidden rounded-md border border-gray-700 shadow">
-                  <BlocklistBlock
-                    tmdbId={data.mediaInfo.tmdbId}
-                    mediaType={data.mediaInfo.mediaType}
-                    onUpdate={() => revalidate()}
-                    onDelete={() => onClose()}
-                  />
                 </div>
               </div>
             )}
@@ -401,17 +239,28 @@ const ManageSlideOver = ({
                 safeServiceUrl4k ||
                 safeTautulliUrl4k ||
                 watchData?.data4k ||
-                (data.mediaInfo &&
-                  data.mediaInfo.status !== MediaStatus.BLOCKLISTED)) && (
+                data.mediaInfo) && (
                 <div>
-                  <h3 className="manage-media-section-title">
-                    {intl.formatMessage(messages.manageModalAdvanced)}
-                  </h3>
                   <div
-                    className="space-y-[5px]"
+                    className="card-stack"
                     data-testid="manage-advanced-actions"
                   >
-                    {(safeServiceUrl || safeTautulliUrl || watchData?.data) && (
+                    {data.mediaInfo && (
+                      <ManageMediaActions
+                        media={data.mediaInfo}
+                        mediaType={
+                          mediaType === 'movie' ? MediaType.MOVIE : MediaType.TV
+                        }
+                        title={mediaType === 'movie' ? data.title : data.name}
+                        year={(mediaType === 'movie'
+                          ? data.releaseDate
+                          : data.firstAirDate
+                        )?.slice(0, 4)}
+                        onUpdate={revalidate}
+                        onDialogChange={setConfirmationOpen}
+                      />
+                    )}
+                    {(safeTautulliUrl || watchData?.data) && (
                       <div className="flex flex-wrap items-start gap-2">
                         {(watchData?.data || safeTautulliUrl) && (
                           <div className="basis-full">
@@ -514,69 +363,9 @@ const ManageSlideOver = ({
                             )}
                           </div>
                         )}
-                        {safeServiceUrl && (
-                          <a
-                            href={safeServiceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-block"
-                          >
-                            <Button buttonType="ghost" buttonSize="standard">
-                              <ServerIcon />
-                              <span>
-                                {intl.formatMessage(messages.openarr, {
-                                  arr:
-                                    mediaType === 'movie' ? 'Radarr' : 'Sonarr',
-                                })}
-                              </span>
-                            </Button>
-                          </a>
-                        )}
-
-                        {hasPermission(Permission.ADMIN) &&
-                          safeServiceUrl &&
-                          isDefaultService() && (
-                            <div className="flex min-w-0 flex-col items-start">
-                              <ConfirmButton
-                                buttonSize="standard"
-                                onClick={() => deleteMediaFile(false)}
-                                confirmText={intl.formatMessage(
-                                  globalMessages.areyousure
-                                )}
-                              >
-                                <TrashIcon />
-                                <span>
-                                  {intl.formatMessage(messages.removearr, {
-                                    arr:
-                                      mediaType === 'movie'
-                                        ? 'Radarr'
-                                        : 'Sonarr',
-                                  })}
-                                </span>
-                              </ConfirmButton>
-                              <div className="mt-1 text-xs text-gray-400">
-                                {intl.formatMessage(
-                                  messages.manageModalRemoveMediaWarning,
-                                  {
-                                    mediaType: intl.formatMessage(
-                                      mediaType === 'movie'
-                                        ? messages.movie
-                                        : messages.tvshow
-                                    ),
-                                    arr:
-                                      mediaType === 'movie'
-                                        ? 'Radarr'
-                                        : 'Sonarr',
-                                  }
-                                )}
-                              </div>
-                            </div>
-                          )}
                       </div>
                     )}
-                    {(safeServiceUrl4k ||
-                      safeTautulliUrl4k ||
-                      watchData?.data4k) && (
+                    {(safeTautulliUrl4k || watchData?.data4k) && (
                       <div className="flex flex-wrap items-start gap-2">
                         {(watchData?.data4k || safeTautulliUrl4k) && (
                           <div className="basis-full">
@@ -679,142 +468,8 @@ const ManageSlideOver = ({
                             )}
                           </div>
                         )}
-                        {safeServiceUrl4k && (
-                          <>
-                            <a
-                              href={safeServiceUrl4k}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-block"
-                            >
-                              <Button buttonType="ghost" buttonSize="standard">
-                                <ServerIcon />
-                                <span>
-                                  {intl.formatMessage(messages.openarr4k, {
-                                    arr:
-                                      mediaType === 'movie'
-                                        ? 'Radarr'
-                                        : 'Sonarr',
-                                  })}
-                                </span>
-                              </Button>
-                            </a>
-                            {isDefault4kService() && (
-                              <div className="flex min-w-0 flex-col items-start">
-                                <ConfirmButton
-                                  buttonSize="standard"
-                                  onClick={() => deleteMediaFile(true)}
-                                  confirmText={intl.formatMessage(
-                                    globalMessages.areyousure
-                                  )}
-                                >
-                                  <TrashIcon />
-                                  <span>
-                                    {intl.formatMessage(messages.removearr4k, {
-                                      arr:
-                                        mediaType === 'movie'
-                                          ? 'Radarr'
-                                          : 'Sonarr',
-                                    })}
-                                  </span>
-                                </ConfirmButton>
-                                <div className="mt-1 text-xs text-gray-400">
-                                  {intl.formatMessage(
-                                    messages.manageModalRemoveMediaWarning,
-                                    {
-                                      mediaType: intl.formatMessage(
-                                        mediaType === 'movie'
-                                          ? messages.movie
-                                          : messages.tvshow
-                                      ),
-                                      arr:
-                                        mediaType === 'movie'
-                                          ? 'Radarr'
-                                          : 'Sonarr',
-                                    }
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )}
                       </div>
                     )}
-                    {data.mediaInfo &&
-                      data.mediaInfo.status !== MediaStatus.BLOCKLISTED && (
-                        <div className="flex flex-wrap gap-2">
-                          {data?.mediaInfo.status !== MediaStatus.AVAILABLE && (
-                            <Button
-                              buttonSize="standard"
-                              onClick={() => markAvailable()}
-                              buttonType="success"
-                            >
-                              <CheckCircleIcon />
-                              <span>
-                                {intl.formatMessage(
-                                  mediaType === 'movie'
-                                    ? messages.markavailable
-                                    : messages.markallseasonsavailable
-                                )}
-                              </span>
-                            </Button>
-                          )}
-                          {data?.mediaInfo.status4k !== MediaStatus.AVAILABLE &&
-                            settings.currentSettings.series4kEnabled && (
-                              <Button
-                                buttonSize="standard"
-                                onClick={() => markAvailable(true)}
-                                buttonType="success"
-                              >
-                                <CheckCircleIcon />
-                                <span>
-                                  {intl.formatMessage(
-                                    mediaType === 'movie'
-                                      ? messages.mark4kavailable
-                                      : messages.markallseasons4kavailable
-                                  )}
-                                </span>
-                              </Button>
-                            )}
-                          <div className="flex min-w-0 basis-full flex-col items-start">
-                            <ConfirmButton
-                              buttonSize="standard"
-                              onClick={() => deleteMedia()}
-                              confirmText={intl.formatMessage(
-                                globalMessages.areyousure
-                              )}
-                            >
-                              <DocumentMinusIcon />
-                              <span>
-                                {intl.formatMessage(
-                                  messages.manageModalClearMedia
-                                )}
-                              </span>
-                            </ConfirmButton>
-                            <div className="mt-2 text-xs text-gray-400">
-                              {intl.formatMessage(
-                                messages.manageModalClearMediaWarning,
-                                {
-                                  mediaType: intl.formatMessage(
-                                    mediaType === 'movie'
-                                      ? messages.movie
-                                      : messages.tvshow
-                                  ),
-                                  mediaServerName:
-                                    settings.currentSettings.mediaServerType ===
-                                    MediaServerType.EMBY
-                                      ? 'Emby'
-                                      : settings.currentSettings
-                                            .mediaServerType ===
-                                          MediaServerType.PLEX
-                                        ? 'Plex'
-                                        : 'Jellyfin',
-                                }
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
                   </div>
                 </div>
               )}

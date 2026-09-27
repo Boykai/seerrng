@@ -1,5 +1,10 @@
 {
   "extends": "../tsconfig.json",
+  "ts-node": {
+    "compilerOptions": {
+      "allowJs": false
+    }
+  },
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",

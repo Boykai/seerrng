@@ -190,7 +190,7 @@ const ServerInstance = ({
   const serviceUrl = getSafeHref(externalUrl) ?? internalHref;
 
   return (
-    <li className="settings-service-card refreshed-inset-surface">
+    <li className="settings-service-card app-card-inset refreshed-inset-surface">
       <div className="settings-service-card-content">
         <a
           href={serviceUrl}
@@ -571,6 +571,7 @@ const SettingsServices = () => {
         <Modal
           okText={intl.formatMessage(globalMessages.delete)}
           okButtonType="danger"
+          okButtonProps={{ buttonIcon: 'delete' }}
           onOk={() => deleteServer()}
           onCancel={() =>
             setDeleteServerModal({
@@ -593,7 +594,7 @@ const SettingsServices = () => {
           {intl.formatMessage(messages.deleteserverconfirm)}
         </Modal>
       </Transition>
-      <div className="section settings-service-section">
+      <div className="app-card-sub section settings-service-section">
         {!radarrData && !radarrError && <LoadingSpinner />}
         {radarrData && !radarrError && (
           <>
@@ -682,7 +683,7 @@ const SettingsServices = () => {
           })}
         </p>
       </div>
-      <div className="section settings-service-section">
+      <div className="app-card-sub section settings-service-section">
         {!sonarrData && !sonarrError && <LoadingSpinner />}
         {sonarrData && !sonarrError && (
           <>
@@ -771,7 +772,7 @@ const SettingsServices = () => {
           })}
         </p>
       </div>
-      <div className="section settings-service-section">
+      <div className="app-card-sub section settings-service-section">
         {!lidarrData && !lidarrError && <LoadingSpinner />}
         {lidarrData && !lidarrError && (
           <>
@@ -834,7 +835,7 @@ const SettingsServices = () => {
           })}
         </p>
       </div>
-      <div className="section settings-service-section">
+      <div className="app-card-sub section settings-service-section">
         {!readarrData && !readarrError && <LoadingSpinner />}
         {readarrData && !readarrError && (
           <>
@@ -919,7 +920,7 @@ const SettingsServices = () => {
           })}
         </p>
       </div>
-      <div className="section settings-service-section">
+      <div className="app-card-sub section settings-service-section">
         {!mylarData && !mylarError && <LoadingSpinner />}
         {mylarData && !mylarError && (
           <>
@@ -983,7 +984,7 @@ const SettingsServices = () => {
           })}
         </p>
       </div>
-      <div className="section settings-service-section">
+      <div className="app-card-sub section settings-service-section">
         {!kapowarrData && !kapowarrError && <LoadingSpinner />}
         {kapowarrData && !kapowarrError && (
           <>
@@ -1035,7 +1036,7 @@ const SettingsServices = () => {
           {intl.formatMessage(messages.magazineServiceSettingsDescription)}
         </p>
       </div>
-      <div className="section settings-service-section">
+      <div className="app-card-sub section settings-service-section">
         {!lazyLibrarianData && !lazyLibrarianError && <LoadingSpinner />}
         {lazyLibrarianData && !lazyLibrarianError && (
           <>
@@ -1105,14 +1106,15 @@ const SettingsServices = () => {
           })}
         </p>
       </div>
-      <div className="section settings-service-section">
+      <div className="app-card-sub section settings-service-section">
         <ul className="settings-service-grid">
-          {rules && radarrData && sonarrData && lidarrData && (
+          {rules && radarrData && sonarrData && lidarrData && readarrData && (
             <OverrideRuleTiles
               rules={rules}
               radarrServices={radarrData}
               sonarrServices={sonarrData}
               lidarrServices={lidarrData}
+              readarrServices={readarrData}
               setOverrideRuleModal={setOverrideRuleModal}
               revalidate={revalidate}
             />
@@ -1120,21 +1122,26 @@ const SettingsServices = () => {
         </ul>
       </div>
       <SettingsSoftwareAcquisition />
-      {overrideRuleModal.open && radarrData && sonarrData && lidarrData && (
-        <OverrideRuleModal
-          rule={overrideRuleModal.rule}
-          onClose={() => {
-            setOverrideRuleModal({
-              open: false,
-              rule: null,
-            });
-            revalidate();
-          }}
-          radarrServices={radarrData}
-          sonarrServices={sonarrData}
-          lidarrServices={lidarrData}
-        />
-      )}
+      {overrideRuleModal.open &&
+        radarrData &&
+        sonarrData &&
+        lidarrData &&
+        readarrData && (
+          <OverrideRuleModal
+            rule={overrideRuleModal.rule}
+            onClose={() => {
+              setOverrideRuleModal({
+                open: false,
+                rule: null,
+              });
+              revalidate();
+            }}
+            radarrServices={radarrData}
+            sonarrServices={sonarrData}
+            lidarrServices={lidarrData}
+            readarrServices={readarrData}
+          />
+        )}
     </>
   );
 };

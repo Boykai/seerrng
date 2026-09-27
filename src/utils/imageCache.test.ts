@@ -12,6 +12,17 @@ import {
 } from './imageCache';
 
 describe('poster artwork identity', () => {
+  it('caches original artist portraits through the bounded Fanart proxy', () => {
+    const src = 'https://assets.fanart.tv/fanart/madonna.jpg';
+    assert.equal(
+      getImageCacheUrl({ cacheImages: true, src, type: 'music' }),
+      '/imageproxy/fanart/fanart/madonna.jpg'
+    );
+    assert.equal(
+      getImageCacheUrl({ cacheImages: false, src, type: 'music' }),
+      src
+    );
+  });
   it('uses the same base URL for cards and compatible detail variants', () => {
     const path = '/poster.jpg?version=2';
     assert.equal(

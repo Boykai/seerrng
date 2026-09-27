@@ -214,7 +214,7 @@ const MagazineRequestModal = ({
         cancelText={intl.formatMessage(messages.close)}
         cancelButtonType="default"
       >
-        <div className="refreshed-inset-surface rounded-lg border border-gray-700 p-3">
+        <div className="app-card-inset refreshed-inset-surface rounded-lg border border-gray-700 p-3">
           {isOwner
             ? intl.formatMessage(messages.pendingApproval)
             : intl.formatMessage(messages.requestFrom, {
@@ -233,7 +233,7 @@ const MagazineRequestModal = ({
       hideActions
       alignTop
       title={intl.formatMessage(messages.requestMagazine)}
-      dialogClass="request-modal-site-surface sm:max-w-5xl"
+      dialogClass="app-card-main request-modal-site-surface sm:max-w-5xl"
     >
       {(quota?.magazine?.limit ?? 0) > 0 && (
         <QuotaDisplay mediaType="magazine" quota={quota?.magazine} />

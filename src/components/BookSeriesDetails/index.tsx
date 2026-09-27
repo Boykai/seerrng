@@ -1,65 +1,65 @@
+import AuthorWorkCard, {
+  getBookFormatState,
+} from '@app/components/AuthorDetails/AuthorWorkCard';
+import BookSeriesSummaryCard from '@app/components/BookSeriesDetails/BookSeriesSummaryCard';
+import CollectionAssociationsButton from '@app/components/CollectionDetails/CollectionAssociationsButton';
 import Alert from '@app/components/Common/Alert';
-import Button from '@app/components/Common/Button';
-import CachedImage from '@app/components/Common/CachedImage';
-import Header from '@app/components/Common/Header';
+import FormatRequestControl from '@app/components/Common/FormatRequestControl';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
-import AvailabilityValue from '@app/components/MediaDetails/AvailabilityValue';
+import ThreeItemScroll from '@app/components/Common/ThreeItemScroll';
+import {
+  CompactRatingSelect,
+  CompactSelect,
+  FilterResetButton,
+  type CompactSelectOption,
+  type RatingOption,
+} from '@app/components/Discover/FilterPanel/CompactFilterSelect';
+import {
+  BOOK_GENRES,
+  BOOK_LANGUAGES,
+} from '@app/components/Discover/FilterPanel/libraryFilterUtils';
+import MediaFilterOption from '@app/components/Discover/MediaFilterOption';
+import MediaDetailArtwork from '@app/components/MediaDetails/MediaDetailArtwork';
 import BulkRequestModal from '@app/components/RequestModal/BulkRequestModal';
+import useMediaFilterPin from '@app/hooks/useMediaFilterPin';
 import { Permission, useUser } from '@app/hooks/useUser';
 import ErrorPage from '@app/pages/_error';
 import { encodeApiPathSegment } from '@app/utils/apiPath';
 import defineMessages from '@app/utils/defineMessages';
-import { ArrowDownTrayIcon } from '@heroicons/react/24/solid';
-import { MediaRequestStatus } from '@server/constants/media';
+import {
+  BookOpenIcon,
+  SpeakerWaveIcon,
+  Squares2X2Icon,
+} from '@heroicons/react/24/outline';
+import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
 import type {
   BookResult,
   BookSeriesDetails as BookSeriesDetailsType,
 } from '@server/models/Book';
-import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useMemo, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 const messages = defineMessages('components.BookSeriesDetails', {
-  volumes: '{count} volumes',
-  requestMissing: 'Request Missing Books',
-  volume: 'Volume {position}',
-  ebook: 'Book',
-  audiobook: 'Audiobook',
-  available: 'Available',
-  requested: 'Requested',
-  missing: 'Missing',
-  descriptionUnavailable:
-    'Series information comes from the configured Bookshelf catalog.',
-  noVolumes: 'No catalog volumes were found for this series.',
+  collection: 'Collection',
+  requestCollection: 'Request Collection',
+  mediaType: 'Media Type',
+  allBooks: 'All Books',
+  books: 'Books',
+  audiobooks: 'Audiobooks',
+  clearFilters: 'Clear Filters',
+  firstPublished: 'First Published',
+  genres: 'Genres',
+  rating: 'Rating',
+  language: 'Language',
+  any: 'Any',
+  empty: 'No books match the current filters.',
 });
 
-type BookFormat = 'ebook' | 'audiobook';
-
-const hasAvailableFormat = (book: BookResult, format: BookFormat) => {
-  const media = book.mediaInfo;
-  if (!media) return false;
-  return format === 'ebook'
-    ? media.serviceId !== null &&
-        media.serviceId !== undefined &&
-        media.externalServiceId !== null &&
-        media.externalServiceId !== undefined
-    : media.audiobookServiceId !== null &&
-        media.audiobookServiceId !== undefined &&
-        media.audiobookExternalServiceId !== null &&
-        media.audiobookExternalServiceId !== undefined;
-};
-
-const hasRequestedFormat = (book: BookResult, format: BookFormat) =>
-  book.mediaInfo?.requests?.some(
-    (request) =>
-      ((request.bookFormat ?? 'ebook') === format ||
-        request.bookFormat === 'both') &&
-      (request.status === MediaRequestStatus.PENDING ||
-        request.status === MediaRequestStatus.APPROVED)
-  ) ?? false;
+type DisplayFormat = 'all' | 'ebook' | 'audiobook';
+const displayFormats: readonly DisplayFormat[] = ['all', 'ebook', 'audiobook'];
 
 const normalizeSeriesTitle = (title: string) =>
   title
@@ -69,54 +69,92 @@ const normalizeSeriesTitle = (title: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const getFormatState = (book: BookResult, format: BookFormat) => {
-  if (hasAvailableFormat(book, format)) return 'available';
-  if (hasRequestedFormat(book, format)) return 'requested';
-  return 'missing';
+const sortSeriesBooks = (books: BookResult[], title: string) => {
+  const seriesTitle = normalizeSeriesTitle(title);
+  return [...books].sort((left, right) => {
+    const position = (book: BookResult) =>
+      Number(
+        book.series?.find(
+          (series) => normalizeSeriesTitle(series.title) === seriesTitle
+        )?.position
+      );
+    const leftPosition = position(left);
+    const rightPosition = position(right);
+    const leftHasPosition = Number.isFinite(leftPosition);
+    const rightHasPosition = Number.isFinite(rightPosition);
+    if (leftHasPosition && rightHasPosition && leftPosition !== rightPosition) {
+      return leftPosition - rightPosition;
+    }
+    if (leftHasPosition !== rightHasPosition) return leftHasPosition ? -1 : 1;
+    return left.title.localeCompare(right.title, undefined, { numeric: true });
+  });
 };
 
 const BookSeriesDetails = ({ series }: { series?: BookSeriesDetailsType }) => {
   const intl = useIntl();
   const router = useRouter();
   const { hasPermission } = useUser();
-  const [showBulkRequestModal, setShowBulkRequestModal] = useState(false);
   const seriesId =
     typeof router.query.seriesId === 'string' ? router.query.seriesId : '';
+  const [showRequest, setShowRequest] = useState(false);
+  const [requestFormat, setRequestFormat] = useState<'ebook' | 'audiobook'>(
+    'ebook'
+  );
+  const [displayFormat, setDisplayFormat] = useState<DisplayFormat>('all');
+  const [firstPublished, setFirstPublished] = useState('');
+  const [genre, setGenre] = useState('');
+  const [rating, setRating] = useState('');
+  const [language, setLanguage] = useState('');
+  const pin = useMediaFilterPin<DisplayFormat>({
+    scope: 'books',
+    selected: displayFormat,
+    values: displayFormats,
+    restore: setDisplayFormat,
+  });
   const { data, error, mutate } = useSWR<BookSeriesDetailsType>(
     seriesId ? `/api/v1/series/${encodeApiPathSegment(seriesId)}` : null,
     { fallbackData: series }
   );
+  const { data: bookServices } = useSWR<ServiceCommonServer[]>(
+    '/api/v1/service/readarr'
+  );
 
-  const sortedBooks = useMemo(() => {
-    const books = [...(data?.books ?? [])];
-    const seriesTitle = normalizeSeriesTitle(data?.title ?? '');
-    return books.sort((left, right) => {
-      const leftPosition = Number(
-        left.series?.find(
-          (series) => normalizeSeriesTitle(series.title) === seriesTitle
-        )?.position
-      );
-      const rightPosition = Number(
-        right.series?.find(
-          (series) => normalizeSeriesTitle(series.title) === seriesTitle
-        )?.position
-      );
-      const leftHasPosition = Number.isFinite(leftPosition);
-      const rightHasPosition = Number.isFinite(rightPosition);
-      if (
-        leftHasPosition &&
-        rightHasPosition &&
-        leftPosition !== rightPosition
-      ) {
-        return leftPosition - rightPosition;
-      }
-      if (leftHasPosition !== rightHasPosition) return leftHasPosition ? -1 : 1;
-      return left.title.localeCompare(right.title, undefined, {
-        numeric: true,
-      });
-    });
-  }, [data?.books, data?.title]);
-
+  const sortedBooks = useMemo(
+    () => sortSeriesBooks(data?.books ?? [], data?.title ?? ''),
+    [data?.books, data?.title]
+  );
+  const visibleBooks = useMemo(
+    () =>
+      sortedBooks.filter((book) => {
+        if (displayFormat !== 'all') {
+          const ebook = getBookFormatState(book, 'ebook') !== 'unavailable';
+          const audio = getBookFormatState(book, 'audiobook') !== 'unavailable';
+          if (displayFormat === 'ebook' ? !ebook && audio : !audio && ebook) {
+            return false;
+          }
+        }
+        if (
+          firstPublished &&
+          (firstPublished === 'before-1970'
+            ? !book.firstPublishYear || book.firstPublishYear >= 1970
+            : book.firstPublishYear?.toString() !== firstPublished)
+        ) {
+          return false;
+        }
+        if (
+          genre &&
+          !book.subjects?.some((subject) =>
+            subject.toLowerCase().includes(genre.replace(/_/g, ' '))
+          )
+        ) {
+          return false;
+        }
+        if (rating && (book.ratingsAverage ?? 0) < Number(rating)) return false;
+        if (language && !book.languages?.includes(language)) return false;
+        return true;
+      }),
+    [displayFormat, firstPublished, genre, language, rating, sortedBooks]
+  );
   const bulkItems = useMemo(
     () =>
       sortedBooks.map((book) => ({
@@ -129,6 +167,9 @@ const BookSeriesDetails = ({ series }: { series?: BookSeriesDetailsType }) => {
         editionId: book.editionId,
         authorId: book.authorId,
         mediaInfo: book.mediaInfo,
+        subjects: book.subjects,
+        languages: book.languages,
+        ratingsAverage: book.ratingsAverage,
       })),
     [sortedBooks]
   );
@@ -136,163 +177,194 @@ const BookSeriesDetails = ({ series }: { series?: BookSeriesDetailsType }) => {
   if (!data && !error) return <LoadingSpinner />;
   if (!data) return <ErrorPage statusCode={404} />;
 
+  const yearOptions: CompactSelectOption[] = [
+    { label: intl.formatMessage(messages.any), value: '' },
+    ...Array.from({ length: new Date().getFullYear() - 1969 }, (_, index) => {
+      const year = new Date().getFullYear() - index;
+      return { label: year.toString(), value: year.toString() };
+    }),
+    { label: '<1970', value: 'before-1970' },
+  ];
+  const genreOptions: CompactSelectOption[] = [
+    { label: intl.formatMessage(messages.any), value: '' },
+    ...BOOK_GENRES.map(([value, label]) => ({ value, label })),
+  ];
+  const ratingOptions: RatingOption[] = [
+    { label: intl.formatMessage(messages.any), value: '' },
+    ...Array.from({ length: 9 }, (_, index) => {
+      const score = 1 + index * 0.5;
+      return { label: score.toFixed(1) + '+', value: score.toFixed(1), score };
+    }),
+  ];
+  const languageOptions: CompactSelectOption[] = [
+    { label: intl.formatMessage(messages.any), value: '' },
+    ...BOOK_LANGUAGES.map(([value, label]) => ({ value, label })),
+  ];
+  const hasEbookServer = (bookServices ?? []).some(
+    (service) => (service.serviceType ?? 'ebook') === 'ebook'
+  );
+  const hasAudiobookServer = (bookServices ?? []).some(
+    (service) => service.serviceType === 'audiobook'
+  );
   const canRequest = hasPermission(
     [Permission.REQUEST, Permission.REQUEST_BOOK],
     { type: 'or' }
   );
-  const availableCounts = {
-    ebook: sortedBooks.filter((book) => hasAvailableFormat(book, 'ebook'))
-      .length,
-    audiobook: sortedBooks.filter((book) =>
-      hasAvailableFormat(book, 'audiobook')
-    ).length,
-  };
-  const formatLabel = (format: BookFormat) =>
-    intl.formatMessage(
-      format === 'ebook' ? messages.ebook : messages.audiobook
-    );
-  const formatStateLabel = (state: ReturnType<typeof getFormatState>) =>
-    intl.formatMessage(
-      state === 'available'
-        ? messages.available
-        : state === 'requested'
-          ? messages.requested
-          : messages.missing
-    );
 
   return (
     <>
-      <PageTitle title={data.title} />
-      {showBulkRequestModal && (
+      <PageTitle title={`${data.title} Collection`} />
+      {showRequest && (
         <BulkRequestModal
-          show={showBulkRequestModal}
+          show={showRequest}
           mediaType="book"
+          seriesId={data.id}
           title={data.title}
+          initialBookFormat={requestFormat}
           initialItems={bulkItems}
           initialTotalItems={bulkItems.length}
-          onCancel={() => setShowBulkRequestModal(false)}
+          onCancel={() => setShowRequest(false)}
           onComplete={() => {
-            setShowBulkRequestModal(false);
+            setShowRequest(false);
             void mutate();
           }}
         />
       )}
-      <main className="media-page">
-        <Header
-          subtext={intl.formatMessage(messages.volumes, {
-            count: intl.formatNumber(sortedBooks.length),
-          })}
-        >
-          {data.title}
-        </Header>
-        <div className="refreshed-card-surface mb-4 flex flex-col gap-4 rounded-xl border border-gray-700 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm text-gray-200">
-              {data.description ||
-                intl.formatMessage(messages.descriptionUnavailable)}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-300">
-              <span>
-                {formatLabel('ebook')}: {availableCounts.ebook}/
-                {sortedBooks.length} {intl.formatMessage(messages.available)}
-              </span>
-              <span>
-                {formatLabel('audiobook')}: {availableCounts.audiobook}/
-                {sortedBooks.length} {intl.formatMessage(messages.available)}
-              </span>
-            </div>
-          </div>
-          {canRequest && sortedBooks.length > 0 && (
-            <Button
-              buttonType="primary"
-              onClick={() => setShowBulkRequestModal(true)}
-            >
-              <ArrowDownTrayIcon />
-              <span>{intl.formatMessage(messages.requestMissing)}</span>
-            </Button>
-          )}
-        </div>
-
-        {sortedBooks.length === 0 ? (
-          <Alert type="info">{intl.formatMessage(messages.noVolumes)}</Alert>
-        ) : (
-          <ol className="space-y-2">
-            {sortedBooks.map((book, index) => {
-              const position = book.series?.find(
-                (series) =>
-                  normalizeSeriesTitle(series.title) ===
-                  normalizeSeriesTitle(data.title)
-              )?.position;
-              const ebookState = getFormatState(book, 'ebook');
-              const audioState = getFormatState(book, 'audiobook');
-
-              return (
-                <li
-                  key={book.id}
-                  className="refreshed-card-surface grid grid-cols-[44px_minmax(0,1fr)] gap-3 rounded-xl border border-gray-700 p-3 sm:grid-cols-[56px_minmax(0,1fr)_minmax(220px,0.8fr)] sm:items-center"
-                >
-                  <div className="relative h-16 w-11 overflow-hidden rounded-md ring-1 ring-gray-700 sm:h-20 sm:w-14">
-                    <CachedImage
-                      type="book"
-                      src={
-                        book.posterPath || '/images/seerr_poster_not_found.png'
-                      }
-                      alt=""
-                      fill
-                      sizes="56px"
-                      className="object-cover"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold tracking-wide text-blue-200">
-                      {position
-                        ? intl.formatMessage(messages.volume, { position })
-                        : intl.formatNumber(index + 1)}
-                    </div>
-                    <Link
-                      href={`/book/${encodeApiPathSegment(book.id)}`}
-                      className="mt-1 block truncate text-base font-semibold text-white hover:text-blue-200 hover:underline focus:ring-2 focus:ring-blue-400 focus:outline-none"
-                    >
-                      {book.title}
-                    </Link>
-                    {book.author && (
-                      <div className="refreshed-detail-text-muted mt-0.5 truncate text-sm">
-                        {book.author}
-                      </div>
-                    )}
-                  </div>
-                  <dl className="col-span-2 grid grid-cols-2 gap-2 pl-[56px] text-xs sm:col-span-1 sm:pl-0">
-                    {(['ebook', 'audiobook'] as const).map((format) => {
-                      const state =
-                        format === 'ebook' ? ebookState : audioState;
-                      return (
-                        <div key={format} className="min-w-0">
-                          <dt className="mb-1 font-medium text-gray-300">
-                            {formatLabel(format)}
-                          </dt>
-                          <dd className="m-0">
-                            <AvailabilityValue
-                              tone={
-                                state === 'available'
-                                  ? 'available'
-                                  : state === 'requested'
-                                    ? 'processing'
-                                    : 'unavailable'
-                              }
-                            >
-                              {formatStateLabel(state)}
-                            </AvailabilityValue>
-                          </dd>
-                        </div>
-                      );
-                    })}
-                  </dl>
-                </li>
-              );
-            })}
-          </ol>
+      <article className="media-detail-card app-card-main refreshed-card-surface refreshed-detail-text relative overflow-hidden rounded-xl border border-gray-700 p-3 shadow-lg shadow-gray-950/20">
+        {sortedBooks[0]?.posterPath && (
+          <MediaDetailArtwork type="book" src={sortedBooks[0].posterPath} />
         )}
-      </main>
+        <div className="card-stack relative z-10">
+          <BookSeriesSummaryCard
+            seriesId={data.id}
+            title={data.title}
+            initialData={data}
+            standalone
+          />
+          <div className="media-primary-action-row">
+            <nav
+              aria-label={intl.formatMessage(messages.mediaType)}
+              className="flex flex-wrap gap-2"
+            >
+              {displayFormats.map((value) => {
+                const label = intl.formatMessage(
+                  value === 'all'
+                    ? messages.allBooks
+                    : value === 'ebook'
+                      ? messages.books
+                      : messages.audiobooks
+                );
+                const Icon =
+                  value === 'all'
+                    ? Squares2X2Icon
+                    : value === 'ebook'
+                      ? BookOpenIcon
+                      : SpeakerWaveIcon;
+                return (
+                  <MediaFilterOption
+                    key={value}
+                    pin={pin}
+                    value={value}
+                    label={label}
+                    selected={displayFormat === value}
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={displayFormat === value}
+                      onClick={() => setDisplayFormat(value)}
+                      className="flex h-full items-center gap-1.5 px-2"
+                    >
+                      <Icon className="h-4 w-4" aria-hidden="true" />
+                      <span>{label}</span>
+                    </button>
+                  </MediaFilterOption>
+                );
+              })}
+            </nav>
+            <CollectionAssociationsButton
+              parts={sortedBooks}
+              mediaType="book"
+            />
+            {canRequest && sortedBooks.length > 0 && (
+              <FormatRequestControl
+                label={intl.formatMessage(messages.requestCollection)}
+                options={(
+                  [
+                    ['ebook', messages.books, hasEbookServer],
+                    ['audiobook', messages.audiobooks, hasAudiobookServer],
+                  ] as const
+                ).map(([value, label, enabled]) => ({
+                  id: value,
+                  label: intl.formatMessage(label),
+                  disabled: !enabled,
+                  onClick: () => {
+                    setRequestFormat(value);
+                    setShowRequest(true);
+                  },
+                }))}
+              />
+            )}
+          </div>
+          <div className="card-spacing-before flex flex-wrap gap-2">
+            <FilterResetButton
+              label={intl.formatMessage(messages.clearFilters)}
+              selected={!firstPublished && !genre && !rating && !language}
+              onClick={() => {
+                setFirstPublished('');
+                setGenre('');
+                setRating('');
+                setLanguage('');
+              }}
+            />
+            <CompactSelect
+              label={intl.formatMessage(messages.firstPublished)}
+              value={firstPublished}
+              options={yearOptions}
+              onChange={setFirstPublished}
+            />
+            <CompactSelect
+              label={intl.formatMessage(messages.genres)}
+              value={genre}
+              options={genreOptions}
+              onChange={setGenre}
+            />
+            <CompactRatingSelect
+              label={intl.formatMessage(messages.rating)}
+              value={rating}
+              options={ratingOptions}
+              maxScore={5}
+              onChange={setRating}
+            />
+            <CompactSelect
+              label={intl.formatMessage(messages.language)}
+              value={language}
+              options={languageOptions}
+              onChange={setLanguage}
+            />
+          </div>
+          <section className="card-spacing-before">
+            <h2 className="slider-title">
+              {intl.formatMessage(messages.collection)}
+              <span className="refreshed-detail-text-muted ml-2 text-sm">
+                ({visibleBooks.length})
+              </span>
+            </h2>
+            {visibleBooks.length > 0 ? (
+              <ThreeItemScroll label={intl.formatMessage(messages.collection)}>
+                {visibleBooks.map((book) => (
+                  <AuthorWorkCard
+                    key={book.id}
+                    work={book}
+                    author={book.author ?? ''}
+                  />
+                ))}
+              </ThreeItemScroll>
+            ) : (
+              <Alert type="info">{intl.formatMessage(messages.empty)}</Alert>
+            )}
+          </section>
+        </div>
+      </article>
     </>
   );
 };

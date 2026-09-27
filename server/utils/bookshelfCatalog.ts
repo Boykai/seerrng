@@ -13,6 +13,7 @@ import type {
   BookSeriesDetails,
   BookSeriesReference,
 } from '@server/models/Book';
+import { matchesAllSearchTerms } from '@server/utils/searchTerms';
 
 export const BOOKSHELF_BOOK_ID_PREFIX = 'bookshelf:';
 export const BOOKSHELF_AUTHOR_ID_PREFIX = 'bookshelf-author:';
@@ -114,7 +115,7 @@ export const parseBookshelfBookId = (
   const match = value.match(/^bookshelf:(\d{1,10}):([A-Za-z0-9_-]{1,2048})$/);
   if (!match) return undefined;
   const serviceId = Number(match[1]);
-  if (!Number.isSafeInteger(serviceId) || serviceId <= 0) return undefined;
+  if (!Number.isSafeInteger(serviceId) || serviceId < 0) return undefined;
   try {
     const foreignBookId = Buffer.from(match[2], 'base64url').toString('utf8');
     return foreignBookId && foreignBookId.length <= 1024
@@ -149,7 +150,7 @@ export const parseBookshelfAuthorId = (
   );
   if (!match) return undefined;
   const serviceId = Number(match[1]);
-  if (!Number.isSafeInteger(serviceId) || serviceId <= 0) return undefined;
+  if (!Number.isSafeInteger(serviceId) || serviceId < 0) return undefined;
   try {
     const payload = JSON.parse(
       Buffer.from(match[2], 'base64url').toString('utf8')
@@ -180,7 +181,7 @@ export const parseBookshelfSeriesId = (
   );
   if (!match) return undefined;
   const serviceId = Number(match[1]);
-  if (!Number.isSafeInteger(serviceId) || serviceId <= 0) return undefined;
+  if (!Number.isSafeInteger(serviceId) || serviceId < 0) return undefined;
   try {
     const title = Buffer.from(match[2], 'base64url').toString('utf8').trim();
     const authorId = match[3] ? Number(match[3]) : undefined;
@@ -343,6 +344,9 @@ export const mapBookshelfBook = (
   const image = result.images?.find(
     (entry) => entry.coverType?.toLowerCase() === 'cover'
   );
+  const subjects = [...(result.genres ?? []), ...(result.subjects ?? [])]
+    .map((subject) => subject.trim())
+    .filter(Boolean);
   return {
     id: makeBookshelfBookId(serviceId, result.foreignBookId),
     provider: 'bookshelf',
@@ -366,6 +370,10 @@ export const mapBookshelfBook = (
     isbnCandidates,
     editionId:
       result.foreignEditionId ?? result.editions?.[0]?.foreignEditionId,
+    subjects: subjects.length ? [...new Set(subjects)] : undefined,
+    languages: result.languages?.length ? result.languages : undefined,
+    ratingsAverage: result.ratingsAverage,
+    ratingsCount: result.ratingsCount,
     series,
     audiobookDuration,
     narrators: narrators?.length ? [...new Set(narrators)] : undefined,
@@ -566,9 +574,45 @@ export const searchBookshelfCatalogs = async (
   return [...deduped.values()];
 };
 
+export const searchBookshelfNarrators = async (
+  servers: ReadarrSettings[],
+  narrator: string
+): Promise<BookResult[]> => {
+  const audiobookServers = servers.filter(
+    (server) => server.serviceType === 'audiobook'
+  );
+  if (!audiobookServers.length) return [];
+
+  const responses = await Promise.allSettled(
+    audiobookServers.map(async (server) => {
+      const books = await getApi(server).getBooks();
+      return books
+        .filter((book) => book.foreignBookId)
+        .map((book) => mapBookshelfBook(book, server.id))
+        .filter(
+          (book) =>
+            book.narrators?.length &&
+            matchesAllSearchTerms(book.narrators, narrator)
+        );
+    })
+  );
+  if (responses.every((response) => response.status === 'rejected')) {
+    throw new Error('Configured audiobook catalogs are unavailable.');
+  }
+
+  const deduped = new Map<string, BookResult>();
+  for (const response of responses) {
+    if (response.status === 'fulfilled') {
+      for (const book of response.value) deduped.set(book.id, book);
+    }
+  }
+  return [...deduped.values()];
+};
+
 export const getBookshelfBookDetails = async (
   servers: ReadarrSettings[],
-  id: string
+  id: string,
+  lookupTitle?: string
 ): Promise<BookDetails | undefined> => {
   const parsed = parseBookshelfBookId(id);
   if (!parsed) return undefined;
@@ -579,16 +623,33 @@ export const getBookshelfBookDetails = async (
     const providerLookupId = /^\d+$/.test(parsed.foreignBookId)
       ? `work:${parsed.foreignBookId}`
       : undefined;
+    const providerIds = /^\d+$/.test(parsed.foreignBookId)
+      ? [
+          parsed.foreignBookId,
+          `hardcover:${parsed.foreignBookId}`,
+          `metadata-api:${parsed.foreignBookId}`,
+        ]
+      : [parsed.foreignBookId];
     let result: ReadarrBookLookupResult | undefined;
-    for (const term of [...new Set([providerLookupId, parsed.foreignBookId])]) {
+    for (const term of [
+      ...new Set([providerLookupId, lookupTitle, ...providerIds]),
+    ]) {
       if (!term?.trim()) continue;
-      const candidates = await api.lookupBook(term);
-      result = candidates.find(
-        (candidate) => candidate.foreignBookId === parsed.foreignBookId
+      let candidates: ReadarrBookLookupResult[];
+      try {
+        candidates = await api.lookupBook(term);
+      } catch {
+        continue;
+      }
+      result = candidates.find((candidate) =>
+        providerIds.includes(candidate.foreignBookId)
       );
       if (result) break;
     }
     if (!result) return undefined;
+    if (result.foreignBookId !== parsed.foreignBookId) {
+      result = { ...result, foreignBookId: parsed.foreignBookId };
+    }
     const base = mapBookshelfBook(result, server.id);
     const editions = result.editions ?? [];
     const description = (

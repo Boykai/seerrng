@@ -1,8 +1,12 @@
 import CoverArtArchive from '@server/api/coverartarchive';
+import Discogs from '@server/api/discogs';
 import ListenBrainzAPI from '@server/api/listenbrainz';
 import type { LbAlbumDetails } from '@server/api/listenbrainz/interfaces';
 import MusicBrainz from '@server/api/musicbrainz';
-import type { MbAlbumDetails } from '@server/api/musicbrainz/interfaces';
+import type {
+  MbAlbumDetails,
+  MbLink,
+} from '@server/api/musicbrainz/interfaces';
 import LidarrAPI from '@server/api/servarr/lidarr';
 import TheAudioDb from '@server/api/theaudiodb';
 import TmdbPersonMapper from '@server/api/themoviedb/personMapper';
@@ -43,6 +47,7 @@ import { Router } from 'express';
 import { In } from 'typeorm';
 
 const musicRoutes = Router();
+const discogsRatings = new Discogs();
 const MAX_MUSICBRAINZ_ID_LENGTH = 128;
 const MAX_PAGE = 500;
 export const MAX_ALBUM_MEDIA = 50;
@@ -205,16 +210,31 @@ const mapMusicBrainzReleaseGroupToListenBrainzAlbum = (
       },
     },
     type: album['primary-type'] ?? 'Album',
+    secondaryTypes: album['secondary-types'] ?? [],
   };
 };
 
-const getAlbumDetails = async (
+export const getAlbumDetails = async (
   mbId: string,
   listenbrainz: ListenBrainzAPI,
   musicbrainz: MusicBrainz
 ) => {
   try {
-    return await listenbrainz.getAlbum(mbId);
+    const details = await listenbrainz.getAlbum(mbId);
+    // ListenBrainz's type alone omits release-group secondary types.
+    // Keep the richer track data, but use the same taxonomy as collections.
+    const releaseGroup = await musicbrainz
+      .getReleaseGroupDetails({
+        releaseGroupId: mbId,
+      })
+      .catch(() => null);
+    return releaseGroup
+      ? {
+          ...details,
+          type: releaseGroup['primary-type'] ?? details.type,
+          secondaryTypes: releaseGroup['secondary-types'] ?? [],
+        }
+      : details;
   } catch (error) {
     logger.warn('ListenBrainz album details unavailable; using MusicBrainz', {
       label: 'Music API',
@@ -252,11 +272,37 @@ musicRoutes.get('/:id/rating', async (req, res) => {
     return res.status(404).json({ status: 404, message: 'Album not found' });
   }
 
+  const failedSources = new Set<
+    NonNullable<MusicRatingResponse['rating']>['source']
+  >();
+  let links: MbLink[] = [];
+  const audioTask = new TheAudioDb()
+    .getAlbumRating(parsedMbId.value)
+    .catch(() => {
+      failedSources.add('theaudiodb');
+      return undefined;
+    });
+  const respond = async (rating?: MusicRatingResponse['rating']) => {
+    const [audio, discogs] = await Promise.all([
+      audioTask,
+      discogsRatings.getAlbumRating(links).catch(() => {
+        failedSources.add('discogs');
+        return undefined;
+      }),
+    ]);
+    return res.status(200).json({
+      rating,
+      ratings: [rating, audio, discogs].filter(Boolean),
+      failedSources: [...failedSources],
+    });
+  };
+
   try {
     const album = await new MusicBrainz().getReleaseGroupDetails({
       releaseGroupId: parsedMbId.value,
     });
-    if (album.rating) {
+    links = album.links ?? [];
+    if (album.rating && album.rating['votes-count'] > 0) {
       const response: MusicRatingResponse = {
         rating: {
           score: Math.round(album.rating.value * 20) / 10,
@@ -267,9 +313,11 @@ musicRoutes.get('/:id/rating', async (req, res) => {
           source: 'musicbrainz',
         },
       };
-      return res.status(200).json(response);
+      return respond(response.rating);
     }
   } catch (e) {
+    failedSources.add('musicbrainz');
+    failedSources.add('discogs');
     logger.warn('MusicBrainz album rating unavailable', {
       label: 'Music API',
       errorMessage: e instanceof Error ? e.message : 'Unknown error',
@@ -281,11 +329,12 @@ musicRoutes.get('/:id/rating', async (req, res) => {
     const media = await getRepository(Media).findOne({
       where: { mbId: parsedMbId.value, mediaType: MediaType.MUSIC },
     });
-    const service = media?.serviceId
-      ? getExternalRuntimeConfig().lidarr.find(
-          (candidate) => candidate.id === media.serviceId
-        )
-      : undefined;
+    const service =
+      media?.serviceId !== undefined && media?.serviceId !== null
+        ? getExternalRuntimeConfig().lidarr.find(
+            (candidate) => candidate.id === media.serviceId
+          )
+        : undefined;
     if (service && media?.externalServiceId) {
       const album = await runWithServarrServiceSnapshot(
         'lidarr',
@@ -303,23 +352,22 @@ musicRoutes.get('/:id/rating', async (req, res) => {
         ratings.value >= 0 &&
         ratings.value <= 10 &&
         Number.isSafeInteger(ratings.votes) &&
-        ratings.votes >= 0
+        ratings.votes > 0
       ) {
-        return res.status(200).json({
-          rating: {
-            score: Math.round(ratings.value * 10) / 10,
-            votes: ratings.votes,
-            url:
-              service.externalUrl ||
-              `https://musicbrainz.org/release-group/${encodeURIComponent(
-                parsedMbId.value
-              )}`,
-            source: 'lidarr',
-          },
-        } satisfies MusicRatingResponse);
+        return respond({
+          score: Math.round(ratings.value * 10) / 10,
+          votes: ratings.votes,
+          url:
+            service.externalUrl ||
+            `https://musicbrainz.org/release-group/${encodeURIComponent(
+              parsedMbId.value
+            )}`,
+          source: 'lidarr',
+        });
       }
     }
   } catch (e) {
+    failedSources.add('lidarr');
     logger.warn('Lidarr album rating unavailable', {
       label: 'Music API',
       errorMessage: e instanceof Error ? e.message : 'Unknown error',
@@ -327,7 +375,35 @@ musicRoutes.get('/:id/rating', async (req, res) => {
     });
   }
 
-  return res.status(200).json({} satisfies MusicRatingResponse);
+  return respond();
+});
+
+musicRoutes.get('/:id/artwork', async (req, res, next) => {
+  const parsed = normalizeParsedMusicBrainzId(
+    parseMusicBrainzId(req.params.id)
+  );
+  if ('error' in parsed || !parsed.value) return res.sendStatus(400);
+  try {
+    const covers = new CoverArtArchive();
+    const response = await covers.getCoverArt(parsed.value);
+    const posterPath =
+      response.images.find((image) => image.front)?.thumbnails?.[250] ?? null;
+    // Do not turn an upstream timeout into a permanent "no artwork" result.
+    if (
+      !posterPath &&
+      (await covers.getCoverArtFromCache(parsed.value)) === undefined
+    ) {
+      return res
+        .status(503)
+        .json({ message: 'Artwork is temporarily unavailable.' });
+    }
+    return res.json({ posterPath });
+  } catch {
+    return next({
+      status: 503,
+      message: 'Artwork is temporarily unavailable.',
+    });
+  }
 });
 
 musicRoutes.get('/:id', async (req, res, next) => {

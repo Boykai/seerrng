@@ -2,11 +2,12 @@ import Tooltip from '@app/components/Common/Tooltip';
 import { getFilterToggleButtonClass } from '@app/components/Discover/FilterPanel/CompactFilterSelect';
 import useCardTextVisibility from '@app/hooks/useCardTextVisibility';
 import defineMessages from '@app/utils/defineMessages';
-import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { Bars3BottomLeftIcon } from '@heroicons/react/24/outline';
 import type { UserSettingsCardTextResponse } from '@server/interfaces/api/userSettingsInterfaces';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.Common.CardTextVisibilityToggle', {
+  titleView: 'Title View',
   showText: 'Always show titles',
   hideText: 'Only show titles on hover',
 });
@@ -35,8 +36,9 @@ const CardTextVisibilityToggle = ({
     <Tooltip content={label}>
       <button
         type="button"
-        className={`${getFilterToggleButtonClass(isAlwaysVisible)} w-5 p-0 ${className}`}
-        aria-label={label}
+        className={`${getFilterToggleButtonClass(isAlwaysVisible)} ${className}`}
+        aria-pressed={isAlwaysVisible}
+        aria-label={`${intl.formatMessage(messages.titleView)}: ${label}`}
         onClick={(e) => {
           e.preventDefault();
           void (async () => {
@@ -48,11 +50,8 @@ const CardTextVisibilityToggle = ({
           })();
         }}
       >
-        {isAlwaysVisible ? (
-          <EyeIcon className="h-4 w-4" />
-        ) : (
-          <EyeSlashIcon className="h-4 w-4" />
-        )}
+        <Bars3BottomLeftIcon className="h-4 w-4" aria-hidden="true" />
+        {intl.formatMessage(messages.titleView)}
       </button>
     </Tooltip>
   );

@@ -164,6 +164,7 @@ function initOpenLibraryCoversImageProxy() {
   return _openLibraryCoversImageProxy;
 }
 
+let fanartImageProxy: ImageProxy;
 const getImageProxy = (type: string): ImageProxy | null => {
   switch (type) {
     case 'tmdb':
@@ -176,6 +177,12 @@ const getImageProxy = (type: string): ImageProxy | null => {
       return initArchiveOrgImageProxy();
     case 'theaudiodb':
       return initTheAudioDbImageProxy();
+    case 'fanart':
+      return (fanartImageProxy ??= new ImageProxy(
+        'fanart',
+        'https://assets.fanart.tv',
+        { rateLimitOptions: { maxRequests: 4, maxRPS: 4 } }
+      ));
     case 'openlibrarycovers':
       return initOpenLibraryCoversImageProxy();
     default:

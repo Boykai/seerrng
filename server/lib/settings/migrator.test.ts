@@ -19,6 +19,11 @@ describe('settings migration file handling', () => {
         'README.md',
         '0002_second.js',
         '0001_first.ts',
+        '0015_enable_default_http_auth.test.ts',
+        '0015_enable_default_http_auth.test.js',
+        '0001_first.spec.ts',
+        '0001_first.d.ts',
+        'helpers.ts',
       ]),
       ['0001_first.ts', '0002_second.js', '0010_last.ts']
     );

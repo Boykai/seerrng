@@ -5,7 +5,7 @@ interface PlaceholderProps {
 const Placeholder = ({ canExpand = false }: PlaceholderProps) => {
   return (
     <div
-      className={`title-card-shell relative animate-pulse rounded-xl bg-gray-700 ${
+      className={`app-card-poster title-card-shell relative animate-pulse rounded-xl bg-gray-700 ${
         canExpand ? 'w-full' : 'w-36 sm:w-36 md:w-44'
       }`}
     >

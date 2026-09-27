@@ -116,7 +116,7 @@ export interface ArtistResult extends MbSearchResult {
 export interface AlbumResult extends MbSearchResult {
   mediaType: 'album';
   title: string;
-  'primary-type': 'Album' | 'Single' | 'EP';
+  'primary-type': MbAlbumResult['primary-type'];
   'first-release-date': string;
   releaseDate?: string;
   'artist-credit': {

@@ -24,7 +24,7 @@ const messages = defineMessages('components.Login', {
   loginerror: 'Something went wrong while trying to sign in.',
   sessionerror:
     'Sign-in succeeded, but SeerrNG could not establish a browser session. Use HTTPS or enable authenticated HTTP sessions, then try again.',
-  credentialerror: 'The email address or password is incorrect.',
+  emailCredentialError: 'The email address or password is incorrect.',
   tipEmailHasTrailingWhitespace: 'The email ends with whitespace',
   signingin: 'Signing In…',
   signin: 'Sign In',
@@ -79,7 +79,7 @@ const LocalLogin = ({ revalidate }: LocalLoginProps) => {
                 e.message === 'browser-session-not-established'
                 ? messages.sessionerror
                 : axios.isAxiosError(e) && e.response?.status === 403
-                  ? messages.credentialerror
+                  ? messages.emailCredentialError
                   : messages.loginerror
             )
           );

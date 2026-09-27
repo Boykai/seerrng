@@ -111,6 +111,83 @@ test('request lifecycle uses authoritative queue progress and never invents a pe
   );
 });
 
+test('linked video requests without transfer evidence wait instead of claiming a library import', () => {
+  for (const type of [MediaType.MOVIE, MediaType.TV]) {
+    for (const is4k of [false, true]) {
+      for (const status of [
+        MediaStatus.PROCESSING,
+        MediaStatus.PARTIALLY_AVAILABLE,
+      ]) {
+        for (const requestStatus of [
+          MediaRequestStatus.APPROVED,
+          MediaRequestStatus.COMPLETED,
+        ]) {
+          const videoRequest = request({
+            type,
+            is4k,
+            status: requestStatus,
+            media: {
+              ...request().media,
+              mediaType: type,
+              status: is4k ? MediaStatus.UNKNOWN : status,
+              status4k: is4k ? status : MediaStatus.UNKNOWN,
+              serviceId: is4k ? null : 10,
+              externalServiceId: is4k ? null : 20,
+              serviceId4k: is4k ? 11 : null,
+              externalServiceId4k: is4k ? 21 : null,
+            },
+            seasons: type === MediaType.TV ? [{ seasonNumber: 1 }] : [],
+          });
+          const result = getRequestStatus(videoRequest, { downloads: [] });
+          assert.equal(result.stage, RequestStatusStage.SEARCHING);
+          assert.equal(
+            result.message,
+            'Waiting for a usable release. No active download or import is currently reported.'
+          );
+          assert.equal(result.downloadCount, 0);
+          assert.equal(result.percent, null);
+          assert.equal(result.isTerminal, false);
+        }
+      }
+    }
+  }
+});
+
+test('linked video requests still waiting for dispatch remain approved', () => {
+  assert.equal(
+    getRequestStatus(request(), { downloads: [], dispatchPending: true }).stage,
+    RequestStatusStage.APPROVED
+  );
+});
+
+test('an old false library event cannot keep an unfulfilled movie in the library stage', () => {
+  const result = getRequestStatus(request(), {
+    downloads: [],
+    latestEvent: {
+      id: 1,
+      requestId: 1,
+      requestedById: 2,
+      mediaId: 3,
+      mediaType: MediaType.MOVIE,
+      stage: RequestStatusStage.LIBRARY,
+      attempt: 0,
+      format: null,
+      service: 'Radarr',
+      fingerprint: 'old-library-event',
+      message: 'The media is being added to your library.',
+      percent: null,
+      size: null,
+      sizeLeft: null,
+      estimatedCompletionTime: null,
+      downloadCount: 0,
+      downloadId: null,
+      createdAt: date,
+    },
+  });
+  assert.equal(result.stage, RequestStatusStage.SEARCHING);
+  assert.equal(result.downloadCount, 0);
+});
+
 test('music remains importing after its download leaves the queue until Lidarr confirms files', () => {
   const musicRequest = request({
     type: MediaType.MUSIC,
@@ -420,7 +497,7 @@ test('movie, series, music, ebook, audiobook, and mixed book requests share the 
     media: tvMedia,
     seasons: [{ seasonNumber: 1 }, { seasonNumber: 2 }],
   });
-  assert.equal(getRequestStatus(tv).stage, RequestStatusStage.LIBRARY);
+  assert.equal(getRequestStatus(tv).stage, RequestStatusStage.SEARCHING);
   assert.equal(
     getRequestStatus({
       ...request({ type: MediaType.TV, seasons: tv.seasons }),

@@ -3,10 +3,16 @@ import test from 'node:test';
 import { DetailDisclosurePinsMutationState } from './detailDisclosurePinsMutation';
 
 const initialPins = {
+  details: false,
+  advancedOptions: false,
+  collection: false,
   cast: false,
   crew: false,
   artists: false,
   subjectTags: false,
+  filters: false,
+  mediaFilters: false,
+  sortBy: false,
 };
 
 test('optimistically updates one detail disclosure pin without clearing others', () => {
@@ -16,10 +22,16 @@ test('optimistically updates one detail disclosure pin without clearing others',
   const mutation = state.begin('crew', true);
 
   assert.deepStrictEqual(mutation.next, {
+    details: false,
+    advancedOptions: false,
+    collection: false,
     cast: true,
     crew: true,
     artists: false,
     subjectTags: false,
+    filters: false,
+    mediaFilters: false,
+    sortBy: false,
   });
 });
 
@@ -31,6 +43,15 @@ test('does not roll back a newer detail disclosure pin mutation', () => {
 
   assert.strictEqual(state.rollback(stale), undefined);
   assert.deepStrictEqual(state.rollback(current), stale.next);
+});
+
+test('collection pin changes preserve cast pins and roll back independently', () => {
+  const state = new DetailDisclosurePinsMutationState();
+  const previous = { ...initialPins, cast: true };
+  state.synchronize('user-1:movie', previous);
+  const mutation = state.begin('collection', true);
+  assert.deepStrictEqual(mutation.next, { ...previous, collection: true });
+  assert.deepStrictEqual(state.rollback(mutation), previous);
 });
 
 test('isolates detail disclosure pin mutations when the signed-in user changes', () => {

@@ -60,6 +60,11 @@ export interface ReadarrBookLookupResult {
   tags?: number[];
   authorTitle?: string;
   seriesTitle?: string;
+  genres?: string[];
+  subjects?: string[];
+  languages?: string[];
+  ratingsAverage?: number;
+  ratingsCount?: number;
   releaseDate?: string;
   audiobookDuration?: number;
   audioSeconds?: number;

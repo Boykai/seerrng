@@ -7,9 +7,42 @@ import {
   prepareMusicBrainzBatchIds,
 } from '@server/lib/externalIds';
 import logger from '@server/logger';
+import type { MusicRating } from '@server/models/Music';
 import { mapWithConcurrency } from '@server/utils/concurrency';
+import DOMPurify from 'dompurify';
+import { JSDOM } from 'jsdom';
 import { In } from 'typeorm';
-import type { TadbArtistResponse } from './interfaces';
+import type { TadbAlbumResponse, TadbArtistResponse } from './interfaces';
+
+const biographyPurify = DOMPurify(new JSDOM('').window);
+// Match the approved Toy Story collection overview's maximum length.
+export const ARTIST_OVERVIEW_MAX_LENGTH = 475;
+export const conciseArtistBiography = (text: unknown): string => {
+  if (typeof text !== 'string') return '';
+  const cleaned = biographyPurify
+    .sanitize(text.slice(0, 20000), { ALLOWED_TAGS: [], ALLOWED_ATTR: [] })
+    .split(/\n\s*\n/)[0]
+    .replace(/\s+/g, ' ')
+    .trim();
+  const plain = [
+    ...new Intl.Segmenter('en', { granularity: 'sentence' }).segment(cleaned),
+  ]
+    .slice(0, 3)
+    .map((part) => part.segment)
+    .join('')
+    .trim();
+  if (plain.length <= ARTIST_OVERVIEW_MAX_LENGTH) return plain;
+  const excerpt = plain.slice(0, ARTIST_OVERVIEW_MAX_LENGTH - 1);
+  const sentenceEnd = Math.max(
+    excerpt.lastIndexOf('. '),
+    excerpt.lastIndexOf('! '),
+    excerpt.lastIndexOf('? ')
+  );
+  const wordEnd = excerpt.lastIndexOf(' ');
+  return sentenceEnd > 150
+    ? excerpt.slice(0, sentenceEnd + 1)
+    : excerpt.slice(0, wordEnd > 0 ? wordEnd : excerpt.length) + '…';
+};
 
 const MAX_THEAUDIODB_IMAGE_URL_LENGTH = 2048;
 
@@ -64,6 +97,61 @@ class TheAudioDb extends ExternalAPI {
   private isMetadataStale(metadata: MetadataArtist | null): boolean {
     if (!metadata || !metadata.tadbUpdatedAt) return true;
     return Date.now() - metadata.tadbUpdatedAt.getTime() > this.STALE_THRESHOLD;
+  }
+
+  public async getArtistOverview(
+    id: string
+  ): Promise<{ text: string; url: string } | null> {
+    const artistId = normalizeMusicBrainzId(id);
+    const data = await this.get<TadbArtistResponse>(
+      `/${this.apiKey}/artist-mb.php`,
+      { params: { i: artistId }, timeout: 5000 },
+      this.CACHE_TTL
+    );
+    const artist = data.artists?.find(
+      (item) => item.strMusicBrainzID?.toLowerCase() === artistId
+    );
+    const text = conciseArtistBiography(
+      artist?.strBiographyEN || artist?.strBiography
+    );
+    return text && /^\d+$/.test(artist?.idArtist ?? '')
+      ? { text, url: `https://www.theaudiodb.com/artist/${artist!.idArtist}` }
+      : null;
+  }
+
+  public async getAlbumRating(id: string): Promise<MusicRating | undefined> {
+    const albumId = normalizeMusicBrainzId(id);
+    const data = await this.get<TadbAlbumResponse>(
+      `/${this.apiKey}/album-mb.php`,
+      { params: { i: albumId }, timeout: 5000 },
+      this.CACHE_TTL
+    );
+    const album = data.album?.find(
+      (item) => item.strMusicBrainzID?.toLowerCase() === albumId
+    );
+    if (
+      !album?.intScore ||
+      !album.intScoreVotes ||
+      !/^\d+$/.test(album.idAlbum ?? '')
+    )
+      return undefined;
+    const score = Number(album.intScore),
+      votes = Number(album.intScoreVotes);
+    if (
+      !Number.isFinite(score) ||
+      score < 0 ||
+      score > 10 ||
+      !Number.isSafeInteger(votes) ||
+      votes <= 0
+    )
+      return undefined;
+    return {
+      source: 'theaudiodb',
+      score,
+      votes,
+      scale: 10,
+      url: `https://www.theaudiodb.com/album/${album.idAlbum}`,
+    };
   }
 
   private createEmptyResponse() {

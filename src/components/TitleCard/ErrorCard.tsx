@@ -57,7 +57,7 @@ const ErrorCard = ({ id, tmdbId, tvdbId, type, canExpand }: ErrorCardProps) => {
       }`}
       data-testid="title-card"
     >
-      <div className="relative aspect-[2/3] transform-gpu cursor-default overflow-hidden rounded-xl bg-gray-800 bg-cover shadow ring-1 ring-gray-700 transition duration-300 outline-none">
+      <div className="app-card-poster relative aspect-[2/3]">
         <div className="absolute inset-0 h-full w-full overflow-hidden">
           <div className="absolute right-0 left-0 flex items-center justify-between p-2">
             <div

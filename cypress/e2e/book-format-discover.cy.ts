@@ -33,6 +33,7 @@ describe('Book discovery formats', () => {
       .its('request.url')
       .should('not.include', 'format=');
     cy.contains('[data-testid=page-header]', 'Books').should('be.visible');
+    cy.contains('button', 'Media Filters').click();
     cy.get('[data-testid=book-format-tab-all]')
       .should('have.attr', 'aria-current', 'page')
       .and('contain', 'All Books');
@@ -59,6 +60,7 @@ describe('Book discovery formats', () => {
       .its('request.url')
       .should('include', 'format=audiobook');
     cy.contains('[data-testid=page-header]', 'Audiobooks').should('be.visible');
+    cy.contains('button', 'Media Filters').click();
     cy.get('[data-testid=book-format-tab-audiobook]').should(
       'have.attr',
       'aria-current',

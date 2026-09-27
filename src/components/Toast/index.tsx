@@ -56,6 +56,7 @@ const Toast = ({
                 <div className="ml-4 flex flex-shrink-0">
                   <button
                     onClick={() => onDismiss()}
+                    aria-label="Dismiss this notification"
                     className="inline-flex text-gray-400 transition duration-150 ease-in-out focus:text-gray-500 focus:outline-none"
                   >
                     <XMarkIcon className="h-5 w-5" />

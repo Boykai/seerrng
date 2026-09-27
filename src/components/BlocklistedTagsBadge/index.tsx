@@ -11,6 +11,8 @@ import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.BlocklistedTagsBadge', {
   blocklistTag: 'Blocklist Tag',
+  sourceTooltip:
+    'Automatically blocked because this title matched a configured blocked content tag. Matching tags: {tags}.',
 });
 const KEYWORD_LOOKUP_CONCURRENCY = 8;
 
@@ -72,11 +74,14 @@ const BlocklistedTagsBadge = ({
 
   return (
     <Tooltip
-      content={tagNamesBlocklistedFor}
+      content={intl.formatMessage(messages.sourceTooltip, {
+        tags: tagNamesBlocklistedFor,
+      })}
       tooltipConfig={{ followCursor: false }}
     >
       <Badge
         badgeType="dark"
+        shape={compact ? 'standard' : 'pill'}
         className={
           compact
             ? compactBlocklistSourceBadgeClass

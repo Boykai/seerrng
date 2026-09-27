@@ -7,7 +7,7 @@ import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.Setup', {
   welcome: 'Welcome to Seerr',
-  signinMessage: 'Get started by signing in with your Plex account',
+  plexSigninMessage: 'Get started by signing in with your Plex account',
 });
 
 interface LoginWithPlexProps {
@@ -69,7 +69,7 @@ const LoginWithPlex = ({ onComplete }: LoginWithPlexProps) => {
         {intl.formatMessage(messages.welcome)}
       </div>
       <div className="mb-2 flex justify-center pb-6 text-sm">
-        {intl.formatMessage(messages.signinMessage)}
+        {intl.formatMessage(messages.plexSigninMessage)}
       </div>
       <div className="flex items-center justify-center">
         <PlexLoginButton onAuthToken={(authToken) => setAuthToken(authToken)} />

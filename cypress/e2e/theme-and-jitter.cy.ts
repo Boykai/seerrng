@@ -57,18 +57,18 @@ describe('Theme picker and seeded discovery refresh', () => {
     });
     cy.contains('[data-testid=page-header]', 'Movies').should('be.visible');
 
-    cy.get('html').should('have.attr', 'data-theme-palette', 'classic');
+    cy.get('html').should('have.attr', 'data-theme-palette', 'seerr');
     cy.get('meta[name="theme-color"]').should(
       'have.attr',
       'content',
-      '#1f2937'
+      '#000000'
     );
     cy.get('button[aria-label="Theme picker"]').click();
-    cy.contains('button', /^Seerr$/).should('exist');
-    cy.contains('button', /^SeerrNG$/).click();
-    cy.get('html').should('have.attr', 'data-theme-palette', 'seerr');
+    cy.contains('button', /^SeerrNG$/).should('exist');
+    cy.contains('button', /^Seerr$/).click();
+    cy.get('html').should('have.attr', 'data-theme-palette', 'classic');
     cy.get('meta[name="theme-color"]').should(
-      'not.have.attr',
+      'have.attr',
       'content',
       '#1f2937'
     );

@@ -82,6 +82,10 @@ const PROXIED_IMAGE_PREFIXES = {
     source: /^https:\/\/(?:www|r2)\.theaudiodb\.com\//,
     target: '/imageproxy/theaudiodb/',
   },
+  musicFanart: {
+    source: /^https:\/\/assets\.fanart\.tv\//,
+    target: '/imageproxy/fanart/',
+  },
   book: {
     source: /^https:\/\/covers\.openlibrary\.org\//,
     target: '/imageproxy/openlibrarycovers/',

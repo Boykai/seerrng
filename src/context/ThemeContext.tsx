@@ -15,7 +15,7 @@ import {
 
 export type ThemeMode = 'light' | 'dark';
 
-type ThemeChrome = 'classic';
+type ThemeChrome = 'classic' | 'blackout';
 
 export type ThemePalette = {
   id: string;
@@ -29,6 +29,15 @@ export type ThemePalette = {
 
 export const themePalettes: ThemePalette[] = [
   {
+    id: 'seerr',
+    name: 'SeerrNG',
+    swatches: ['#000000', '#1a3260', '#333333'],
+    surface: 'gray',
+    primary: 'indigo',
+    secondary: 'purple',
+    chrome: 'blackout',
+  },
+  {
     id: 'classic',
     name: 'Seerr',
     swatches: ['#1f2937', '#4f46e5', '#9333ea'],
@@ -36,14 +45,6 @@ export const themePalettes: ThemePalette[] = [
     primary: 'indigo',
     secondary: 'purple',
     chrome: 'classic',
-  },
-  {
-    id: 'seerr',
-    name: 'SeerrNG',
-    swatches: ['#0f172a', '#2563eb', '#38bdf8'],
-    surface: 'slate',
-    primary: 'blue',
-    secondary: 'sky',
   },
   {
     id: 'aurora',
@@ -215,7 +216,7 @@ export const themePalettes: ThemePalette[] = [
   },
 ];
 
-export const DEFAULT_THEME_PALETTE_ID = 'classic';
+export const DEFAULT_THEME_PALETTE_ID = 'seerr';
 
 const shades = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 
@@ -663,7 +664,9 @@ const getThemeChromeTokens = (
   mode: ThemeMode,
   chrome?: ThemeChrome
 ): ThemeChromeTokens => {
-  const classicDark = mode === 'dark' && chrome === 'classic';
+  const blackout = chrome === 'blackout';
+  const classicDark =
+    mode === 'dark' && (chrome === 'classic' || chrome === 'blackout');
   const pageBg = surfaceScale[9];
   const pageGlowStart = classicDark
     ? surfaceScale[8]
@@ -671,21 +674,27 @@ const getThemeChromeTokens = (
       ? mixRgb(surfaceScale[8], primaryScale[7], 0.56)
       : mixRgb(surfaceScale[8], primaryScale[3], 0.44);
   const pageGlowEnd = surfaceScale[9];
-  const searchbarScrolled = classicDark
-    ? surfaceScale[7]
-    : mode === 'dark'
-      ? mixRgb(surfaceScale[8], primaryScale[7], 0.44)
-      : mixRgb(surfaceScale[8], primaryScale[2], 0.38);
-  const sidebarStart = classicDark
-    ? surfaceScale[8]
-    : mode === 'dark'
-      ? mixRgb(surfaceScale[8], primaryScale[8], 0.58)
-      : mixRgb(primaryScale[7], surfaceScale[2], 0.24);
-  const sidebarEnd = classicDark
-    ? '19 25 40'
-    : mode === 'dark'
-      ? mixRgb(surfaceScale[10], primaryScale[9], 0.52)
-      : mixRgb(primaryScale[9], surfaceScale[1], 0.18);
+  const searchbarScrolled = blackout
+    ? '0 0 0'
+    : classicDark
+      ? surfaceScale[7]
+      : mode === 'dark'
+        ? mixRgb(surfaceScale[8], primaryScale[7], 0.44)
+        : mixRgb(surfaceScale[8], primaryScale[2], 0.38);
+  const sidebarStart = blackout
+    ? '0 0 0'
+    : classicDark
+      ? surfaceScale[8]
+      : mode === 'dark'
+        ? mixRgb(surfaceScale[8], primaryScale[8], 0.58)
+        : mixRgb(primaryScale[7], surfaceScale[2], 0.24);
+  const sidebarEnd = blackout
+    ? '0 0 0'
+    : classicDark
+      ? '19 25 40'
+      : mode === 'dark'
+        ? mixRgb(surfaceScale[10], primaryScale[9], 0.52)
+        : mixRgb(primaryScale[9], surfaceScale[1], 0.18);
   const sidebarBorder = classicDark
     ? surfaceScale[7]
     : mode === 'dark'
@@ -708,45 +717,53 @@ const getThemeChromeTokens = (
       ? mixRgb(primaryScale[4], secondaryScale[4], 0.5)
       : mixRgb(primaryScale[2], secondaryScale[2], 0.5);
 
-  const pageGradientLight = classicDark
-    ? '76 67 189'
-    : mode === 'dark'
-      ? mixRgb(pageGlowStart, primaryScale[6], 0.18)
-      : pageGlowStart;
-  const pageGradientMain = classicDark
-    ? '52 51 157'
-    : mode === 'dark'
-      ? mixRgb(pageBg, primaryScale[8], 0.35)
-      : mixRgb(pageBg, pageGlowStart, 0.2);
-  const pageGradientDeep = classicDark
-    ? '23 29 89'
-    : mode === 'dark'
-      ? mixRgb(surfaceScale[10], primaryScale[9], 0.42)
-      : mixRgb(pageBg, surfaceScale[8], 0.2);
-  const pageGradientBlack = classicDark
+  const pageGradientLight = blackout
     ? '0 0 0'
-    : mode === 'dark'
-      ? '0 0 0'
-      : pageBg;
+    : classicDark
+      ? '76 67 189'
+      : mode === 'dark'
+        ? mixRgb(pageGlowStart, primaryScale[6], 0.18)
+        : pageGlowStart;
+  const pageGradientMain = blackout
+    ? '40 68 120'
+    : classicDark
+      ? '52 51 157'
+      : mode === 'dark'
+        ? mixRgb(pageBg, primaryScale[8], 0.35)
+        : mixRgb(pageBg, pageGlowStart, 0.2);
+  const pageGradientDeep = blackout
+    ? '14 28 58'
+    : classicDark
+      ? '23 29 89'
+      : mode === 'dark'
+        ? mixRgb(surfaceScale[10], primaryScale[9], 0.42)
+        : mixRgb(pageBg, surfaceScale[8], 0.2);
+  const pageGradientBlack =
+    blackout || classicDark || mode === 'dark' ? '0 0 0' : pageBg;
 
-  const controlSurface = classicDark
-    ? '49 46 129'
-    : mode === 'dark'
-      ? mixRgb(surfaceScale[8], primaryScale[9], 0.18)
-      : mixRgb(surfaceScale[9], secondaryScale[0], 0.12);
-  const controlSurfaceHover = classicDark
-    ? '55 48 163'
-    : mode === 'dark'
-      ? mixRgb(surfaceScale[7], primaryScale[8], 0.18)
-      : mixRgb(surfaceScale[8], secondaryScale[0], 0.1);
+  const controlSurface = blackout
+    ? '0 0 0'
+    : classicDark
+      ? '49 46 129'
+      : mode === 'dark'
+        ? mixRgb(surfaceScale[8], primaryScale[9], 0.18)
+        : mixRgb(surfaceScale[9], secondaryScale[0], 0.12);
+  const controlSurfaceHover = blackout
+    ? '0 0 0'
+    : classicDark
+      ? '55 48 163'
+      : mode === 'dark'
+        ? mixRgb(surfaceScale[7], primaryScale[8], 0.18)
+        : mixRgb(surfaceScale[8], secondaryScale[0], 0.1);
   const controlBorder = classicDark ? '99 102 241' : primaryScale[5];
-  const controlText = classicDark
-    ? '199 210 254'
-    : mode === 'dark'
-      ? primaryScale[2]
-      : mixRgb(surfaceScale[2], primaryScale[9], 0.12);
+  const controlText =
+    blackout || classicDark
+      ? '199 210 254'
+      : mode === 'dark'
+        ? primaryScale[2]
+        : mixRgb(surfaceScale[2], primaryScale[9], 0.12);
   const headingText =
-    mode === 'dark'
+    blackout || mode === 'dark'
       ? '255 255 255'
       : mixRgb(surfaceScale[1], primaryScale[9], 0.12);
 
@@ -811,7 +828,8 @@ export const getThemeTokens = (mode: ThemeMode, palette: string) => {
   const primaryScale = themeScales[activePalette.primary];
   const secondaryScale = themeScales[activePalette.secondary];
   const surfaceScale =
-    mode === 'dark' && activePalette.chrome === 'classic'
+    mode === 'dark' &&
+    (activePalette.chrome === 'classic' || activePalette.chrome === 'blackout')
       ? themeScales.gray
       : createSurfaceScale(
           themeScales[activePalette.surface],
@@ -829,7 +847,8 @@ export const getThemeTokens = (mode: ThemeMode, palette: string) => {
   const darkSurfaceScale =
     mode === 'dark'
       ? surfaceScale
-      : activePalette.chrome === 'classic'
+      : activePalette.chrome === 'classic' ||
+          activePalette.chrome === 'blackout'
         ? themeScales.gray
         : createSurfaceScale(
             themeScales[activePalette.surface],
@@ -855,10 +874,22 @@ export const getThemeTokens = (mode: ThemeMode, palette: string) => {
     surfaceScale,
     chrome: activePalette.chrome,
     ...chromeTokens,
-    artworkScrim: darkChromeTokens.pageGradientMain,
-    artworkGradientLight: darkChromeTokens.pageGradientLight,
-    artworkGradientMain: darkChromeTokens.pageGradientMain,
-    artworkGradientDeep: darkChromeTokens.pageGradientDeep,
+    artworkScrim:
+      activePalette.chrome === 'blackout'
+        ? '0 0 0'
+        : darkChromeTokens.pageGradientMain,
+    artworkGradientLight:
+      activePalette.chrome === 'blackout'
+        ? '0 0 0'
+        : darkChromeTokens.pageGradientLight,
+    artworkGradientMain:
+      activePalette.chrome === 'blackout'
+        ? '0 0 0'
+        : darkChromeTokens.pageGradientMain,
+    artworkGradientDeep:
+      activePalette.chrome === 'blackout'
+        ? '0 0 0'
+        : darkChromeTokens.pageGradientDeep,
     artworkGradientBlack: '0 0 0',
     artworkText: primaryScale[2],
   };

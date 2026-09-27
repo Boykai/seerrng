@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  getMusicSearchParams,
   getSearchCategoryQuery,
   getSearchEndpoint,
   getSearchResultFilter,
@@ -9,6 +10,36 @@ import {
 } from './searchFilters';
 
 describe('contextual global search filters', () => {
+  it('routes active filters to a fresh scoped catalogue search with the main keyword', () => {
+    for (const [category, endpoint] of [
+      ['movie', 'movies'],
+      ['tv', 'tv'],
+      ['book', 'books'],
+      ['audiobook', 'books'],
+      ['music', 'music'],
+    ] as const) {
+      assert.equal(
+        getSearchEndpoint(category, 'title', true),
+        `/api/v1/discover/${endpoint}`
+      );
+    }
+    assert.deepEqual(
+      getMusicSearchParams({
+        artist: 'Madonna',
+        artistId: 'id',
+        primaryReleaseDateGte: '1998-01-01',
+        query: 'title',
+      }),
+      { artist: 'Madonna', artistId: 'id', primaryReleaseDateGte: '1998-01-01' }
+    );
+    assert.deepEqual(
+      getSearchCategoryQuery(
+        { query: 'title', artist: 'Madonna', artistId: 'id' },
+        { type: 'movie' }
+      ),
+      { query: 'title', type: 'movie' }
+    );
+  });
   it('uses combined search for All and the matching discovery source when no main query exists', () => {
     assert.equal(getSearchEndpoint('all'), '/api/v1/search');
     assert.equal(getSearchEndpoint('movie'), '/api/v1/discover/movies');

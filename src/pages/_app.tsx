@@ -1,3 +1,4 @@
+import ButtonHelp from '@app/components/Common/ButtonHelp';
 import Layout from '@app/components/Layout';
 import LoadingBar from '@app/components/LoadingBar';
 import PWAHeader from '@app/components/PWAHeader';
@@ -190,7 +191,7 @@ const CoreApp = ({ Component, pageProps, router }: AppProps) => {
         <IntlProvider
           locale={currentLocale}
           defaultLocale="en"
-          messages={loadedMessages}
+          messages={currentLocale === 'en' ? enMessages : loadedMessages}
         >
           <LoadingBar />
           <ThemeProvider>
@@ -206,6 +207,7 @@ const CoreApp = ({ Component, pageProps, router }: AppProps) => {
                 <StatusChecker />
                 <ServiceWorkerSetup />
                 <UserContext>{component}</UserContext>
+                <ButtonHelp key={router.asPath} />
                 <Toaster
                   position="top-right"
                   toastOptions={{ duration: 4000 }}

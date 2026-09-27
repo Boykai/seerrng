@@ -340,7 +340,7 @@ const NotificationsWebhook = () => {
         };
 
         return (
-          <Form className="section">
+          <Form className="app-card-sub section">
             <div className="form-row">
               <label htmlFor="enabled" className="checkbox-label">
                 {intl.formatMessage(messages.agentenabled)}

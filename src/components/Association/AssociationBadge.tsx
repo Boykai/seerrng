@@ -72,8 +72,8 @@ const AssociationBadge = ({
   const associationLabel = intl.formatMessage(messages.associations);
   const buttonClass =
     variant === 'card'
-      ? 'app-button app-button-association h-6 w-6 rounded-full p-0 shadow-md shadow-cyan-950/40 backdrop-blur'
-      : 'flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 text-gray-300 ring-1 ring-gray-700 transition hover:text-white';
+      ? 'app-button poster-control poster-control-icon poster-control-association shadow-md shadow-cyan-950/40'
+      : 'flex h-8 w-8 items-center justify-center rounded-full bg-gray-800/35 text-gray-300 ring-1 ring-gray-700 transition hover:bg-gray-700/55 hover:text-white active:bg-gray-700/70';
 
   const toggleAssociations = (event: React.MouseEvent) => {
     event.preventDefault();
@@ -126,10 +126,11 @@ const AssociationBadge = ({
             );
           }}
           okText={intl.formatMessage(messages.browseMore)}
+          okButtonProps={{ buttonIcon: 'browse' }}
           cancelButtonType="danger"
           okButtonType="success"
           actionButtonSize="standard"
-          dialogClass="request-modal-site-surface refreshed-detail-text !w-[calc(100%-2rem)] rounded-xl border border-gray-700 shadow-lg shadow-gray-950/20 sm:!max-w-4xl"
+          dialogClass="app-card-main request-modal-site-surface refreshed-detail-text !w-[calc(100%-2rem)] rounded-xl border border-gray-700 shadow-lg shadow-gray-950/20 sm:!max-w-4xl"
         >
           <div data-testid="association-popover">
             <AssociationPopover

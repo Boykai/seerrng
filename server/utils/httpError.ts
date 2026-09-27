@@ -91,11 +91,13 @@ const sanitizeUpstreamMessage = (value: unknown): string | undefined => {
   }
 
   const sanitized = value
+    // Control characters are intentionally stripped from untrusted error text.
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ')
     .replace(/\s+/gu, ' ')
     .replace(/\bBearer\s+[^\s,;]+/giu, 'Bearer [redacted]')
     .replace(
-      /((?:api[_-]?key|access[_-]?token|token|secret|password)["']?\s*[:=]\s*["']?)[^&\s"'&,}]*/giu,
+      /((?:api[_-]?key|access[_-]?token|token|secret|password)["']?\s*[:=]\s*["']?)[^&\s"',}]*/giu,
       '$1[redacted]'
     )
     .trim()

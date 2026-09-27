@@ -20,7 +20,6 @@ type SettingsLinkProps = {
   route: string;
   regex: RegExp;
   hidden?: boolean;
-  isMobile?: boolean;
   children: React.ReactNode;
 };
 
@@ -31,14 +30,9 @@ const SettingsLink = ({
   route,
   regex,
   hidden = false,
-  isMobile = false,
 }: SettingsLinkProps) => {
   if (hidden) {
     return null;
-  }
-
-  if (isMobile) {
-    return <option value={route}>{children}</option>;
   }
 
   let linkClasses =
@@ -81,6 +75,25 @@ const SettingsTabs = ({
 }) => {
   const router = useRouter();
   const { user: currentUser } = useUser();
+  const visibleSettingsRoutes = settingsRoutes.filter(
+    (route) =>
+      !route.hidden &&
+      (route.requiredPermission
+        ? hasPermission(
+            route.requiredPermission,
+            currentUser?.permissions ?? 0,
+            route.permissionType
+          )
+        : true)
+  );
+  const activeMobileIndex = visibleSettingsRoutes.findIndex((route) =>
+    router.pathname.match(route.regex)
+  );
+  const navigateMobile = (rawIndex: string) => {
+    const routeIndex = Number.parseInt(rawIndex, 10);
+    const destination = visibleSettingsRoutes[routeIndex]?.route;
+    if (destination) void router.push(destination);
+  };
 
   return (
     <>
@@ -91,42 +104,19 @@ const SettingsTabs = ({
         <select
           id="tabs"
           onChange={(e) => {
-            router.push(e.target.value);
+            navigateMobile(e.target.value);
           }}
           onBlur={(e) => {
-            router.push(e.target.value);
+            navigateMobile(e.target.value);
           }}
-          defaultValue={
-            settingsRoutes.find((route) => !!router.pathname.match(route.regex))
-              ?.route
-          }
+          defaultValue={activeMobileIndex >= 0 ? String(activeMobileIndex) : ''}
           aria-label="Selected Tab"
         >
-          {settingsRoutes
-            .filter(
-              (route) =>
-                !route.hidden &&
-                (route.requiredPermission
-                  ? hasPermission(
-                      route.requiredPermission,
-                      currentUser?.permissions ?? 0,
-                      route.permissionType
-                    )
-                  : true)
-            )
-            .map((route, index) => (
-              <SettingsLink
-                tabType={tabType}
-                currentPath={router.pathname}
-                route={route.route}
-                regex={route.regex}
-                hidden={route.hidden ?? false}
-                isMobile
-                key={`mobile-settings-link-${index}`}
-              >
-                {route.text}
-              </SettingsLink>
-            ))}
+          {visibleSettingsRoutes.map((route, index) => (
+            <option value={String(index)} key={`mobile-settings-link-${index}`}>
+              {route.text}
+            </option>
+          ))}
         </select>
       </div>
       {tabType === 'button' || tabType === 'filter' ? (
@@ -145,58 +135,34 @@ const SettingsTabs = ({
             }
             aria-label="Tabs"
           >
-            {settingsRoutes
-              .filter(
-                (route) =>
-                  !route.hidden &&
-                  (route.requiredPermission
-                    ? hasPermission(
-                        route.requiredPermission,
-                        currentUser?.permissions ?? 0,
-                        route.permissionType
-                      )
-                    : true)
-              )
-              .map((route, index) => (
-                <SettingsLink
-                  tabType={tabType}
-                  currentPath={router.pathname}
-                  route={route.route}
-                  regex={route.regex}
-                  hidden={route.hidden ?? false}
-                  key={`button-settings-link-${index}`}
-                >
-                  {route.content ?? route.text}
-                </SettingsLink>
-              ))}
+            {visibleSettingsRoutes.map((route, index) => (
+              <SettingsLink
+                tabType={tabType}
+                currentPath={router.pathname}
+                route={route.route}
+                regex={route.regex}
+                hidden={route.hidden ?? false}
+                key={`button-settings-link-${index}`}
+              >
+                {route.content ?? route.text}
+              </SettingsLink>
+            ))}
           </nav>
         </div>
       ) : (
         <div className="hide-scrollbar hidden overflow-x-scroll border-b border-gray-600 sm:block">
           <nav className="flex" data-testid="settings-nav-desktop">
-            {settingsRoutes
-              .filter(
-                (route) =>
-                  !route.hidden &&
-                  (route.requiredPermission
-                    ? hasPermission(
-                        route.requiredPermission,
-                        currentUser?.permissions ?? 0,
-                        route.permissionType
-                      )
-                    : true)
-              )
-              .map((route, index) => (
-                <SettingsLink
-                  tabType={tabType}
-                  currentPath={router.pathname}
-                  route={route.route}
-                  regex={route.regex}
-                  key={`standard-settings-link-${index}`}
-                >
-                  {route.text}
-                </SettingsLink>
-              ))}
+            {visibleSettingsRoutes.map((route, index) => (
+              <SettingsLink
+                tabType={tabType}
+                currentPath={router.pathname}
+                route={route.route}
+                regex={route.regex}
+                key={`standard-settings-link-${index}`}
+              >
+                {route.text}
+              </SettingsLink>
+            ))}
           </nav>
         </div>
       )}

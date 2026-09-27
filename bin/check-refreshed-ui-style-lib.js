@@ -76,7 +76,7 @@ const validateGlobalStylesheet = (fileName, source) => {
     '.app-button-success',
     '.button-standard',
     '.detail-disclosure-control',
-    '.media-quality-select-control',
+    '.format-request-control',
     '.media-detail-column-divider',
     '.media-rating-row',
     '.media-primary-action-row',

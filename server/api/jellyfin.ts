@@ -96,6 +96,12 @@ export interface JellyfinLibraryItem {
   MediaType: string;
 }
 
+export interface JellyfinWatchEpisode {
+  seasonNumber: number;
+  episodeNumber: number;
+  played: boolean;
+}
+
 export interface JellyfinMediaStream {
   Codec: string;
   Type: 'Video' | 'Audio' | 'Subtitle';
@@ -650,6 +656,62 @@ class JellyfinAPI extends ExternalAPI {
     return;
   }
 
+  public async getUserItemPlayed(itemId: string): Promise<boolean> {
+    if (!this.userId) {
+      return false;
+    }
+    const response = await this.get<unknown>(
+      `/Users/${encodeURIComponent(this.userId)}/Items/${encodeURIComponent(
+        boundedJellyfinText(itemId, 128)
+      )}`
+    );
+    return (
+      isRecord(response) &&
+      isRecord(response.UserData) &&
+      response.UserData.Played === true
+    );
+  }
+
+  public async getUserWatchEpisodes(
+    seriesId: string
+  ): Promise<JellyfinWatchEpisode[]> {
+    if (!this.userId) {
+      return [];
+    }
+    const response = await this.get<unknown>(
+      `/Users/${encodeURIComponent(this.userId)}/Items`,
+      {
+        params: {
+          ParentId: boundedJellyfinText(seriesId, 128),
+          Recursive: true,
+          IncludeItemTypes: 'Episode',
+          EnableUserData: true,
+          Limit: MAX_JELLYFIN_EPISODES,
+        },
+      }
+    );
+    const items =
+      isRecord(response) && Array.isArray(response.Items) ? response.Items : [];
+    return items.slice(0, MAX_JELLYFIN_EPISODES).flatMap((item) => {
+      if (
+        !isRecord(item) ||
+        item.Type !== 'Episode' ||
+        item.LocationType === 'Virtual' ||
+        !Number.isSafeInteger(item.ParentIndexNumber) ||
+        !Number.isSafeInteger(item.IndexNumber)
+      ) {
+        return [];
+      }
+      return [
+        {
+          seasonNumber: item.ParentIndexNumber as number,
+          episodeNumber: item.IndexNumber as number,
+          played: isRecord(item.UserData) && item.UserData.Played === true,
+        },
+      ];
+    });
+  }
+
   public async getSystemInfo(): Promise<{ Id: string; ServerName: string }> {
     try {
       const systemInfoResponse = sanitizeJellyfinSystemInfo(
@@ -873,6 +935,27 @@ class JellyfinAPI extends ExternalAPI {
 
       throw new ApiError(e.response.status, ApiErrorCode.InvalidAuthToken);
     }
+  }
+
+  // Unlike the legacy availability lookup, never turn a server error or a
+  // malformed response into an empty (apparently deleted) item.
+  public async getItemDataForDeletionCheck(
+    id: string
+  ): Promise<JellyfinLibraryItemExtended | undefined> {
+    const response = await this.get<JellyfinItemsReponse>('/Items', {
+      params: {
+        ids: id,
+        fields: 'ProviderIds,MediaSources,Width,Height,IsHD,DateCreated',
+      },
+    });
+    if (!Array.isArray(response?.Items))
+      throw new Error('Invalid media-server item response');
+    if (!response.Items.length) return undefined;
+    const item = sanitizeJellyfinLibraryItem(response.Items[0], true) as
+      JellyfinLibraryItemExtended | undefined;
+    if (!item || item.Id !== id)
+      throw new Error('Unverified media-server item identity');
+    return item;
   }
 
   public async getItemData(

@@ -107,7 +107,7 @@ const UserDropdown = () => {
         transition
         className="absolute right-0 z-50 mt-2 w-72 origin-top-right rounded-md shadow-lg transition duration-100 ease-out data-closed:scale-95 data-closed:opacity-0"
       >
-        <div className="divide-y divide-gray-700 rounded-md bg-gray-800/80 ring-1 ring-gray-700 backdrop-blur">
+        <div className="app-user-menu-surface divide-y divide-gray-700 rounded-md ring-1 ring-gray-700 backdrop-blur">
           <div className="flex flex-col space-y-4 px-4 py-4">
             <div className="flex items-center space-x-2">
               <CachedImage
@@ -136,14 +136,14 @@ const UserDropdown = () => {
               {({ active }) => (
                 <ForwardedLink
                   href={`/profile`}
-                  className={`flex items-center rounded px-4 py-2 text-sm font-medium text-gray-200 transition duration-150 ease-in-out ${
+                  className={`user-dropdown-action flex items-center rounded px-4 py-2 text-sm font-medium text-gray-200 transition duration-150 ease-in-out ${
                     active
                       ? 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white'
                       : ''
                   }`}
                   data-testid="user-menu-profile"
                 >
-                  <UserIcon className="mr-2 inline h-5 w-5" />
+                  <UserIcon className="inline h-5 w-5" />
                   <span>{intl.formatMessage(messages.myprofile)}</span>
                 </ForwardedLink>
               )}
@@ -151,15 +151,15 @@ const UserDropdown = () => {
             <MenuItem>
               {({ active }) => (
                 <ForwardedLink
-                  href="/requests/status"
-                  className={`flex items-center rounded px-4 py-2 text-sm font-medium text-gray-200 transition duration-150 ease-in-out ${
+                  href="/requests"
+                  className={`user-dropdown-action flex items-center rounded px-4 py-2 text-sm font-medium text-gray-200 transition duration-150 ease-in-out ${
                     active
                       ? 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white'
                       : ''
                   }`}
-                  data-testid="user-menu-settings"
+                  data-testid="user-menu-requests"
                 >
-                  <ClockIcon className="mr-2 inline h-5 w-5" />
+                  <ClockIcon className="inline h-5 w-5" />
                   <span>{intl.formatMessage(messages.requests)}</span>
                 </ForwardedLink>
               )}
@@ -168,14 +168,14 @@ const UserDropdown = () => {
               {({ active }) => (
                 <ForwardedLink
                   href={`/profile/settings`}
-                  className={`flex items-center rounded px-4 py-2 text-sm font-medium text-gray-200 transition duration-150 ease-in-out ${
+                  className={`user-dropdown-action flex items-center rounded px-4 py-2 text-sm font-medium text-gray-200 transition duration-150 ease-in-out ${
                     active
                       ? 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white'
                       : ''
                   }`}
                   data-testid="user-menu-settings"
                 >
-                  <CogIcon className="mr-2 inline h-5 w-5" />
+                  <CogIcon className="inline h-5 w-5" />
                   <span>{intl.formatMessage(messages.settings)}</span>
                 </ForwardedLink>
               )}
@@ -184,14 +184,14 @@ const UserDropdown = () => {
               {({ active }) => (
                 <a
                   href="#"
-                  className={`flex items-center rounded px-4 py-2 text-sm font-medium text-gray-200 transition duration-150 ease-in-out ${
+                  className={`user-dropdown-action flex items-center rounded px-4 py-2 text-sm font-medium text-gray-200 transition duration-150 ease-in-out ${
                     active
                       ? 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white'
                       : ''
                   }`}
                   onClick={() => logout()}
                 >
-                  <ArrowRightOnRectangleIcon className="mr-2 inline h-5 w-5" />
+                  <ArrowRightOnRectangleIcon className="inline h-5 w-5" />
                   <span>{intl.formatMessage(messages.signout)}</span>
                 </a>
               )}

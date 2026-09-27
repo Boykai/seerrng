@@ -111,7 +111,7 @@ const PlaylistImportModal = ({
         cancelButtonType="danger"
         okButtonType="success"
         actionButtonSize="standard"
-        dialogClass="request-modal-site-surface refreshed-detail-text !w-[calc(100%-2rem)] rounded-xl border border-gray-700 shadow-lg shadow-gray-950/20 sm:!max-w-2xl"
+        dialogClass="app-card-main request-modal-site-surface refreshed-detail-text !w-[calc(100%-2rem)] rounded-xl border border-gray-700 shadow-lg shadow-gray-950/20 sm:!max-w-2xl"
       >
         <p className="refreshed-detail-text">
           {intl.formatMessage(messages.description)}
@@ -141,7 +141,7 @@ const PlaylistImportModal = ({
             }}
           />
         </div>
-        <section className="refreshed-inset-surface mt-5 rounded-lg border border-gray-700 p-3 text-sm">
+        <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3 text-sm">
           <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
             <Button
               as="a"

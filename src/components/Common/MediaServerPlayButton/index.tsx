@@ -17,6 +17,10 @@ import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.Common.MediaServerPlayButton', {
   playOnServer: 'Play on {mediaServerName}',
+  playHelp: 'Open this media in your media server to play it.',
+  movieHelp: 'Open this movie in your media server to play it.',
+  playlistHelp:
+    'Create a playback playlist from the selected items and open it in your media server.',
   playOnServer4k: 'Play on {mediaServerName} (4K)',
   unavailable: 'No playable media is currently available on {mediaServerName}.',
   failed: 'The selected items could not be opened on {mediaServerName}.',
@@ -35,6 +39,7 @@ interface MediaServerPlayButtonProps {
   buttonSize?: 'default' | 'sm';
   disabled?: boolean;
   disabledReason?: string;
+  context?: 'movie' | 'selection';
 }
 
 const MediaServerPlayButton = ({
@@ -50,6 +55,7 @@ const MediaServerPlayButton = ({
   buttonSize = 'sm',
   disabled = false,
   disabledReason,
+  context = 'selection',
 }: MediaServerPlayButtonProps) => {
   const intl = useIntl();
   const settings = useSettings();
@@ -96,7 +102,7 @@ const MediaServerPlayButton = ({
       const response = selectedMediaIds.length
         ? await axios.post<PlaybackPlaylistResponse>(
             '/api/v1/playback/collection/playlist',
-            { mediaIds: selectedMediaIds }
+            { mediaIds: selectedMediaIds, is4k }
           )
         : await axios.post<PlaybackPlaylistResponse>(
             `/api/v1/playback/media/${mediaId}/playlist`,
@@ -127,6 +133,9 @@ const MediaServerPlayButton = ({
     const effectiveDisabled = disabled || isOpening || !hasPlaylistRequest;
     return (
       <ButtonWithDropdown
+        title={intl.formatMessage(
+          context === 'movie' ? messages.movieHelp : messages.playlistHelp
+        )}
         buttonType="playback"
         buttonSize={buttonSize}
         text={
@@ -159,6 +168,9 @@ const MediaServerPlayButton = ({
 
   return (
     <PlayButton
+      tooltip={intl.formatMessage(
+        context === 'movie' ? messages.movieHelp : messages.playHelp
+      )}
       links={links}
       buttonSize={buttonSize}
       unavailableLink={{ text: label, svg: icon }}

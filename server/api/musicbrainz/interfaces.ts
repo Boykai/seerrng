@@ -1,3 +1,5 @@
+import type { MusicPrimaryType } from '@server/constants/musicReleaseTypes';
+
 interface MbResult {
   id: string;
   score: number;
@@ -11,7 +13,7 @@ export interface MbLink {
 export interface MbAlbumResult extends MbResult {
   media_type: 'album';
   title: string;
-  'primary-type': 'Album' | 'Single' | 'EP';
+  'primary-type': MusicPrimaryType;
   'first-release-date': string;
   'artist-credit': {
     name: string;
@@ -42,6 +44,7 @@ export interface MbAlbumDetails extends MbAlbumResult {
     count: number;
     name: string;
   }[];
+  genres?: { count: number; name: string }[];
   artists?: {
     id: string;
     name: string;

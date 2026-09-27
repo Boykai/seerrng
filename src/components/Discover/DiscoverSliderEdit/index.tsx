@@ -12,7 +12,6 @@ import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import {
-  ArrowUturnLeftIcon,
   Bars3Icon,
   ChevronDownIcon,
   ChevronUpIcon,
@@ -282,11 +281,11 @@ const DiscoverSliderEdit = ({
                 <Button
                   buttonType="default"
                   buttonSize="sm"
+                  buttonIcon="cancel"
                   onClick={() => {
                     setIsEditing(false);
                   }}
                 >
-                  <ArrowUturnLeftIcon />
                   <span>{intl.formatMessage(globalMessages.cancel)}</span>
                 </Button>
               )}
@@ -306,6 +305,8 @@ const DiscoverSliderEdit = ({
           <div className="absolute top-4 right-14 flex px-2 md:relative md:top-0 md:right-0">
             <button
               data-testid="discover-slider-move-up"
+              aria-label="Move this Discover section up"
+              data-disabled-reason="This section cannot be moved any higher."
               className={'hover:text-white disabled:text-gray-800'}
               onClick={() =>
                 onPositionUpdate(Number(slider.id), Position.Above, true)
@@ -316,6 +317,8 @@ const DiscoverSliderEdit = ({
             </button>
             <button
               data-testid="discover-slider-move-down"
+              aria-label="Move this Discover section down"
+              data-disabled-reason="This section cannot be moved any lower."
               className={'hover:text-white disabled:text-gray-800'}
               onClick={() =>
                 onPositionUpdate(Number(slider.id), Position.Below, true)

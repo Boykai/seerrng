@@ -4,6 +4,17 @@ export class AddChaptarrPendingBookTracking1790214517393 implements MigrationInt
   name = 'AddChaptarrPendingBookTracking1790214517393';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    const currentTable = await queryRunner.getTable('book_request_search');
+    const hasTargetSchema =
+      ['providerBookId', 'providerEditionId', 'pendingId'].every((name) =>
+        currentTable?.findColumnByName(name)
+      ) &&
+      currentTable?.findColumnByName('bookId')?.isNullable === true &&
+      currentTable?.findColumnByName('commandId')?.isNullable === true;
+    if (hasTargetSchema) {
+      return;
+    }
+
     await queryRunner.query(`
       CREATE TABLE "book_request_search_v2" (
         "id" integer PRIMARY KEY AUTOINCREMENT NOT NULL,

@@ -363,6 +363,30 @@ authorRoutes.get<
 });
 
 authorRoutes.get<{ id: string }>('/:id/works', async (req, res, next) => {
+  if (parseBookshelfAuthorId(req.params.id)) {
+    const limit = parsePositiveInt(req.query.limit, 20, 100);
+    const offset = parseNonNegativeInt(
+      req.query.offset,
+      0,
+      MAX_PAGINATION_OFFSET
+    );
+    const author = await getBookshelfAuthorDetails(
+      getSettings().readarr,
+      req.params.id,
+      limit,
+      offset
+    );
+    return author
+      ? res.status(200).json({
+          works: author.works,
+          pagination: {
+            ...author.pagination,
+            nextOffset: offset + author.works.length,
+          },
+        })
+      : res.status(404).json({ status: 404, message: 'Author not found' });
+  }
+
   const parsedAuthorId = parseOpenLibraryAuthorId(req.params.id);
   if ('error' in parsedAuthorId) {
     return res.status(404).json({ status: 404, message: 'Author not found' });

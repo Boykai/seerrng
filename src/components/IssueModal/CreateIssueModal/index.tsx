@@ -11,10 +11,12 @@ import {
   getIssueOptionsForMediaType,
   getIssueSubtypeOptionsForMediaType,
 } from '@app/components/IssueModal/constants';
+import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
 import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
 import { encodeApiPathSegment } from '@app/utils/apiPath';
 import defineMessages from '@app/utils/defineMessages';
+import { getIssueListHref } from '@app/utils/issueNavigation';
 import { PaperAirplaneIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { ArrowRightCircleIcon } from '@heroicons/react/24/solid';
 import { IssueType, MAX_ISSUE_MESSAGE_LENGTH } from '@server/constants/issue';
@@ -51,7 +53,7 @@ const messages = defineMessages('components.IssueModal.CreateIssueModal', {
   toastSuccessCreate:
     'Issue report for <strong>{title}</strong> submitted successfully!',
   toastFailedCreate: 'Something went wrong while submitting the issue.',
-  toastviewissue: 'View Issue',
+  toastviewdetails: 'View Details',
   reportissue: 'Report an Issue',
   submitissue: 'Submit Issue',
 });
@@ -171,14 +173,13 @@ const CreateIssueModal = ({
   const availableQualities = getAvailableIssueQualities(data?.mediaInfo);
   const hasAvailableVideoQuality = availableQualities.length > 0;
   const initialIs4k = availableQualities[0] === '4k';
-  const qualityOptions: CompactSelectOption[] = availableQualities.map(
-    (quality) => ({
-      value: quality,
-      label: intl.formatMessage(
-        quality === '4k' ? messages.ultraHd : messages.hd
-      ),
-    })
-  );
+  const qualityOptions = (['hd', '4k'] as const).map((quality) => ({
+    value: quality,
+    disabled: !availableQualities.includes(quality),
+    label: intl.formatMessage(
+      quality === '4k' ? messages.ultraHd : messages.hd
+    ),
+  }));
   const isAvailableStatus = (status?: MediaStatus) =>
     status === MediaStatus.AVAILABLE ||
     status === MediaStatus.PARTIALLY_AVAILABLE;
@@ -260,9 +261,9 @@ const CreateIssueModal = ({
                     strong: (msg: React.ReactNode) => <strong>{msg}</strong>,
                   })}
                 </div>
-                <Link href={`/issues/${newIssue.data.id}`} legacyBehavior>
+                <Link href={getIssueListHref(newIssue.data.id)} legacyBehavior>
                   <Button as="a" className="mt-4">
-                    <span>{intl.formatMessage(messages.toastviewissue)}</span>
+                    <span>{intl.formatMessage(messages.toastviewdetails)}</span>
                     <ArrowRightCircleIcon />
                   </Button>
                 </Link>
@@ -297,6 +298,7 @@ const CreateIssueModal = ({
       }) => {
         const issueTypeSelect = (
           <CompactSelect
+            className="compact-select-warning"
             label={intl.formatMessage(messages.issueType)}
             value={values.issueType.toString()}
             options={issueTypeOptions}
@@ -327,7 +329,7 @@ const CreateIssueModal = ({
             loading={!!detailUrl && !data && !error}
             backdrop={resolvedBackdrop}
             backdropFull
-            dialogClass="artwork-form-main-card refreshed-card-surface refreshed-detail-text"
+            dialogClass="artwork-form-main-card app-card-main refreshed-card-surface refreshed-detail-text"
           >
             {data && (
               <IssueMediaSummary
@@ -353,25 +355,22 @@ const CreateIssueModal = ({
                 ]}
                 footer={
                   <>
-                    {(mediaType === 'movie' || mediaType === 'tv') &&
-                      hasAvailableVideoQuality && (
-                        <CompactSelect
-                          label={intl.formatMessage(messages.quality)}
-                          value={values.is4k ? '4k' : 'hd'}
-                          options={qualityOptions}
-                          onChange={(quality) => {
-                            const nextIs4k = quality === '4k';
-                            const seasons = getAvailableSeasons(nextIs4k);
-                            void setFieldValue('is4k', nextIs4k);
-                            void setFieldValue(
-                              'activeSeason',
-                              seasons[0] ?? -1
-                            );
-                            void setFieldValue('problemEpisodeSelections', []);
-                          }}
-                          defaultValue={initialIs4k ? '4k' : 'hd'}
-                        />
-                      )}
+                    {(mediaType === 'movie' || mediaType === 'tv') && (
+                      <MediaQualitySelect
+                        purpose="issue"
+                        label={intl.formatMessage(messages.quality)}
+                        value={values.is4k ? '4k' : 'hd'}
+                        options={qualityOptions}
+                        onChange={(quality) => {
+                          const nextIs4k = quality === '4k';
+                          if (nextIs4k === values.is4k) return;
+                          const seasons = getAvailableSeasons(nextIs4k);
+                          void setFieldValue('is4k', nextIs4k);
+                          void setFieldValue('activeSeason', seasons[0] ?? -1);
+                          void setFieldValue('problemEpisodeSelections', []);
+                        }}
+                      />
+                    )}
                     {issueTypeSelect}
                     {issueSubtypeSelect}
                   </>
@@ -415,7 +414,7 @@ const CreateIssueModal = ({
                 </>
               )}
 
-            <div className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-2">
+            <div className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-2">
               <div className="flex flex-col gap-1.5">
                 <label
                   htmlFor="message"

@@ -493,6 +493,15 @@ describe('GET /music/:id', () => {
         url: 'https://musicbrainz.org/release-group/release-group-id',
         source: 'musicbrainz',
       },
+      ratings: [
+        {
+          score: 8.5,
+          votes: 32,
+          url: 'https://musicbrainz.org/release-group/release-group-id',
+          source: 'musicbrainz',
+        },
+      ],
+      failedSources: ['theaudiodb'],
     });
   });
 

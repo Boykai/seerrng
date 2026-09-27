@@ -105,6 +105,68 @@ const sanitizeIssue = (value: unknown): MylarIssue | undefined => {
   };
 };
 
+const MAX_CONTENT_DISPOSITION_LENGTH = 8_192;
+
+export const getMylarIssueFilename = (
+  disposition: string
+): string | undefined => {
+  if (disposition.length > MAX_CONTENT_DISPOSITION_LENGTH) return undefined;
+
+  const extendedFilename = /(?:^|;)\s*filename\*\s*=\s*UTF-8''([^;]+)/i.exec(
+    disposition
+  )?.[1];
+  let filename = extendedFilename;
+  if (filename) {
+    try {
+      filename = decodeURIComponent(filename.trim());
+    } catch {
+      return undefined;
+    }
+  } else {
+    const parameter = /(?:^|;)\s*filename\s*=\s*/i.exec(disposition);
+    if (!parameter) return undefined;
+    let index = parameter.index + parameter[0].length;
+    while (index < disposition.length && /\s/.test(disposition[index])) index++;
+    if (disposition[index] === '"') {
+      index++;
+      let parsed = '';
+      let closed = false;
+      while (index < disposition.length) {
+        const character = disposition[index];
+        if (character === '\\' && index + 1 < disposition.length) {
+          const next = disposition[index + 1];
+          parsed += next === '"' || next === '\\' ? next : '\\' + next;
+          index += 2;
+        } else if (character === '"') {
+          closed = true;
+          break;
+        } else {
+          parsed += character;
+          index++;
+        }
+      }
+      if (!closed) return undefined;
+      filename = parsed;
+    } else {
+      const end = disposition.indexOf(';', index);
+      filename = disposition.slice(index, end < 0 ? undefined : end).trim();
+    }
+  }
+
+  if (!filename) return undefined;
+  filename = filename
+    .replace(/\\/g, '/')
+    .split('/')
+    .pop()!
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim()
+    .slice(0, 255);
+  return filename === '.' || filename === '..' || !filename
+    ? undefined
+    : filename;
+};
+
 class MylarAPI extends ExternalAPI {
   static buildUrl(
     settings: Pick<MylarSettings, 'useSsl' | 'hostname' | 'port' | 'baseUrl'>,
@@ -205,38 +267,9 @@ class MylarAPI extends ExternalAPI {
       typeof rawSize === 'string' && /^\d+$/.test(rawSize)
         ? Number(rawSize)
         : undefined;
-    const disposition = String(response.headers['content-disposition'] ?? '');
-    const extendedFilename = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(
-      disposition
-    )?.[1];
-    const plainFilename = /filename\s*=\s*(?:"((?:\\.|[^"])*)"|([^;]+))/i.exec(
-      disposition
+    const filename = getMylarIssueFilename(
+      String(response.headers['content-disposition'] ?? '')
     );
-    let filename = extendedFilename;
-    if (filename) {
-      try {
-        filename = decodeURIComponent(filename.trim());
-      } catch {
-        filename = undefined;
-      }
-    } else if (plainFilename) {
-      filename = (plainFilename[1] ?? plainFilename[2] ?? '').replace(
-        /\\(["\\])/g,
-        '$1'
-      );
-    }
-    if (filename) {
-      filename = filename
-        .replace(/\\/g, '/')
-        .split('/')
-        .pop()!
-        .replace(/[\u0000-\u001f\u007f]/g, '')
-        .trim()
-        .slice(0, 255);
-      if (filename === '.' || filename === '..' || !filename) {
-        filename = undefined;
-      }
-    }
 
     return {
       stream: response.data,

@@ -63,7 +63,7 @@ export const toMusicAlbumRefinementQuery = (
   albumFilter: string
 ): string => {
   const mainQuery = getLuceneTerms(mainSearch)
-    .map((term) => `(releasegroup:${term} OR artist:${term})`)
+    .map((term) => `(releasegroup:${term} OR artist:${term} OR tag:${term})`)
     .join(' AND ');
   const filterQuery = getLuceneTerms(albumFilter)
     .map((term) => `releasegroup:${term}`)

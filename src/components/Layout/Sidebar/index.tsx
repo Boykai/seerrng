@@ -281,8 +281,8 @@ const Sidebar = ({
                             tabIndex={0}
                             className={`flex items-center rounded-md px-2 py-2 text-base leading-6 font-medium text-white transition duration-150 ease-in-out focus:outline-none ${
                               router.pathname.match(sidebarLink.activeRegExp)
-                                ? 'bg-gradient-to-br from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500'
-                                : 'sidebar-link-idle'
+                                ? 'main-menu-link sidebar-link-selected'
+                                : 'main-menu-link sidebar-link-idle'
                             } `}
                             data-testid={`${sidebarLink.dataTestId}-mobile`}
                           >
@@ -337,8 +337,8 @@ const Sidebar = ({
                       prefetch={false}
                       className={`group flex items-center rounded-md px-2 py-2 text-lg leading-6 font-medium text-white transition duration-150 ease-in-out focus:outline-none ${
                         router.pathname.match(sidebarLink.activeRegExp)
-                          ? 'bg-gradient-to-br from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500'
-                          : 'sidebar-link-idle'
+                          ? 'main-menu-link sidebar-link-selected'
+                          : 'main-menu-link sidebar-link-idle'
                       } `}
                       data-testid={sidebarLink.dataTestId}
                     >

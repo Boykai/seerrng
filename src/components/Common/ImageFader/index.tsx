@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 interface ImageFaderProps extends HTMLAttributes<HTMLDivElement> {
   backgroundImages: string[];
+  backgroundTitles?: string[];
   rotationSpeed?: number;
   isDarker?: boolean;
   forceOptimize?: boolean;
@@ -14,6 +15,7 @@ const DEFAULT_ROTATION_SPEED = 6000;
 const ImageFader: ForwardRefRenderFunction<HTMLDivElement, ImageFaderProps> = (
   {
     backgroundImages,
+    backgroundTitles,
     rotationSpeed = DEFAULT_ROTATION_SPEED,
     isDarker,
     forceOptimize,
@@ -91,6 +93,14 @@ const ImageFader: ForwardRefRenderFunction<HTMLDivElement, ImageFaderProps> = (
             <div
               className={`absolute inset-0 ${isDarker ? 'bg-gray-900/55' : 'bg-gray-800/45'}`}
             />
+            {backgroundTitles?.[i] && (
+              <h1
+                className="auth-backdrop-title text-overseerr text-2xl leading-6 font-bold"
+                aria-hidden={i !== activeIndex}
+              >
+                {backgroundTitles[i]}
+              </h1>
+            )}
           </div>
         );
       })}

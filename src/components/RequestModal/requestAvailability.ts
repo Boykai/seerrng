@@ -3,9 +3,12 @@ import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
 import {
   getActiveRequestForDestination,
+  getStoredRequestDestinations,
   hasTrackedAvailableDestination,
   isDestinationAvailableInTargets,
   isDestinationCoveredByActiveRequest,
+  isExactRequestDestination,
+  legacyRequestDestinationCovers,
   type RequestDestination,
   type StoredRequestDestination,
 } from '@server/lib/requestDestination';
@@ -17,6 +20,20 @@ interface DestinationAvailabilityMedia {
   serviceId4k?: number | null;
   requests?: StoredRequestDestination[];
 }
+
+// Availability is quality-specific; a partial series must still allow its
+// missing episodes to be requested.
+export const isVideoQualityAvailable = (
+  media: DestinationAvailabilityMedia | null | undefined,
+  mediaType: 'movie' | 'tv',
+  is4k = false
+): boolean => {
+  const status = is4k ? media?.status4k : media?.status;
+  return (
+    status === MediaStatus.AVAILABLE ||
+    (mediaType === 'movie' && status === MediaStatus.PARTIALLY_AVAILABLE)
+  );
+};
 
 export const createRequestDestination = (
   serviceType: RequestDestination['serviceType'],
@@ -77,6 +94,22 @@ export const isRequestDestinationRequested = (
   selected: RequestDestination | null | undefined
 ): boolean =>
   selected ? isDestinationCoveredByActiveRequest(requests, selected) : false;
+
+export const isRequestForDestination = (
+  request: StoredRequestDestination,
+  selected: RequestDestination | null | undefined
+): boolean => {
+  if (!selected) {
+    return false;
+  }
+
+  const { targets, legacy } = getStoredRequestDestinations(request);
+  return targets.some((target) =>
+    legacy
+      ? legacyRequestDestinationCovers(target, selected)
+      : isExactRequestDestination(target, selected)
+  );
+};
 
 export const canPromotePendingDestinationRequests = (
   requests: StoredRequestDestination[] | null | undefined,

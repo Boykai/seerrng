@@ -19,22 +19,26 @@ describe('TV Details', () => {
     });
     cy.visit('/tv/66732');
 
-    cy.get('[data-testid=format-request-control]').should('be.visible');
-    cy.get('[data-testid=format-request-option-standard]').should('be.visible');
-    cy.get('[data-testid=format-request-option-4k]')
-      .should('be.visible')
-      .then(($fourKButton) => {
-        cy.get('[data-testid=format-request-option-standard]').then(
-          ($standardButton) => {
+    cy.get('[data-testid=format-request-option-standard]')
+      .filter(':visible')
+      .last()
+      .then(($standardButton) => {
+        cy.get('[data-testid=format-request-option-4k]')
+          .filter(':visible')
+          .last()
+          .should('be.visible')
+          .then(($fourKButton) => {
             expect(
               $fourKButton[0].getBoundingClientRect().left
             ).to.be.greaterThan(
               $standardButton[0].getBoundingClientRect().left
             );
-          }
-        );
+          });
       });
-    cy.get('[aria-label="Quality: HD"]').should('be.visible');
+    cy.get('[role="group"][aria-label="Quality"]')
+      .should('be.visible')
+      .contains('button', 'HD')
+      .should('be.visible');
   });
 
   it('hides the playback quality selector when 4K is not configured', () => {

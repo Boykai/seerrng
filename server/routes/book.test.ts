@@ -19,9 +19,10 @@ import MediaIdentifier, {
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { Watchlist } from '@server/entity/Watchlist';
-import { getSettings } from '@server/lib/settings';
+import { getSettings, type ReadarrSettings } from '@server/lib/settings';
 import { checkUser } from '@server/middleware/auth';
 import { setupTestDb } from '@server/test/db';
+import { makeBookshelfBookId } from '@server/utils/bookshelfCatalog';
 import type { Express } from 'express';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
@@ -145,6 +146,99 @@ function mockBookDetailsWithoutCover() {
 }
 
 describe('GET /book/:id', () => {
+  it('resolves a Bookshelf series member using its title hint and exact provider ID', async () => {
+    const settings = getSettings();
+    const priorReadarr = settings.readarr;
+    settings.readarr = [
+      {
+        id: 0,
+        hostname: 'bookshelf.test',
+        port: 8787,
+        apiKey: 'test-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'ebook',
+      } as ReadarrSettings,
+    ];
+    const lookup = mock.method(ReadarrAPI.prototype, 'lookupBook', async () => [
+      {
+        title: 'Unrelated book',
+        foreignBookId: 'other',
+      },
+      {
+        title: 'The Fellowship of the Ring',
+        foreignBookId: '139773',
+        seriesTitle: 'The Lord of the Rings #1',
+      },
+    ]);
+
+    try {
+      const agent = await login();
+      const id = makeBookshelfBookId(0, '139773');
+      const response = await agent
+        .get(`/book/${encodeURIComponent(id)}`)
+        .query({ lookupTitle: 'The Fellowship of the Ring' });
+
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(response.body.id, id);
+      assert.strictEqual(response.body.title, 'The Fellowship of the Ring');
+      assert.strictEqual(lookup.mock.callCount(), 1);
+      assert.strictEqual(lookup.mock.calls[0].arguments[0], 'work:139773');
+    } finally {
+      settings.readarr = priorReadarr;
+    }
+  });
+
+  it('resolves an unqualified Bookshelf ID through its primary provider namespace', async () => {
+    const settings = getSettings();
+    const priorReadarr = settings.readarr;
+    settings.readarr = [
+      {
+        id: 0,
+        hostname: 'bookshelf.test',
+        port: 8787,
+        apiKey: 'test-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'ebook',
+      } as ReadarrSettings,
+    ];
+    const lookup = mock.method(
+      ReadarrAPI.prototype,
+      'lookupBook',
+      async (term: string) =>
+        term === 'hardcover:374541'
+          ? [
+              {
+                title: 'The Return of the King',
+                foreignBookId: 'hardcover:374541',
+              },
+            ]
+          : [
+              {
+                title: 'Unrelated book',
+                foreignBookId: 'other',
+              },
+            ]
+    );
+
+    try {
+      const agent = await login();
+      const id = makeBookshelfBookId(0, '374541');
+      const response = await agent.get(`/book/${encodeURIComponent(id)}`);
+
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(response.body.id, id);
+      assert.strictEqual(response.body.title, 'The Return of the King');
+      assert.deepStrictEqual(
+        lookup.mock.calls.map((call) => call.arguments[0]),
+        ['work:374541', '374541', 'hardcover:374541']
+      );
+    } finally {
+      settings.readarr = priorReadarr;
+    }
+  });
+
   it('rejects malformed book IDs before calling OpenLibrary', async () => {
     const getWork = mock.method(OpenLibraryAPI.prototype, 'getWork');
     const getWorkEditions = mock.method(
@@ -589,6 +683,73 @@ describe('GET /book/:id', () => {
     assert.strictEqual(res.body.id, 'OL45804W');
     assert.strictEqual(res.body.authorId, 'OL1A');
     assert.strictEqual(res.body.author, undefined);
+  });
+});
+
+describe('GET /book/:id/ratings', () => {
+  it('matches a Bookshelf book by title and author before using Open Library ratings', async () => {
+    const settings = getSettings();
+    const priorReadarr = settings.readarr;
+    settings.readarr = [
+      {
+        id: 0,
+        hostname: 'bookshelf.test',
+        port: 8787,
+        apiKey: 'test-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'ebook',
+      } as ReadarrSettings,
+    ];
+    mock.method(ReadarrAPI.prototype, 'lookupBook', async () => [
+      {
+        title: 'The Fellowship of the Ring',
+        foreignBookId: '139773',
+        author: { authorName: 'J.R.R. Tolkien' },
+      },
+    ]);
+    mock.method(OpenLibraryAPI.prototype, 'searchBooks', async () => ({
+      numFound: 2,
+      start: 0,
+      docs: [
+        {
+          key: '/works/OL27448W',
+          title: 'The Lord of the Rings',
+          author_name: ['J.R.R. Tolkien'],
+          ratings_count: 500,
+        },
+        {
+          key: '/works/OL27513W',
+          title: 'The Fellowship of the Ring',
+          author_name: ['J.R.R. Tolkien'],
+          ratings_count: 404,
+        },
+      ],
+    }));
+    const getWorkRatings = mock.method(
+      OpenLibraryAPI.prototype,
+      'getWorkRatings',
+      async () => ({ average: 4.34, count: 404 })
+    );
+
+    try {
+      const agent = await login();
+      const id = makeBookshelfBookId(0, '139773');
+      const response = await agent
+        .get(`/book/${encodeURIComponent(id)}/ratings`)
+        .query({ lookupTitle: 'The Fellowship of the Ring' });
+
+      assert.strictEqual(response.status, 200);
+      assert.deepStrictEqual(response.body, {
+        average: 4.34,
+        count: 404,
+        source: 'openlibrary',
+        workId: 'OL27513W',
+      });
+      assert.strictEqual(getWorkRatings.mock.calls[0].arguments[0], 'OL27513W');
+    } finally {
+      settings.readarr = priorReadarr;
+    }
   });
 });
 

@@ -39,7 +39,7 @@ const StatusBadgeMini = memo(
   }: StatusBadgeMiniProps) => {
     const intl = useIntl();
     const badgeStyle = [
-      `rounded-full shadow-md ${shrink ? 'h-3.5 w-3.5' : 'w-5 p-0.5'}`,
+      `shadow-md ${shrink ? 'poster-control poster-control-icon' : 'w-5 rounded-full p-0.5'}`,
     ];
 
     let indicatorIcon: React.ReactNode;
@@ -117,16 +117,16 @@ const StatusBadgeMini = memo(
 
     if (shrink && quality) {
       const tone = inProgress
-        ? 'border-indigo-400/80 bg-indigo-700/35 text-indigo-50'
+        ? 'poster-control-processing'
         : status === MediaStatus.AVAILABLE ||
             status === MediaStatus.PARTIALLY_AVAILABLE
-          ? 'border-green-500/80 bg-green-700/35 text-green-50'
+          ? 'poster-control-available'
           : status === MediaStatus.PENDING
-            ? 'border-yellow-400/80 bg-yellow-700/35 text-yellow-50'
-            : 'border-indigo-400/80 bg-indigo-700/35 text-indigo-50';
+            ? 'poster-control-pending'
+            : 'poster-control-processing';
       const qualityBadge = (
         <div
-          className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] leading-none font-semibold shadow-md backdrop-blur ${tone}`}
+          className={`poster-control shadow-md ${tone}`}
           data-testid="poster-quality-status-badge"
           role="img"
           aria-label={tooltipLabel}

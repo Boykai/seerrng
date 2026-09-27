@@ -21,13 +21,18 @@ describe('Servarr service ID allocation', () => {
       new OverrideRule({ sonarrServiceId: 5 }),
       new OverrideRule({ lidarrServiceId: 6 }),
     ]);
-    await getRepository(Media).save(
+    await getRepository(Media).save([
       new Media({
         mediaType: MediaType.BOOK,
         tmdbId: 999_999_991,
         serviceId: 7,
-      })
-    );
+      }),
+      new Media({
+        mediaType: MediaType.COMIC,
+        tmdbId: 999_999_992,
+        serviceId: 8,
+      }),
+    ]);
 
     assert.strictEqual(await getHistoricalServarrServiceIdMaximum('radarr'), 4);
     assert.strictEqual(await getHistoricalServarrServiceIdMaximum('sonarr'), 5);
@@ -35,6 +40,11 @@ describe('Servarr service ID allocation', () => {
     assert.strictEqual(
       await getHistoricalServarrServiceIdMaximum('readarr'),
       7
+    );
+    assert.strictEqual(await getHistoricalServarrServiceIdMaximum('mylar'), 8);
+    assert.strictEqual(
+      await getHistoricalServarrServiceIdMaximum('kapowarr'),
+      8
     );
     assert.strictEqual(allocateServarrServiceId([], -1), 0);
     assert.strictEqual(allocateServarrServiceId([], 7), 8);

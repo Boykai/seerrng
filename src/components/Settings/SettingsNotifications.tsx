@@ -151,7 +151,7 @@ const SettingsNotifications = ({ children }: SettingsNotificationsProps) => {
           intl.formatMessage(globalMessages.settings),
         ]}
       />
-      <section className="settings-group-card">
+      <section className="app-card-sub settings-group-card">
         <h3 className="settings-group-heading">
           {intl.formatMessage(messages.notificationsettings)}
         </h3>

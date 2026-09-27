@@ -9,16 +9,21 @@ import CachedImage from '@app/components/Common/CachedImage';
 import MediaTypeBadge from '@app/components/Common/MediaTypeBadge';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import Tooltip from '@app/components/Common/Tooltip';
+import WatchedBadge from '@app/components/Common/WatchedBadge';
 import ErrorCard from '@app/components/TitleCard/ErrorCard';
 import Placeholder from '@app/components/TitleCard/Placeholder';
+import PosterRatingPopover from '@app/components/TitleCard/PosterRatingPopover';
+import { getTitleCardBookDetailQuery } from '@app/components/TitleCard/bookDetailQuery';
 import {
   getTitleCardStatusBadges,
   getTitleCardStatusBadgeSlots,
 } from '@app/components/TitleCard/statusBadges';
+import useAlbumArtwork from '@app/hooks/useAlbumArtwork';
 import { useIsTouch } from '@app/hooks/useIsTouch';
 import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, UserType, useUser } from '@app/hooks/useUser';
+import useWatchStatus from '@app/hooks/useWatchStatus';
 import globalMessages from '@app/i18n/globalMessages';
 import {
   encodeApiPathSegment,
@@ -61,6 +66,9 @@ interface TitleCardProps {
   artist?: string;
   type?: string;
   userScore?: number;
+  voteCount?: number;
+  bookRatingAverage?: number;
+  bookRatingCount?: number;
   mediaType: Exclude<MediaType, 'author'>;
   status?: MediaStatus;
   status4k?: MediaStatus;
@@ -76,6 +84,7 @@ interface TitleCardProps {
   hideAssociationWhenEmpty?: boolean;
   priority?: boolean;
   preferredBookFormat?: 'ebook' | 'audiobook';
+  showAllBookFormats?: boolean;
   availableQualities?: ('MP3' | 'FLAC')[];
   qualityStatuses?: AlbumResult['qualityStatuses'];
 }
@@ -98,6 +107,10 @@ const TitleCard = ({
   year,
   title,
   artist,
+  userScore,
+  voteCount,
+  bookRatingAverage,
+  bookRatingCount,
   status,
   status4k,
   mediaType,
@@ -112,6 +125,7 @@ const TitleCard = ({
   hideAssociationWhenEmpty = false,
   priority = false,
   preferredBookFormat,
+  showAllBookFormats = false,
   availableQualities,
   qualityStatuses,
 }: TitleCardProps) => {
@@ -436,9 +450,45 @@ const TitleCard = ({
   const isComic = mediaType === 'comic';
   const isMagazine = mediaType === 'magazine';
   const canonicalId = normalizeExternalTitleId(mediaType, id);
+  const artwork = useAlbumArtwork(
+    isAlbum ? String(canonicalId) : undefined,
+    image,
+    cardRef
+  );
   const videoMediaType =
     mediaType === 'movie' || mediaType === 'collection' || mediaType === 'tv';
   const numericId = typeof id === 'number' ? id : Number(id);
+  const canShowWatchedStatus =
+    (mediaType === 'movie' || mediaType === 'tv') &&
+    (currentStatus === MediaStatus.AVAILABLE ||
+      currentStatus === MediaStatus.PARTIALLY_AVAILABLE ||
+      currentStatus4k === MediaStatus.AVAILABLE ||
+      currentStatus4k === MediaStatus.PARTIALLY_AVAILABLE);
+  const [watchStatusInView, setWatchStatusInView] = useState(false);
+  useEffect(() => {
+    if (!canShowWatchedStatus || watchStatusInView) return;
+    const card = cardRef.current;
+    if (!card || typeof IntersectionObserver === 'undefined') {
+      setWatchStatusInView(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setWatchStatusInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [canShowWatchedStatus, watchStatusInView]);
+  const { data: watchedStatus } = useWatchStatus(
+    mediaType === 'tv' ? 'tv' : 'movie',
+    Number.isSafeInteger(numericId) ? numericId : undefined,
+    canShowWatchedStatus && watchStatusInView
+  );
   const canUseVideoActions = videoMediaType && Number.isFinite(numericId);
   const canUseRequestActions =
     canUseVideoActions || isAlbum || isBook || isComic || isMagazine;
@@ -456,16 +506,18 @@ const TitleCard = ({
             : mediaType === 'book'
               ? {
                   pathname: `/book/${encodeApiPathSegment(canonicalId)}`,
-                  query: preferredBookFormat
-                    ? { format: preferredBookFormat }
-                    : undefined,
+                  query: getTitleCardBookDetailQuery({
+                    canonicalId,
+                    preferredBookFormat,
+                    title,
+                  }),
                 }
               : mediaType === 'comic'
                 ? `/comic/${encodeApiPathSegment(canonicalId)}`
                 : mediaType === 'magazine'
                   ? `/magazine/${encodeApiPathSegment(canonicalId)}`
                   : `/artist/${encodeApiPathSegment(canonicalId)}`;
-  const displayImage = getTmdbPosterImageUrl(image);
+  const displayImage = getTmdbPosterImageUrl(artwork);
   // ComicVine artwork is served from its own CDN hosts and isn't yet routed
   // through our image cache proxy (deliberate scope cut - see comics plan);
   // 'tmdb' is a safe no-op default since the proxy leaves non-tmdb URLs as-is.
@@ -535,8 +587,9 @@ const TitleCard = ({
     !!currentStatus &&
     currentStatus !== MediaStatus.UNKNOWN &&
     currentStatus !== MediaStatus.DELETED;
-  const showTextOverlay = showText || !image || showDetail || showRequestModal;
-  const showFullDetailOverlay = !image || showDetail || showRequestModal;
+  const showTextOverlay =
+    showText || !artwork || showDetail || showRequestModal;
+  const showFullDetailOverlay = !artwork || showDetail || showRequestModal;
   const requestLabel =
     isBook && preferredBookFormat
       ? intl.formatMessage(messages.requestBookFormat, {
@@ -639,10 +692,8 @@ const TitleCard = ({
         </>
       )}
       <div
-        className={`group relative aspect-[2/3] transform-gpu cursor-default overflow-hidden rounded-xl bg-gray-800 bg-cover ring-1 transition duration-300 outline-none ${
-          showDetail
-            ? 'scale-105 shadow-lg ring-gray-500'
-            : 'scale-100 shadow ring-gray-700'
+        className={`app-card-poster app-card-poster-interactive group aspect-[2/3] ${
+          showDetail ? 'app-card-poster-active' : ''
         }`}
         onMouseEnter={() => {
           if (!isTouch) {
@@ -669,14 +720,29 @@ const TitleCard = ({
             priority={priority}
           />
           <div className="absolute right-0 left-0 p-2">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] gap-x-2 gap-y-1">
-              <div className="flex min-w-0 items-center">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] gap-x-1 gap-y-1">
+              <div className="flex min-w-0 flex-col items-start gap-1">
                 {isBook ? (
-                  <BookFormatBadge
-                    format={preferredBookFormat}
-                    variant="card"
-                    className="pointer-events-none z-40 self-start"
-                  />
+                  showAllBookFormats ? (
+                    <>
+                      <BookFormatBadge
+                        format="ebook"
+                        variant="card"
+                        className="pointer-events-none z-40 self-start"
+                      />
+                      <BookFormatBadge
+                        format="audiobook"
+                        variant="card"
+                        className="pointer-events-none z-40 self-start"
+                      />
+                    </>
+                  ) : (
+                    <BookFormatBadge
+                      format={preferredBookFormat}
+                      variant="card"
+                      className="pointer-events-none z-40 self-start"
+                    />
+                  )
                 ) : (
                   <MediaTypeBadge
                     mediaType={mediaType === 'person' ? 'artist' : mediaType}
@@ -685,7 +751,7 @@ const TitleCard = ({
                   />
                 )}
               </div>
-              <div className="z-40 flex min-h-6 items-center justify-end">
+              <div className="z-40 flex min-h-4 items-center justify-end">
                 {primaryStatusBadge && (
                   <StatusBadgeMini
                     status={primaryStatusBadge.status}
@@ -700,19 +766,20 @@ const TitleCard = ({
                   >
                     <Button
                       buttonType="ghost"
-                      className="z-40 h-6 w-6 rounded-full border-red-600/80 bg-red-950/75 p-0 text-red-600 hover:border-red-400 hover:bg-red-700/90 hover:text-white"
+                      className="poster-control poster-control-icon poster-control-blocklist z-40"
                       buttonSize="sm"
+                      iconOnly
                       aria-label={intl.formatMessage(
                         globalMessages.addToBlocklist
                       )}
                       onClick={() => setShowBlocklistModal(true)}
                     >
-                      <EyeSlashIcon className="h-3.5 w-3.5" />
+                      <EyeSlashIcon />
                     </Button>
                   </Tooltip>
                 )}
               </div>
-              <div className="z-40 flex min-h-6 items-center">
+              <div className="z-40 flex min-h-4 items-center">
                 {currentStatus !== MediaStatus.BLOCKLISTED && (
                   <AssociationBadge
                     mediaType={mediaType}
@@ -722,7 +789,7 @@ const TitleCard = ({
                   />
                 )}
               </div>
-              <div className="z-40 flex min-h-6 items-center justify-end">
+              <div className="z-40 flex min-h-4 items-center justify-end">
                 {secondaryStatusBadge && (
                   <StatusBadgeMini
                     status={secondaryStatusBadge.status}
@@ -732,6 +799,23 @@ const TitleCard = ({
                   />
                 )}
               </div>
+              {watchedStatus && watchedStatus.watchedCount > 0 && (
+                <>
+                  <span aria-hidden="true" />
+                  <div className="z-40 flex items-center justify-end">
+                    <WatchedBadge
+                      status={watchedStatus}
+                      incompleteLibrary={
+                        mediaType === 'tv' &&
+                        (currentStatus === MediaStatus.PARTIALLY_AVAILABLE ||
+                          (currentStatus !== MediaStatus.AVAILABLE &&
+                            currentStatus4k ===
+                              MediaStatus.PARTIALLY_AVAILABLE))
+                      }
+                    />
+                  </div>
+                </>
+              )}
             </div>
             {showDetail && currentStatus !== MediaStatus.BLOCKLISTED && (
               <div className="mt-1 flex justify-end">
@@ -741,16 +825,18 @@ const TitleCard = ({
                     (toggleWatchlist ? (
                       <Button
                         buttonType={'ghost'}
-                        className="z-40"
+                        className="poster-control poster-control-icon z-40"
                         buttonSize={'sm'}
+                        iconOnly
                         onClick={onClickWatchlistBtn}
                       >
                         <StarIcon className={'h-3 text-amber-300'} />
                       </Button>
                     ) : (
                       <Button
-                        className="z-40"
+                        className="poster-control poster-control-icon z-40"
                         buttonSize={'sm'}
+                        iconOnly
                         onClick={onClickDeleteWatchlistBtn}
                       >
                         <MinusCircleIcon className={'h-3'} />
@@ -770,8 +856,9 @@ const TitleCard = ({
                   >
                     <Button
                       buttonType={'ghost'}
-                      className="z-40"
+                      className="poster-control poster-control-icon z-40"
                       buttonSize={'sm'}
+                      iconOnly
                       onClick={() => onClickShowBlocklistBtn()}
                     >
                       <EyeIcon className={'h-3'} />
@@ -881,6 +968,24 @@ const TitleCard = ({
           </Transition>
         </div>
       </div>
+      {showDetail &&
+        !isTouch &&
+        (mediaType === 'movie' ||
+          mediaType === 'tv' ||
+          mediaType === 'album' ||
+          mediaType === 'book') && (
+          <PosterRatingPopover
+            anchorRef={cardRef}
+            id={canonicalId}
+            mediaType={mediaType}
+            userScore={userScore}
+            voteCount={voteCount}
+            bookRatingAverage={bookRatingAverage}
+            bookRatingCount={bookRatingCount}
+            title={title}
+            artist={artist}
+          />
+        )}
     </div>
   );
 };

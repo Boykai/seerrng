@@ -373,13 +373,18 @@ class Media {
     Object.assign(this, init);
   }
 
-  public resetServiceDataForResolution(is4k: boolean): void {
+  public resetServiceDataForResolution(
+    is4k: boolean,
+    preserveMediaServerKeys = false
+  ): void {
     if (is4k) {
       this.serviceId4k = null;
       this.externalServiceId4k = null;
       this.externalServiceSlug4k = null;
-      this.ratingKey4k = null;
-      this.jellyfinMediaId4k = null;
+      if (!preserveMediaServerKeys) {
+        this.ratingKey4k = null;
+        this.jellyfinMediaId4k = null;
+      }
       return;
     }
 
@@ -388,8 +393,10 @@ class Media {
     this.externalServiceId = null;
     this.externalServiceSlug = null;
     this.comicServiceType = null;
-    this.ratingKey = null;
-    this.jellyfinMediaId = null;
+    if (!preserveMediaServerKeys) {
+      this.ratingKey = null;
+      this.jellyfinMediaId = null;
+    }
     this.ratingKeyMp3 = null;
     this.ratingKeyFlac = null;
     this.jellyfinMediaIdMp3 = null;

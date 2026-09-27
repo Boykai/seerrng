@@ -32,9 +32,22 @@ const messages = defineMessages('components.Login', {
   signinwithjellyfin: 'Use your {mediaServerName} account',
   signinwithoverseerr: 'Use your {applicationTitle} account',
   orsigninwith: 'Or sign in with',
+  movie: 'Movie',
+  series: 'Series',
 });
 
-const Login = ({ initialBackdrops }: { initialBackdrops?: string[] }) => {
+export type LoginBackdrop = {
+  path: string;
+  title: string;
+  mediaType: 'movie' | 'tv';
+  year?: string;
+};
+
+const Login = ({
+  initialBackdrops,
+}: {
+  initialBackdrops?: LoginBackdrop[];
+}) => {
   const intl = useIntl();
   const router = useRouter();
   const settings = useSettings();
@@ -109,7 +122,7 @@ const Login = ({ initialBackdrops }: { initialBackdrops?: string[] }) => {
     }
   }, [user, router]);
 
-  const { data: backdrops } = useSWR<string[]>('/api/v1/backdrops', {
+  const { data: backdrops } = useSWR<LoginBackdrop[]>('/api/v1/backdrops', {
     fallbackData: initialBackdrops,
     revalidateOnMount: !initialBackdrops,
     refreshInterval: 0,
@@ -194,19 +207,30 @@ const Login = ({ initialBackdrops }: { initialBackdrops?: string[] }) => {
   ].filter((o): o is JSX.Element => !!o);
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-gray-900 py-14">
+    <div className="auth-login-page relative flex min-h-screen flex-col bg-gray-900">
       <PageTitle title={intl.formatMessage(messages.signin)} />
       <ImageFader
         backgroundImages={
           backdrops?.map(
-            (backdrop) => `https://image.tmdb.org/t/p/w1280${backdrop}`
+            (backdrop) => `https://image.tmdb.org/t/p/w1280${backdrop.path}`
+          ) ?? []
+        }
+        backgroundTitles={
+          backdrops?.map(
+            (backdrop) =>
+              intl.formatMessage(
+                backdrop.mediaType === 'tv' ? messages.series : messages.movie
+              ) +
+              ': ' +
+              backdrop.title +
+              (backdrop.year ? ' (' + backdrop.year + ')' : '')
           ) ?? []
         }
       />
       <div className="absolute top-4 right-4 z-50">
         <LanguagePicker />
       </div>
-      <div className="relative z-40 mt-10 flex flex-col items-center px-4 sm:mx-auto sm:w-full sm:max-w-md">
+      <div className="auth-login-brand relative z-40 flex flex-col items-center px-4 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="relative h-48 w-full max-w-full drop-shadow-[0_2px_8px_rgba(15,23,42,0.65)]">
           <Image
             src={versionedAsset('/logo_stacked.svg')}
@@ -221,8 +245,8 @@ const Login = ({ initialBackdrops }: { initialBackdrops?: string[] }) => {
       <div className="relative z-50 mt-4 sm:mx-auto sm:w-full sm:max-w-md">
         <TransportSecurityNotice onReadinessChange={setTransportReady} />
       </div>
-      <div className="relative z-50 mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="auth-frosted-surface overflow-hidden bg-gray-800/50 shadow sm:rounded-lg">
+      <div className="auth-login-form relative z-50 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="auth-frosted-surface app-card-main refreshed-card-surface overflow-hidden rounded-xl border border-gray-700 shadow-lg shadow-gray-950/20">
           <>
             <Transition
               as="div"
@@ -290,13 +314,13 @@ const Login = ({ initialBackdrops }: { initialBackdrops?: string[] }) => {
                 (loginFormVisible ? (
                   <div className="flex items-center py-5">
                     <div className="flex-grow border-t border-gray-600" />
-                    <span className="mx-2 flex-shrink text-sm text-gray-400">
+                    <span className="refreshed-detail-text-muted mx-2 flex-shrink text-sm">
                       {intl.formatMessage(messages.orsigninwith)}
                     </span>
                     <div className="flex-grow border-t border-gray-600" />
                   </div>
                 ) : (
-                  <h2 className="mb-6 text-center text-lg font-bold text-gray-200">
+                  <h2 className="refreshed-detail-text mb-6 text-center text-lg font-bold">
                     {intl.formatMessage(messages.signinheader)}
                   </h2>
                 ))}

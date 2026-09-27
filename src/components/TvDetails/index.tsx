@@ -8,6 +8,7 @@ import Tooltip from '@app/components/Common/Tooltip';
 import RequestButton from '@app/components/RequestButton';
 import SeriesDetailsLayout from '@app/components/TvDetails/SeriesDetailsLayout';
 import useSettings from '@app/hooks/useSettings';
+import useTitleBlocklist from '@app/hooks/useTitleBlocklist';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, UserType, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -25,7 +26,6 @@ import {
   StarIcon,
 } from '@heroicons/react/24/outline';
 import type { RTRating } from '@server/api/rating/rottentomatoes';
-import { IssueStatus } from '@server/constants/issue';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -119,7 +119,10 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
       setShowManager(true);
       void router.replace({
         pathname: router.pathname,
-        query: { tvId: router.query.tvId },
+        query: {
+          tvId: router.query.tvId,
+          ...(router.query.issues === '1' ? { issues: '1' } : {}),
+        },
       });
     }
   }, [router, router.query.manage]);
@@ -128,6 +131,17 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
     () => setShowBlocklistModal(false),
     []
   );
+  const {
+    isBlocklisted,
+    checking: checkingBlocklist,
+    error: blocklistError,
+    setBlocklisted,
+  } = useTitleBlocklist(
+    data?.id,
+    MediaType.TV,
+    data?.mediaInfo?.status === MediaStatus.BLOCKLISTED
+  );
+
   if (!data && !error) {
     return <LoadingSpinner />;
   }
@@ -251,6 +265,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
         title: data.name,
         user: user?.id,
       });
+      await setBlocklisted(true);
       addToast(
         <span>
           {intl.formatMessage(globalMessages.blocklistSuccess, {
@@ -263,6 +278,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
       await revalidate();
     } catch (e) {
       if (axios.isAxiosError(e) && e.response?.status === 412) {
+        await setBlocklisted(true);
         addToast(
           <span>
             {intl.formatMessage(globalMessages.blocklistDuplicateError, {
@@ -286,7 +302,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
 
   const canUseBlocklist = hasPermission(Permission.MANAGE_BLOCKLIST);
   const isBlocklistAvailable =
-    data.mediaInfo?.status !== MediaStatus.BLOCKLISTED;
+    !isBlocklisted && !checkingBlocklist && !blocklistError;
   const canUseReportIssue = hasPermission(
     [Permission.CREATE_ISSUES, Permission.MANAGE_ISSUES],
     { type: 'or' }
@@ -371,18 +387,8 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
             className="relative"
             aria-label={intl.formatMessage(messages.manageseries)}
           >
-            <CogIcon className="!mr-0" />
-            {hasPermission([Permission.MANAGE_ISSUES, Permission.VIEW_ISSUES], {
-              type: 'or',
-            }) &&
-              (data.mediaInfo?.issues.filter(
-                (issue) => issue.status === IssueStatus.OPEN
-              ).length ?? 0) > 0 && (
-                <>
-                  <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-600" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 animate-ping rounded-full bg-red-600" />
-                </>
-              )}
+            <CogIcon />
+            <span>{intl.formatMessage(globalMessages.manage)}</span>
           </Button>
         </Tooltip>
       )}
@@ -405,6 +411,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
             aria-label={intl.formatMessage(messages.reportissue)}
           >
             <ExclamationTriangleIcon />
+            <span>{intl.formatMessage(globalMessages.reportIssue)}</span>
           </Button>
         </Tooltip>
       )}

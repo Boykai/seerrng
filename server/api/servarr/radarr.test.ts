@@ -17,6 +17,30 @@ function getAxios(radarr: RadarrAPI): AxiosInstance {
 }
 
 describe('Radarr response normalization', () => {
+  it('rejects malformed or incomplete inventories in deletion-check mode', async () => {
+    const radarr = buildRadarr();
+    for (const data of [
+      {},
+      [null],
+      [{ id: 0, tmdbId: 42, title: 'Invalid' }],
+      [{ id: 4, title: 'No canonical ID' }],
+    ]) {
+      const get = mock.method(getAxios(radarr), 'get', async () => ({ data }));
+      await assert.rejects(radarr.getMovies({ strict: true }));
+      get.mock.restore();
+    }
+  });
+  it('accepts a verified empty inventory and sends the canonical filter', async () => {
+    const radarr = buildRadarr();
+    const get = mock.method(getAxios(radarr), 'get', async () => ({
+      data: [],
+    }));
+    assert.deepEqual(await radarr.getMovies({ strict: true, tmdbId: 42 }), []);
+    const options = get.mock.calls[0].arguments[1] as
+      { params?: { tmdbId?: number } } | undefined;
+    assert.equal(options?.params?.tmdbId, 42);
+    get.mock.restore();
+  });
   it('returns an exact bounded movie and nested media record', () => {
     const movie = sanitizeRadarrMovie({
       id: 9,

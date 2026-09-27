@@ -37,7 +37,7 @@ const LibraryItem = ({
   );
 
   return (
-    <li className="settings-library-card col-span-1 flex shadow-sm">
+    <li className="app-card-sub settings-library-card col-span-1 flex shadow-sm">
       <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
         <div className="settings-library-card-content">
           {badgeType && (

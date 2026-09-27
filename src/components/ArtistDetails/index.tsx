@@ -5,7 +5,6 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import MediaTypeBadge from '@app/components/Common/MediaTypeBadge';
 import PageTitle from '@app/components/Common/PageTitle';
 import MediaSlider from '@app/components/MediaSlider';
-import BulkRequestModal from '@app/components/RequestModal/BulkRequestModal';
 import TitleCard from '@app/components/TitleCard';
 import { Permission, useUser } from '@app/hooks/useUser';
 import ErrorPage from '@app/pages/_error';
@@ -93,7 +92,6 @@ const ArtistDetails = () => {
   const router = useRouter();
   const { hasPermission } = useUser();
   const artistId = router.query.artistId as string | undefined;
-  const [showBulkRequestModal, setShowBulkRequestModal] = useState(false);
   const { data, error } = useSWR<ArtistData>(
     artistId ? `/api/v1/artist/${encodeApiPathSegment(artistId)}` : null,
     { revalidateOnFocus: false, dedupingInterval: 30000 }
@@ -217,15 +215,6 @@ const ArtistDetails = () => {
   return (
     <>
       <PageTitle title={artistName} />
-      {showBulkRequestModal && artistId && (
-        <BulkRequestModal
-          show={showBulkRequestModal}
-          mediaType="music"
-          artistId={artistId}
-          title={artistName}
-          onCancel={() => setShowBulkRequestModal(false)}
-        />
-      )}
       <div className="relative z-10 mt-4 mb-10 flex flex-col items-center gap-6 text-gray-300 lg:flex-row lg:items-start">
         {data.artistThumb && (
           <div className="relative h-36 w-36 flex-shrink-0 overflow-hidden rounded-full ring-1 ring-gray-700 lg:h-44 lg:w-44">
@@ -266,7 +255,11 @@ const ArtistDetails = () => {
             <div className="mt-5">
               <Button
                 buttonType="primary"
-                onClick={() => setShowBulkRequestModal(true)}
+                onClick={() =>
+                  void router.push(
+                    `/collections/music/${artistId}?view=discography`
+                  )
+                }
               >
                 <ArrowDownTrayIcon />
                 <span>{intl.formatMessage(messages.requestdiscography)}</span>

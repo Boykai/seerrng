@@ -5,20 +5,33 @@ import { MediaRequest } from '@server/entity/MediaRequest';
 import OverrideRule from '@server/entity/OverrideRule';
 import { User } from '@server/entity/User';
 import type { OverrideRuleResultsResponse } from '@server/interfaces/api/overrideRuleInterfaces';
+import {
+  getBookOverrideMetadata,
+  getMusicOverrideMetadata,
+} from '@server/lib/catalogOverrideMetadata';
+import {
+  isValidMusicBrainzResourceId,
+  isValidOpenLibraryResourceId,
+  normalizeMusicBrainzId,
+  normalizeOpenLibraryWorkId,
+} from '@server/lib/externalIds';
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import { runOverrideRuleMutation } from '@server/lib/overrideRuleMutation';
 import {
   evaluateOverrideRules,
+  evaluateRequesterOverrideRules,
   type OverrideRulesResult,
 } from '@server/lib/overrideRules';
 import { Permission } from '@server/lib/permissions';
 import { runWithServarrServiceAdmission } from '@server/lib/serviceAdmission';
+import { getSettings, type ReadarrSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import {
   authorizedMutation,
   authorizedRouteAccess,
 } from '@server/middleware/authorizedMutation';
+import { parseBookshelfBookId } from '@server/utils/bookshelfCatalog';
 import { parsePositiveRouteId } from '@server/utils/routeId';
 import {
   parseBoundedString,
@@ -42,6 +55,7 @@ const overrideRuleBodyFields = new Set<keyof OverrideRuleBody>([
   'radarrServiceId',
   'sonarrServiceId',
   'lidarrServiceId',
+  'readarrServiceId',
 ]);
 
 type OverrideRuleBody = {
@@ -55,6 +69,7 @@ type OverrideRuleBody = {
   radarrServiceId?: number | null;
   sonarrServiceId?: number | null;
   lidarrServiceId?: number | null;
+  readarrServiceId?: number | null;
 };
 
 type OverrideRulePatch = {
@@ -68,11 +83,12 @@ type OverrideRulePatch = {
   radarrServiceId?: number | null;
   sonarrServiceId?: number | null;
   lidarrServiceId?: number | null;
+  readarrServiceId?: number | null;
 };
 
 type OverrideRuleServiceSelection = Pick<
   OverrideRulePatch,
-  'radarrServiceId' | 'sonarrServiceId' | 'lidarrServiceId'
+  'radarrServiceId' | 'sonarrServiceId' | 'lidarrServiceId' | 'readarrServiceId'
 >;
 
 const getOverrideRuleServiceReferences = (
@@ -87,6 +103,9 @@ const getOverrideRuleServiceReferences = (
       : []),
     ...(rule.lidarrServiceId != null
       ? [{ serviceType: 'lidarr' as const, serviceId: rule.lidarrServiceId }]
+      : []),
+    ...(rule.readarrServiceId != null
+      ? [{ serviceType: 'readarr' as const, serviceId: rule.readarrServiceId }]
       : []),
   ]);
 
@@ -198,6 +217,24 @@ const parseOptionalRuleIdList = (
   return [...new Set(ids)].join(',');
 };
 
+const parseOptionalCatalogTerms = (
+  value: unknown,
+  fieldName: string
+): string | null | undefined | { error: string } => {
+  const parsed = parseOptionalRuleString(value, fieldName);
+  if (parsed === undefined || parsed === null || typeof parsed === 'object') {
+    return parsed;
+  }
+  const terms = parsed.split(',').map((term) => term.trim());
+  if (
+    terms.length > MAX_OVERRIDE_RULE_LIST_ITEMS ||
+    terms.some((term) => !term || term.length > 100)
+  ) {
+    return { error: `${fieldName} must contain non-empty names.` };
+  }
+  return [...new Set(terms)].join(',');
+};
+
 const parseOptionalRuleLanguageList = (
   value: unknown
 ): string | null | undefined | { error: string } => {
@@ -230,6 +267,7 @@ const validateOverrideRuleShape = (
     rule.radarrServiceId,
     rule.sonarrServiceId,
     rule.lidarrServiceId,
+    rule.readarrServiceId,
   ].filter((serviceId) => serviceId != null);
 
   if (configuredServices.length !== 1) {
@@ -243,7 +281,9 @@ const validateOverrideRuleShape = (
     (rule.sonarrServiceId != null &&
       !settings.sonarr.some(({ id }) => id === rule.sonarrServiceId)) ||
     (rule.lidarrServiceId != null &&
-      !settings.lidarr.some(({ id }) => id === rule.lidarrServiceId))
+      !settings.lidarr.some(({ id }) => id === rule.lidarrServiceId)) ||
+    (rule.readarrServiceId != null &&
+      !settings.readarr.some(({ id }) => id === rule.readarrServiceId))
   ) {
     return { error: 'The selected override rule service does not exist.' };
   }
@@ -258,20 +298,16 @@ const validateOverrideRuleShape = (
     return { error: 'Override rules must define at least one setting.' };
   }
 
-  if (
-    rule.lidarrServiceId != null &&
-    [rule.genre, rule.language, rule.keywords].some(hasRuleValue)
-  ) {
-    return {
-      error: 'Lidarr override rules support only user conditions.',
-    };
+  if (rule.lidarrServiceId != null && hasRuleValue(rule.language)) {
+    return { error: 'Album language is not available for Lidarr rules.' };
   }
 
   return undefined;
 };
 
 const parseOverrideRuleBody = (
-  body: unknown
+  body: unknown,
+  existingRule?: OverrideRule
 ): OverrideRulePatch | { error: string } => {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { error: 'Override rule body must be an object.' };
@@ -285,16 +321,27 @@ const parseOverrideRuleBody = (
   }
 
   const bodyObject = body as Record<keyof OverrideRuleBody, unknown>;
+  const isCatalogRule =
+    (bodyObject.lidarrServiceId === undefined
+      ? existingRule?.lidarrServiceId
+      : bodyObject.lidarrServiceId) != null ||
+    (bodyObject.readarrServiceId === undefined
+      ? existingRule?.readarrServiceId
+      : bodyObject.readarrServiceId) != null;
 
   const users = parseOptionalRuleIdList(bodyObject.users, 'Users');
   if (typeof users === 'object' && users && 'error' in users) return users;
-  const genre = parseOptionalRuleIdList(bodyObject.genre, 'Genre');
+  const genre = isCatalogRule
+    ? parseOptionalCatalogTerms(bodyObject.genre, 'Genre')
+    : parseOptionalRuleIdList(bodyObject.genre, 'Genre');
   if (typeof genre === 'object' && genre && 'error' in genre) return genre;
   const language = parseOptionalRuleLanguageList(bodyObject.language);
   if (typeof language === 'object' && language && 'error' in language) {
     return language;
   }
-  const keywords = parseOptionalRuleIdList(bodyObject.keywords, 'Keywords');
+  const keywords = isCatalogRule
+    ? parseOptionalCatalogTerms(bodyObject.keywords, 'Keywords')
+    : parseOptionalRuleIdList(bodyObject.keywords, 'Keywords');
   if (typeof keywords === 'object' && keywords && 'error' in keywords) {
     return keywords;
   }
@@ -350,6 +397,17 @@ const parseOverrideRuleBody = (
   ) {
     return lidarrServiceId;
   }
+  const readarrServiceId = parseOptionalRuleInteger(
+    bodyObject.readarrServiceId,
+    'Bookshelf service ID'
+  );
+  if (
+    typeof readarrServiceId === 'object' &&
+    readarrServiceId &&
+    'error' in readarrServiceId
+  ) {
+    return readarrServiceId;
+  }
 
   const parsedRule: OverrideRulePatch = {
     users,
@@ -362,6 +420,7 @@ const parseOverrideRuleBody = (
     radarrServiceId,
     sonarrServiceId,
     lidarrServiceId,
+    readarrServiceId,
   };
 
   return Object.fromEntries(
@@ -434,7 +493,10 @@ overrideRuleRoutes.post<
   {
     mediaType: MediaType;
     is4k: boolean;
-    tmdbId: number;
+    tmdbId?: number;
+    bookFormat?: 'ebook' | 'audiobook';
+    musicId?: string;
+    bookId?: string;
     requestUser?: number;
     requestId?: number | null;
     tags?: number[] | null;
@@ -464,7 +526,8 @@ overrideRuleRoutes.post<
 
     if (
       !userId ||
-      !tmdbId ||
+      ((mediaType === MediaType.MOVIE || mediaType === MediaType.TV) &&
+        !tmdbId) ||
       (req.body.requestId != null && !requestId) ||
       (req.body.requestUser != null && !requestedUserId) ||
       (req.body.serviceId != null && !serviceId) ||
@@ -483,10 +546,44 @@ overrideRuleRoutes.post<
         .status(400)
         .json({ status: 400, message: 'Invalid advanced request options.' });
     }
-    if (mediaType !== MediaType.MOVIE && mediaType !== MediaType.TV) {
+    if (
+      mediaType !== MediaType.MOVIE &&
+      mediaType !== MediaType.TV &&
+      mediaType !== MediaType.MUSIC &&
+      mediaType !== MediaType.BOOK
+    ) {
       return res
         .status(400)
         .json({ status: 400, message: 'Invalid advanced request media type.' });
+    }
+    if (
+      mediaType === MediaType.BOOK &&
+      req.body.bookFormat !== 'ebook' &&
+      req.body.bookFormat !== 'audiobook'
+    ) {
+      return res
+        .status(400)
+        .json({ status: 400, message: 'Invalid book format.' });
+    }
+    if (
+      (mediaType === MediaType.MUSIC &&
+        req.body.musicId != null &&
+        (typeof req.body.musicId !== 'string' ||
+          !isValidMusicBrainzResourceId(
+            normalizeMusicBrainzId(req.body.musicId)
+          ))) ||
+      (mediaType === MediaType.BOOK &&
+        req.body.bookId != null &&
+        (typeof req.body.bookId !== 'string' ||
+          (!parseBookshelfBookId(req.body.bookId) &&
+            !isValidOpenLibraryResourceId(
+              normalizeOpenLibraryWorkId(req.body.bookId)
+            ))))
+    ) {
+      return res.status(400).json({
+        status: 400,
+        message: 'Invalid catalog item identifier.',
+      });
     }
 
     const canManageRequests = req.user?.hasPermission(
@@ -557,11 +654,69 @@ overrideRuleRoutes.post<
           .json({ status: 404, message: 'User not found.' });
       }
 
+      if (canManageRequests) {
+        return res.status(200).json({
+          rootFolder: null,
+          profileId: null,
+          tags: req.body.tags ?? null,
+        });
+      }
+
+      if (mediaType === MediaType.MUSIC || mediaType === MediaType.BOOK) {
+        const settings = getSettings();
+        const services =
+          mediaType === MediaType.MUSIC ? settings.lidarr : settings.readarr;
+        const selectedService = serviceId
+          ? services.find((service) => service.id === serviceId)
+          : services.find(
+              (service) =>
+                service.isDefault &&
+                (mediaType !== MediaType.BOOK ||
+                  ((service as ReadarrSettings).serviceType ?? 'ebook') ===
+                    req.body.bookFormat)
+            );
+        if (!selectedService) {
+          return res.status(400).json({
+            status: 400,
+            message: 'Selected request service is not configured.',
+          });
+        }
+        if (
+          mediaType === MediaType.BOOK &&
+          ((selectedService as ReadarrSettings).serviceType ?? 'ebook') !==
+            req.body.bookFormat
+        ) {
+          return res.status(400).json({
+            status: 400,
+            message: 'Selected Bookshelf service does not match the format.',
+          });
+        }
+        const metadata =
+          mediaType === MediaType.MUSIC
+            ? req.body.musicId
+              ? await getMusicOverrideMetadata(req.body.musicId)
+              : {}
+            : req.body.bookId
+              ? await getBookOverrideMetadata(req.body.bookId, settings.readarr)
+              : {};
+        const result = await evaluateRequesterOverrideRules({
+          serviceField:
+            mediaType === MediaType.MUSIC
+              ? 'lidarrServiceId'
+              : 'readarrServiceId',
+          serviceId: selectedService.id,
+          requestUser,
+          tags: req.body.tags,
+          metadata,
+        });
+        return res.status(200).json(result);
+      }
+
       const tmdb = new TheMovieDb();
       const tmdbMedia =
         req.body.mediaType === MediaType.MOVIE
-          ? await tmdb.getMovie({ movieId: tmdbId })
-          : await tmdb.getTvShow({ tvId: tmdbId });
+          ? await tmdb.getMovie({ movieId: tmdbId! })
+          : await tmdb.getTvShow({ tvId: tmdbId! });
       const result = await evaluateOverrideRules({
         mediaType,
         is4k: req.body.is4k,
@@ -594,11 +749,6 @@ overrideRuleRoutes.put(
         return next({ status: 404, message: 'Override Rule not found.' });
       }
 
-      const parsedBody = parseOverrideRuleBody(req.body);
-      if ('error' in parsedBody) {
-        return res.status(400).json({ status: 400, message: parsedBody.error });
-      }
-
       try {
         return await runOverrideRuleMutation(ruleId, async () => {
           const rule = await overrideRuleRepository.findOne({
@@ -609,6 +759,13 @@ overrideRuleRoutes.put(
 
           if (!rule) {
             return next({ status: 404, message: 'Override Rule not found.' });
+          }
+
+          const parsedBody = parseOverrideRuleBody(req.body, rule);
+          if ('error' in parsedBody) {
+            return res
+              .status(400)
+              .json({ status: 400, message: parsedBody.error });
           }
 
           const updatedRule = { ...rule, ...parsedBody };

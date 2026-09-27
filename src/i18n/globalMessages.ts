@@ -3,6 +3,7 @@ import defineMessages from '@app/utils/defineMessages';
 const globalMessages = defineMessages('i18n', {
   available: 'Available',
   partiallyavailable: 'Partially Available',
+  notavailable: 'Not Available',
   deleted: 'Deleted',
   processing: 'Processing',
   unavailable: 'Unavailable',
@@ -10,6 +11,8 @@ const globalMessages = defineMessages('i18n', {
   requested: 'Requested',
   requesting: 'Requesting…',
   request: 'Request',
+  manage: 'Manage',
+  reportIssue: 'Report Issue',
   request4k: 'Request in 4K',
   failed: 'Failed',
   pending: 'Pending',

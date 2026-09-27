@@ -1,4 +1,12 @@
 describe('Books and Music discover parity', () => {
+  const openFilterSection = (label: string) => {
+    cy.contains('button', new RegExp(`^${label}$`)).then(($button) => {
+      if ($button.attr('aria-expanded') === 'false') {
+        cy.wrap($button).click();
+      }
+    });
+  };
+
   const themePalettes = [
     'aurora',
     'ember',
@@ -60,7 +68,7 @@ describe('Books and Music discover parity', () => {
           const styles = window.getComputedStyle($button[0]);
 
           expect($button).to.have.class('button-standard');
-          expect(bounds.height).to.eq(30);
+          expect(bounds.height).to.eq(16);
           expect(styles.fontSize).to.eq('12px');
           expect(bounds.width).to.be.lessThan(dialogWidth - 32);
         });
@@ -224,9 +232,11 @@ describe('Books and Music discover parity', () => {
     cy.visit('/discover/books');
     cy.wait('@getBooks');
     cy.contains('[data-testid=page-header]', 'Books').should('be.visible');
+    openFilterSection('Filters');
+    openFilterSection('Sort By');
     cy.get('button[aria-label="Genres"]').should('be.visible');
     cy.contains('Filters').should('be.visible');
-    cy.get('input[aria-label="Search Books"]')
+    cy.get('input[aria-label="Keyword Search"]')
       .should('be.visible')
       .type('left hand');
     cy.contains('button', 'Recommended').should('be.visible');
@@ -300,6 +310,7 @@ describe('Books and Music discover parity', () => {
       '/discover/books?subject=fantasy&firstPublishYear=2020&sortBy=newest'
     );
     cy.wait('@getBooks');
+    openFilterSection('Filters');
     cy.contains('button', 'Clear Filters').click();
     cy.location('search').should('not.include', 'subject=');
     cy.location('search').should('not.include', 'firstPublishYear=');
@@ -387,34 +398,33 @@ describe('Books and Music discover parity', () => {
     cy.contains('[data-testid=media-title]', 'Requestable Book').should(
       'be.visible'
     );
-    cy.get('[data-testid=format-request-option-ebook]').click();
+    cy.get('[data-testid=format-request-control]')
+      .filter(':has([data-testid="format-request-option-ebook"])')
+      .last()
+      .find('[data-testid=format-request-option-ebook]')
+      .click();
     cy.contains('[data-testid=modal-title]', 'Request Book').should(
       'be.visible'
     );
     cy.contains('[data-testid=media-title]', 'Requestable Book').should(
       'be.visible'
     );
-    cy.contains('legend', 'Format').should('be.visible');
-    cy.get('[role=radiogroup][aria-label=Format]').within(() => {
-      cy.get('[title=Book]')
-        .closest('[role=radio]')
-        .should('have.attr', 'aria-checked', 'true');
-      cy.get('[title=Audiobook]')
-        .closest('[role=radio]')
-        .click()
-        .should('have.attr', 'aria-checked', 'true');
-    });
-    cy.contains('[data-testid=modal-title]', 'Request Audiobook')
-      .scrollIntoView()
-      .should('be.visible');
-    cy.contains('[role=radio]', 'Book + Audiobook')
-      .click()
-      .should('have.attr', 'aria-checked', 'true');
-    cy.contains('[data-testid=modal-title]', 'Request Book + Audiobook')
-      .scrollIntoView()
-      .should('be.visible');
+    cy.get('[role=dialog] [role=group][aria-label=Format]')
+      .last()
+      .within(() => {
+        cy.contains('button', 'Book').should(
+          'have.attr',
+          'aria-pressed',
+          'true'
+        );
+        cy.contains('button', 'Audiobook')
+          .click()
+          .should('have.attr', 'aria-pressed', 'true');
+      });
+    cy.contains('[data-testid=modal-title]', 'Request Book').should(
+      'be.visible'
+    );
     cy.contains('label', 'Edition / ISBN').should('be.visible');
-    cy.get('select[name=isbn]').should('be.visible');
     cy.contains('Automatic best match').should('be.visible');
     cy.contains('Advanced').should('be.visible');
     cy.get('[data-testid=modal-cancel-button]').click();
@@ -461,7 +471,11 @@ describe('Books and Music discover parity', () => {
     cy.contains('[data-testid=media-title]', 'Requestable Album').should(
       'be.visible'
     );
-    cy.get('[data-testid=format-request-option-mp3]').click();
+    cy.get('[data-testid=format-request-control]')
+      .filter(':has([data-testid="format-request-option-mp3"])')
+      .last()
+      .find('[data-testid=format-request-option-mp3]')
+      .click();
     cy.contains('[data-testid=modal-title]', 'Request Music').should(
       'be.visible'
     );
@@ -592,38 +606,25 @@ describe('Books and Music discover parity', () => {
     cy.wait('@getBulkAuthor');
     cy.contains('h1', 'Bulk Author').should('be.visible');
     cy.contains('button', 'Request Bibliography').click();
-    cy.contains(
-      '[data-testid=modal-title]',
-      'Request Book Bibliography'
-    ).should('be.visible');
+    cy.contains('[data-testid=modal-title]', 'Request Bibliography').should(
+      'be.visible'
+    );
     cy.contains('Requestable Work').should('be.visible');
     cy.contains('Already Requested Work').should('be.visible');
     cy.contains('button', 'Load More').should('not.exist');
-    cy.get('[role="radiogroup"][aria-label="Format"] [role="radio"]')
-      .should('have.length', 3)
-      .filter('[aria-checked="true"]')
+    cy.get('[role="group"][aria-label="Format"] button')
+      .should('have.length', 2)
+      .filter('[aria-pressed="true"]')
       .should('contain', 'Book');
-    cy.get('[role="dialog"] table')
-      .contains('td', 'Already Requested Work')
-      .parents('tr')
-      .contains('Requested')
-      .should('be.visible');
-    cy.get('[role="radiogroup"][aria-label="Format"]')
-      .contains('[role="radio"]', 'Book + Audiobook')
+    cy.contains('Already Requested Work')
+      .parent()
+      .should('contain.text', 'Requested');
+    cy.get('[role="group"][aria-label="Format"]')
+      .contains('button', 'Audiobook')
       .click();
-    cy.get('[role="dialog"] table')
-      .contains('td', 'Already Requested Work')
-      .parents('tr')
-      .contains('Not Requested')
-      .should('be.visible');
-    cy.get('[role="radiogroup"][aria-label="Format"]')
-      .contains('[role="radio"]', 'Audiobook')
+    cy.get('[role=dialog]')
+      .contains('button', /^Request$/)
       .click();
-    cy.get('[data-testid=modal-ok-button]').should(
-      'contain',
-      'Request 3 Items as Audiobook'
-    );
-    cy.get('[data-testid=modal-ok-button]').click();
     cy.wait('@bulkBookRequest').then(({ request }) => {
       expect(request?.body.format).to.equal('audiobook');
       expect(request?.body.items).to.have.length(3);
@@ -633,12 +634,12 @@ describe('Books and Music discover parity', () => {
     cy.contains('No default Bookshelf server configured.').should('be.visible');
   });
 
-  it('defaults artist discography bulk requests to albums and switches release types', () => {
+  it('opens artist discography requests through the music collection workflow', () => {
     cy.intercept('GET', '/api/v1/user/*/quota', unrestrictedQuota);
     cy.intercept('GET', '/api/v1/service/lidarr', [
       {
         id: 1,
-        name: 'Lidarr',
+        name: 'Lidarr MP3',
         is4k: false,
         isDefault: true,
         activeProfileId: 1,
@@ -648,96 +649,44 @@ describe('Books and Music discover parity', () => {
       },
     ]);
     cy.intercept('GET', '/api/v1/service/lidarr/1', {
-      ...serviceDetails('Lidarr', '/music'),
+      ...serviceDetails('Lidarr MP3', '/music'),
     });
-    cy.intercept('GET', '/api/v1/artist/bulk-artist*', (req) => {
-      if (req.query.albumType === 'Single') {
-        req.reply({
-          artist: { name: 'Bulk Artist' },
-          releaseGroups: [
-            {
-              id: 'single-one',
-              mediaType: 'album',
-              title: 'Single One',
-              'primary-type': 'Single',
-              'first-release-date': '2021-01-01',
-              'artist-credit': [{ name: 'Bulk Artist' }],
-            },
-          ],
-          typeCounts: { Album: 2, Single: 1 },
-          pagination: {
-            page: 1,
-            pageSize: 50,
-            totalItems: 1,
-            totalPages: 1,
-            albumType: 'Single',
-          },
-        });
-        return;
-      }
-
-      if (req.query.albumType === 'Album' && req.query.page === '2') {
-        req.reply({
-          artist: { name: 'Bulk Artist', area: 'US' },
-          releaseGroups: [
-            {
-              id: 'album-two',
-              mediaType: 'album',
-              title: 'Album Two',
-              'primary-type': 'Album',
-              'first-release-date': '2018-01-01',
-              'artist-credit': [{ name: 'Bulk Artist' }],
-            },
-          ],
-          typeCounts: { Album: 3, Single: 1 },
-          pagination: {
-            page: 2,
-            pageSize: 50,
-            totalItems: 3,
-            totalPages: 2,
-            albumType: 'Album',
-          },
-        });
-        return;
-      }
-
-      req.reply({
-        artist: { name: 'Bulk Artist', area: 'US' },
-        releaseGroups: [
-          {
-            id: 'album-one',
-            mediaType: 'album',
-            title: 'Album One',
-            'primary-type': 'Album',
-            'first-release-date': '2020-01-01',
-            'artist-credit': [{ name: 'Bulk Artist' }],
-          },
-          {
-            id: 'album-owned',
-            mediaType: 'album',
-            title: 'Owned Album',
-            'primary-type': 'Album',
-            'first-release-date': '2019-01-01',
-            'artist-credit': [{ name: 'Bulk Artist' }],
-            mediaInfo: {
-              id: 1302,
-              status: 5,
-              requests: [],
-              watchlists: [],
-              downloadStatus: [],
-            },
-          },
-        ],
-        typeCounts: { Album: 3, Single: 1 },
-        pagination: {
-          page: 1,
-          pageSize: 50,
-          totalItems: 3,
-          totalPages: req.query.albumType === 'Album' ? 2 : 1,
-          albumType: req.query.albumType as string,
-        },
-      });
+    cy.intercept('GET', '/api/v1/artist/bulk-artist*', {
+      artist: { name: 'Bulk Artist', area: 'US' },
+      releaseGroups: [],
+      typeCounts: { Album: 2, Single: 1 },
+      pagination: { page: 1, pageSize: 50, totalItems: 0, totalPages: 1 },
     }).as('getBulkArtist');
+    cy.intercept('GET', '/api/v1/collection-catalog/music/bulk-artist', {
+      id: 'bulk-artist',
+      kind: 'music',
+      name: 'Bulk Artist Collection',
+      overview: 'Artist collection',
+      sourceUrl: 'https://musicbrainz.org/artist/bulk-artist',
+      parts: [
+        {
+          id: 'album-one',
+          title: 'Album One',
+          releaseDate: '2020-01-01',
+          genres: ['rock'],
+          primaryType: 'Album',
+          secondaryTypes: [],
+        },
+        {
+          id: 'single-one',
+          title: 'Single One',
+          releaseDate: '2021-01-01',
+          genres: ['pop'],
+          primaryType: 'Single',
+          secondaryTypes: [],
+        },
+      ],
+    }).as('getMusicCollection');
+    cy.intercept(
+      'POST',
+      '/api/v1/collection-catalog/music/bulk-artist/availability',
+      { supported: true, checkedAt: 1, destinations: [] }
+    );
     cy.intercept('POST', '/api/v1/request/bulk', {
       statusCode: 207,
       body: {
@@ -751,28 +700,18 @@ describe('Books and Music discover parity', () => {
     cy.wait('@getBulkArtist');
     cy.contains('h1', 'Bulk Artist').should('be.visible');
     cy.contains('button', 'Request Discography').click();
-    cy.wait('@getBulkArtist').then((interception) => {
-      expect(interception.request.query.albumType).to.eq('Album');
-      expect(interception.response?.body.releaseGroups).to.have.length(2);
-    });
-    cy.wait('@getBulkArtist').then((interception) => {
-      expect(interception.request.query.albumType).to.eq('Album');
-      expect(interception.request.query.page).to.eq('2');
-      expect(interception.response?.body.releaseGroups[0].id).to.eq(
-        'album-two'
-      );
-    });
-    cy.contains('[data-testid=modal-title]', 'Request Discography').should(
-      'be.visible'
-    );
-    cy.contains('Album Two').should('be.visible');
-    cy.contains('label', 'Release Type').find('select').select('Single');
-    cy.wait('@getBulkArtist').then((interception) => {
-      expect(interception.request.query.albumType).to.eq('Single');
-      expect(interception.response?.body.releaseGroups[0].id).to.eq(
-        'single-one'
-      );
-    });
+    cy.location('pathname').should('eq', '/collections/music/bulk-artist');
+    cy.wait('@getMusicCollection');
+    cy.contains('Bulk Artist Discography').should('be.visible');
+    cy.contains('Album One').should('be.visible');
+    cy.get('button[aria-label="Release Type"]').click();
+    cy.contains('[role=option]', 'Single').click();
+    cy.contains('Single One').should('be.visible');
+    cy.get('button[aria-label="Single One"]').click();
+    cy.get('[role=group][aria-label=Request]')
+      .find('[data-testid=format-request-option-mp3]')
+      .should('be.visible')
+      .and('be.enabled');
   });
 
   it('keeps book and music service setup modals aligned with video services', () => {
@@ -1012,11 +951,11 @@ describe('Books and Music discover parity', () => {
         'be.visible'
       );
       cy.get('button[aria-label="Issue Type"]').click();
-      cy.contains('[role=option]', 'Audio').should('be.visible');
-      cy.contains('Other').should('be.visible');
-      cy.contains('Video').should('not.exist');
-      cy.contains('Subtitle').should('not.exist');
     });
+    cy.contains('[role=option]', 'Audio').should('be.visible');
+    cy.contains('[role=option]', 'Other').should('be.visible');
+    cy.contains('[role=option]', 'Video').should('not.exist');
+    cy.contains('[role=option]', 'Subtitle').should('not.exist');
   });
 
   it('confirms book and music blocklist actions with video-style modals', () => {
@@ -1974,6 +1913,7 @@ describe('Books and Music discover parity', () => {
 
     cy.visit('/search?query=pride%20and%20prejudice');
     cy.wait('@bookSearch');
+    openFilterSection('Media Filters');
     cy.contains('button', 'Audiobooks').click();
     cy.location('search')
       .should('include', 'type=book')

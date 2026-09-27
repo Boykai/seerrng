@@ -442,7 +442,7 @@ const SettingsPlex = ({ isSetupSettings, onComplete }: SettingsPlexProps) => {
           {intl.formatMessage(messages.plexsettingsDescription)}
         </p>
         {isSetupSettings && (
-          <div className="section">
+          <div className="app-card-sub section">
             <Alert
               title={intl.formatMessage(messages.settingUpPlexDescription, {
                 RegisterPlexTVLink: (msg: React.ReactNode) => (
@@ -522,7 +522,7 @@ const SettingsPlex = ({ isSetupSettings, onComplete }: SettingsPlexProps) => {
           isValid,
         }) => {
           return (
-            <form className="section" onSubmit={handleSubmit}>
+            <form className="app-card-sub section" onSubmit={handleSubmit}>
               <div className="form-row">
                 <label htmlFor="preset" className="text-label">
                   {intl.formatMessage(messages.serverpreset)}
@@ -716,7 +716,7 @@ const SettingsPlex = ({ isSetupSettings, onComplete }: SettingsPlexProps) => {
           );
         }}
       </Formik>
-      <section className="settings-group-card">
+      <section className="app-card-sub settings-group-card">
         <h3 className="heading">
           {intl.formatMessage(messages.plexlibraries)}
         </h3>
@@ -799,7 +799,7 @@ const SettingsPlex = ({ isSetupSettings, onComplete }: SettingsPlexProps) => {
           {intl.formatMessage(messages.manualscanDescription)}
         </p>
       </div>
-      <div className="section">
+      <div className="app-card-sub section">
         <div className="rounded-md bg-gray-800 p-4">
           <div className="relative mb-6 h-8 w-full overflow-hidden rounded-full bg-gray-600">
             {dataSync?.running && (
@@ -929,7 +929,7 @@ const SettingsPlex = ({ isSetupSettings, onComplete }: SettingsPlexProps) => {
               isValid,
             }) => {
               return (
-                <form className="section" onSubmit={handleSubmit}>
+                <form className="app-card-sub section" onSubmit={handleSubmit}>
                   <div className="form-row">
                     <label htmlFor="tautulliHostname" className="text-label">
                       {intl.formatMessage(messages.hostname)}

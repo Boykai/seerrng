@@ -32,7 +32,7 @@ export interface OpenRequestDownloadAsset {
 
 type ResolvedAsset = RequestDownloadAsset & {
   source:
-    | { type: 'file'; filePath: string }
+    | { type: 'file'; filePath: string; rootPath: string }
     | { type: 'mylar'; serviceId: number; issueId: string };
 };
 
@@ -193,6 +193,7 @@ const buildResolvedAsset = async (
 
     const name = path
       .basename(canonicalFile)
+      // eslint-disable-next-line no-control-regex
       .replace(/[\u0000-\u001f\u007f]/g, '')
       .slice(0, 255);
     if (!name) return undefined;
@@ -205,7 +206,11 @@ const buildResolvedAsset = async (
       ),
       name,
       size: fileInfo.size,
-      source: { type: 'file', filePath: canonicalFile },
+      source: {
+        type: 'file',
+        filePath: canonicalFile,
+        rootPath: canonicalRoot,
+      },
     };
   } catch {
     return undefined;
@@ -446,6 +451,7 @@ const getLazyLibrarianAssets = async (
 
 const sanitizeAssetName = (value: string): string => {
   const name = value
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
@@ -571,6 +577,47 @@ export const listRequestDownloadAssets = async (
   return assets.map(({ id, name, size }) => ({ id, name, size }));
 };
 
+export const openVerifiedMappedFile = async (
+  filePath: string,
+  rootPath: string
+): Promise<{ file: FileHandle; size: number } | undefined> => {
+  let file: FileHandle | undefined;
+  try {
+    file = await open(
+      filePath,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+    );
+    const openedInfo = await file.stat();
+    if (!openedInfo.isFile()) {
+      await file.close();
+      return undefined;
+    }
+
+    // Open first, then validate the opened descriptor against the current path.
+    // A parent-directory symlink swap must not redirect a download outside its
+    // configured root between path validation and the open.
+    const canonicalPath = await realpath(filePath);
+    if (!isWithin(rootPath, canonicalPath) || canonicalPath === rootPath) {
+      await file.close();
+      return undefined;
+    }
+    const pathInfo = await stat(canonicalPath);
+    if (
+      !pathInfo.isFile() ||
+      pathInfo.dev !== openedInfo.dev ||
+      pathInfo.ino !== openedInfo.ino
+    ) {
+      await file.close();
+      return undefined;
+    }
+
+    return { file, size: openedInfo.size };
+  } catch {
+    if (file) await file.close().catch(() => undefined);
+    return undefined;
+  }
+};
+
 export const openRequestDownloadAsset = async (
   request: MediaRequest,
   assetId: string
@@ -603,25 +650,7 @@ export const openRequestDownloadAsset = async (
     };
   }
 
-  let file: FileHandle | undefined;
-  try {
-    const expectedInfo = await stat(source.filePath);
-    file = await open(
-      source.filePath,
-      constants.O_RDONLY | constants.O_NOFOLLOW
-    );
-    const openedInfo = await file.stat();
-    if (
-      !openedInfo.isFile() ||
-      openedInfo.dev !== expectedInfo.dev ||
-      openedInfo.ino !== expectedInfo.ino
-    ) {
-      await file.close();
-      return undefined;
-    }
-    return { file, name: asset.name, size: openedInfo.size };
-  } catch {
-    if (file) await file.close().catch(() => undefined);
-    return undefined;
-  }
+  const opened = await openVerifiedMappedFile(source.filePath, source.rootPath);
+  if (!opened) return undefined;
+  return { ...opened, name: asset.name };
 };

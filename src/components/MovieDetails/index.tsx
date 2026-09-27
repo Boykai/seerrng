@@ -10,6 +10,7 @@ import MovieDetailsLayout from '@app/components/MovieDetails/MovieDetailsLayout'
 import RequestButton from '@app/components/RequestButton';
 import usePlaybackCatalog from '@app/hooks/usePlaybackCatalog';
 import useSettings from '@app/hooks/useSettings';
+import useTitleBlocklist from '@app/hooks/useTitleBlocklist';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, UserType, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -27,7 +28,6 @@ import {
   StarIcon,
 } from '@heroicons/react/24/outline';
 import type { RatingResponse } from '@server/api/ratings';
-import { IssueStatus } from '@server/constants/issue';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import type { MovieDetails as MovieDetailsType } from '@server/models/Movie';
 import axios from 'axios';
@@ -128,7 +128,10 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
       setShowManager(true);
       void router.replace({
         pathname: router.pathname,
-        query: { movieId: router.query.movieId },
+        query: {
+          movieId: router.query.movieId,
+          ...(router.query.issues === '1' ? { issues: '1' } : {}),
+        },
       });
     }
   }, [router, router.query.manage]);
@@ -137,6 +140,17 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
     () => setShowBlocklistModal(false),
     []
   );
+  const {
+    isBlocklisted,
+    checking: checkingBlocklist,
+    error: blocklistError,
+    setBlocklisted,
+  } = useTitleBlocklist(
+    movieId,
+    MediaType.MOVIE,
+    data?.mediaInfo?.status === MediaStatus.BLOCKLISTED
+  );
+
   if (!data && !error) {
     return <LoadingSpinner />;
   }
@@ -235,6 +249,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
         title: data.title,
         user: user?.id,
       });
+      await setBlocklisted(true);
       addToast(
         <span>
           {intl.formatMessage(globalMessages.blocklistSuccess, {
@@ -247,6 +262,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
       await revalidate();
     } catch (e) {
       if (axios.isAxiosError(e) && e.response?.status === 412) {
+        await setBlocklisted(true);
         addToast(
           <span>
             {intl.formatMessage(globalMessages.blocklistDuplicateError, {
@@ -270,7 +286,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
 
   const canUseBlocklist = hasPermission(Permission.MANAGE_BLOCKLIST);
   const isBlocklistAvailable =
-    data.mediaInfo?.status !== MediaStatus.BLOCKLISTED;
+    !isBlocklisted && !checkingBlocklist && !blocklistError;
   const canUseReportIssue = hasPermission(
     [Permission.CREATE_ISSUES, Permission.MANAGE_ISSUES],
     { type: 'or' }
@@ -302,6 +318,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
         return (
           <>
             <MediaServerPlayButton
+              context="movie"
               mediaUrl={is4k ? undefined : data.mediaInfo?.mediaUrl}
               mediaUrl4k={is4k ? data.mediaInfo?.mediaUrl4k : undefined}
               iOSPlexUrl={is4k ? undefined : data.mediaInfo?.iOSPlexUrl}
@@ -364,18 +381,8 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
             className="relative"
             aria-label={intl.formatMessage(messages.managemovie)}
           >
-            <CogIcon className="!mr-0" />
-            {hasPermission([Permission.MANAGE_ISSUES, Permission.VIEW_ISSUES], {
-              type: 'or',
-            }) &&
-              (data.mediaInfo?.issues.filter(
-                (issue) => issue.status === IssueStatus.OPEN
-              ).length ?? 0) > 0 && (
-                <>
-                  <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-600" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 animate-ping rounded-full bg-red-600" />
-                </>
-              )}
+            <CogIcon />
+            <span>{intl.formatMessage(globalMessages.manage)}</span>
           </Button>
         </Tooltip>
       )}
@@ -398,6 +405,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
             aria-label={intl.formatMessage(messages.reportissue)}
           >
             <ExclamationTriangleIcon />
+            <span>{intl.formatMessage(globalMessages.reportIssue)}</span>
           </Button>
         </Tooltip>
       )}

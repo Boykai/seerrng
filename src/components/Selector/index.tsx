@@ -56,36 +56,39 @@ type SingleVal = {
   value: number;
 };
 
-const CompactSelectControl = ({
+const CompactSelectControl = <Option, IsMulti extends boolean>({
   children,
   innerRef,
   innerProps,
   isDisabled,
   isFocused,
   menuIsOpen,
-}: ControlProps<SingleVal, boolean>) => (
+}: ControlProps<Option, IsMulti>) => (
   <div
     ref={innerRef}
     {...innerProps}
-    className={`react-select__control${
-      isDisabled ? 'react-select__control--is-disabled' : ''
-    }${isFocused ? 'react-select__control--is-focused' : ''}${
-      menuIsOpen ? 'react-select__control--menu-is-open' : ''
-    }`}
+    className={[
+      'react-select__control',
+      isDisabled && 'react-select__control--is-disabled',
+      isFocused && 'react-select__control--is-focused',
+      menuIsOpen && 'react-select__control--menu-is-open',
+    ]
+      .filter(Boolean)
+      .join(' ')}
   >
     {children}
   </div>
 );
 
-const CompactDropdownIndicator = ({
+const CompactDropdownIndicator = <Option, IsMulti extends boolean>({
   innerProps,
-}: DropdownIndicatorProps<SingleVal, boolean>) => (
+}: DropdownIndicatorProps<Option, IsMulti>) => (
   <div {...innerProps} className="react-select__dropdown-indicator">
     <ChevronDownIcon className="app-filter-select-chevron" aria-hidden="true" />
   </div>
 );
 
-const compactSelectComponents = {
+export const compactSelectComponents = {
   Control: CompactSelectControl,
   DropdownIndicator: CompactDropdownIndicator,
 };

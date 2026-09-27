@@ -89,8 +89,9 @@ export interface ExternalAPIOptions {
   maxContentLength?: number;
   maxBodyLength?: number;
   rateLimit?: {
-    maxRPS: number;
+    maxRPS?: number;
     maxRequests: number;
+    perMilliseconds?: number;
   };
   // Some callers (e.g. JellyfinAPI) build their base URL from structured
   // settings where an unset hostname is a normal "not yet configured" state,
@@ -362,6 +363,7 @@ class ExternalAPI {
       this.axios = rateLimit(this.axios, {
         maxRequests: options.rateLimit.maxRequests,
         maxRPS: options.rateLimit.maxRPS,
+        perMilliseconds: options.rateLimit.perMilliseconds,
       });
     }
 
@@ -425,8 +427,14 @@ class ExternalAPI {
             this.axios.get<T>(requestTarget, config)
           );
         case 'POST':
+          // requestTarget is restricted to the constructor's allowed origins;
+          // provider payloads may intentionally originate in local config.
+          // codeql[js/file-access-to-http]
           return await this.axios.post<T>(requestTarget, data, config);
         case 'PUT':
+          // requestTarget is restricted to the constructor's allowed origins;
+          // provider payloads may intentionally originate in local config.
+          // codeql[js/file-access-to-http]
           return await this.axios.put<T>(requestTarget, data, config);
         case 'DELETE':
           return await this.axios.delete<T>(requestTarget, config);

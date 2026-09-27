@@ -13,6 +13,7 @@ import {
 import type {
   LidarrSettings,
   RadarrSettings,
+  ReadarrSettings,
   SonarrSettings,
 } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -73,6 +74,7 @@ beforeEach(() => {
   settings.radarr = [{ id: 0 } as RadarrSettings, { id: 3 } as RadarrSettings];
   settings.sonarr = [{ id: 0 } as SonarrSettings];
   settings.lidarr = [{ id: 0 } as LidarrSettings];
+  settings.readarr = [{ id: 5, serviceType: 'ebook' } as ReadarrSettings];
 });
 
 async function login() {
@@ -93,6 +95,24 @@ async function login() {
 }
 
 describe('Override rule route validation', () => {
+  it('stores a Bookshelf rule with catalog conditions', async () => {
+    const agent = await login();
+    const response = await agent.post('/overrideRule').send({
+      readarrServiceId: 5,
+      users: '1',
+      genre: 'Horror fiction',
+      language: 'en',
+      keywords: 'Ghost stories',
+      profileId: 2,
+    });
+
+    assert.strictEqual(response.status, 200);
+    const stored = await getRepository(OverrideRule).findOneByOrFail({
+      id: response.body.id,
+    });
+    assert.strictEqual(stored.readarrServiceId, 5);
+    assert.strictEqual(stored.genre, 'Horror fiction');
+  });
   it('revalidates administrator authority before reading override rules', async () => {
     await getRepository(OverrideRule).save(
       new OverrideRule({ users: 'private-rule@seerr.dev' })
@@ -223,8 +243,8 @@ describe('Override rule route validation', () => {
         /exactly one service/i,
       ],
       [
-        { lidarrServiceId: 0, genre: '18', profileId: 1 },
-        /only user conditions/i,
+        { lidarrServiceId: 0, users: '1', language: 'en', profileId: 1 },
+        /album language is not available/i,
       ],
       [
         {

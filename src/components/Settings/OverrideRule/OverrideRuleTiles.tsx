@@ -10,6 +10,7 @@ import type {
   Language,
   LidarrSettings,
   RadarrSettings,
+  ReadarrSettings,
   SonarrSettings,
 } from '@server/lib/settings';
 import type { Keyword } from '@server/models/common';
@@ -48,6 +49,7 @@ interface OverrideRuleTilesProps {
   radarrServices: RadarrSettings[];
   sonarrServices: SonarrSettings[];
   lidarrServices: LidarrSettings[];
+  readarrServices: ReadarrSettings[];
 }
 
 const OverrideRuleTiles = ({
@@ -57,6 +59,7 @@ const OverrideRuleTiles = ({
   radarrServices,
   sonarrServices,
   lidarrServices,
+  readarrServices,
 }: OverrideRuleTilesProps) => {
   const intl = useIntl();
   const [users, setUsers] = useState<User[] | null>(null);
@@ -86,6 +89,13 @@ const OverrideRuleTiles = ({
           type: 'lidarr' as const,
           referenced: rules.some((rule) => rule.lidarrServiceId === service.id),
         })),
+        ...readarrServices.map((service) => ({
+          service,
+          type: 'readarr' as const,
+          referenced: rules.some(
+            (rule) => rule.readarrServiceId === service.id
+          ),
+        })),
       ].filter(({ referenced }) => referenced);
       for (const { service, type } of services) {
         const { hostname, port, apiKey, baseUrl, useSsl = false } = service;
@@ -99,6 +109,8 @@ const OverrideRuleTiles = ({
               port: Number(port),
               baseUrl,
               useSsl,
+              serviceType:
+                'serviceType' in service ? service.serviceType : undefined,
             },
             { signal }
           );
@@ -122,7 +134,7 @@ const OverrideRuleTiles = ({
       }
       return results;
     },
-    [lidarrServices, radarrServices, rules, sonarrServices]
+    [lidarrServices, radarrServices, readarrServices, rules, sonarrServices]
   );
 
   useEffect(() => {
@@ -202,7 +214,7 @@ const OverrideRuleTiles = ({
       {rules.map((rule) => (
         <li
           key={rule.id}
-          className="settings-service-card refreshed-inset-surface text-left"
+          className="settings-service-card app-card-inset refreshed-inset-surface text-left"
         >
           <div className="settings-rule-card-content">
             <h3 className="settings-service-title">
@@ -233,7 +245,11 @@ const OverrideRuleTiles = ({
                     <span className="inline-flex flex-wrap gap-x-2">
                       {rule.genre.split(',').map((genreId) => (
                         <span key={genreId}>
-                          {genres?.find((g) => g.id === Number(genreId))?.name}
+                          {rule.lidarrServiceId != null ||
+                          rule.readarrServiceId != null
+                            ? genreId
+                            : genres?.find((g) => g.id === Number(genreId))
+                                ?.name}
                         </span>
                       ))}
                     </span>
@@ -252,7 +268,8 @@ const OverrideRuleTiles = ({
                           const language = languages?.find(
                             (language) => language.iso_639_1 === languageId
                           );
-                          if (!language) return null;
+                          if (!language)
+                            return <span key={languageId}>{languageId}</span>;
                           const languageName =
                             intl.formatDisplayName(language.iso_639_1, {
                               type: 'language',
@@ -272,9 +289,12 @@ const OverrideRuleTiles = ({
                       {rule.keywords.split(',').map((keywordId) => {
                         return (
                           <span key={keywordId}>
-                            {keywords?.find(
-                              (keyword) => keyword.id === Number(keywordId)
-                            )?.name ?? keywordId}
+                            {rule.lidarrServiceId != null ||
+                            rule.readarrServiceId != null
+                              ? keywordId
+                              : (keywords?.find(
+                                  (keyword) => keyword.id === Number(keywordId)
+                                )?.name ?? keywordId)}
                           </span>
                         );
                       })}
@@ -298,7 +318,10 @@ const OverrideRuleTiles = ({
                             r.type === 'radarr') ||
                           (r.id === rule.sonarrServiceId &&
                             r.type === 'sonarr') ||
-                          (r.id === rule.lidarrServiceId && r.type === 'lidarr')
+                          (r.id === rule.lidarrServiceId &&
+                            r.type === 'lidarr') ||
+                          (r.id === rule.readarrServiceId &&
+                            r.type === 'readarr')
                       )
                       ?.profiles.find(
                         (profile) => rule.profileId === profile.id
@@ -327,7 +350,9 @@ const OverrideRuleTiles = ({
                                 (r.id === rule.sonarrServiceId &&
                                   r.type === 'sonarr') ||
                                 (r.id === rule.lidarrServiceId &&
-                                  r.type === 'lidarr')
+                                  r.type === 'lidarr') ||
+                                (r.id === rule.readarrServiceId &&
+                                  r.type === 'readarr')
                             )
                             ?.tags?.find((t) => t.id === Number(tag))?.label ||
                             tag}

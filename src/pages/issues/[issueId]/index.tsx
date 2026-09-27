@@ -1,20 +1,14 @@
-import IssueDetails from '@app/components/IssueDetails';
-import useRouteGuard from '@app/hooks/useRouteGuard';
-import { Permission } from '@app/hooks/useUser';
-import type { NextPage } from 'next';
+import { getIssueListHref } from '@app/utils/issueNavigation';
+import type { GetServerSideProps, NextPage } from 'next';
 
-const IssuePage: NextPage = () => {
-  useRouteGuard(
-    [
-      Permission.MANAGE_ISSUES,
-      Permission.CREATE_ISSUES,
-      Permission.VIEW_ISSUES,
-    ],
-    {
-      type: 'or',
-    }
-  );
-  return <IssueDetails />;
-};
+// Compatibility only: previously sent notification links must still work.
+const IssuePage: NextPage = () => null;
+
+export const getServerSideProps: GetServerSideProps = async ({ params }) => ({
+  redirect: {
+    destination: getIssueListHref(params?.issueId),
+    permanent: false,
+  },
+});
 
 export default IssuePage;

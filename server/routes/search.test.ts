@@ -484,9 +484,51 @@ describe('GET /search', () => {
     assert.strictEqual(res.status, 200);
     assert.strictEqual(
       albumQuery,
-      '(releasegroup:madonna OR artist:madonna) AND releasegroup:prayer'
+      '(releasegroup:madonna OR artist:madonna OR tag:madonna) AND releasegroup:prayer'
     );
     assert.strictEqual(artistSearch.mock.callCount(), 0);
+  });
+
+  it('autocomplete searches artist prefixes without fetching albums or dropping mapped artists', async () => {
+    const artistId = '79239441-bfd5-4981-a70c-55c3f15c1287';
+    await getRepository(MetadataArtist).save(
+      new MetadataArtist({ mbArtistId: artistId, tmdbPersonId: '999' })
+    );
+    const albums = mock.method(
+      MusicBrainz.prototype,
+      'searchAlbumWithTotal',
+      async () => {
+        throw new Error('Albums should not be fetched');
+      }
+    );
+    mock.method(
+      MusicBrainz.prototype,
+      'searchArtistWithTotal',
+      async ({ query }: { query: string }) => {
+        assert.strictEqual(query, 'artist:Mad*');
+        return {
+          totalResults: 1,
+          results: [
+            {
+              id: artistId,
+              name: 'Madonna',
+              type: 'Person',
+              score: 100,
+              disambiguation: 'US singer',
+              'sort-name': 'Madonna',
+            },
+          ],
+        };
+      }
+    );
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const res = await agent
+      .get('/search')
+      .query({ query: 'Mad', type: 'artist' });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.results[0].id, artistId);
+    assert.equal(res.body.results[0].name, 'Madonna');
+    assert.equal(albums.mock.callCount(), 0);
   });
 
   it('rejects book formats on non-book searches', async () => {
@@ -1264,6 +1306,12 @@ describe('search filters behind the OpenAPI validator', () => {
       query: 'madonna',
       type: 'music',
       resultFilter: 'prayer',
+      artist: 'Madonna',
+      artistId: '79239441-bfd5-4981-a70c-55c3f15c1287',
+      primaryReleaseDateGte: '1998-01-01',
+      primaryReleaseDateLte: '1998-12-31',
+      genre: 'pop',
+      releaseType: 'Album',
     });
     const audiobook = await request(validatedApp)
       .get('/api/v1/search')

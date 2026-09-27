@@ -12,6 +12,7 @@ import useSWR from 'swr';
 
 const messages = defineMessages('components.Common.PlayOnDeviceButton', {
   label: 'Play on Device',
+  help: 'Choose an active, authorized device and start playing the selected media on it.',
   emptySelection: 'No playable media is currently available.',
   noDevices: 'No active, authorized playback devices are available.',
   started: 'Playback started on {deviceName}.',
@@ -21,6 +22,7 @@ const messages = defineMessages('components.Common.PlayOnDeviceButton', {
 interface PlayOnDeviceButtonProps {
   mediaId?: number;
   itemIds: string[];
+  unavailableReason?: string;
   is4k?: boolean;
   className?: string;
 }
@@ -28,6 +30,7 @@ interface PlayOnDeviceButtonProps {
 const PlayOnDeviceButton = ({
   mediaId,
   itemIds,
+  unavailableReason,
   is4k = false,
   className,
 }: PlayOnDeviceButtonProps) => {
@@ -43,7 +46,7 @@ const PlayOnDeviceButton = ({
   const canPlay = !!mediaId && selectedItemIds.length > 0;
   const availableDevices = canPlay ? (devices ?? []) : [];
   const disabledReason = !canPlay
-    ? intl.formatMessage(messages.emptySelection)
+    ? (unavailableReason ?? intl.formatMessage(messages.emptySelection))
     : error || (devices && devices.length === 0)
       ? intl.formatMessage(messages.noDevices)
       : undefined;
@@ -75,6 +78,7 @@ const PlayOnDeviceButton = ({
 
   return (
     <Dropdown
+      title={intl.formatMessage(messages.help)}
       buttonType="playback"
       buttonSize="sm"
       className={className}
@@ -100,10 +104,10 @@ const PlayOnDeviceButton = ({
                 void startPlayback(device);
               }}
             >
-              <ComputerDesktopIcon className="mr-2 h-4 w-4 flex-none" />
-              <span className="min-w-0">
-                <span className="block truncate">{device.name}</span>
-                <span className="block truncate text-xs text-gray-500">
+              <ComputerDesktopIcon className="h-4 w-4 flex-none" />
+              <span className="playback-device-label">
+                <span className="playback-device-name">{device.name}</span>
+                <span className="playback-device-description">
                   {device.client}
                   {device.platform ? ` · ${device.platform}` : ''}
                 </span>

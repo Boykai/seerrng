@@ -7,6 +7,7 @@ interface PlayButtonProps {
   buttonSize?: 'standard' | 'default' | 'sm';
   unavailableLink?: Omit<PlayButtonLink, 'url'>;
   disabledReason?: string;
+  tooltip?: string;
 }
 
 export interface PlayButtonLink {
@@ -20,6 +21,7 @@ const PlayButton = ({
   buttonSize = 'standard',
   unavailableLink,
   disabledReason,
+  tooltip,
 }: PlayButtonProps) => {
   const safeLinks = links
     .map((link) => ({ ...link, url: getSafeHref(link.url) }))
@@ -46,6 +48,7 @@ const PlayButton = ({
       as="a"
       buttonType="playback"
       buttonSize={buttonSize}
+      title={tooltip}
       text={
         <span className="playback-button-label">
           {safeLinks[0].svg}

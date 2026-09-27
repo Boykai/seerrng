@@ -746,7 +746,11 @@ describe('GET /request/status', () => {
     assert.strictEqual(response.status, 200);
     assert.strictEqual(response.body.pageInfo.results, 1);
     assert.strictEqual(response.body.results[0].request.id, mediaRequest.id);
-    assert.strictEqual(response.body.results[0].status.stage, 'library');
+    assert.strictEqual(response.body.results[0].status.stage, 'searching');
+    assert.match(
+      response.body.results[0].status.message,
+      /Waiting for a usable release/
+    );
     assert.strictEqual(response.body.counts.incomplete, 1);
 
     const sortedResponse = await agent.get('/request/status').query({

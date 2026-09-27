@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import OverrideRule from '@server/entity/OverrideRule';
 import {
+  catalogOverrideRuleMatches,
   getOverrideRuleProfileId,
   getOverrideRuleSpecificity,
   getOverrideRuleTagIds,
@@ -11,6 +12,35 @@ import {
 } from './overrideRules';
 
 describe('override rule selection', () => {
+  it('falls back when catalog metadata needed by a rule is absent', () => {
+    const metadataRule = new OverrideRule({
+      users: '7',
+      genre: 'Rock',
+      keywords: 'Acoustic',
+      language: 'en',
+    });
+    assert.strictEqual(catalogOverrideRuleMatches(metadataRule, 7), false);
+    assert.strictEqual(
+      catalogOverrideRuleMatches(metadataRule, 7, {
+        genres: ['rock'],
+        keywords: ['ACOUSTIC'],
+        languages: ['eng'],
+      }),
+      true
+    );
+    assert.strictEqual(
+      catalogOverrideRuleMatches(metadataRule, 8, {
+        genres: ['rock'],
+        keywords: ['acoustic'],
+        languages: ['eng'],
+      }),
+      false
+    );
+    assert.strictEqual(
+      catalogOverrideRuleMatches(new OverrideRule({ users: '7' }), 7),
+      true
+    );
+  });
   it('counts every configured condition and ignores empty legacy values', () => {
     assert.strictEqual(
       getOverrideRuleSpecificity(

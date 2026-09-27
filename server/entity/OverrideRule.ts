@@ -20,6 +20,9 @@ class OverrideRule {
   @Column({ type: 'int', nullable: true })
   public lidarrServiceId?: number;
 
+  @Column({ type: 'int', nullable: true })
+  public readarrServiceId?: number;
+
   @Column({ nullable: true })
   public users?: string;
 

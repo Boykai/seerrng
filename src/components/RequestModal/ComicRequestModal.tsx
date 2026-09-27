@@ -261,9 +261,9 @@ const ComicRequestModal = ({
         backdropFull
         alignTop
         actionButtonSize="standard"
-        dialogClass="refreshed-card-surface refreshed-detail-text !w-[calc(100%-2rem)] rounded-xl border border-gray-700 shadow-lg shadow-gray-950/20 sm:!max-w-5xl"
+        dialogClass="app-card-main refreshed-card-surface refreshed-detail-text !w-[calc(100%-2rem)] rounded-xl border border-gray-700 shadow-lg shadow-gray-950/20 sm:!max-w-5xl"
       >
-        <div className="refreshed-inset-surface rounded-lg border border-gray-700 p-3">
+        <div className="app-card-inset refreshed-inset-surface rounded-lg border border-gray-700 p-3">
           {isOwner
             ? intl.formatMessage(messages.pendingapproval)
             : intl.formatMessage(messages.requestfrom, {
@@ -286,7 +286,7 @@ const ComicRequestModal = ({
       title={intl.formatMessage(messages.requestcomic)}
       okText={requestButtonLabel}
       okButtonType="primary"
-      dialogClass="request-modal-site-surface sm:max-w-5xl"
+      dialogClass="app-card-main request-modal-site-surface sm:max-w-5xl"
     >
       {serviceUnavailable && (
         <div className="mt-6">

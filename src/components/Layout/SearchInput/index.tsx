@@ -52,6 +52,7 @@ const SearchInput = () => {
             <button
               className="absolute inset-y-0 right-2 m-auto h-7 w-7 border-none p-1 text-gray-400 transition outline-none hover:text-white focus:border-none focus:outline-none"
               onClick={() => clear()}
+              aria-label="Clear the search text"
             >
               <XCircleIcon className="h-5 w-5" />
             </button>

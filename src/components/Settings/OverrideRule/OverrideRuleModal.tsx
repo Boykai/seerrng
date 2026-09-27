@@ -15,6 +15,7 @@ import type OverrideRule from '@server/entity/OverrideRule';
 import type {
   LidarrSettings,
   RadarrSettings,
+  ReadarrSettings,
   SonarrSettings,
 } from '@server/lib/settings';
 import axios from 'axios';
@@ -33,6 +34,8 @@ const messages = defineMessages('components.Settings.OverrideRuleModal', {
   conditions: 'Conditions',
   conditionsDescription:
     'Specifies conditions before applying parameter changes. Each field must be validated for the rules to be applied (AND operation). A field is considered verified if any of its properties match (OR operation).',
+  catalogConditionsDescription:
+    'Enter comma-separated genre or keyword names as shown on the album or book. If that metadata is missing, the rule will not match and normal request defaults remain in place.',
   settings: 'Settings',
   settingsDescription:
     'Specifies which settings will be changed when the above conditions are met.',
@@ -62,6 +65,7 @@ interface OverrideRuleModalProps {
   radarrServices: RadarrSettings[];
   sonarrServices: SonarrSettings[];
   lidarrServices: LidarrSettings[];
+  readarrServices: ReadarrSettings[];
 }
 
 const OverrideRuleModal = ({
@@ -70,6 +74,7 @@ const OverrideRuleModal = ({
   radarrServices,
   sonarrServices,
   lidarrServices,
+  readarrServices,
 }: OverrideRuleModalProps) => {
   const intl = useIntl();
   const { addToast } = useToasts();
@@ -91,6 +96,7 @@ const OverrideRuleModal = ({
         apiKey,
         baseUrl,
         useSsl = false,
+        serviceType,
       }: {
         id: number;
         hostname: string;
@@ -98,8 +104,9 @@ const OverrideRuleModal = ({
         apiKey: string;
         baseUrl?: string;
         useSsl?: boolean;
+        serviceType?: ReadarrSettings['serviceType'];
       },
-      type: 'radarr' | 'sonarr' | 'lidarr'
+      type: 'radarr' | 'sonarr' | 'lidarr' | 'readarr'
     ) => {
       setIsTesting(true);
       try {
@@ -112,6 +119,7 @@ const OverrideRuleModal = ({
             port: Number(port),
             baseUrl,
             useSsl,
+            serviceType,
           }
         );
 
@@ -141,10 +149,21 @@ const OverrideRuleModal = ({
       (s) => s.id === rule?.lidarrServiceId
     );
     if (lidarrMatch) getServiceInfos(lidarrMatch, 'lidarr');
-    if (rule && !radarrMatch && !sonarrMatch && !lidarrMatch) {
+    const readarrMatch = readarrServices.find(
+      (s) => s.id === rule?.readarrServiceId
+    );
+    if (readarrMatch) getServiceInfos(readarrMatch, 'readarr');
+    if (rule && !radarrMatch && !sonarrMatch && !lidarrMatch && !readarrMatch) {
       setIsValidated(false);
     }
-  }, [getServiceInfos, lidarrServices, rule, radarrServices, sonarrServices]);
+  }, [
+    getServiceInfos,
+    lidarrServices,
+    readarrServices,
+    rule,
+    radarrServices,
+    sonarrServices,
+  ]);
 
   return (
     <Transition
@@ -163,6 +182,7 @@ const OverrideRuleModal = ({
           radarrServiceId: rule?.radarrServiceId,
           sonarrServiceId: rule?.sonarrServiceId,
           lidarrServiceId: rule?.lidarrServiceId,
+          readarrServiceId: rule?.readarrServiceId,
           users: rule?.users,
           genre: rule?.genre,
           language: rule?.language,
@@ -175,12 +195,10 @@ const OverrideRuleModal = ({
           try {
             const submission = {
               users: values.users || null,
-              genre:
-                values.lidarrServiceId != null ? null : values.genre || null,
+              genre: values.genre || null,
               language:
                 values.lidarrServiceId != null ? null : values.language || null,
-              keywords:
-                values.lidarrServiceId != null ? null : values.keywords || null,
+              keywords: values.keywords || null,
               profileId:
                 values.profileId == null || String(values.profileId) === ''
                   ? null
@@ -190,6 +208,7 @@ const OverrideRuleModal = ({
               radarrServiceId: values.radarrServiceId,
               sonarrServiceId: values.sonarrServiceId,
               lidarrServiceId: values.lidarrServiceId,
+              readarrServiceId: values.readarrServiceId,
             };
             if (!rule) {
               await axios.post('/api/v1/overrideRule', submission);
@@ -233,12 +252,10 @@ const OverrideRuleModal = ({
               okDisabled={
                 isSubmitting ||
                 !isValid ||
-                (values.lidarrServiceId != null
-                  ? !values.users
-                  : !values.users &&
-                    !values.genre &&
-                    !values.language &&
-                    !values.keywords) ||
+                (!values.users &&
+                  !values.genre &&
+                  !values.language &&
+                  !values.keywords) ||
                 (!values.rootFolder &&
                   String(values.profileId ?? '') === '' &&
                   !values.tags)
@@ -273,7 +290,9 @@ const OverrideRuleModal = ({
                               ? `sonarr-${values.sonarrServiceId}`
                               : values.lidarrServiceId != null
                                 ? `lidarr-${values.lidarrServiceId}`
-                                : ''
+                                : values.readarrServiceId != null
+                                  ? `readarr-${values.readarrServiceId}`
+                                  : ''
                         }
                         onChange={(e) => {
                           const id = Number(e.target.value.split('-')[1]);
@@ -281,6 +300,7 @@ const OverrideRuleModal = ({
                             setFieldValue('radarrServiceId', id);
                             setFieldValue('sonarrServiceId', null);
                             setFieldValue('lidarrServiceId', null);
+                            setFieldValue('readarrServiceId', null);
                             const match = radarrServices.find(
                               (s) => s.id === id
                             );
@@ -291,6 +311,7 @@ const OverrideRuleModal = ({
                             setFieldValue('radarrServiceId', null);
                             setFieldValue('sonarrServiceId', id);
                             setFieldValue('lidarrServiceId', null);
+                            setFieldValue('readarrServiceId', null);
                             const match = sonarrServices.find(
                               (s) => s.id === id
                             );
@@ -301,6 +322,7 @@ const OverrideRuleModal = ({
                             setFieldValue('radarrServiceId', null);
                             setFieldValue('sonarrServiceId', null);
                             setFieldValue('lidarrServiceId', id);
+                            setFieldValue('readarrServiceId', null);
                             setFieldValue('genre', null);
                             setFieldValue('language', null);
                             setFieldValue('keywords', null);
@@ -310,10 +332,22 @@ const OverrideRuleModal = ({
                             if (match) {
                               getServiceInfos(match, 'lidarr');
                             }
+                          } else if (e.target.value.startsWith('readarr-')) {
+                            setFieldValue('radarrServiceId', null);
+                            setFieldValue('sonarrServiceId', null);
+                            setFieldValue('lidarrServiceId', null);
+                            setFieldValue('readarrServiceId', id);
+                            const match = readarrServices.find(
+                              (s) => s.id === id
+                            );
+                            if (match) {
+                              getServiceInfos(match, 'readarr');
+                            }
                           } else {
                             setFieldValue('radarrServiceId', null);
                             setFieldValue('sonarrServiceId', null);
                             setFieldValue('lidarrServiceId', null);
+                            setFieldValue('readarrServiceId', null);
                             setIsValidated(false);
                           }
                         }}
@@ -345,6 +379,18 @@ const OverrideRuleModal = ({
                             {lidarr.name}
                           </option>
                         ))}
+                        {readarrServices.map((readarr) => (
+                          <option
+                            key={`readarr-${readarr.id}`}
+                            value={`readarr-${readarr.id}`}
+                          >
+                            {readarr.name} (
+                            {readarr.serviceType === 'audiobook'
+                              ? 'Audiobook'
+                              : 'Book'}
+                            )
+                          </option>
+                        ))}
                       </select>
                     </div>
                     {errors.rootFolder &&
@@ -360,6 +406,12 @@ const OverrideRuleModal = ({
                 <p className="description">
                   {intl.formatMessage(messages.conditionsDescription)}
                 </p>
+                {(values.lidarrServiceId != null ||
+                  values.readarrServiceId != null) && (
+                  <p className="description">
+                    {intl.formatMessage(messages.catalogConditionsDescription)}
+                  </p>
+                )}
                 <div className="form-row">
                   <label htmlFor="users" className="text-label">
                     {intl.formatMessage(messages.users)}
@@ -368,11 +420,7 @@ const OverrideRuleModal = ({
                     <div className="form-input-field">
                       <UserSelector
                         defaultValue={values.users}
-                        isDisabled={
-                          !isValidated ||
-                          isTesting ||
-                          values.lidarrServiceId != null
-                        }
+                        isDisabled={!isValidated || isTesting}
                         isMulti
                         onChange={(users) => {
                           setFieldValue(
@@ -395,28 +443,35 @@ const OverrideRuleModal = ({
                   </label>
                   <div className="form-input-area">
                     <div className="form-input-field">
-                      <GenreSelector
-                        type={
-                          values.radarrServiceId != null
-                            ? 'movie'
-                            : values.sonarrServiceId != null
-                              ? 'tv'
-                              : 'tv'
-                        }
-                        defaultValue={values.genre}
-                        isMulti
-                        isDisabled={
-                          !isValidated ||
-                          isTesting ||
-                          values.lidarrServiceId != null
-                        }
-                        onChange={(genres) => {
-                          setFieldValue(
-                            'genre',
-                            genres?.map((v) => v.value).join(',')
-                          );
-                        }}
-                      />
+                      {values.lidarrServiceId != null ||
+                      values.readarrServiceId != null ? (
+                        <Field
+                          type="text"
+                          id="genre"
+                          name="genre"
+                          placeholder="Comma-separated album genres or book subjects"
+                          disabled={!isValidated || isTesting}
+                        />
+                      ) : (
+                        <GenreSelector
+                          type={
+                            values.radarrServiceId != null
+                              ? 'movie'
+                              : values.sonarrServiceId != null
+                                ? 'tv'
+                                : 'tv'
+                          }
+                          defaultValue={values.genre}
+                          isMulti
+                          isDisabled={!isValidated || isTesting}
+                          onChange={(genres) => {
+                            setFieldValue(
+                              'genre',
+                              genres?.map((v) => v.value).join(',')
+                            );
+                          }}
+                        />
+                      )}
                     </div>
                     {errors.genre &&
                       touched.genre &&
@@ -457,17 +512,28 @@ const OverrideRuleModal = ({
                   </label>
                   <div className="form-input-area">
                     <div className="form-input-field">
-                      <KeywordSelector
-                        defaultValue={values.keywords}
-                        isMulti
-                        isDisabled={!isValidated || isTesting}
-                        onChange={(value) => {
-                          setFieldValue(
-                            'keywords',
-                            value?.map((v) => v.value).join(',')
-                          );
-                        }}
-                      />
+                      {values.lidarrServiceId != null ||
+                      values.readarrServiceId != null ? (
+                        <Field
+                          type="text"
+                          id="keywords"
+                          name="keywords"
+                          placeholder="Comma-separated album tags or book subjects"
+                          disabled={!isValidated || isTesting}
+                        />
+                      ) : (
+                        <KeywordSelector
+                          defaultValue={values.keywords}
+                          isMulti
+                          isDisabled={!isValidated || isTesting}
+                          onChange={(value) => {
+                            setFieldValue(
+                              'keywords',
+                              value?.map((v) => v.value).join(',')
+                            );
+                          }}
+                        />
+                      )}
                     </div>
                     {errors.keywords &&
                       touched.keywords &&

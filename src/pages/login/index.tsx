@@ -1,4 +1,4 @@
-import Login from '@app/components/Login';
+import Login, { type LoginBackdrop } from '@app/components/Login';
 import {
   getInternalApiBaseUrl,
   INTERNAL_API_HTTP_OPTIONS,
@@ -7,7 +7,7 @@ import axios from 'axios';
 import type { GetServerSideProps, NextPage } from 'next';
 
 type LoginPageProps = {
-  initialBackdrops?: string[];
+  initialBackdrops?: LoginBackdrop[];
 };
 
 const LoginPage: NextPage<LoginPageProps> = ({ initialBackdrops }) => {
@@ -18,7 +18,7 @@ export const getServerSideProps: GetServerSideProps<
   LoginPageProps
 > = async () => {
   try {
-    const response = await axios.get<string[]>(
+    const response = await axios.get<LoginBackdrop[]>(
       `${getInternalApiBaseUrl()}/api/v1/backdrops`,
       INTERNAL_API_HTTP_OPTIONS
     );

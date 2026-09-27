@@ -6,6 +6,7 @@ import Button from '@app/components/Common/Button';
 import ImageFader from '@app/components/Common/ImageFader';
 import PageTitle from '@app/components/Common/PageTitle';
 import LanguagePicker from '@app/components/Layout/LanguagePicker';
+import type { LoginBackdrop } from '@app/components/Login';
 import SetupSteps from '@app/components/Setup/SetupSteps';
 import TransportSecurityNotice from '@app/components/TransportSecurityNotice';
 import useLocale from '@app/hooks/useLocale';
@@ -191,7 +192,7 @@ const Setup = () => {
     }
   }, [intl, mediaServerType, toasts]);
 
-  const { data: backdrops } = useSWR<string[]>('/api/v1/backdrops', {
+  const { data: backdrops } = useSWR<LoginBackdrop[]>('/api/v1/backdrops', {
     refreshInterval: 0,
     refreshWhenHidden: false,
     revalidateOnFocus: false,
@@ -259,7 +260,7 @@ const Setup = () => {
       <ImageFader
         backgroundImages={
           backdrops?.map(
-            (backdrop) => `https://image.tmdb.org/t/p/w1280${backdrop}`
+            (backdrop) => `https://image.tmdb.org/t/p/w1280${backdrop.path}`
           ) ?? []
         }
       />

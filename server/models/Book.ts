@@ -27,6 +27,8 @@ export interface BookResult {
   editionCount?: number;
   ratingsAverage?: number;
   ratingsCount?: number;
+  subjects?: string[];
+  languages?: string[];
   wantToReadCount?: number;
   publisher?: string;
   series?: BookSeriesReference[];
@@ -41,6 +43,13 @@ export interface BookDetails extends BookResult {
   subjects?: string[];
   numberOfPages?: number;
   onUserWatchlist?: boolean;
+}
+
+export interface BookRatingResponse {
+  average?: number;
+  count: number;
+  source: 'openlibrary' | 'bookshelf';
+  workId?: string;
 }
 
 export interface BookSeriesReference {
@@ -264,6 +273,10 @@ export const mapOpenLibraryAuthorWork = (
     firstPublishYear: work.first_publish_date
       ? Number(work.first_publish_date.match(/\d{4}/)?.[0])
       : undefined,
+    subjects: work.subjects,
+    languages: work.languages?.map((language) =>
+      language.key.replace(/^\/?languages\//, '')
+    ),
     posterPath: coverId
       ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`
       : undefined,

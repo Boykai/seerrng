@@ -18,6 +18,7 @@ import { User } from '@server/entity/User';
 import { getSettings } from '@server/lib/settings';
 import { checkUser } from '@server/middleware/auth';
 import { setupTestDb } from '@server/test/db';
+import { makeBookshelfAuthorId } from '@server/utils/bookshelfCatalog';
 import { MAX_PAGINATION_OFFSET } from '@server/utils/pagination';
 import type { Express } from 'express';
 import express from 'express';
@@ -269,6 +270,65 @@ describe('GET /author/:id', () => {
 });
 
 describe('GET /author/:id/works', () => {
+  it('paginates Bookshelf bibliography works through the same route', async () => {
+    const settings = getSettings();
+    const previousReadarr = settings.readarr;
+    settings.readarr = [
+      {
+        id: 0,
+        hostname: 'bookshelf.test',
+        port: 8787,
+        apiKey: 'test-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'ebook',
+      },
+    ];
+    mock.method(ReadarrAPI.prototype, 'lookupAuthor', async () => [
+      { foreignAuthorId: 'tolkien', authorName: 'J.R.R. Tolkien' },
+    ]);
+    mock.method(ReadarrAPI.prototype, 'lookupBook', async () =>
+      Array.from({ length: 15 }, (_, index) => ({
+        foreignBookId: String(index + 1),
+        title: `Book ${index + 1}`,
+        author: {
+          foreignAuthorId: 'tolkien',
+          authorName: 'J.R.R. Tolkien',
+        },
+      }))
+    );
+
+    try {
+      const agent = await login();
+      const id = makeBookshelfAuthorId(0, 'tolkien', 'J.R.R. Tolkien');
+      const first = await agent.get(
+        `/author/${encodeURIComponent(id)}/works?limit=10&offset=0`
+      );
+      const second = await agent.get(
+        `/author/${encodeURIComponent(id)}/works?limit=10&offset=10`
+      );
+
+      assert.strictEqual(first.status, 200);
+      assert.strictEqual(first.body.works.length, 10);
+      assert.deepStrictEqual(first.body.pagination, {
+        limit: 10,
+        offset: 0,
+        totalItems: 15,
+        nextOffset: 10,
+      });
+      assert.strictEqual(second.status, 200);
+      assert.strictEqual(second.body.works.length, 5);
+      assert.deepStrictEqual(second.body.pagination, {
+        limit: 10,
+        offset: 10,
+        totalItems: 15,
+        nextOffset: 15,
+      });
+    } finally {
+      settings.readarr = previousReadarr;
+    }
+  });
+
   it('rejects malformed author work IDs before calling OpenLibrary', async () => {
     const getAuthor = mock.method(OpenLibraryAPI.prototype, 'getAuthor');
     const getAuthorWorks = mock.method(

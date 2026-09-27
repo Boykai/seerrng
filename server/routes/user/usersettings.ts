@@ -20,6 +20,12 @@ import type {
   UserSettingsNotificationsResponse,
 } from '@server/interfaces/api/userSettingsInterfaces';
 import {
+  mediaFilterScopes,
+  mediaFilterValues,
+  type MediaFilterScope,
+  type MediaFilterValue,
+} from '@server/interfaces/api/userSettingsInterfaces';
+import {
   getAuthAccountAdmissionResource,
   runAuthAccountAdmission,
 } from '@server/lib/authAccountAdmission';
@@ -71,6 +77,103 @@ import { IsNull, Not, Raw, type FindOptionsWhere } from 'typeorm';
 import { canMakePermissionsChange, isUniqueConstraintError } from '.';
 
 const userSettingsRoutes = Router({ mergeParams: true });
+
+const updateMediaFilterPin = (
+  current: Partial<Record<MediaFilterScope, MediaFilterValue>> | undefined,
+  scope: MediaFilterScope,
+  value: MediaFilterValue | null
+): Partial<Record<MediaFilterScope, MediaFilterValue>> => {
+  const pins = { ...current };
+
+  // Keep request-derived property names out of object writes. The explicit
+  // cases also make additions to MediaFilterScope fail closed until handled.
+  switch (scope) {
+    case 'books': {
+      if (value !== null) return { ...pins, books: value };
+      const remaining = { ...pins };
+      delete remaining.books;
+      return remaining;
+    }
+    case 'trending': {
+      if (value !== null) return { ...pins, trending: value };
+      const remaining = { ...pins };
+      delete remaining.trending;
+      return remaining;
+    }
+    case 'search': {
+      if (value !== null) return { ...pins, search: value };
+      const remaining = { ...pins };
+      delete remaining.search;
+      return remaining;
+    }
+    case 'blocklist': {
+      if (value !== null) return { ...pins, blocklist: value };
+      const remaining = { ...pins };
+      delete remaining.blocklist;
+      return remaining;
+    }
+    case 'issues': {
+      if (value !== null) return { ...pins, issues: value };
+      const remaining = { ...pins };
+      delete remaining.issues;
+      return remaining;
+    }
+    case 'requests': {
+      if (value !== null) return { ...pins, requests: value };
+      const remaining = { ...pins };
+      delete remaining.requests;
+      return remaining;
+    }
+  }
+};
+
+userSettingsRoutes.post<{ id: string; scope: string }>(
+  '/media-filter-pins/:scope',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    const scope = req.params.scope as MediaFilterScope;
+    const value = req.body?.value;
+    if (
+      !mediaFilterScopes.includes(scope) ||
+      !req.body ||
+      Array.isArray(req.body) ||
+      Object.keys(req.body).some((key) => key !== 'value') ||
+      (value !== null && !mediaFilterValues.includes(value))
+    ) {
+      return next({ status: 400, message: 'Invalid media filter pin.' });
+    }
+    const userId = parseUserSettingsRouteId(req.params.id);
+    if (!userId) return next({ status: 404, message: 'User not found.' });
+    try {
+      return await runUserSecurityMutationWithActor(
+        req.user!.id,
+        userId,
+        Permission.MANAGE_USERS,
+        async (actor) => {
+          const repository = getRepository(User);
+          const user = await repository.findOne({ where: { id: userId } });
+          if (!user) return next({ status: 404, message: 'User not found.' });
+          if (!canModifyUser(user, actor))
+            return next({ status: 403, message: 'Access denied.' });
+          if (!user.settings) user.settings = new UserSettings({ user });
+          const pins = updateMediaFilterPin(
+            user.settings.mediaFilterPins,
+            scope,
+            value as MediaFilterValue | null
+          );
+          user.settings.mediaFilterPins = pins;
+          await repository.save(user);
+          return res.status(200).json(pins);
+        }
+      );
+    } catch (error) {
+      next({
+        status: error instanceof UserMutationActorUnauthorizedError ? 403 : 500,
+        message: 'Could not save media filter pin.',
+      });
+    }
+  }
+);
 const MAX_USER_SETTINGS_ID_VALUE = 1_000_000_000;
 const MAX_LINKED_ACCOUNT_TOKEN_LENGTH = 4096;
 const MAX_LINKED_ACCOUNT_USERNAME_LENGTH = 512;
@@ -225,6 +328,8 @@ const serializeScopedDetailDisclosurePins = (
   mediaType: DetailDisclosureMediaType
 ): UserSettingsDetailDisclosureResponse => {
   const legacyPins: UserSettingsDetailDisclosureResponse = {
+    details: false,
+    ...(mediaType === 'movie' ? { collection: false } : {}),
     cast:
       mediaType === 'movie' && settings?.detailDisclosureCastPinned === true,
     crew:
@@ -243,7 +348,9 @@ const serializeScopedDetailDisclosurePins = (
 };
 
 const parseDetailDisclosurePinsBody = (
-  body: unknown
+  body: unknown,
+  includeCollection = false,
+  includeDetails = false
 ): { value: UserSettingsDetailDisclosureResponse } | { error: string } => {
   const parsedBody = parseUserSettingsBodyObject(body);
 
@@ -252,7 +359,17 @@ const parseDetailDisclosurePinsBody = (
   }
 
   const value: UserSettingsDetailDisclosureResponse = {};
-  for (const key of ['cast', 'crew', 'artists', 'subjectTags'] as const) {
+  const keys = ['cast', 'crew', 'artists', 'subjectTags'] as const;
+  const allowedKeys: (keyof UserSettingsDetailDisclosureResponse)[] = [
+    ...keys,
+    ...(includeDetails ? (['details'] as const) : []),
+    'advancedOptions',
+    'filters',
+    'mediaFilters',
+    'sortBy',
+    ...(includeCollection ? (['collection'] as const) : []),
+  ];
+  for (const key of allowedKeys) {
     if (!hasOwn(parsedBody.value, key)) {
       continue;
     }
@@ -1105,7 +1222,11 @@ userSettingsRoutes.post<
   async (req, res, next) => {
     const userRepository = getRepository(User);
     const { mediaType } = req.params;
-    const parsedBody = parseDetailDisclosurePinsBody(req.body);
+    const parsedBody = parseDetailDisclosurePinsBody(
+      req.body,
+      mediaType === 'movie',
+      true
+    );
 
     if (!isDetailDisclosureMediaType(mediaType)) {
       return next({ status: 400, message: 'Invalid detail media type.' });

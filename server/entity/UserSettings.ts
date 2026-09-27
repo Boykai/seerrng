@@ -1,6 +1,7 @@
 import type {
   CardTextVisibility,
   NotificationAgentTypes,
+  UserMediaFilterPins,
   UserPreferredLanguages,
   UserSettingsDetailDisclosuresByMedia,
 } from '@server/interfaces/api/userSettingsInterfaces';
@@ -222,6 +223,9 @@ export class UserSettings {
   @Column({ type: 'simple-json', nullable: true })
   public detailDisclosurePins?: UserSettingsDetailDisclosuresByMedia;
 
+  @Column({ type: 'simple-json', nullable: true })
+  public mediaFilterPins?: UserMediaFilterPins;
+
   @Column({
     type: 'text',
     nullable: true,
@@ -271,6 +275,7 @@ export class UserSettings {
       detailDisclosureArtistsPinned: this.detailDisclosureArtistsPinned,
       detailDisclosureSubjectTagsPinned: this.detailDisclosureSubjectTagsPinned,
       detailDisclosurePins: this.detailDisclosurePins,
+      mediaFilterPins: this.mediaFilterPins,
     };
   }
 

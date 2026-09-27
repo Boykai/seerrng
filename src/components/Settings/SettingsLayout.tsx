@@ -288,7 +288,7 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
         </form>
       </div>
 
-      <article className="settings-main-card">
+      <article className="app-card-main settings-main-card">
         <div
           ref={contentRef}
           className={`settings-page-content ${
@@ -306,6 +306,7 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
             buttonType="danger"
             buttonSize="standard"
             onClick={discardAndLeave}
+            buttonIcon="cancel"
           >
             {intl.formatMessage(globalMessages.cancel)}
           </Button>

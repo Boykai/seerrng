@@ -21,9 +21,17 @@ import type {
 } from '@server/interfaces/api/mediaInterfaces';
 import { runWithConfigurationAdmission } from '@server/lib/configurationAdmission';
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
+import {
+  executeLibraryRemoval,
+  libraryServiceType,
+  resolveLibraryRemoval,
+} from '@server/lib/libraryRemoval';
 import { runMediaEntityMutation } from '@server/lib/mediaMutation';
 import { Permission } from '@server/lib/permissions';
-import { runWithServarrServiceAdmission } from '@server/lib/serviceAdmission';
+import {
+  runWithServarrServiceAdmission,
+  runWithServarrServiceCollectionMutationAdmission,
+} from '@server/lib/serviceAdmission';
 import {
   UserMutationActorUnauthorizedError,
   runAuthorizedUserSecurityMutation,
@@ -61,14 +69,14 @@ const mediaListFilters = [
   'pending',
 ] as const;
 const mediaListSorts = ['modified', 'mediaAdded'] as const;
-const mediaListTypes = [
+const mediaListTypes: MediaType[] = [
   MediaType.MOVIE,
   MediaType.TV,
   MediaType.MUSIC,
   MediaType.BOOK,
   MediaType.COMIC,
   MediaType.MAGAZINE,
-] as const;
+];
 const mediaFileFormats = ['ebook', 'audiobook', 'both'] as const;
 const mediaListPermissions: Permission[] = [
   Permission.MANAGE_REQUESTS,
@@ -536,6 +544,151 @@ mediaRoutes.delete(
   }
 );
 
+mediaRoutes.get(
+  '/:id/library',
+  isAuthenticated(Permission.ADMIN),
+  authorizedRouteAccess(Permission.ADMIN),
+  async (req, res, next) => {
+    const id = parseMediaRouteId(req.params.id);
+    const media = id
+      ? await getRepository(Media).findOne({
+          where: { id },
+          relations: { identifiers: true },
+        })
+      : null;
+    if (!media) return next({ status: 404, message: 'Media not found.' });
+    try {
+      return await runWithServarrServiceCollectionMutationAdmission(
+        libraryServiceType(media.mediaType, media.comicServiceType),
+        async () => {
+          const { plan } = await resolveLibraryRemoval(media);
+          return res.json(plan);
+        }
+      );
+    } catch (error) {
+      return next({ status: 502, message: error.message });
+    }
+  }
+);
+
+mediaRoutes.delete(
+  '/:id/library',
+  isAuthenticated(Permission.ADMIN),
+  async (req, res, next) => {
+    const id = parseMediaRouteId(req.params.id);
+    if (
+      !id ||
+      typeof req.body?.token !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(req.body.token)
+    )
+      return next({
+        status: 400,
+        message: 'A current library confirmation is required.',
+      });
+    try {
+      const repository = getRepository(Media);
+      const initial = await repository.findOneOrFail({
+        where: { id },
+        relations: { identifiers: true },
+      });
+      return await runAuthorizedUserSecurityMutation(
+        req.user!.id,
+        req.user!.id,
+        Permission.ADMIN,
+        () =>
+          runMediaEntityMutation(initial, async () =>
+            runWithServarrServiceCollectionMutationAdmission(
+              libraryServiceType(initial.mediaType, initial.comicServiceType),
+              async () => {
+                const media = await repository.findOneOrFail({
+                  where: { id },
+                  relations: { identifiers: true, seasons: true },
+                });
+                const resolved = await resolveLibraryRemoval(media);
+                let removed = 0;
+                try {
+                  await executeLibraryRemoval(
+                    req.body.token,
+                    resolved,
+                    async (target, remaining) => {
+                      removed++;
+                      if (
+                        media.mediaType === MediaType.MOVIE ||
+                        media.mediaType === MediaType.TV
+                      ) {
+                        const is4k = target.quality === '4K';
+                        if (
+                          !remaining.some(
+                            (copy) => copy.quality === target.quality
+                          )
+                        ) {
+                          if (
+                            media[is4k ? 'status4k' : 'status'] !==
+                            MediaStatus.BLOCKLISTED
+                          )
+                            media[is4k ? 'status4k' : 'status'] =
+                              MediaStatus.DELETED;
+                          // Keep the media-server key solely as evidence for the next
+                          // deletion reconciliation; playback is disabled by status.
+                          media.resetServiceDataForResolution(is4k, true);
+                          for (const season of media.seasons ?? [])
+                            season[is4k ? 'status4k' : 'status'] =
+                              MediaStatus.DELETED;
+                        }
+                      } else if (!remaining.length) {
+                        media.status = MediaStatus.DELETED;
+                        media.resetServiceData();
+                      } else if (media.mediaType === MediaType.BOOK) {
+                        if (
+                          target.quality === 'Book' &&
+                          !remaining.some((copy) => copy.quality === 'Book')
+                        )
+                          media.resetServiceDataForResolution(false);
+                        if (
+                          target.quality === 'Audiobook' &&
+                          !remaining.some(
+                            (copy) => copy.quality === 'Audiobook'
+                          )
+                        ) {
+                          media.audiobookServiceId = null;
+                          media.audiobookExternalServiceId = null;
+                          media.audiobookExternalServiceSlug = null;
+                        }
+                        media.status = MediaStatus.PARTIALLY_AVAILABLE;
+                      }
+                      await repository.save(media);
+                    }
+                  );
+                } catch {
+                  return next({
+                    status: 409,
+                    message: removed
+                      ? `${removed} library copy/copies were deleted before an error. Remaining copies were not deleted. Refresh and review a new confirmation.`
+                      : 'Library verification changed or deletion failed. No successful deletions were recorded. Refresh and review a new confirmation.',
+                  });
+                }
+                return res.status(204).send();
+              }
+            )
+          )
+      );
+    } catch (error) {
+      if (error instanceof UserMutationActorUnauthorizedError)
+        return next({
+          status: 403,
+          message: 'You no longer have permission to modify media.',
+        });
+      if (error instanceof EntityNotFoundError)
+        return next({ status: 404, message: 'Media not found.' });
+      return next({
+        status: 502,
+        message:
+          'Unable to verify all library services. No deletion has started.',
+      });
+    }
+  }
+);
+
 mediaRoutes.delete(
   '/:id/file',
   isAuthenticated(Permission.MANAGE_REQUESTS),
@@ -947,9 +1100,13 @@ mediaRoutes.delete(
                   // Book format links are saved as each backend removal succeeds.
                 } else {
                   const deleted4k = is4k && !isMusic;
-                  media[deleted4k ? 'status4k' : 'status'] =
-                    MediaStatus.DELETED;
-                  media.resetServiceDataForResolution(deleted4k);
+                  if (
+                    media[deleted4k ? 'status4k' : 'status'] !==
+                    MediaStatus.BLOCKLISTED
+                  )
+                    media[deleted4k ? 'status4k' : 'status'] =
+                      MediaStatus.DELETED;
+                  media.resetServiceDataForResolution(deleted4k, isMusic);
                   if (media.mediaType === MediaType.TV) {
                     for (const season of media.seasons) {
                       season[deleted4k ? 'status4k' : 'status'] =

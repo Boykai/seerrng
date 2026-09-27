@@ -5,7 +5,8 @@ import { useCallback, useRef } from 'react';
 
 type UseQueryParamReturnedFunction = (
   query: ParsedUrlQuery,
-  routerAction?: 'push' | 'replace'
+  routerAction?: 'push' | 'replace',
+  options?: { shallow?: boolean; scroll?: boolean }
 ) => void;
 
 interface MergedQueryString {
@@ -134,14 +135,18 @@ export const useQueryParams = (): UseQueryParamReturnedFunction => {
   const router = useRouter();
 
   return useCallback(
-    (query: ParsedUrlQuery, routerAction: 'push' | 'replace' = 'push') => {
+    (
+      query: ParsedUrlQuery,
+      routerAction: 'push' | 'replace' = 'push',
+      options?: { shallow?: boolean; scroll?: boolean }
+    ) => {
       const newRoute = mergeQueryString(router, query);
 
       if (newRoute.path !== router.asPath) {
         if (routerAction === 'replace') {
-          router.replace(newRoute.pathname, newRoute.path);
+          router.replace(newRoute.pathname, newRoute.path, options);
         } else {
-          router.push(newRoute.pathname, newRoute.path);
+          router.push(newRoute.pathname, newRoute.path, options);
         }
       }
     },
@@ -170,18 +175,24 @@ export const useUpdateQueryParams = (
 
 export const useBatchUpdateQueryParams = (
   filter: ParsedUrlQuery
-): ((items: Record<string, string | undefined>) => void) => {
+): ((
+  items: Record<string, string | undefined>,
+  options?: { shallow?: boolean; scroll?: boolean }
+) => void) => {
   const updateQueryParams = useQueryParams();
   const filterRef = useRef(filter);
   filterRef.current = filter;
 
   return useCallback(
-    (items: Record<string, string | undefined>) => {
+    (
+      items: Record<string, string | undefined>,
+      options?: { shallow?: boolean; scroll?: boolean }
+    ) => {
       const query = {
         ...filterRef.current,
         ...items,
       };
-      updateQueryParams(query, 'replace');
+      updateQueryParams(query, 'replace', options);
     },
     [updateQueryParams]
   );

@@ -13,6 +13,12 @@ import {
 } from './detailDisclosurePinsMutation';
 
 const defaultPins: DetailDisclosurePins = {
+  details: false,
+  advancedOptions: false,
+  filters: false,
+  mediaFilters: false,
+  sortBy: false,
+  collection: false,
   cast: false,
   crew: false,
   artists: false,
@@ -24,6 +30,12 @@ const fromUserSettings = (
   mediaType: DetailDisclosureMediaType
 ): DetailDisclosurePins => {
   const legacyPins: DetailDisclosurePins = {
+    details: false,
+    advancedOptions: false,
+    filters: false,
+    mediaFilters: false,
+    sortBy: false,
+    collection: false,
     cast:
       mediaType === 'movie' && settings?.detailDisclosureCastPinned === true,
     crew:
@@ -43,10 +55,17 @@ const fromUserSettings = (
 
 const useDetailDisclosurePins = (mediaType: DetailDisclosureMediaType) => {
   const { user, revalidate: revalidateUser } = useUser();
-  const userKey = `${user?.id ? String(user.id) : 'anonymous'}:${mediaType}`;
-  const endpoint = user?.id
-    ? `/api/v1/user/${user.id}/settings/detail-disclosures/${mediaType}`
-    : null;
+  const userId = String(user?.id ?? '').match(/^[1-9]\d{0,8}$/)?.[0] ?? null;
+  const userKey = `${userId ? String(userId) : 'anonymous'}:${mediaType}`;
+  const endpoint = !userId
+    ? null
+    : mediaType === 'movie'
+      ? `/api/v1/user/${userId}/settings/detail-disclosures/movie`
+      : mediaType === 'tv'
+        ? `/api/v1/user/${userId}/settings/detail-disclosures/tv`
+        : mediaType === 'music'
+          ? `/api/v1/user/${userId}/settings/detail-disclosures/music`
+          : `/api/v1/user/${userId}/settings/detail-disclosures/book`;
   const { data, mutate } = useSWR<UserSettingsDetailDisclosureResponse>(
     endpoint,
     {

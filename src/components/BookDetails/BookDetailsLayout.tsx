@@ -1,8 +1,12 @@
+import BookSeriesSummaryCard from '@app/components/BookSeriesDetails/BookSeriesSummaryCard';
 import CachedImage from '@app/components/Common/CachedImage';
 import PlayOnDeviceButton from '@app/components/Common/PlayOnDeviceButton';
 import AvailabilityValue from '@app/components/MediaDetails/AvailabilityValue';
+import BookRating from '@app/components/MediaDetails/BookRating';
 import DetailDisclosureButton from '@app/components/MediaDetails/DetailDisclosureButton';
+import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
 import PlaybackTrackList from '@app/components/MediaDetails/PlaybackTrackList';
+import { subjectTagClassName } from '@app/components/MediaDetails/subjectTagStyle';
 import useDetailDisclosurePins from '@app/hooks/useDetailDisclosurePins';
 import usePlaybackCatalog from '@app/hooks/usePlaybackCatalog';
 import { encodeApiPathSegment } from '@app/utils/apiPath';
@@ -10,7 +14,7 @@ import { normalizeBookOverviewMarkdown } from '@app/utils/bookMarkdown';
 import defineMessages from '@app/utils/defineMessages';
 import { resolveCanonicalPlaybackSelection } from '@app/utils/playbackSelection';
 import { getSafeMarkdownHref } from '@app/utils/safeUrl';
-import type { BookDetails } from '@server/models/Book';
+import type { BookDetails, BookRatingResponse } from '@server/models/Book';
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
@@ -24,8 +28,7 @@ const messages = defineMessages('components.BookDetails.Layout', {
   author: 'Author',
   editions: 'Editions',
   isbn: 'ISBN',
-  series: 'Series',
-  audiobookEdition: 'Audiobook Edition',
+  collection: 'Collection',
   audiobookDuration: 'Runtime',
   narrators: 'Narrators',
   ebook: 'Book',
@@ -34,15 +37,17 @@ const messages = defineMessages('components.BookDetails.Layout', {
   overviewUnavailable: 'Overview unavailable',
   genres: 'Genres',
   noGenres: 'No Genres Available',
-  bookDetails: 'Book Details',
+  keywords: 'Keywords',
+  noKeywords: 'No keywords available',
+  bookDetails: 'Details',
   openLibrary: 'Open Library',
   metadataSource: 'Metadata source',
   edition: 'Edition',
   isbnCandidates: 'ISBN Candidates',
   available: 'Available',
   requested: 'Requested',
-  notRequested: 'Not Requested',
-  notAvailable: 'Not available',
+  notAvailable: 'Not Available',
+  format: 'Format',
 });
 
 export interface BookFormatCoverage {
@@ -53,32 +58,48 @@ export interface BookFormatCoverage {
 
 interface BookDetailsLayoutProps {
   data: BookDetails;
+  ratingData?: BookRatingResponse;
   formatCoverage: BookFormatCoverage[];
+  initialPlaybackFormat: 'ebook' | 'audiobook';
   primaryActions: ReactNode;
   secondaryActions: ReactNode;
-  playbackActions?: (itemIds: string[]) => ReactNode;
+  catalogActions?: ReactNode;
+  playbackActions?: (
+    itemIds: string[],
+    format: 'ebook' | 'audiobook'
+  ) => ReactNode;
+  playbackUnavailableReason?: (format: 'ebook' | 'audiobook') => string;
   additionalContent?: ReactNode;
 }
 
-const genreTones = [
-  'border-indigo-400/80 bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/35',
-  'border-purple-400/80 bg-purple-500/20 text-purple-100 hover:bg-purple-500/35',
-  'border-emerald-400/80 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/35',
-  'border-amber-400/80 bg-amber-500/20 text-amber-100 hover:bg-amber-500/35',
-  'border-sky-400/80 bg-sky-500/20 text-sky-100 hover:bg-sky-500/35',
-  'border-rose-400/80 bg-rose-500/20 text-rose-100 hover:bg-rose-500/35',
-] as const;
-
 const BookDetailsLayout = ({
   data,
+  ratingData,
   formatCoverage,
+  initialPlaybackFormat,
   primaryActions,
   secondaryActions,
+  catalogActions,
   playbackActions,
+  playbackUnavailableReason,
   additionalContent,
 }: BookDetailsLayoutProps) => {
   const intl = useIntl();
   const { pins, togglePinned } = useDetailDisclosurePins('book');
+  const [showDetails, setShowDetails] = useState(false);
+  const [showCollection, setShowCollection] = useState(false);
+  const [selectedPlaybackFormat, setSelectedPlaybackFormat] = useState<
+    'ebook' | 'audiobook'
+  >(initialPlaybackFormat);
+  useEffect(() => {
+    setSelectedPlaybackFormat(initialPlaybackFormat);
+  }, [data.id, initialPlaybackFormat]);
+  useEffect(() => {
+    setShowDetails(pins.details);
+  }, [pins.details, data.id]);
+  useEffect(() => {
+    setShowCollection(pins.collection);
+  }, [pins.collection, data.id]);
   const [showGenres, setShowGenres] = useState(false);
   const [selectedPlaybackItemIds, setSelectedPlaybackItemIds] = useState<
     string[]
@@ -131,12 +152,12 @@ const BookDetailsLayout = ({
         ? messages.available
         : coverage.requested
           ? messages.requested
-          : messages.notRequested
+          : messages.notAvailable
     );
 
   return (
     <div className="media-page">
-      <article className="media-detail-card refreshed-card-surface refreshed-detail-text relative overflow-hidden rounded-xl border border-gray-700 p-3 shadow-lg shadow-gray-950/20">
+      <article className="media-detail-card app-card-main refreshed-card-surface refreshed-detail-text relative overflow-hidden rounded-xl border border-gray-700 p-3 shadow-lg shadow-gray-950/20">
         {data.posterPath && (
           <div className="pointer-events-none absolute inset-0 z-0" aria-hidden>
             <CachedImage
@@ -154,7 +175,7 @@ const BookDetailsLayout = ({
         )}
 
         <div className="relative z-10">
-          <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[80px_minmax(0,1fr)]">
+          <div className="app-card-inset refreshed-inset-surface detail-summary-card grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[80px_minmax(0,1fr)]">
             <div
               className="relative h-24 w-16 overflow-hidden rounded-lg ring-1 ring-gray-600 sm:h-[120px] sm:w-20"
               data-testid="media-details-poster"
@@ -172,16 +193,16 @@ const BookDetailsLayout = ({
 
             <div className="flex min-w-0 flex-col">
               <h1
-                className="text-lg leading-5 font-semibold text-white"
+                className="detail-summary-title text-lg leading-5 font-semibold text-white"
                 data-testid="media-title"
               >
                 {data.title}
                 {data.firstPublishYear ? ` (${data.firstPublishYear})` : ''}
               </h1>
 
-              <div className="card:grid-cols-3 mt-4 grid min-w-0 flex-1 grid-cols-1">
-                <div className="card:col-span-2 card:pr-3 min-w-0">
-                  <dl className="card:grid-cols-[max-content_0.75rem_6rem_0.75rem_minmax(0,1fr)] card:gap-x-0 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-0.5 text-xs leading-4">
+              <div className="detail-card-heading-spacing detail-three-column-grid grid min-w-0 flex-1">
+                <div className="detail-paired-column-span min-w-0">
+                  <dl className="media-detail-rows detail-paired-columns grid min-w-0 content-start text-xs">
                     <dt className="card:col-start-1 card:row-start-1 font-medium text-gray-100">
                       {intl.formatMessage(messages.mediaAndFormat)}:
                     </dt>
@@ -195,19 +216,35 @@ const BookDetailsLayout = ({
                       {data.firstPublishYear ?? unavailable}
                     </dd>
                     <dt className="card:col-start-1 card:row-start-3 font-medium text-gray-100">
-                      {intl.formatMessage(messages.pages)}:
+                      {intl.formatMessage(
+                        selectedPlaybackFormat === 'audiobook'
+                          ? messages.audiobookDuration
+                          : messages.pages
+                      )}
+                      :
                     </dt>
                     <dd className="card:col-start-3 card:row-start-3 m-0 truncate">
-                      {data.numberOfPages
-                        ? intl.formatNumber(data.numberOfPages)
-                        : unavailable}
+                      {selectedPlaybackFormat === 'audiobook'
+                        ? data.audiobookDuration && data.audiobookDuration > 0
+                          ? `${Math.floor(data.audiobookDuration / 3600)}h ${Math.floor((data.audiobookDuration % 3600) / 60)}m`
+                          : unavailable
+                        : data.numberOfPages
+                          ? intl.formatNumber(data.numberOfPages)
+                          : unavailable}
                     </dd>
-                    <div className="media-detail-column-divider card:col-span-1 card:col-start-5 card:row-span-3 card:row-start-1 col-span-2 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-0.5">
+                    <div className="media-detail-rows media-detail-column-divider card:col-span-1 card:col-start-5 card:row-span-3 card:row-start-1 col-span-2 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3">
                       <dt className="font-medium text-gray-100">
-                        {intl.formatMessage(messages.author)}:
+                        {intl.formatMessage(
+                          selectedPlaybackFormat === 'audiobook'
+                            ? messages.narrators
+                            : messages.author
+                        )}
+                        :
                       </dt>
                       <dd className="m-0 truncate">
-                        {data.author ? (
+                        {selectedPlaybackFormat === 'audiobook' ? (
+                          data.narrators?.join(', ') || unavailable
+                        ) : data.author ? (
                           authorId ? (
                             <Link
                               href={`/author/${authorId}`}
@@ -238,11 +275,11 @@ const BookDetailsLayout = ({
                       </dd>
                     </div>
 
-                    <dt className="card:col-start-1 card:row-start-4 mt-0.5 font-medium text-gray-100">
+                    <dt className="card:col-start-1 card:row-start-4 font-medium text-gray-100">
                       {intl.formatMessage(messages.genres)}:
                     </dt>
                     <dd
-                      className="card:col-span-3 card:col-start-3 card:row-start-4 m-0 mt-0.5 min-w-0 break-words"
+                      className="card:col-span-3 card:col-start-3 card:row-start-4 m-0 min-w-0 break-words"
                       data-testid="media-details-genres"
                     >
                       {genres.length > 0
@@ -262,7 +299,7 @@ const BookDetailsLayout = ({
                   </dl>
                 </div>
 
-                <dl className="media-detail-column-divider grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-0.5 text-xs leading-4">
+                <dl className="media-detail-rows media-detail-column-divider grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
                   {formatCoverage.map((coverage) => (
                     <div className="contents" key={coverage.format}>
                       <dt className="font-medium text-gray-100">
@@ -300,74 +337,76 @@ const BookDetailsLayout = ({
               onSelectionChange={setSelectedPlaybackItemIds}
             />
           )}
-          {playbackActions && (
-            <div className="media-rating-row">
-              {playbackActions(effectivePlaybackItemIds)}
+          <div className="media-rating-row">
+            <MediaQualitySelect
+              value={selectedPlaybackFormat}
+              options={[
+                {
+                  label: intl.formatMessage(messages.ebook),
+                  value: 'ebook',
+                },
+                {
+                  label: intl.formatMessage(messages.audiobook),
+                  value: 'audiobook',
+                },
+              ]}
+              onChange={setSelectedPlaybackFormat}
+              label={intl.formatMessage(messages.format)}
+              autoSelectAvailable={false}
+            />
+            {playbackActions?.(
+              effectivePlaybackItemIds,
+              selectedPlaybackFormat
+            )}
+            {playbackActions && (
               <PlayOnDeviceButton
                 mediaId={data.mediaInfo?.id}
-                itemIds={effectivePlaybackItemIds}
+                unavailableReason={playbackUnavailableReason?.(
+                  selectedPlaybackFormat
+                )}
+                itemIds={
+                  selectedPlaybackFormat === 'audiobook'
+                    ? effectivePlaybackItemIds
+                    : []
+                }
               />
-            </div>
-          )}
+            )}
+            <BookRating
+              average={
+                ratingData?.average ??
+                (data.provider === 'bookshelf'
+                  ? data.ratingsAverage
+                  : undefined)
+              }
+              count={
+                ratingData?.count ||
+                (data.provider === 'bookshelf' ? data.ratingsCount : undefined)
+              }
+              source={
+                ratingData?.average !== undefined && ratingData.count > 0
+                  ? ratingData.source === 'bookshelf'
+                    ? 'Bookshelf'
+                    : 'Open Library'
+                  : data.provider === 'bookshelf'
+                    ? 'Bookshelf'
+                    : 'Open Library'
+              }
+              href={
+                ratingData?.workId && ratingData.source === 'openlibrary'
+                  ? `https://openlibrary.org/works/${encodeURIComponent(ratingData.workId)}`
+                  : data.provider !== 'bookshelf'
+                    ? `https://openlibrary.org/works/${encodeURIComponent(data.id)}`
+                    : undefined
+              }
+            />
+          </div>
 
           <div className="media-primary-action-row">
             {primaryActions}
             {secondaryActions}
           </div>
 
-          {data.series && data.series.length > 0 && (
-            <section className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
-              <h2 className="media-inset-heading">
-                {intl.formatMessage(messages.series)}
-              </h2>
-              <ul className="mt-3 flex flex-wrap gap-2">
-                {data.series.map((series) => (
-                  <li key={series.id}>
-                    <Link
-                      href={`/series/${encodeApiPathSegment(series.id)}`}
-                      className="inline-flex items-center rounded-md border border-blue-400/40 bg-blue-500/10 px-3 py-1.5 text-sm text-blue-100 hover:bg-blue-500/20 focus:ring-2 focus:ring-blue-400 focus:outline-none"
-                    >
-                      {series.title}
-                      {series.position ? ` #${series.position}` : ''}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {(data.audiobookDuration || data.narrators?.length) && (
-            <section className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
-              <h2 className="media-inset-heading">
-                {intl.formatMessage(messages.audiobookEdition)}
-              </h2>
-              <dl className="mt-3 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
-                {data.audiobookDuration && data.audiobookDuration > 0 && (
-                  <>
-                    <dt className="font-medium text-gray-100">
-                      {intl.formatMessage(messages.audiobookDuration)}:
-                    </dt>
-                    <dd className="m-0">
-                      {Math.floor(data.audiobookDuration / 3600)}h{' '}
-                      {Math.floor((data.audiobookDuration % 3600) / 60)}m
-                    </dd>
-                  </>
-                )}
-                {data.narrators && data.narrators.length > 0 && (
-                  <>
-                    <dt className="font-medium text-gray-100">
-                      {intl.formatMessage(messages.narrators)}:
-                    </dt>
-                    <dd className="m-0 break-words">
-                      {data.narrators.join(', ')}
-                    </dd>
-                  </>
-                )}
-              </dl>
-            </section>
-          )}
-
-          <section className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
+          <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
             <h2 className="media-inset-heading">
               {intl.formatMessage(messages.overview)}
             </h2>
@@ -391,24 +430,54 @@ const BookDetailsLayout = ({
             </div>
           </section>
 
-          <div className="mt-[5px] flex flex-wrap items-center gap-2">
+          <div className="media-detail-disclosure-row">
+            {data.series && data.series.length > 0 && (
+              <DetailDisclosureButton
+                label={intl.formatMessage(messages.collection)}
+                open={showCollection}
+                onClick={() => setShowCollection((open) => !open)}
+                pinned={pins.collection}
+                onPinClick={() => void togglePinned('collection')}
+              />
+            )}
             <DetailDisclosureButton
-              label={intl.formatMessage(messages.genres)}
+              label={intl.formatMessage(messages.keywords)}
               open={showGenres}
               onClick={() => setShowGenres((open) => !open)}
               pinned={pins.subjectTags}
               onPinClick={() => void togglePinned('subjectTags')}
             />
+            <DetailDisclosureButton
+              label={intl.formatMessage(messages.bookDetails)}
+              open={showDetails}
+              onClick={() => setShowDetails((open) => !open)}
+              pinned={pins.details}
+              onPinClick={() => void togglePinned('details')}
+              controls="book-additional-details"
+            />
+            {catalogActions}
           </div>
 
+          {showCollection && data.series && data.series.length > 0 && (
+            <div className="card-spacing-before space-y-2">
+              {data.series.map((series) => (
+                <BookSeriesSummaryCard
+                  key={series.id}
+                  seriesId={series.id}
+                  title={series.title}
+                />
+              ))}
+            </div>
+          )}
+
           {showGenres && (
-            <section className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
+            <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
               <h2 className="media-inset-heading mb-2">
-                {intl.formatMessage(messages.genres)}
+                {intl.formatMessage(messages.keywords)}
               </h2>
               {genres.length === 0 ? (
                 <p className="refreshed-detail-text-muted text-xs">
-                  {intl.formatMessage(messages.noGenres)}
+                  {intl.formatMessage(messages.noKeywords)}
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
@@ -416,9 +485,7 @@ const BookDetailsLayout = ({
                     <Link
                       key={genre}
                       href={`/discover/books?subject=${encodeURIComponent(genre)}&sortBy=ranked`}
-                      className={`compact-control inline-flex items-center rounded-full border px-2 text-[11px] font-medium transition focus:ring-2 focus:ring-indigo-400 focus:outline-none ${
-                        genreTones[index % genreTones.length]
-                      }`}
+                      className={subjectTagClassName(index)}
                     >
                       {genre}
                     </Link>
@@ -428,129 +495,71 @@ const BookDetailsLayout = ({
             </section>
           )}
 
-          <section className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
-            <h2 className="media-inset-heading mb-3">
-              {intl.formatMessage(messages.bookDetails)}
-            </h2>
-            <div className="card:grid-cols-3 grid grid-cols-1">
-              <dl className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-1 text-xs leading-4">
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.firstPublished)}:
-                </dt>
-                <dd className="m-0 truncate">
-                  {data.firstPublishYear ?? unavailable}
-                </dd>
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.pages)}:
-                </dt>
-                <dd className="m-0 truncate">
-                  {data.numberOfPages
-                    ? intl.formatNumber(data.numberOfPages)
-                    : unavailable}
-                </dd>
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.editions)}:
-                </dt>
-                <dd className="m-0 truncate">
-                  {data.editionCount
-                    ? intl.formatNumber(data.editionCount)
-                    : unavailable}
-                </dd>
-              </dl>
-
-              <dl className="media-detail-column-divider card:pr-3 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-1 text-xs leading-4">
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.publisher)}:
-                </dt>
-                <dd className="m-0 truncate">
-                  {data.publisher || unavailable}
-                </dd>
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.author)}:
-                </dt>
-                <dd className="m-0 truncate">
-                  {data.author ? (
-                    authorId ? (
-                      <Link
-                        href={`/author/${authorId}`}
-                        className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                      >
-                        {data.author}
-                      </Link>
-                    ) : (
-                      data.author
-                    )
-                  ) : (
-                    unavailable
-                  )}
-                </dd>
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.edition)}:
-                </dt>
-                <dd className="m-0 truncate">
-                  {data.editionId || unavailable}
-                </dd>
-              </dl>
-
-              <dl className="media-detail-column-divider grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-1 text-xs leading-4">
-                {data.metadataSource ? (
-                  <>
-                    <dt className="font-medium text-gray-100">
-                      {intl.formatMessage(messages.metadataSource)}:
-                    </dt>
-                    <dd className="m-0 truncate">
-                      <a
-                        href={data.metadataSource.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                      >
-                        {data.metadataSource.name}
-                      </a>
-                    </dd>
-                  </>
-                ) : data.provider === 'openlibrary' ? (
-                  <>
-                    <dt className="font-medium text-gray-100">
-                      {intl.formatMessage(messages.openLibrary)}:
-                    </dt>
-                    <dd className="m-0 truncate">
-                      <a
-                        href={`https://openlibrary.org/works/${workId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                      >
-                        {data.id}
-                      </a>
-                    </dd>
-                  </>
-                ) : null}
-                <dt className="font-medium text-gray-100">
-                  {intl.formatMessage(messages.isbnCandidates)}:
-                </dt>
-                <dd className="m-0 min-w-0">
-                  {data.isbnCandidates?.length
-                    ? data.isbnCandidates.slice(0, 4).map((candidate) => (
-                        <span
-                          className="block truncate"
-                          key={`${candidate.editionId ?? candidate.isbn}-${candidate.isbn}`}
-                          title={[
-                            candidate.isbn,
-                            candidate.title,
-                            candidate.format,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        >
-                          {candidate.isbn}
-                        </span>
-                      ))
-                    : unavailable}
-                </dd>
-              </dl>
-            </div>
-          </section>
+          {showDetails && (
+            <section
+              id="book-additional-details"
+              className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3"
+            >
+              <h2 className="media-inset-heading detail-card-heading-after">
+                {intl.formatMessage(messages.bookDetails)}
+              </h2>
+              <div className="detail-three-column-grid grid">
+                <dl className="media-detail-rows grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.publisher)}:
+                  </dt>
+                  <dd className="m-0 truncate">
+                    {data.publisher || unavailable}
+                  </dd>
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.edition)}:
+                  </dt>
+                  <dd className="m-0 truncate">
+                    {data.editionId || unavailable}
+                  </dd>
+                </dl>
+                <dl className="media-detail-rows media-detail-column-divider grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.openLibrary)}:
+                  </dt>
+                  <dd className="m-0 truncate">
+                    <a
+                      href={`https://openlibrary.org/works/${workId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                    >
+                      {data.id}
+                    </a>
+                  </dd>
+                </dl>
+                <dl className="media-detail-rows media-detail-column-divider grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
+                  <dt className="font-medium text-gray-100">
+                    {intl.formatMessage(messages.isbnCandidates)}:
+                  </dt>
+                  <dd className="m-0 min-w-0">
+                    {data.isbnCandidates?.length
+                      ? data.isbnCandidates.slice(0, 4).map((candidate) => (
+                          <span
+                            className="block truncate"
+                            key={`${candidate.editionId ?? candidate.isbn}-${candidate.isbn}`}
+                            title={[
+                              candidate.isbn,
+                              candidate.title,
+                              candidate.format,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          >
+                            {candidate.isbn}
+                          </span>
+                        ))
+                      : unavailable}
+                  </dd>
+                </dl>
+              </div>
+            </section>
+          )}
           {additionalContent}
         </div>
       </article>

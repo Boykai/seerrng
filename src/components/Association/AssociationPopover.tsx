@@ -76,7 +76,7 @@ const AssociationPopover = ({
           <h2 className="mb-2 text-xs font-semibold tracking-wider text-gray-200 uppercase">
             {similarLabel}
           </h2>
-          <div className="grid grid-cols-1 gap-2">
+          <div className="association-detail-list">
             {sameMedium.map((edge) => (
               <AssociationDetailCard
                 key={`${edge.node.mediaType}:${edge.node.id}`}
@@ -93,7 +93,7 @@ const AssociationPopover = ({
           <h2 className="mb-2 text-xs font-semibold tracking-wider text-gray-200 uppercase">
             {intl.formatMessage(messages.alsoconnected)}
           </h2>
-          <div className="grid grid-cols-1 gap-2">
+          <div className="association-detail-list">
             {connected.map((edge) => (
               <AssociationDetailCard
                 key={`${edge.node.mediaType}:${edge.node.id}`}

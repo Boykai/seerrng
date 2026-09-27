@@ -267,6 +267,7 @@ const Layout = ({ children }: LayoutProps) => {
                 isScrolled ? 'opacity-90' : 'opacity-70'
               } pwa-only transition duration-300 hover:text-white focus:text-white focus:outline-none`}
               onClick={() => router.back()}
+              aria-label="Go back to the previous page"
             >
               <ArrowLeftIcon className="w-7" />
             </button>

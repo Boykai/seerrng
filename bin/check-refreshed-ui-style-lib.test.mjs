@@ -15,7 +15,7 @@ const validSharedStyles = `
   .app-button-success {}
   .button-standard, .button-sm {}
   .detail-disclosure-control {}
-  .media-quality-select-control {}
+  .format-request-control {}
   .media-detail-column-divider {}
   .media-rating-row {}
   .media-primary-action-row {}

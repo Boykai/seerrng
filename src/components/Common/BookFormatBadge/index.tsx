@@ -54,7 +54,7 @@ const BookFormatBadge = ({
   const Icon = isAudio ? SpeakerWaveIcon : BookOpenIcon;
 
   const variantClasses = {
-    card: 'inline-flex max-w-full items-center gap-1 rounded-full border border-amber-500/70 bg-amber-700/35 px-2 py-1 text-[11px] font-semibold leading-none text-amber-50 shadow-md',
+    card: 'poster-control poster-control-book-format max-w-full shadow-md',
     compact:
       'inline-flex max-w-full items-center gap-1 rounded-full border border-amber-500/70 bg-amber-700/35 px-2 py-1 text-[11px] font-semibold leading-none text-amber-50',
     inline:

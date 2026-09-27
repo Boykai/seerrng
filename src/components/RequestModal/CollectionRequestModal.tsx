@@ -1,9 +1,21 @@
-import Alert from '@app/components/Common/Alert';
+import CollectionSummaryCard from '@app/components/CollectionDetails/CollectionSummaryCard';
+import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import Modal from '@app/components/Common/Modal';
 import SelectionCircle from '@app/components/Common/SelectionCircle';
+import AvailabilityValue from '@app/components/MediaDetails/AvailabilityValue';
+import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
+import AdvancedOptionsDisclosureButton from '@app/components/RequestModal/AdvancedOptionsDisclosureButton';
+import type { RequestOverrides } from '@app/components/RequestModal/AdvancedRequester';
+import AdvancedRequester from '@app/components/RequestModal/AdvancedRequester';
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
 import RequestMediaCard from '@app/components/RequestModal/RequestMediaCard';
+import VideoCollectionRequestFilters, {
+  EMPTY_VIDEO_COLLECTION_FILTERS,
+  matchesVideoCollectionFilters,
+  type VideoCollectionFilters,
+} from '@app/components/RequestModal/VideoCollectionRequestFilters';
+import useAdvancedOptionsDisclosure from '@app/hooks/useAdvancedOptionsDisclosure';
 import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -15,6 +27,7 @@ import {
 import { mapWithConcurrency } from '@app/utils/concurrency';
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
+import { ArrowDownTrayIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { QuotaResponse } from '@server/interfaces/api/userInterfaces';
@@ -26,23 +39,25 @@ import { useIntl } from 'react-intl';
 import useSWR, { mutate } from 'swr';
 
 const messages = defineMessages('components.RequestModal', {
-  requestadmin: 'This request will be approved automatically.',
   requestSuccess: '<strong>{title}</strong> requested successfully!',
   requestcollectiontitle: 'Request Collection',
   requestcollection4ktitle: 'Request Collection in 4K',
   requesterror: 'Something went wrong while submitting the request.',
   requestpartial: '{created} requested; {failed} failed.',
-  selectmovies: 'Select Movie(s)',
-  requestmovies: 'Request {count} {count, plural, one {Movie} other {Movies}}',
-  requestmovies4k:
-    'Request {count} {count, plural, one {Movie} other {Movies}} in 4K',
+  selectItemsToRequest: 'Select at least one movie to request.',
   selection: 'Select this movie to request',
   selectAll: 'Select every movie that is ready to request',
-  status: 'Status',
-  readyToRequest: 'Ready to Request',
+  advancedOptions: 'Advanced Options',
+  quality: 'Quality',
+  hd: 'HD',
+  ultraHd: '4K',
   requested: 'Requested',
   available: 'Available',
+  partiallyAvailable: 'Partially Available',
+  processing: 'Processing',
   blocklisted: 'Blocklisted',
+  notAvailable: 'Not Available',
+  quotaRestricted: 'The selected user cannot make more movie requests.',
 });
 
 const COLLECTION_REQUEST_CONCURRENCY = 5;
@@ -63,7 +78,21 @@ const CollectionRequestModal = ({
   is4k = false,
 }: RequestModalProps) => {
   const [isUpdating, setIsUpdating] = useState(false);
+  const [selectedIs4k, setSelectedIs4k] = useState(is4k);
+  const [qualityRevision, setQualityRevision] = useState(0);
   const [selectedParts, setSelectedParts] = useState<number[]>([]);
+  const [filters, setFilters] = useState<VideoCollectionFilters>({
+    ...EMPTY_VIDEO_COLLECTION_FILTERS,
+  });
+  const [requestOverrides, setRequestOverrides] = useState<RequestOverrides>();
+  const {
+    open: advancedOptionsOpen,
+    pinned: advancedOptionsPinned,
+    toggleOpen: toggleAdvancedOptions,
+    togglePin: toggleAdvancedOptionsPin,
+  } = useAdvancedOptionsDisclosure('movie');
+  const [requestedByPortal, setRequestedByPortal] =
+    useState<HTMLDivElement | null>(null);
   const mountedRef = useRef(true);
   const submissionActiveRef = useRef(false);
   const { addToast } = useToasts();
@@ -76,28 +105,36 @@ const CollectionRequestModal = ({
   });
   const intl = useIntl();
   const { user, hasPermission } = useUser();
-  const { data: quota } = useSWR<QuotaResponse>(
-    user ? `/api/v1/user/${user.id}/quota` : null
+  const canManageSelectedUser = hasPermission(
+    [Permission.MANAGE_REQUESTS, Permission.MANAGE_USERS],
+    { type: 'or' }
+  );
+  const quotaUserId = requestOverrides?.user?.id ?? user?.id;
+  const { data: quota, error: quotaError } = useSWR<QuotaResponse>(
+    user && (!requestOverrides?.user?.id || canManageSelectedUser)
+      ? `/api/v1/user/${quotaUserId}/quota`
+      : null
+  );
+  const effectiveIs4k = requestOverrides?.is4k ?? selectedIs4k;
+  const filteredParts = (data?.parts ?? []).filter((part) =>
+    matchesVideoCollectionFilters(part, filters, 'movie')
   );
 
-  const currentlyRemaining =
-    (quota?.movie.remaining ?? 0) - selectedParts.length;
-
   const getAllParts = (): number[] => {
-    return (data?.parts ?? [])
+    return filteredParts
       .filter(
         (part) =>
-          part.mediaInfo?.[is4k ? 'status4k' : 'status'] !==
+          part.mediaInfo?.[effectiveIs4k ? 'status4k' : 'status'] !==
           MediaStatus.BLOCKLISTED
       )
       .map((part) => part.id);
   };
 
   const getAllRequestedParts = (): number[] =>
-    getCoveredCollectionPartIds(data?.parts ?? [], is4k);
+    getCoveredCollectionPartIds(data?.parts ?? [], effectiveIs4k);
 
   const isSelectedPart = (tmdbId: number): boolean =>
-    selectedParts.includes(tmdbId);
+    selectedRequestableParts.includes(tmdbId);
 
   const togglePart = (tmdbId: number): void => {
     // If this part already has a pending request, don't allow it to be toggled
@@ -124,6 +161,11 @@ const CollectionRequestModal = ({
   const unrequestedParts = getAllParts().filter(
     (tmdbId) => !getAllRequestedParts().includes(tmdbId)
   );
+  const selectedRequestableParts = unrequestedParts.filter((id) =>
+    selectedParts.includes(id)
+  );
+  const currentlyRemaining =
+    (quota?.movie.remaining ?? 0) - selectedRequestableParts.length;
 
   const toggleAllParts = (): void => {
     // If the user has a quota and not enough requests for all parts, block toggleAllParts
@@ -134,11 +176,7 @@ const CollectionRequestModal = ({
       return;
     }
 
-    if (
-      data &&
-      selectedParts.length >= 0 &&
-      selectedParts.length < unrequestedParts.length
-    ) {
+    if (data && selectedRequestableParts.length < unrequestedParts.length) {
       setSelectedParts(unrequestedParts);
     } else {
       setSelectedParts([]);
@@ -151,9 +189,8 @@ const CollectionRequestModal = ({
     }
 
     return (
-      selectedParts.length ===
-      getAllParts().filter((part) => !getAllRequestedParts().includes(part))
-        .length
+      unrequestedParts.length > 0 &&
+      unrequestedParts.every((part) => selectedParts.includes(part))
     );
   };
 
@@ -178,8 +215,10 @@ const CollectionRequestModal = ({
     setIsUpdating(true);
 
     try {
-      const parts =
-        data?.parts.filter((part) => selectedParts.includes(part.id)) ?? [];
+      const parts = filteredParts.filter(
+        (part) =>
+          selectedParts.includes(part.id) && unrequestedParts.includes(part.id)
+      );
       const outcomes = await mapWithConcurrency(
         parts,
         COLLECTION_REQUEST_CONCURRENCY,
@@ -188,7 +227,13 @@ const CollectionRequestModal = ({
             await axios.post<MediaRequest>('/api/v1/request', {
               mediaId: part.id,
               mediaType: 'movie',
-              is4k,
+              is4k: effectiveIs4k,
+              ignoreQuota: requestOverrides?.ignoreQuota,
+              serverId: requestOverrides?.server,
+              profileId: requestOverrides?.profile,
+              rootFolder: requestOverrides?.folder,
+              userId: requestOverrides?.user?.id,
+              tags: requestOverrides?.tags,
             });
             return { id: part.id, succeeded: true } as const;
           } catch {
@@ -224,13 +269,13 @@ const CollectionRequestModal = ({
         failedCount === 0
       ) {
         const coveredIds = new Set(
-          getCoveredCollectionPartIds(data?.parts ?? [], is4k)
+          getCoveredCollectionPartIds(data?.parts ?? [], effectiveIs4k)
         );
         succeededIds.forEach((id) => coveredIds.add(id));
         const requestableCollectionIds = (data?.parts ?? [])
           .filter(
             (part) =>
-              part.mediaInfo?.[is4k ? 'status4k' : 'status'] !==
+              part.mediaInfo?.[effectiveIs4k ? 'status4k' : 'status'] !==
               MediaStatus.BLOCKLISTED
           )
           .map((part) => part.id);
@@ -238,7 +283,7 @@ const CollectionRequestModal = ({
           requestableCollectionIds.every((id) => coveredIds.has(id))
             ? MediaStatus.UNKNOWN
             : MediaStatus.PARTIALLY_AVAILABLE,
-          is4k
+          effectiveIs4k
         );
       }
 
@@ -288,79 +333,88 @@ const CollectionRequestModal = ({
     addToast,
     intl,
     selectedParts,
-    is4k,
+    filteredParts,
+    unrequestedParts,
+    effectiveIs4k,
+    requestOverrides,
     revalidateCollection,
   ]);
-
-  const hasAutoApprove = hasPermission(
-    [
-      Permission.MANAGE_REQUESTS,
-      is4k ? Permission.AUTO_APPROVE_4K : Permission.AUTO_APPROVE,
-      is4k ? Permission.AUTO_APPROVE_4K_MOVIE : Permission.AUTO_APPROVE_MOVIE,
-    ],
-    { type: 'or' }
-  );
 
   const blocklistVisibility = hasPermission(
     [Permission.MANAGE_BLOCKLIST, Permission.VIEW_BLOCKLIST],
     { type: 'or' }
   );
-  const visibleParts = orderCollectionPartsOldestFirst(
-    data?.parts ?? []
-  ).filter(
+  const visibleParts = orderCollectionPartsOldestFirst(filteredParts).filter(
     (part) =>
       blocklistVisibility ||
-      getCollectionPartRequestPresentation(part, is4k) !== 'blocklisted'
+      getCollectionPartRequestPresentation(part, effectiveIs4k) !==
+        'blocklisted'
   );
+  const columnSize = Math.ceil(visibleParts.length / 2);
+  const visiblePartColumns = [
+    visibleParts.slice(0, columnSize),
+    visibleParts.slice(columnSize),
+  ].filter((parts) => parts.length > 0);
   const selectAllDisabled =
     unrequestedParts.length === 0 ||
     (!!quota?.movie.limit &&
       (quota.movie.remaining ?? 0) < unrequestedParts.length);
+  const quotaRestricted =
+    !!quota?.movie.restricted && !requestOverrides?.ignoreQuota;
+  const requestDisabled =
+    !data ||
+    !quota ||
+    selectedRequestableParts.length === 0 ||
+    isUpdating ||
+    quotaRestricted;
+  const requestDisabledReason = isUpdating
+    ? intl.formatMessage(globalMessages.requesting)
+    : selectedRequestableParts.length === 0
+      ? intl.formatMessage(messages.selectItemsToRequest)
+      : quotaRestricted
+        ? intl.formatMessage(messages.quotaRestricted)
+        : undefined;
+  const canUseAdvancedOptions = hasPermission(
+    [Permission.REQUEST_ADVANCED, Permission.MANAGE_REQUESTS],
+    { type: 'or' }
+  );
+
+  const getAvailabilityMessage = (status?: MediaStatus) => {
+    switch (status) {
+      case MediaStatus.AVAILABLE:
+        return messages.available;
+      case MediaStatus.PARTIALLY_AVAILABLE:
+        return messages.partiallyAvailable;
+      case MediaStatus.PROCESSING:
+        return messages.processing;
+      case MediaStatus.PENDING:
+        return messages.requested;
+      case MediaStatus.BLOCKLISTED:
+        return messages.blocklisted;
+      default:
+        return messages.notAvailable;
+    }
+  };
 
   return (
     <Modal
-      loading={(!data && !error) || !quota}
       backgroundClickable
       onCancel={onCancel}
       onOk={sendRequest}
+      hideActions
+      alignTop
       title={intl.formatMessage(
-        is4k
+        effectiveIs4k
           ? messages.requestcollection4ktitle
           : messages.requestcollectiontitle
       )}
-      subTitle={data?.name}
-      okText={
-        isUpdating
-          ? intl.formatMessage(globalMessages.requesting)
-          : selectedParts.length === 0
-            ? intl.formatMessage(messages.selectmovies)
-            : intl.formatMessage(
-                is4k ? messages.requestmovies4k : messages.requestmovies,
-                {
-                  count: selectedParts.length,
-                }
-              )
-      }
-      okDisabled={selectedParts.length === 0 || isUpdating}
+      okText={intl.formatMessage(globalMessages.request)}
+      okDisabled={requestDisabled}
       cancelButtonType="danger"
       okButtonType="success"
-      dialogClass="request-modal-site-surface sm:max-w-5xl"
+      actionButtonSize="standard"
+      dialogClass="app-card-main request-modal-site-surface sm:max-w-5xl"
     >
-      {hasAutoApprove && !quota?.movie.restricted && (
-        <div className="mt-6">
-          <Alert
-            title={intl.formatMessage(messages.requestadmin)}
-            type="info"
-          />
-        </div>
-      )}
-      {(quota?.movie.limit ?? 0) > 0 && (
-        <QuotaDisplay
-          mediaType="movie"
-          quota={quota?.movie}
-          remaining={currentlyRemaining}
-        />
-      )}
       <RequestMediaCard
         artwork={
           data?.backdropPath
@@ -369,118 +423,213 @@ const CollectionRequestModal = ({
         }
         artworkType="tmdb"
       >
-        <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[80px_minmax(0,1fr)]">
-          <div className="relative h-24 w-16 overflow-hidden rounded-lg ring-1 ring-gray-600 sm:h-[120px] sm:w-20">
-            <CachedImage
-              type="tmdb"
-              src={
-                getTmdbPosterImageUrl(data?.posterPath) ||
-                '/images/seerr_poster_not_found.png'
-              }
-              alt=""
-              fill
-              sizes="(min-width: 640px) 80px, 64px"
-              className="object-cover"
-            />
-          </div>
-          <div className="min-w-0">
-            <h3 className="-mt-0.5 truncate text-lg leading-5 font-semibold text-white">
-              {data?.name}
-            </h3>
-            <p className="refreshed-detail-text mt-1 text-xs">
-              {intl.formatMessage(messages.requestmovies, {
-                count: visibleParts.length,
-              })}
-            </p>
-          </div>
+        {((!data && !error) || (!quota && !quotaError)) && (
+          <p role="status">{intl.formatMessage(globalMessages.loading)}</p>
+        )}
+        {(error || quotaError) && (
+          <p role="alert">{intl.formatMessage(globalMessages.error)}</p>
+        )}
+        {data && (
+          <CollectionSummaryCard
+            collection={{
+              id: data.id,
+              name: data.name,
+              posterPath: data.posterPath ?? undefined,
+            }}
+            selectionSize={{
+              selected: selectedRequestableParts.length,
+              visible: visibleParts.length,
+            }}
+          />
+        )}
+        {(quota?.movie.limit ?? 0) > 0 && (
+          <QuotaDisplay
+            mediaType="movie"
+            quota={quota?.movie}
+            userOverride={
+              requestOverrides?.user && requestOverrides.user.id !== user?.id
+                ? requestOverrides.user.id
+                : undefined
+            }
+            remaining={currentlyRemaining}
+          />
+        )}
+
+        <VideoCollectionRequestFilters
+          kind="movie"
+          filters={filters}
+          onChange={setFilters}
+        />
+
+        <div className="card-spacing-before card:grid-cols-2 grid grid-cols-1 items-start gap-2">
+          {visiblePartColumns.map((columnParts, columnIndex) => (
+            <section
+              key={`collection-column-${columnIndex}`}
+              className="app-card-inset refreshed-inset-surface overflow-hidden rounded-lg border border-gray-700 p-2"
+            >
+              <div className="media-inset-table-heading request-divider-dark grid grid-cols-[2rem_40px_minmax(0,1fr)] items-center gap-x-2 border-b px-2 pb-2">
+                {columnIndex === 0 ? (
+                  <SelectionCircle
+                    disabled={selectAllDisabled}
+                    onClick={toggleAllParts}
+                    selected={isAllParts() && unrequestedParts.length > 0}
+                    label={intl.formatMessage(messages.selectAll)}
+                  />
+                ) : (
+                  <span aria-hidden="true" />
+                )}
+                <span className="media-inset-poster-column-heading text-left">
+                  {intl.formatMessage(globalMessages.movie)}
+                </span>
+              </div>
+              <div className="scrollable-card -mr-3 max-h-[228px] space-y-0.5 overflow-y-auto pt-1 pr-3">
+                {columnParts.map((part) => {
+                  const presentation = getCollectionPartRequestPresentation(
+                    part,
+                    effectiveIs4k
+                  );
+                  const selected = isSelectedPart(part.id);
+                  const quotaBlocked =
+                    !!quota?.movie.limit &&
+                    currentlyRemaining <= 0 &&
+                    !selected;
+                  const selectionDisabled =
+                    presentation !== 'ready' || quotaBlocked;
+                  const hdStatus = part.mediaInfo?.status;
+                  const ultraHdStatus = part.mediaInfo?.status4k;
+
+                  return (
+                    <div
+                      key={`part-${part.id}`}
+                      className="app-card-inset refreshed-inset-surface grid min-h-[54px] grid-cols-[2rem_40px_minmax(0,1fr)] items-center gap-x-2 rounded-lg border border-gray-700 px-2"
+                    >
+                      <SelectionCircle
+                        disabled={selectionDisabled}
+                        onClick={() => togglePart(part.id)}
+                        selected={selected}
+                        label={intl.formatMessage(messages.selection)}
+                      />
+                      <div className="relative h-[46px] w-[35px] justify-self-center overflow-hidden rounded-md ring-1 ring-gray-700">
+                        <CachedImage
+                          type="tmdb"
+                          src={
+                            part.posterPath
+                              ? getTmdbPosterImageUrl(part.posterPath)
+                              : '/images/seerr_poster_not_found.png'
+                          }
+                          alt=""
+                          fill
+                          sizes="35px"
+                          className="object-cover"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm leading-5 font-semibold text-gray-100">
+                          {part.title}
+                        </div>
+                        <dl className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] gap-x-1 text-xs leading-4">
+                          <dt className="font-medium text-gray-100">
+                            {intl.formatMessage(messages.hd)}:
+                          </dt>
+                          <dd className="m-0 truncate font-medium">
+                            <AvailabilityValue status={hdStatus}>
+                              {intl.formatMessage(
+                                getAvailabilityMessage(hdStatus)
+                              )}
+                            </AvailabilityValue>
+                          </dd>
+                          <dt className="font-medium text-gray-100">
+                            {intl.formatMessage(messages.ultraHd)}:
+                          </dt>
+                          <dd className="m-0 truncate font-medium">
+                            <AvailabilityValue status={ultraHdStatus}>
+                              {intl.formatMessage(
+                                getAvailabilityMessage(ultraHdStatus)
+                              )}
+                            </AvailabilityValue>
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </div>
 
-        <section className="refreshed-inset-surface mt-3 overflow-hidden rounded-lg border border-gray-700 p-2">
-          <div className="request-divider-dark grid grid-cols-[2rem_minmax(0,1fr)_8rem] items-center gap-x-2 border-b px-1 pb-2 text-xs font-semibold text-gray-200">
-            <SelectionCircle
-              disabled={selectAllDisabled}
-              onClick={toggleAllParts}
-              selected={isAllParts() && unrequestedParts.length > 0}
-              label={intl.formatMessage(messages.selectAll)}
-            />
-            <span>{intl.formatMessage(globalMessages.movie)}</span>
-            <span>{intl.formatMessage(messages.status)}</span>
-          </div>
-          <div className="scrollable-card -mr-3 max-h-[312px] space-y-1 overflow-y-auto pt-1 pr-3">
-            {visibleParts.map((part) => {
-              const presentation = getCollectionPartRequestPresentation(
-                part,
-                is4k
-              );
-              const selected = isSelectedPart(part.id);
-              const quotaBlocked =
-                !!quota?.movie.limit && currentlyRemaining <= 0 && !selected;
-              const selectionDisabled =
-                presentation !== 'ready' || quotaBlocked;
-              const statusLabel =
-                presentation === 'available'
-                  ? messages.available
-                  : presentation === 'requested'
-                    ? messages.requested
-                    : presentation === 'blocklisted'
-                      ? messages.blocklisted
-                      : messages.readyToRequest;
-              const statusTone =
-                presentation === 'available'
-                  ? 'text-green-400'
-                  : presentation === 'ready'
-                    ? 'text-yellow-300'
-                    : presentation === 'blocklisted'
-                      ? 'text-red-400'
-                      : 'text-indigo-300';
+        <div className="mt-2 flex items-center">
+          <MediaQualitySelect
+            value={effectiveIs4k ? '4k' : 'hd'}
+            options={[
+              { label: 'HD', value: 'hd' },
+              { label: '4K', value: '4k' },
+            ]}
+            onChange={(quality) => {
+              setSelectedIs4k(quality === '4k');
+              setRequestOverrides(undefined);
+              setQualityRevision((current) => current + 1);
+            }}
+            label={intl.formatMessage(messages.quality)}
+            autoSelectAvailable={false}
+            purpose="request"
+          />
+        </div>
 
-              return (
-                <div
-                  key={`part-${part.id}`}
-                  className="refreshed-inset-surface grid min-h-[58px] grid-cols-[2rem_40px_minmax(0,1fr)_8rem] items-center gap-x-2 rounded-lg border border-gray-700 px-2 py-1.5"
-                >
-                  <SelectionCircle
-                    disabled={selectionDisabled}
-                    onClick={() => togglePart(part.id)}
-                    selected={selected}
-                    label={intl.formatMessage(messages.selection)}
-                  />
-                  <div className="relative h-[52px] w-10 overflow-hidden rounded-md ring-1 ring-gray-700">
-                    <CachedImage
-                      type="tmdb"
-                      src={
-                        part.posterPath
-                          ? getTmdbPosterImageUrl(part.posterPath)
-                          : '/images/seerr_poster_not_found.png'
-                      }
-                      alt=""
-                      fill
-                      sizes="40px"
-                      className="object-cover"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-gray-100">
-                      {part.title}
-                    </div>
-                    <div className="refreshed-detail-text text-xs">
-                      {part.releaseDate?.slice(0, 4) || '—'} ·{' '}
-                      {is4k ? '4K' : 'HD'}
-                    </div>
-                  </div>
-                  <dl className="grid min-w-0 grid-cols-1 text-xs leading-4">
-                    <dt className="font-medium text-gray-100">
-                      {intl.formatMessage(messages.status)}:
-                    </dt>
-                    <dd className={`m-0 truncate font-medium ${statusTone}`}>
-                      {intl.formatMessage(statusLabel)}
-                    </dd>
-                  </dl>
-                </div>
-              );
-            })}
+        {canUseAdvancedOptions && (
+          <AdvancedRequester
+            key={(selectedIs4k ? '4k' : 'hd') + '-' + qualityRevision}
+            type="movie"
+            is4k={selectedIs4k}
+            quota={quota}
+            expanded={advancedOptionsOpen}
+            panelOnly
+            rootFolderTable
+            allow4kServerSelection
+            requestedByPortal={requestedByPortal}
+            onChange={(overrides) => setRequestOverrides(overrides)}
+          />
+        )}
+
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+          <div className="mr-auto flex items-center gap-2">
+            {canUseAdvancedOptions && (
+              <AdvancedOptionsDisclosureButton
+                label={intl.formatMessage(messages.advancedOptions)}
+                open={advancedOptionsOpen}
+                pinned={advancedOptionsPinned}
+                onToggle={toggleAdvancedOptions}
+                onPin={toggleAdvancedOptionsPin}
+              />
+            )}
           </div>
-        </section>
+          <div
+            className="compact-control flex items-center"
+            ref={setRequestedByPortal}
+          />
+          <Button
+            type="button"
+            onClick={onCancel}
+            data-testid="modal-cancel-button"
+            buttonType="danger"
+            buttonSize="standard"
+          >
+            <XMarkIcon aria-hidden="true" />
+            {intl.formatMessage(globalMessages.cancel)}
+          </Button>
+          <Button
+            type="button"
+            disabled={requestDisabled}
+            disabledReason={requestDisabledReason}
+            onClick={() => void sendRequest()}
+            data-testid="modal-ok-button"
+            buttonType="success"
+            buttonSize="standard"
+          >
+            <ArrowDownTrayIcon aria-hidden="true" />
+            {intl.formatMessage(globalMessages.request)}
+          </Button>
+        </div>
       </RequestMediaCard>
     </Modal>
   );

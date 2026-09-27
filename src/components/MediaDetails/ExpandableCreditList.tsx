@@ -19,7 +19,7 @@ const ExpandableCreditList = ({
   credits,
   emptyLabel,
 }: ExpandableCreditListProps) => (
-  <section className="refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
+  <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
     <h2 className="media-inset-heading mb-2">{title}</h2>
     {credits.length === 0 ? (
       <p className="refreshed-detail-text-muted text-xs">{emptyLabel}</p>
@@ -30,7 +30,7 @@ const ExpandableCreditList = ({
             key={`${credit.id}-${credit.role}-${index}`}
             href={`/person/${credit.id}`}
             prefetch={false}
-            className="group flex h-20 min-w-0 overflow-hidden rounded-lg border border-gray-700 bg-gray-900/30 transition hover:border-indigo-400 hover:bg-indigo-500/15 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+            className="app-card-sub detail-item-surface detail-item-interactive group flex h-20 min-w-0 overflow-hidden"
           >
             <span className="relative h-full w-[54px] flex-shrink-0 overflow-hidden border-r border-gray-700 bg-white">
               <CachedImage

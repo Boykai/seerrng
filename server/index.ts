@@ -175,7 +175,15 @@ Promise.resolve()
     await getSettings().load();
   })
   .then(() => {
-    const app = next({ dev });
+    // Select Webpack independently of filesystem polling for Linux-local previews.
+    const app = next({
+      dev,
+      ...(dev &&
+      (process.env.WATCHPACK_POLLING === 'true' ||
+        process.env.SEERR_DEV_WEBPACK === 'true')
+        ? { webpack: true }
+        : {}),
+    });
     const handle = app.getRequestHandler();
 
     if (!appDataPermissions()) {
@@ -364,6 +372,9 @@ Promise.resolve()
           }) as Store);
       server.use(
         '/api',
+        // HTTP session cookies are an explicit compatibility mode controlled
+        // by allowHttpAuth; HTTPS-only deployments always force Secure.
+        // codeql[js/clear-text-cookie]
         session({
           secret: settings.sessionSecret,
           resave: false,
@@ -391,7 +402,9 @@ Promise.resolve()
       server.use('/avatarproxy', clearCookies, avatarproxy);
 
       server.get('*path', (req, res) => {
-        setStaticAssetCacheControl(req, res);
+        if (!dev) {
+          setStaticAssetCacheControl(req, res);
+        }
 
         return handle(req, res);
       });

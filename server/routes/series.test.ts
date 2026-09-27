@@ -72,6 +72,30 @@ afterEach(() => {
 setupTestDb();
 
 describe('GET /series/:id', () => {
+  it('accepts a series from the first configured Bookshelf service', async () => {
+    getSettings().readarr[0].id = 0;
+    const lookupBook = mock.method(
+      ReadarrAPI.prototype,
+      'lookupBook',
+      async () => [
+        {
+          title: 'The Saga: Book One',
+          foreignBookId: 'googlebooks:one',
+          seriesTitle: 'The Saga #1',
+        },
+      ]
+    );
+
+    const seriesId = makeBookshelfSeriesId(0, 'The Saga');
+    const response = await request(app).get(
+      `/api/v1/series/${encodeURIComponent(seriesId)}`
+    );
+
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.equal(response.body.books[0].title, 'The Saga: Book One');
+    assert.equal(lookupBook.mock.callCount(), 1);
+  });
+
   it('returns Bookshelf books in natural series order and rejects malformed IDs', async () => {
     const lookupBook = mock.method(
       ReadarrAPI.prototype,

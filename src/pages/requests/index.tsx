@@ -1,14 +1,6 @@
-import type { GetServerSideProps, NextPage } from 'next';
+import Requests from '@app/components/Requests';
+import type { NextPage } from 'next';
 
-const RequestsPage: NextPage = () => {
-  return null;
-};
-
-export const getServerSideProps: GetServerSideProps = async () => ({
-  redirect: {
-    destination: '/requests/status',
-    permanent: false,
-  },
-});
+const RequestsPage: NextPage = () => <Requests />;
 
 export default RequestsPage;

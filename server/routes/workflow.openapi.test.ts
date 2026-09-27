@@ -31,6 +31,16 @@ describe('workflow list filters behind the OpenAPI validator', () => {
     app.get('/api/v1/playback/devices', (_req, res) =>
       res.status(200).json([])
     );
+    app.get('/api/v1/playback/watched/:mediaType/:tmdbId', (req, res) =>
+      res.status(200).json({
+        mediaType: req.params.mediaType,
+        tmdbId: Number(req.params.tmdbId),
+        serverType: 1,
+        availableCount: 1,
+        watchedCount: 1,
+        unwatchedCount: 0,
+      })
+    );
     app.get('/api/v1/playback/media/:mediaId', (req, res) =>
       res.status(200).json({
         mediaId: Number(req.params.mediaId),
@@ -106,6 +116,15 @@ describe('workflow list filters behind the OpenAPI validator', () => {
     assert.strictEqual(devices.status, 200);
     assert.strictEqual(catalog.status, 200);
     assert.strictEqual(catalog.body.mediaId, 4222);
+  });
+
+  it('admits the watched-status route and details query', async () => {
+    const response = await request(createValidatedApp())
+      .get('/api/v1/playback/watched/tv/103516')
+      .query({ details: '1' });
+
+    assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+    assert.strictEqual(response.body.tmdbId, 103516);
   });
 
   it('admits media and collection playback commands', async () => {

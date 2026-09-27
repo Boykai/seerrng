@@ -1,14 +1,8 @@
+import AvailabilityQualityControl, {
+  type AvailabilityQuality,
+} from '@app/components/Discover/AvailabilityQualityControl';
 import FilterPanel from '@app/components/Discover/FilterPanel';
-import {
-  CompactRatingSelect,
-  CompactSelect,
-  type CompactSelectOption,
-  type RatingOption,
-} from '@app/components/Discover/FilterPanel/CompactFilterSelect';
-import {
-  BOOK_GENRES,
-  BOOK_LANGUAGES,
-} from '@app/components/Discover/FilterPanel/libraryFilterUtils';
+import LibraryFilterFields from '@app/components/Discover/FilterPanel/LibraryFilterFields';
 import { prepareFilterValues } from '@app/components/Discover/constants';
 import useDebouncedState from '@app/hooks/useDebouncedState';
 import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
@@ -27,35 +21,10 @@ import {
 const messages = defineMessages('components.Search.ContextualFilters', {
   keywordSearch: 'Keyword Search',
   searchAll: 'Search All Media',
-  searchBooks: 'Search Books',
-  searchAudiobooks: 'Search Audiobooks',
-  searchMusic: 'Search Music',
   searchComics: 'Filter Comic Results',
   searchMagazines: 'Filter Magazine Results',
   searchAuthors: 'Search Authors',
-  firstPublished: 'First Published',
-  genres: 'Genres',
-  rating: 'Rating',
-  language: 'Language',
-  releaseYear: 'Release Year',
-  releaseType: 'Release Type',
-  any: 'Any',
-  album: 'Album',
-  ep: 'EP',
-  single: 'Single',
 });
-
-const musicGenres = [
-  'Alternative',
-  'Classical',
-  'Country',
-  'Electronic',
-  'Hip-Hop',
-  'Jazz',
-  'Metal',
-  'Pop',
-  'Rock',
-];
 
 const getQueryString = (value: string | string[] | undefined) =>
   typeof value === 'string' ? value : '';
@@ -71,22 +40,55 @@ const LibrarySearchFilters = ({
   const router = useRouter();
   const update = useBatchUpdateQueryParams({});
   const [search, debouncedSearch, setSearch] = useDebouncedState(filterQuery);
+  const authorQuery = getQueryString(router.query.author);
+  const [author, debouncedAuthor, setAuthor] = useDebouncedState(authorQuery);
+  const routedAuthorRef = useRef(authorQuery.trim());
   const routedSearchRef = useRef(filterQuery.trim());
 
   useEffect(() => {
-    routedSearchRef.current = filterQuery.trim();
-    setSearch(filterQuery);
+    const routedSearch = filterQuery.trim();
+    if (routedSearch !== routedSearchRef.current) {
+      routedSearchRef.current = routedSearch;
+      setSearch(filterQuery);
+    }
   }, [filterQuery, setSearch]);
 
   useEffect(() => {
     const nextSearch = debouncedSearch.trim();
-
     if (nextSearch !== routedSearchRef.current) {
       routedSearchRef.current = nextSearch;
-      update({ resultFilter: nextSearch || undefined, page: undefined });
+      update(
+        { resultFilter: nextSearch || undefined, page: undefined },
+        { shallow: true, scroll: false }
+      );
     }
   }, [debouncedSearch, update]);
 
+  useEffect(() => {
+    const routedAuthor = authorQuery.trim();
+    if (routedAuthor !== routedAuthorRef.current) {
+      routedAuthorRef.current = routedAuthor;
+      setAuthor(authorQuery);
+    }
+  }, [authorQuery, setAuthor]);
+
+  useEffect(() => {
+    const nextAuthor = debouncedAuthor.trim();
+    if (nextAuthor !== routedAuthorRef.current) {
+      routedAuthorRef.current = nextAuthor;
+      update(
+        { author: nextAuthor || undefined, page: undefined },
+        { shallow: true, scroll: false }
+      );
+    }
+  }, [debouncedAuthor, update]);
+
+  useSearchActivityReporter(
+    (category === 'book' || category === 'audiobook') &&
+      Boolean(author.trim()) &&
+      author.trim() !== authorQuery.trim(),
+    'main-search-author-input'
+  );
   useSearchActivityReporter(
     Boolean(search.trim()) && search.trim() !== filterQuery.trim(),
     'main-search-keyword-input'
@@ -94,176 +96,110 @@ const LibrarySearchFilters = ({
 
   const setParam = (values: Record<string, string | undefined>) =>
     update({ ...values, page: undefined });
-  const currentYear = new Date().getFullYear();
-  const yearOptions: CompactSelectOption[] = [
-    { label: intl.formatMessage(messages.any), value: '' },
-    ...Array.from({ length: currentYear - 1969 }, (_, index) => {
-      const year = currentYear - index;
-      return { label: year.toString(), value: year.toString() };
-    }),
-    { label: '<1970', value: 'before-1970' },
-  ];
-  const subject = getQueryString(router.query.subject);
-  const firstPublishYear = getQueryString(router.query.firstPublishYear);
-  const language = getQueryString(router.query.language);
-  const minRating = getQueryString(router.query.minRating);
-  const genre = getQueryString(router.query.genre);
-  const releaseType = getQueryString(router.query.releaseType);
+  const onSearchSubmit = () => {
+    const nextSearch = search.trim();
+    routedSearchRef.current = nextSearch;
+    update(
+      { resultFilter: nextSearch || undefined, page: undefined },
+      { shallow: true, scroll: false }
+    );
+  };
+
+  const renderKeywordSearch = (
+    placeholder: (typeof messages)[
+      'searchAll' | 'searchAuthors' | 'searchComics' | 'searchMagazines']
+  ) => (
+    <form
+      className="discover-filter-control w-72 max-w-full flex-none"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSearchSubmit();
+      }}
+    >
+      <span
+        className={
+          'discover-filter-control-label' +
+          (search.trim() ? ' discover-filter-control-label-active' : '')
+        }
+      >
+        <MagnifyingGlassIcon className="h-4 w-4" aria-hidden="true" />
+        {intl.formatMessage(messages.keywordSearch)}
+      </span>
+      <input
+        type="search"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder={intl.formatMessage(placeholder)}
+        aria-label={intl.formatMessage(placeholder)}
+        className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0 text-xs font-medium text-gray-200 placeholder:text-gray-500 focus:ring-0"
+      />
+    </form>
+  );
+
+  if (category === 'all') {
+    return renderKeywordSearch(messages.searchAll);
+  }
+
+  if (category === 'book' || category === 'audiobook') {
+    return (
+      <LibraryFilterFields
+        mediaType="book"
+        audiobook={category === 'audiobook'}
+        search={search}
+        onSearchChange={setSearch}
+        onSearchSubmit={onSearchSubmit}
+        author={author}
+        onAuthorChange={setAuthor}
+        onAuthorSubmit={() => {
+          const nextAuthor = author.trim();
+          routedAuthorRef.current = nextAuthor;
+          update(
+            { author: nextAuthor || undefined, page: undefined },
+            { shallow: true, scroll: false }
+          );
+        }}
+        firstPublishYear={getQueryString(router.query.firstPublishYear)}
+        subject={getQueryString(router.query.subject)}
+        minRating={getQueryString(router.query.minRating)}
+        language={getQueryString(router.query.language)}
+        setParam={setParam}
+      />
+    );
+  }
+
+  if (category !== 'music') {
+    return renderKeywordSearch(
+      category === 'author'
+        ? messages.searchAuthors
+        : category === 'comic'
+          ? messages.searchComics
+          : messages.searchMagazines
+    );
+  }
+
   const releaseDateGte = getQueryString(router.query.primaryReleaseDateGte);
   const releaseDateLte = getQueryString(router.query.primaryReleaseDateLte);
   const releaseYear =
     !releaseDateGte && !releaseDateLte
-      ? ''
+      ? 'any'
       : !releaseDateGte && releaseDateLte === '1969-12-31'
         ? 'before-1970'
         : releaseDateGte.endsWith('-01-01') &&
-            releaseDateLte === `${releaseDateGte.slice(0, 4)}-12-31`
+            releaseDateLte === releaseDateGte.slice(0, 4) + '-12-31'
           ? releaseDateGte.slice(0, 4)
-          : '';
-  const bookGenreOptions: CompactSelectOption[] = [
-    { label: intl.formatMessage(messages.any), value: '' },
-    ...BOOK_GENRES.map(([value, label]) => ({ value, label })),
-  ];
-  const languageOptions: CompactSelectOption[] = [
-    { label: intl.formatMessage(messages.any), value: '' },
-    ...BOOK_LANGUAGES.map(([value, label]) => ({ value, label })),
-  ];
-  const ratingOptions: RatingOption[] = [
-    { label: intl.formatMessage(messages.any), value: '' },
-    ...Array.from({ length: 9 }, (_, index) => {
-      const score = 1 + index * 0.5;
-      return {
-        label: `${score.toFixed(1)}+`,
-        value: score.toFixed(1),
-        score,
-      };
-    }),
-  ];
-  const musicGenreOptions: CompactSelectOption[] = [
-    { label: intl.formatMessage(messages.any), value: '' },
-    ...musicGenres.map((value) => ({
-      label: value,
-      value: value.toLowerCase(),
-    })),
-  ];
-  const releaseTypeOptions: CompactSelectOption[] = [
-    { label: intl.formatMessage(messages.any), value: '' },
-    { label: intl.formatMessage(messages.album), value: 'Album' },
-    { label: intl.formatMessage(messages.ep), value: 'EP' },
-    { label: intl.formatMessage(messages.single), value: 'Single' },
-  ];
-  const placeholderMessage =
-    category === 'all'
-      ? messages.searchAll
-      : category === 'book'
-        ? messages.searchBooks
-        : category === 'audiobook'
-          ? messages.searchAudiobooks
-          : category === 'author'
-            ? messages.searchAuthors
-            : category === 'comic'
-              ? messages.searchComics
-              : category === 'magazine'
-                ? messages.searchMagazines
-                : messages.searchMusic;
+          : 'any';
 
   return (
-    <div className="contents">
-      <form
-        className="discover-filter-control w-72 max-w-full flex-none"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setParam({ resultFilter: search.trim() || undefined });
-        }}
-      >
-        <span
-          className={`discover-filter-control-label gap-1.5 ${
-            search.trim() ? 'discover-filter-control-label-active' : ''
-          }`}
-        >
-          <MagnifyingGlassIcon className="h-4 w-4" aria-hidden="true" />
-          {intl.formatMessage(messages.keywordSearch)}
-        </span>
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={intl.formatMessage(placeholderMessage)}
-          aria-label={intl.formatMessage(placeholderMessage)}
-          className="min-w-0 flex-1 border-0 bg-transparent px-2 py-1 text-xs font-medium text-gray-200 placeholder:text-gray-500 focus:ring-0"
-        />
-      </form>
-      {(category === 'book' || category === 'audiobook') && (
-        <>
-          <CompactSelect
-            label={intl.formatMessage(messages.firstPublished)}
-            value={firstPublishYear}
-            options={yearOptions}
-            onChange={(value) =>
-              setParam({ firstPublishYear: value || undefined })
-            }
-          />
-          <CompactSelect
-            label={intl.formatMessage(messages.genres)}
-            value={subject}
-            options={bookGenreOptions}
-            onChange={(value) => setParam({ subject: value || undefined })}
-          />
-          <CompactRatingSelect
-            label={intl.formatMessage(messages.rating)}
-            value={minRating}
-            options={ratingOptions}
-            maxScore={5}
-            onChange={(value) => setParam({ minRating: value || undefined })}
-          />
-          <CompactSelect
-            label={intl.formatMessage(messages.language)}
-            value={language}
-            options={languageOptions}
-            onChange={(value) => setParam({ language: value || undefined })}
-          />
-        </>
-      )}
-      {category === 'music' && (
-        <>
-          <CompactSelect
-            label={intl.formatMessage(messages.releaseYear)}
-            value={releaseYear}
-            options={yearOptions}
-            onChange={(value) => {
-              if (!value) {
-                setParam({
-                  primaryReleaseDateGte: undefined,
-                  primaryReleaseDateLte: undefined,
-                });
-              } else if (value === 'before-1970') {
-                setParam({
-                  primaryReleaseDateGte: undefined,
-                  primaryReleaseDateLte: '1969-12-31',
-                });
-              } else {
-                setParam({
-                  primaryReleaseDateGte: `${value}-01-01`,
-                  primaryReleaseDateLte: `${value}-12-31`,
-                });
-              }
-            }}
-          />
-          <CompactSelect
-            label={intl.formatMessage(messages.releaseType)}
-            value={releaseType}
-            options={releaseTypeOptions}
-            onChange={(value) => setParam({ releaseType: value || undefined })}
-          />
-          <CompactSelect
-            label={intl.formatMessage(messages.genres)}
-            value={genre}
-            options={musicGenreOptions}
-            onChange={(value) => setParam({ genre: value || undefined })}
-          />
-        </>
-      )}
-    </div>
+    <LibraryFilterFields
+      mediaType="music"
+      search={search}
+      onSearchChange={setSearch}
+      onSearchSubmit={onSearchSubmit}
+      genre={getQueryString(router.query.genre)}
+      releaseType={getQueryString(router.query.releaseType)}
+      releaseYear={releaseYear}
+      setParam={setParam}
+    />
   );
 };
 
@@ -273,6 +209,7 @@ const ContextualSearchFilters = ({
   category: SearchFilterCategory;
 }) => {
   const router = useRouter();
+  const update = useBatchUpdateQueryParams({});
   const filterQuery = getSearchResultFilter(router.query);
 
   if (category === 'movie' || category === 'tv') {
@@ -282,16 +219,45 @@ const ContextualSearchFilters = ({
     });
 
     return (
-      <FilterPanel
-        type={category}
-        currentFilters={currentFilters}
-        variant="search"
-        searchQueryKey="resultFilter"
-      />
+      <>
+        <AvailabilityQualityControl
+          mediaType={category}
+          value={currentFilters.availability}
+          onChange={(value) =>
+            update({ availability: value || undefined, page: undefined })
+          }
+        />
+        <FilterPanel
+          type={category}
+          currentFilters={currentFilters}
+          variant="search"
+          searchQueryKey="resultFilter"
+        />
+      </>
     );
   }
 
-  return <LibrarySearchFilters category={category} filterQuery={filterQuery} />;
+  const availability: AvailabilityQuality | undefined =
+    category === 'music' &&
+    (router.query.availability === 'mp3' ||
+      router.query.availability === 'flac')
+      ? router.query.availability
+      : undefined;
+
+  return (
+    <>
+      {category === 'music' && (
+        <AvailabilityQualityControl
+          mediaType="music"
+          value={availability}
+          onChange={(value) =>
+            update({ availability: value || undefined, page: undefined })
+          }
+        />
+      )}
+      <LibrarySearchFilters category={category} filterQuery={filterQuery} />
+    </>
+  );
 };
 
 export default ContextualSearchFilters;

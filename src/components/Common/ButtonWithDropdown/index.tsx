@@ -51,7 +51,9 @@ const ButtonWithDropdown = ({
           children ? 'rounded-r-none' : ''
         } ${className ?? ''}`}
         {...(props as Record<string, string>)}
-        title={disabledTitle}
+        data-button-help={props.title}
+        data-disabled-reason={disabled ? disabledTitle : undefined}
+        title={undefined}
       >
         {text}
       </TriggerElement>
@@ -62,11 +64,11 @@ const ButtonWithDropdown = ({
             disabled={disabled}
             className={`relative z-10 -ml-px rounded-l-none px-1.5 hover:z-20 focus:z-20 ${sharedClasses}`}
             aria-label="Expand"
-            title={disabledTitle}
+            data-disabled-reason={disabled ? disabledTitle : undefined}
           >
             {dropdownIcon ? dropdownIcon : <ChevronDownIcon />}
           </MenuButton>
-          <Dropdown.Items dropdownType={buttonType}>{children}</Dropdown.Items>
+          <Dropdown.Items>{children}</Dropdown.Items>
         </span>
       )}
     </Menu>

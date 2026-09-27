@@ -170,6 +170,85 @@ class Tvdb extends ExternalAPI implements TvShowProvider {
     }
   }
 
+  /** Official lists only: personal watchlists are not franchise metadata. */
+  public async getSeriesCollections(
+    tvdbId: number
+  ): Promise<{ id: number; name: string }[]> {
+    if (!Number.isSafeInteger(tvdbId) || tvdbId <= 0)
+      throw new Error('Invalid series ID');
+    await this.refreshToken();
+    const response = await this.get<{
+      data: { lists?: { id: number; name: string; isOfficial: boolean }[] };
+    }>(
+      `/series/${tvdbId}/extended`,
+      { headers: { Authorization: `Bearer ${this.token}` } },
+      3600
+    );
+    if (!response.data || !Array.isArray(response.data.lists))
+      throw new Error('Unverified series collections');
+    return response.data.lists
+      .filter(
+        (list) =>
+          list.isOfficial === true &&
+          Number.isSafeInteger(list.id) &&
+          list.id > 0 &&
+          typeof list.name === 'string'
+      )
+      .slice(0, 50)
+      .map(({ id, name }) => ({ id, name: name.slice(0, 512) }));
+  }
+
+  public async getSeriesCollection(id: number): Promise<{
+    id: number;
+    name: string;
+    overview: string;
+    seriesIds: number[];
+  }> {
+    if (!Number.isSafeInteger(id) || id <= 0)
+      throw new Error('Invalid collection ID');
+    await this.refreshToken();
+    const response = await this.get<{
+      data: {
+        id: number;
+        name: string;
+        overview?: string;
+        isOfficial: boolean;
+        entities: { seriesId?: number; order: number }[];
+      };
+    }>(
+      `/lists/${id}/extended`,
+      { headers: { Authorization: `Bearer ${this.token}` } },
+      3600
+    );
+    const list = response.data;
+    if (
+      !list ||
+      list.id !== id ||
+      list.isOfficial !== true ||
+      typeof list.name !== 'string' ||
+      !Array.isArray(list.entities) ||
+      list.entities.length > 500
+    )
+      throw new Error('Unverified official collection');
+    return {
+      id,
+      name: list.name.slice(0, 512),
+      overview: (list.overview || '').slice(0, 20000),
+      seriesIds: [
+        ...new Set(
+          list.entities
+            .slice()
+            .sort((a, b) => a.order - b.order)
+            .map((entry) => entry.seriesId)
+            .filter(
+              (value): value is number =>
+                Number.isSafeInteger(value) && Number(value) > 0
+            )
+        ),
+      ],
+    };
+  }
+
   async login(): Promise<TvdbLoginResponse> {
     let body: { apiKey: string; pin?: string } = {
       apiKey: 'd00d9ecb-a9d0-4860-958a-74b14a041405',

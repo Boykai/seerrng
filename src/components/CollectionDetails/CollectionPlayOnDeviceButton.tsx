@@ -12,13 +12,21 @@ import useSWR from 'swr';
 
 const messages = defineMessages('components.CollectionDetails.PlayOnDevice', {
   label: 'Play on Device',
-  emptySelection: 'No playable movies are currently available.',
+  emptySelection: 'No playable items are currently available.',
   noDevices: 'No active, authorized playback devices are available.',
   started: 'Playback started on {deviceName}.',
   failed: 'Playback could not be started on {deviceName}.',
 });
 
-const CollectionPlayOnDeviceButton = ({ mediaIds }: { mediaIds: number[] }) => {
+const CollectionPlayOnDeviceButton = ({
+  mediaIds,
+  is4k = false,
+  disabledReason: reason,
+}: {
+  mediaIds: number[];
+  is4k?: boolean;
+  disabledReason?: string;
+}) => {
   const intl = useIntl();
   const settings = useSettings();
   const { addToast } = useToasts();
@@ -29,11 +37,12 @@ const CollectionPlayOnDeviceButton = ({ mediaIds }: { mediaIds: number[] }) => {
   );
   const selectedMediaIds = [...new Set(mediaIds)].filter(Number.isSafeInteger);
   const disabledReason =
-    selectedMediaIds.length === 0
+    reason ??
+    (selectedMediaIds.length === 0
       ? intl.formatMessage(messages.emptySelection)
       : error || (devices && devices.length === 0)
         ? intl.formatMessage(messages.noDevices)
-        : undefined;
+        : undefined);
 
   const startPlayback = async (device: PlaybackDevice) => {
     if (activeDeviceId || selectedMediaIds.length === 0) return;
@@ -42,6 +51,7 @@ const CollectionPlayOnDeviceButton = ({ mediaIds }: { mediaIds: number[] }) => {
       await axios.post('/api/v1/playback/collection/play', {
         deviceId: device.id,
         mediaIds: selectedMediaIds,
+        is4k,
       });
       addToast(
         intl.formatMessage(messages.started, { deviceName: device.name }),
@@ -78,27 +88,28 @@ const CollectionPlayOnDeviceButton = ({ mediaIds }: { mediaIds: number[] }) => {
         </span>
       }
     >
-      {selectedMediaIds.length > 0 &&
-        (devices ?? []).map((device) => (
-          <Dropdown.Item
-            key={device.id}
-            buttonType="playback"
-            aria-disabled={!!activeDeviceId}
-            onClick={(event) => {
-              event.preventDefault();
-              void startPlayback(device);
-            }}
-          >
-            <ComputerDesktopIcon className="mr-2 h-4 w-4 flex-none" />
-            <span className="min-w-0">
-              <span className="block truncate">{device.name}</span>
-              <span className="block truncate text-xs text-gray-500">
-                {device.client}
-                {device.platform ? ` · ${device.platform}` : ''}
+      {selectedMediaIds.length > 0 && (devices?.length ?? 0) > 0
+        ? (devices ?? []).map((device) => (
+            <Dropdown.Item
+              key={device.id}
+              buttonType="playback"
+              aria-disabled={!!activeDeviceId}
+              onClick={(event) => {
+                event.preventDefault();
+                void startPlayback(device);
+              }}
+            >
+              <ComputerDesktopIcon className="mr-2 h-4 w-4 flex-none" />
+              <span className="min-w-0">
+                <span className="block truncate">{device.name}</span>
+                <span className="block truncate text-xs text-gray-500">
+                  {device.client}
+                  {device.platform ? ` · ${device.platform}` : ''}
+                </span>
               </span>
-            </span>
-          </Dropdown.Item>
-        ))}
+            </Dropdown.Item>
+          ))
+        : null}
     </Dropdown>
   );
 };

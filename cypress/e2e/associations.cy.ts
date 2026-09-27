@@ -150,8 +150,7 @@ describe('Associations', () => {
 
     cy.contains('h1', 'Associations for Root Book').should('be.visible');
     cy.get('[data-testid=association-wall]').within(() => {
-      cy.contains('Same author').should('be.visible');
-      cy.contains('Related books').should('be.visible');
+      cy.contains('Same Author').should('be.visible');
     });
     cy.get('a[href="/book/OLRELATEDW"]')
       .contains('Related Book')
@@ -224,7 +223,9 @@ describe('Associations', () => {
     cy.wait('@getAlbumAssociations');
 
     cy.get('[data-testid=association-wall]').within(() => {
-      cy.contains('Similar artists').should('be.visible');
+      cy.get('[role="region"][aria-label="Similar artists"]').should(
+        'be.visible'
+      );
       cy.contains('More like this').should('not.exist');
       cy.get('a[href="/artist/ARTISTRELATED"]')
         .contains('Related Artist')

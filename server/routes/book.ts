@@ -17,9 +17,10 @@ import { upsertMediaSearchMetadata } from '@server/lib/mediaSearchMetadata';
 import { getSettings, type ReadarrSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import {
-  type BookSeriesReference,
   mapOpenLibrarySearchDoc,
   mapOpenLibraryWork,
+  type BookDetails,
+  type BookSeriesReference,
 } from '@server/models/Book';
 import {
   getBookshelfBookDetails,
@@ -32,7 +33,10 @@ import {
   parseOptionalPositiveInt,
   parsePositiveInt,
 } from '@server/utils/pagination';
-import { parseBoundedString } from '@server/utils/validation';
+import {
+  parseBoundedString,
+  parseOptionalBoundedString,
+} from '@server/utils/validation';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 
@@ -90,6 +94,50 @@ const mergeBookSeriesReferences = (
     if (!unique.has(key)) unique.set(key, series);
   }
   return [...unique.values()];
+};
+
+const normalizeBookIdentity = (value: string) =>
+  value
+    .normalize('NFKD')
+    .toLocaleLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+
+const findMatchingOpenLibraryWorkId = async (
+  api: OpenLibraryAPI,
+  book: BookDetails
+): Promise<string | undefined> => {
+  const bookAuthor = book.author;
+  if (!bookAuthor) return undefined;
+
+  const quoted = (value: string) => value.replace(/["\\]/g, ' ').slice(0, 256);
+  const matches = await api.searchBooks({
+    query: `title:"${quoted(book.title)}" author:"${quoted(bookAuthor)}"`,
+    limit: 20,
+  });
+  const candidates = matches.docs
+    .filter(
+      (candidate) =>
+        normalizeBookIdentity(candidate.title) ===
+          normalizeBookIdentity(book.title) &&
+        candidate.author_name?.some(
+          (author) =>
+            normalizeBookIdentity(author) === normalizeBookIdentity(bookAuthor)
+        )
+    )
+    .sort((left, right) => {
+      const year = book.firstPublishYear;
+      const leftYearMatch = year && left.first_publish_year === year ? 1 : 0;
+      const rightYearMatch = year && right.first_publish_year === year ? 1 : 0;
+      return (
+        rightYearMatch - leftYearMatch ||
+        (right.ratings_count ?? 0) - (left.ratings_count ?? 0)
+      );
+    });
+  const workId = candidates[0]
+    ? normalizeOpenLibraryWorkId(candidates[0].key)
+    : undefined;
+  return workId && /^OL\d+W$/.test(workId) ? workId : undefined;
 };
 
 const getBookCoverService = (
@@ -246,10 +294,18 @@ bookRoutes.get('/search', async (req, res, next) => {
 bookRoutes.get('/:id', async (req, res, next) => {
   const bookshelfId = parseBookshelfBookId(req.params.id);
   if (bookshelfId) {
+    const lookupTitle = parseOptionalBoundedString(req.query.lookupTitle, {
+      fieldName: 'Lookup title',
+      maxLength: 512,
+    });
+    if ('error' in lookupTitle) {
+      return res.status(400).json({ status: 400, message: lookupTitle.error });
+    }
     const settings = getSettings();
     const details = await getBookshelfBookDetails(
       settings.readarr,
-      req.params.id
+      req.params.id,
+      lookupTitle.value
     );
     if (!details)
       return res.status(404).json({ status: 404, message: 'Book not found' });
@@ -377,6 +433,87 @@ bookRoutes.get('/:id', async (req, res, next) => {
       bookId,
     });
     return next({ status: 500, message: 'Unable to retrieve book details.' });
+  }
+});
+
+bookRoutes.get('/:id/ratings', async (req, res) => {
+  if (parseBookshelfBookId(req.params.id)) {
+    const lookupTitle = parseOptionalBoundedString(req.query.lookupTitle, {
+      fieldName: 'Lookup title',
+      maxLength: 512,
+    });
+    if ('error' in lookupTitle) {
+      return res.status(400).json({ status: 400, message: lookupTitle.error });
+    }
+
+    const book = await getBookshelfBookDetails(
+      getSettings().readarr,
+      req.params.id,
+      lookupTitle.value
+    );
+    if (!book) {
+      return res.status(404).json({ status: 404, message: 'Book not found' });
+    }
+
+    const nativeRating = {
+      average:
+        book.ratingsAverage !== undefined &&
+        Number.isFinite(book.ratingsAverage) &&
+        book.ratingsAverage >= 0 &&
+        book.ratingsAverage <= 5
+          ? book.ratingsAverage
+          : undefined,
+      count: book.ratingsCount ?? 0,
+      source: 'bookshelf' as const,
+    };
+
+    try {
+      const openLibrary = new OpenLibraryAPI();
+      const workId = await findMatchingOpenLibraryWorkId(openLibrary, book);
+      if (!workId) return res.status(200).json(nativeRating);
+
+      const rating = await openLibrary.getWorkRatings(workId);
+      return res
+        .status(200)
+        .json(
+          rating.average !== undefined && rating.count > 0
+            ? { ...rating, source: 'openlibrary', workId }
+            : { ...nativeRating, workId }
+        );
+    } catch (error) {
+      logger.debug('Failed to match Bookshelf ratings to Open Library', {
+        label: 'Book',
+        bookId: req.params.id,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return res.status(200).json(nativeRating);
+    }
+  }
+
+  const parsedBookId = parseOpenLibraryWorkId(req.params.id);
+  if ('error' in parsedBookId) {
+    return res.status(404).json({ status: 404, message: 'Book not found' });
+  }
+
+  try {
+    const ratings = await new OpenLibraryAPI().getWorkRatings(
+      parsedBookId.value
+    );
+    return res.status(200).json({
+      ...ratings,
+      source: 'openlibrary',
+      workId: parsedBookId.value,
+    });
+  } catch (error) {
+    logger.debug('Failed to retrieve book ratings', {
+      label: 'Book',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      bookId: parsedBookId.value,
+    });
+    return res.status(503).json({
+      status: 503,
+      message: 'Unable to retrieve book ratings.',
+    });
   }
 });
 

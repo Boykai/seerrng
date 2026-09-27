@@ -43,7 +43,7 @@ import {
 } from '@server/models/Book';
 import { mapComicVineVolumeResult } from '@server/models/Comic';
 import { mapLazyLibrarianMagazine } from '@server/models/Magazine';
-import { mapSearchResults } from '@server/models/Search';
+import { mapArtistResult, mapSearchResults } from '@server/models/Search';
 import { trackBackgroundTask } from '@server/utils/backgroundTasks';
 import {
   searchBookshelfAuthors,
@@ -55,6 +55,11 @@ import {
   settlePromisesWithin,
 } from '@server/utils/concurrency';
 import { getHttpErrorDetails, hasHttpStatus } from '@server/utils/httpError';
+import {
+  buildArtistAutocompleteQuery,
+  buildMusicAlbumSearchQuery,
+  parseMusicSearchFilters,
+} from '@server/utils/musicSearchFilters';
 import { parsePositiveInt } from '@server/utils/pagination';
 import {
   matchesAllSearchTerms,
@@ -306,6 +311,18 @@ searchRoutes.get('/', async (req, res, next) => {
     return res.status(400).json({ status: 400, message: parsedType.error });
   }
   const typeFilter = parsedType.value;
+  const parsedMusicFilters = parseMusicSearchFilters(req.query);
+  if ('error' in parsedMusicFilters)
+    return res
+      .status(400)
+      .json({ status: 400, message: parsedMusicFilters.error });
+  const musicFilters = parsedMusicFilters.value;
+  const hasMusicFilters = Object.keys(musicFilters).length > 0;
+  if (hasMusicFilters && typeFilter !== 'music' && typeFilter !== 'album')
+    return res.status(400).json({
+      status: 400,
+      message: 'Music filters require the Music media type.',
+    });
   const parsedResultFilter = parseOptionalBoundedString(
     req.query.resultFilter,
     {
@@ -473,19 +490,27 @@ searchRoutes.get('/', async (req, res, next) => {
               total_pages: 1,
               total_results: 0,
             }),
-        shouldSearchMusic && musicEnabled
+        shouldSearchMusic && musicEnabled && typeFilter !== 'artist'
           ? musicbrainz.searchAlbumWithTotal({
-              query:
-                typeFilter === 'music' && resultFilter
+              query: hasMusicFilters
+                ? buildMusicAlbumSearchQuery(
+                    queryString,
+                    musicFilters,
+                    resultFilter
+                  )
+                : typeFilter === 'music' && resultFilter
                   ? toMusicAlbumRefinementQuery(queryString, resultFilter)
                   : queryString,
               limit: 20,
               offset: musicOffset,
             })
           : Promise.resolve({ results: [], totalResults: 0 }),
-        shouldSearchMusic && musicEnabled && !resultFilter
+        shouldSearchMusic && musicEnabled && !resultFilter && !hasMusicFilters
           ? musicbrainz.searchArtistWithTotal({
-              query: queryString,
+              query:
+                typeFilter === 'artist'
+                  ? buildArtistAutocompleteQuery(queryString)
+                  : queryString,
               limit: 20,
               offset: musicOffset,
             })
@@ -504,13 +529,19 @@ searchRoutes.get('/', async (req, res, next) => {
               bookFormatForProviderSearch
             )
           : Promise.resolve([]),
-        shouldSearchAuthors && (ebookEnabled || audiobookEnabled)
+        // Choosing a validated search type selects a provider; it does not
+        // bypass provider authorization or transport policy.
+        // codeql[js/user-controlled-bypass]
+        shouldSearchAuthors && booksEnabled
           ? openLibrary.searchAuthors({
               query: queryString,
               page,
               limit: 20,
             })
           : Promise.resolve({ numFound: 0, start: 0, docs: [] }),
+        // Choosing a validated search type selects a provider; it does not
+        // bypass provider authorization or transport policy.
+        // codeql[js/user-controlled-bypass]
         shouldSearchAuthors && booksEnabled
           ? searchBookshelfAuthors(getSettings().readarr, queryString)
           : Promise.resolve([]),
@@ -627,6 +658,30 @@ searchRoutes.get('/', async (req, res, next) => {
       const bookshelfProviderResponse = providerResults.get(4);
       const authorProviderResponse = providerResults.get(5);
       const bookshelfAuthorProviderResponse = providerResults.get(6);
+      const albumProviderResponse = providerResults.get(1);
+      const artistProviderResponse = providerResults.get(2);
+      if (
+        typeFilter === 'artist' &&
+        musicEnabled &&
+        (!artistProviderResponse ||
+          artistProviderResponse.status === 'rejected')
+      )
+        return next({
+          status: 503,
+          message:
+            'Artist search is temporarily unavailable. Please try again.',
+        });
+      if (
+        (typeFilter === 'music' || typeFilter === 'album') &&
+        musicEnabled &&
+        (!albumProviderResponse || albumProviderResponse.status === 'rejected')
+      ) {
+        return next({
+          status: 503,
+          message:
+            'MusicBrainz, the service used for music searches, timed out or is unavailable. Please try again.',
+        });
+      }
       if (
         typeFilter === 'book' &&
         shouldSearchBooks &&
@@ -720,6 +775,19 @@ searchRoutes.get('/', async (req, res, next) => {
       const artistResults = capSearchProviderResults<
         ArtistSearchResults['results'][number]
       >(rawArtistResults.results);
+      // Artist selection needs exact MusicBrainz IDs, including artists linked
+      // to TMDB people. It does not need slower poster/person enrichment.
+      if (typeFilter === 'artist') {
+        return res.status(200).json({
+          page,
+          totalPages: Math.max(
+            1,
+            Math.ceil(rawArtistResults.totalResults / 20)
+          ),
+          totalResults: rawArtistResults.totalResults,
+          results: artistResults.map(mapArtistResult),
+        });
+      }
       const rawBookResults = getProviderValue<BookSearchResults>(3, {
         numFound: 0,
         start: 0,
@@ -1173,7 +1241,7 @@ searchRoutes.get('/', async (req, res, next) => {
       totalPages: typeSpecificTotalPages ?? results.total_pages,
       totalResults:
         typeSpecificTotalResults ??
-        (typeFilter || capabilityFiltered
+        ((typeFilter || capabilityFiltered) && !hasMusicFilters
           ? filteredResults.length
           : results.total_results),
       results: filteredResults,

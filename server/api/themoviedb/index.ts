@@ -301,6 +301,7 @@ export const sanitizeTmdbPersonDetails = (
     profile_path: boundedTmdbString(value.profile_path, 2000) || undefined,
     adult: value.adult === true,
     imdb_id: boundedTmdbString(value.imdb_id, 512) || undefined,
+    origin_country: boundedTmdbStrings(value.origin_country, 100),
     homepage: boundedTmdbString(value.homepage, 2000) || undefined,
   } as unknown as TmdbPersonDetails;
 };

@@ -122,10 +122,21 @@ const badgeConfig = {
 >;
 
 const variantClasses = {
-  card: 'px-2 py-1 text-[11px] shadow-md',
+  card: 'poster-control shadow-md',
   compact: 'px-2 py-1 text-[11px]',
   inline: 'px-2 py-1 text-xs',
 } as const;
+
+const posterToneClass: Record<MediaTypeBadgeType, string> = {
+  movie: 'poster-control-type-movie',
+  tv: 'poster-control-type-tv',
+  collection: 'poster-control-type-collection',
+  album: 'poster-control-type-album',
+  artist: 'poster-control-type-artist',
+  book: 'poster-control-type-book',
+  comic: 'poster-control-type-comic',
+  magazine: 'poster-control-type-magazine',
+};
 
 const MediaTypeBadge = ({
   mediaType,
@@ -142,9 +153,11 @@ const MediaTypeBadge = ({
   const badge = (
     <span
       className={twMerge(
-        'inline-flex max-w-full items-center gap-1 rounded-full border leading-none font-semibold',
+        variant === 'card'
+          ? 'max-w-full'
+          : 'inline-flex max-w-full items-center gap-1 rounded-full border leading-none font-semibold',
         variantClasses[variant],
-        config.tone,
+        variant === 'card' ? posterToneClass[mediaType] : config.tone,
         className
       )}
     >

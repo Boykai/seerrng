@@ -1,10 +1,10 @@
 import Tooltip from '@app/components/Common/Tooltip';
 import defineMessages from '@app/utils/defineMessages';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
-import type { SVGProps } from 'react';
+import type { ReactNode, SVGProps } from 'react';
 import { useIntl } from 'react-intl';
 
-const PushPinIcon = ({
+export const PushPinIcon = ({
   filled = false,
   ...props
 }: SVGProps<SVGSVGElement> & { filled?: boolean }) => (
@@ -28,18 +28,22 @@ const messages = defineMessages('components.MediaDetails.DetailDisclosure', {
 
 interface DetailDisclosureButtonProps {
   label: string;
+  icon?: ReactNode;
   open: boolean;
   onClick: () => void;
   pinned?: boolean;
   onPinClick?: () => void;
+  controls?: string;
 }
 
 const DetailDisclosureButton = ({
   label,
+  icon,
   open,
   onClick,
   pinned = false,
   onPinClick,
+  controls,
 }: DetailDisclosureButtonProps) => {
   const intl = useIntl();
   const pinLabel = intl.formatMessage(pinned ? messages.unpin : messages.pin, {
@@ -69,13 +73,12 @@ const DetailDisclosureButton = ({
         type="button"
         className="detail-disclosure-button"
         aria-expanded={open}
+        aria-controls={controls}
         onClick={onClick}
       >
+        {icon}
         {label}
-        <ChevronDownIcon
-          className={`h-3.5 w-3.5 transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
-          aria-hidden="true"
-        />
+        <ChevronDownIcon className="disclosure-chevron" aria-hidden="true" />
       </button>
     </span>
   );

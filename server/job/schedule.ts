@@ -2,6 +2,7 @@ import { MediaServerType } from '@server/constants/server';
 import blocklistedTagsProcessor from '@server/job/blocklistedTagsProcessor';
 import availabilitySync from '@server/lib/availabilitySync';
 import bookRequestSearchManager from '@server/lib/bookRequestSearch';
+import { syncManagedCollections } from '@server/lib/collectionSync';
 import downloadRecovery from '@server/lib/downloadRecovery';
 import downloadTracker from '@server/lib/downloadtracker';
 import ImageProxy from '@server/lib/imageproxy';
@@ -188,9 +189,10 @@ export const startJobs = (): void => {
           logger.info('Starting scheduled job: Plex Recently Added Scan', {
             label: 'Jobs',
           });
-          return runTrackedJob('Plex Recently Added Scan', () =>
-            plexRecentScanner.run()
-          );
+          return runTrackedJob('Plex Recently Added Scan', async () => {
+            await plexRecentScanner.run();
+            await syncManagedCollections();
+          });
         }
       ),
       running: () => plexRecentScanner.status().running,
@@ -208,9 +210,10 @@ export const startJobs = (): void => {
         logger.info('Starting scheduled job: Plex Full Library Scan', {
           label: 'Jobs',
         });
-        return runTrackedJob('Plex Full Library Scan', () =>
-          plexFullScanner.run()
-        );
+        return runTrackedJob('Plex Full Library Scan', async () => {
+          await plexFullScanner.run();
+          await syncManagedCollections();
+        });
       }),
       running: () => plexFullScanner.status().running,
       cancelFn: () => plexFullScanner.cancel(),
@@ -265,9 +268,10 @@ export const startJobs = (): void => {
           logger.info('Starting scheduled job: Jellyfin Recently Added Scan', {
             label: 'Jobs',
           });
-          return runTrackedJob('Jellyfin Recently Added Scan', () =>
-            jellyfinRecentScanner.run()
-          );
+          return runTrackedJob('Jellyfin Recently Added Scan', async () => {
+            await jellyfinRecentScanner.run();
+            await syncManagedCollections();
+          });
         }
       ),
       running: () => jellyfinRecentScanner.status().running,
@@ -285,9 +289,10 @@ export const startJobs = (): void => {
         logger.info('Starting scheduled job: Jellyfin Full Scan', {
           label: 'Jobs',
         });
-        return runTrackedJob('Jellyfin Full Library Scan', () =>
-          jellyfinFullScanner.run()
-        );
+        return runTrackedJob('Jellyfin Full Library Scan', async () => {
+          await jellyfinFullScanner.run();
+          await syncManagedCollections();
+        });
       }),
       running: () => jellyfinFullScanner.status().running,
       cancelFn: () => jellyfinFullScanner.cancel(),

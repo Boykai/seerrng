@@ -1,4 +1,5 @@
 import type { LbAlbumDetails } from '@server/api/listenbrainz/interfaces';
+import { formatMusicReleaseType } from '@server/constants/musicReleaseTypes';
 import type Media from '@server/entity/Media';
 import { normalizeMusicBrainzId } from '@server/lib/externalIds';
 import type { AvailableMusicService } from '@server/lib/musicQualityAvailability';
@@ -72,13 +73,18 @@ export interface MusicDetails {
   trackAvailability?: MusicTrackAvailability;
 }
 
+export interface MusicRating {
+  score: number;
+  votes: number;
+  url: string;
+  source: 'musicbrainz' | 'lidarr' | 'theaudiodb' | 'discogs';
+  scale?: 5 | 10;
+  edition?: string;
+}
 export interface MusicRatingResponse {
-  rating?: {
-    score: number;
-    votes: number;
-    url: string;
-    source: 'musicbrainz' | 'lidarr';
-  };
+  rating?: MusicRating;
+  ratings?: MusicRating[];
+  failedSources?: MusicRating['source'][];
 }
 
 export const MAX_MUSIC_DETAIL_MEDIA = 50;
@@ -136,7 +142,7 @@ export const mapMusicDetails = (
     title,
     titleSlug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     mediaType: 'album',
-    type: album.type,
+    type: formatMusicReleaseType(album.type, album.secondaryTypes),
     releaseDate: releaseGroup?.date,
     artist: {
       id: primaryArtist?.artist_mbid

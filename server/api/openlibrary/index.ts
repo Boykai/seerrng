@@ -46,6 +46,11 @@ interface OpenLibraryAuthorSearchResponse {
   docs: OpenLibraryAuthorSearchDoc[];
 }
 
+export interface OpenLibraryWorkRatingResponse {
+  average?: number;
+  count: number;
+}
+
 export interface OpenLibraryWork {
   key: string;
   title: string;
@@ -75,6 +80,7 @@ export interface OpenLibraryAuthorWork {
   covers?: number[];
   first_publish_date?: string;
   authors?: OpenLibraryWork['authors'];
+  subjects?: string[];
   languages?: { key: string }[];
 }
 
@@ -423,6 +429,7 @@ const sanitizeAuthorWork = (
     covers: work.covers,
     first_publish_date: work.first_publish_date,
     authors: work.authors,
+    subjects: work.subjects,
     languages: Array.isArray(value.languages)
       ? value.languages
           .slice(0, 50)
@@ -610,6 +617,37 @@ class OpenLibraryAPI extends ExternalAPI {
         43200
       )
     );
+  }
+
+  public async getWorkRatings(
+    workId: string
+  ): Promise<OpenLibraryWorkRatingResponse> {
+    const normalizedWorkId = requireOpenLibraryResourceId(workId, 'work');
+    const response = await this.get<unknown>(
+      `/works/${encodeURIComponent(normalizedWorkId)}/ratings.json`,
+      undefined,
+      43200
+    );
+    const summary =
+      isRecord(response) && isRecord(response.summary)
+        ? response.summary
+        : undefined;
+    const average = summary?.average;
+    const count = summary?.count;
+
+    return {
+      average:
+        typeof average === 'number' &&
+        Number.isFinite(average) &&
+        average >= 0 &&
+        average <= 5
+          ? average
+          : undefined,
+      count:
+        typeof count === 'number' && Number.isSafeInteger(count) && count >= 0
+          ? count
+          : 0,
+    };
   }
 
   public async getEdition(editionId: string): Promise<OpenLibraryEdition> {

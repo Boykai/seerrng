@@ -66,7 +66,7 @@ const SettingsAbout = () => {
           intl.formatMessage(globalMessages.settings),
         ]}
       />
-      <div className="section">
+      <div className="app-card-sub section">
         <List title={intl.formatMessage(messages.aboutseerr)}>
           {data.version.startsWith('main-') && (
             <Alert
@@ -162,7 +162,7 @@ const SettingsAbout = () => {
           </List.Item>
         </List>
       </div>
-      <div className="section">
+      <div className="app-card-sub section">
         <List title={intl.formatMessage(messages.gettingsupport)}>
           <List.Item title={intl.formatMessage(messages.documentation)}>
             <a
@@ -196,7 +196,7 @@ const SettingsAbout = () => {
           </List.Item>
         </List>
       </div>
-      <div className="section">
+      <div className="app-card-sub section">
         <List title={intl.formatMessage(messages.supportseerr)}>
           <List.Item title={intl.formatMessage(messages.supportdevelopment)}>
             <div className="flex flex-wrap gap-[5px]">
@@ -220,7 +220,7 @@ const SettingsAbout = () => {
           </List.Item>
         </List>
       </div>
-      <div className="section">
+      <div className="app-card-sub section">
         <Releases currentVersion={data.version} />
       </div>
     </>

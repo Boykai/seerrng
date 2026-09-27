@@ -25,7 +25,10 @@ describe('Bookshelf catalog identities', () => {
       serviceId: 27,
       foreignBookId: 'googlebooks:volume/a+b=',
     });
-    expect(parseBookshelfBookId('bookshelf:0:YWJj')).toBeUndefined();
+    expect(parseBookshelfBookId('bookshelf:0:YWJj')).toEqual({
+      serviceId: 0,
+      foreignBookId: 'abc',
+    });
     expect(parseBookshelfBookId('bookshelf:27:!bad')).toBeUndefined();
     const authorId = makeBookshelfAuthorId(
       27,
@@ -174,5 +177,48 @@ describe('Bookshelf catalog identities', () => {
       title: 'The Fellowship of the Ring',
       series: [{ title: 'The Lord of the Rings', position: '1' }],
     });
+  });
+
+  it('uses a title hint but accepts only the exact Bookshelf book identity', async () => {
+    const lookup = vi
+      .spyOn(ReadarrAPI.prototype, 'lookupBook')
+      .mockImplementation(async (term) =>
+        term === 'The Fellowship of the Ring'
+          ? [
+              { title: 'Wrong book', foreignBookId: 'other' },
+              {
+                title: 'The Fellowship of the Ring',
+                foreignBookId: '139773',
+                seriesTitle: 'The Lord of the Rings #1',
+                author: {
+                  foreignAuthorId: '1077326',
+                  authorName: 'J.R.R. Tolkien',
+                },
+                editions: [],
+              },
+            ]
+          : []
+      );
+    const server = {
+      id: 0,
+      hostname: 'bookshelf.test',
+      port: 8787,
+      apiKey: 'test-key',
+      useSsl: false,
+      baseUrl: '',
+      serviceType: 'ebook',
+    } as ReadarrSettings;
+
+    const id = makeBookshelfBookId(0, '139773');
+    const details = await getBookshelfBookDetails(
+      [server],
+      id,
+      'The Fellowship of the Ring'
+    );
+
+    expect(details?.id).toBe(id);
+    expect(details?.title).toBe('The Fellowship of the Ring');
+    expect(lookup).toHaveBeenNthCalledWith(1, 'work:139773');
+    expect(lookup).toHaveBeenNthCalledWith(2, 'The Fellowship of the Ring');
   });
 });

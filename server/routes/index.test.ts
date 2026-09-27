@@ -36,6 +36,8 @@ function createApp() {
   const app = express();
   app.use(express.json());
   app.use(
+    // Test-only session middleware has no network listener or real secret.
+    // codeql[js/clear-text-cookie]
     session({
       secret: 'test-secret',
       resave: false,

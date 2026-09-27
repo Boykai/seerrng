@@ -6,8 +6,34 @@ import {
   createRequestDestination,
   isRequestDestinationAvailable,
   isRequestDestinationRequested,
+  isVideoQualityAvailable,
 } from '@app/components/RequestModal/requestAvailability';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+
+test('available request qualities are independent and partial series remain requestable', () => {
+  const media = {
+    status: MediaStatus.AVAILABLE,
+    status4k: MediaStatus.UNKNOWN,
+  };
+  assert.equal(isVideoQualityAvailable(media, 'movie'), true);
+  assert.equal(isVideoQualityAvailable(media, 'movie', true), false);
+  assert.equal(
+    isVideoQualityAvailable({ status4k: MediaStatus.AVAILABLE }, 'tv', true),
+    true
+  );
+  assert.equal(
+    isVideoQualityAvailable({ status: MediaStatus.PARTIALLY_AVAILABLE }, 'tv'),
+    false
+  );
+  assert.equal(
+    isVideoQualityAvailable(
+      { status: MediaStatus.PARTIALLY_AVAILABLE },
+      'movie'
+    ),
+    true
+  );
+  assert.equal(isVideoQualityAvailable(undefined, 'movie'), false);
+});
 
 const selectedMusicTarget = createRequestDestination(
   'lidarr',

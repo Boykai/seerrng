@@ -6,6 +6,10 @@ import {
 } from '@app/utils/availabilityQuality';
 import { readDiscoverScrollEntry } from '@app/utils/discoverScrollRestoration';
 import {
+  hasMoreSearchPages,
+  MAX_SEARCH_PAGES,
+} from '@app/utils/searchPagination';
+import {
   setPersistentResponse,
   usePersistentResponse,
 } from '@app/utils/swrCache';
@@ -198,7 +202,7 @@ const useDiscover = <
     mutate: revalidate,
   } = useSWRInfinite<BaseSearchResult<T> & S>(
     (pageIndex: number, previousPageData) => {
-      if (!enabled) {
+      if (!enabled || pageIndex >= MAX_SEARCH_PAGES) {
         return null;
       }
 
@@ -314,23 +318,11 @@ const useDiscover = <
     settings.currentSettings.hideAvailable,
   ]);
 
-  const rawResultCount = useMemo(
-    () =>
-      (data ?? []).reduce(
-        (total, page) =>
-          total + (Array.isArray(page?.results) ? page.results.length : 0),
-        0
-      ),
-    [data]
-  );
   const lastResultPage = data?.[data.length - 1];
-  const lastResultPageResults = Array.isArray(lastResultPage?.results)
-    ? lastResultPage.results
-    : [];
-  const hasMoreUnfilteredResults =
-    !!lastResultPage &&
-    lastResultPageResults.length >= 20 &&
-    lastResultPage.totalResults > size * 20;
+  const hasMoreUnfilteredResults = hasMoreSearchPages(
+    lastResultPage?.totalPages,
+    size
+  );
   const needsMoreFilteredResults =
     titles.length === 0 ||
     Boolean(availableQuality && titles.length < FILTERED_PAGE_RESULT_TARGET);
@@ -339,11 +331,13 @@ const useDiscover = <
     !isLoadingMore &&
     !isValidating &&
     needsMoreFilteredResults &&
-    rawResultCount > 0 &&
     hasMoreUnfilteredResults &&
     size < FILTERED_PAGE_SCAN_LIMIT;
   const isEmpty =
-    !isLoadingInitialData && titles.length === 0 && !shouldScanNextFilteredPage;
+    !isLoadingInitialData &&
+    titles.length === 0 &&
+    !shouldScanNextFilteredPage &&
+    !hasMoreUnfilteredResults;
   const isSearchingAvailableQuality = Boolean(
     availableQuality &&
     (isLoadingInitialData ||
@@ -351,13 +345,7 @@ const useDiscover = <
       isValidating ||
       shouldScanNextFilteredPage)
   );
-  const isReachingEnd =
-    (!!data && lastResultPageResults.length < 20) ||
-    (!!data && (lastResultPage?.totalResults ?? 0) <= size * 20) ||
-    (!!data && (lastResultPage?.totalResults ?? 0) < 41) ||
-    (needsMoreFilteredResults &&
-      rawResultCount > 0 &&
-      size >= FILTERED_PAGE_SCAN_LIMIT);
+  const isReachingEnd = !!data && !hasMoreUnfilteredResults;
 
   useEffect(() => {
     if (shouldScanNextFilteredPage) {

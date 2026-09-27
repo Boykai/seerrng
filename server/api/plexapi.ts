@@ -1,4 +1,5 @@
 import ExternalAPI from '@server/api/externalapi';
+import MusicBrainz from '@server/api/musicbrainz';
 import type { Library, PlexSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -7,6 +8,7 @@ import {
   buildServiceUrl,
   normalizeServiceHostname,
 } from '@server/utils/serviceUrl';
+import axios from 'axios';
 
 interface PlexStatusResponse {
   MediaContainer: {
@@ -57,6 +59,7 @@ export interface PlexMetadata {
   parentIndex?: number;
   leafCount: number;
   viewedLeafCount: number;
+  viewCount: number;
   addedAt: number;
   updatedAt: number;
   Media: Media[];
@@ -73,6 +76,44 @@ export interface PlexPlaylist {
   title: string;
   playlistType: 'audio' | 'video';
 }
+
+export interface PlexCollection {
+  ratingKey: string;
+  title: string;
+  librarySectionID: string;
+  smart: boolean;
+}
+
+const parseCollection = (value: unknown, section?: string): PlexCollection => {
+  const libraryId = isRecord(value)
+    ? (value.librarySectionID ?? section)
+    : undefined;
+  if (
+    !isRecord(value) ||
+    value.type !== 'collection' ||
+    !/^\d+$/.test(String(value.ratingKey)) ||
+    !/^\d+$/.test(String(libraryId)) ||
+    (section !== undefined && String(libraryId) !== section)
+  ) {
+    throw new Error('Plex returned invalid collection metadata.');
+  }
+  return {
+    ratingKey: String(value.ratingKey),
+    title: boundedPlexText(value.title, 512),
+    librarySectionID: String(libraryId),
+    smart: value.smart === true || value.smart === 1 || value.smart === '1',
+  };
+};
+
+const metadataItems = (response: unknown): unknown[] => {
+  if (!isRecord(response) || !isRecord(response.MediaContainer)) {
+    throw new Error('Plex returned an invalid library response.');
+  }
+  const container = response.MediaContainer;
+  if (Array.isArray(container.Metadata)) return container.Metadata;
+  if (container.size === 0) return [];
+  throw new Error('Plex returned incomplete library metadata.');
+};
 
 export interface PlexClient {
   clientIdentifier: string;
@@ -295,6 +336,7 @@ export const sanitizePlexMetadata = (
         : undefined,
     leafCount: plexInteger(value.leafCount),
     viewedLeafCount: plexInteger(value.viewedLeafCount),
+    viewCount: plexInteger(value.viewCount),
     addedAt: item.addedAt,
     updatedAt: item.updatedAt,
     Media: item.Media,
@@ -303,6 +345,8 @@ export const sanitizePlexMetadata = (
 
 class PlexAPI extends ExternalAPI {
   private readonly configuredServerUrl: string;
+  private collectionLookupSeeds = new Map<string, Promise<string | null>>();
+  private collectionLookupGuids = new Map<number, Promise<string | null>>();
 
   constructor({
     plexToken,
@@ -407,6 +451,309 @@ class PlexAPI extends ExternalAPI {
         ? { ...client, connectionUri: this.configuredServerUrl }
         : client;
     });
+  }
+
+  /** Exact GUID lookup, never a title/year guess or a filesystem scan. */
+  public async findCollectionMovies(
+    libraryId: string,
+    tmdbId: number,
+    mediaType: 'movie' | 'show' = 'movie'
+  ): Promise<PlexLibraryItem[]> {
+    const guid = `tmdb://${tmdbId}`;
+    const endpoint = `/library/sections/${encodeURIComponent(libraryId)}/all`;
+    const lookup = (searchGuid: string) =>
+      this.get<unknown>(
+        endpoint,
+        {
+          params: {
+            type: mediaType === 'movie' ? 1 : 2,
+            guid: searchGuid,
+            includeGuids: 1,
+          },
+          headers: {
+            'X-Plex-Container-Start': '0',
+            'X-Plex-Container-Size': '100',
+          },
+        },
+        0
+      );
+    let items = metadataItems(await lookup(guid));
+    if (!items.length) {
+      // Modern Plex filters on its primary plex:// identity, not child TMDB GUIDs.
+      // The read-only matches endpoint resolves an exact provider ID. It does NOT
+      // apply a match or change the seed movie. This mirrors PlexAPI getGuid().
+      if (!this.collectionLookupSeeds.has(libraryId)) {
+        this.collectionLookupSeeds.set(
+          libraryId,
+          (async () => {
+            const response = await this.get<unknown>(
+              endpoint,
+              {
+                params: { type: mediaType === 'movie' ? 1 : 2 },
+                headers: {
+                  'X-Plex-Container-Start': '0',
+                  'X-Plex-Container-Size': '1',
+                },
+              },
+              0
+            );
+            const seed = metadataItems(response)[0];
+            if (!seed) return null;
+            if (!isRecord(seed) || !/^\d+$/.test(String(seed.ratingKey)))
+              throw new Error('Invalid Plex lookup seed.');
+            return String(seed.ratingKey);
+          })()
+        );
+      }
+      const seed = await this.collectionLookupSeeds.get(libraryId)!;
+      if (!seed) return [];
+      if (!this.collectionLookupGuids.has(tmdbId)) {
+        this.collectionLookupGuids.set(
+          tmdbId,
+          (async () => {
+            const response = await this.get<unknown>(
+              `/library/metadata/${seed}/matches`,
+              {
+                params: {
+                  title: `tmdb-${tmdbId}`,
+                  manual: 1,
+                  agent:
+                    mediaType === 'movie'
+                      ? 'tv.plex.agents.movie'
+                      : 'tv.plex.agents.series',
+                  language: 'en',
+                },
+              },
+              0
+            );
+            if (!isRecord(response) || !isRecord(response.MediaContainer))
+              throw new Error('Invalid provider-ID lookup.');
+            const container = response.MediaContainer;
+            if (container.size === 0) return null;
+            if (
+              !Array.isArray(container.SearchResult) ||
+              container.SearchResult.length !== 1
+            )
+              throw new Error('Ambiguous provider-ID lookup.');
+            const result = container.SearchResult[0];
+            if (
+              !isRecord(result) ||
+              typeof result.guid !== 'string' ||
+              !result.guid.startsWith(`plex://${mediaType}/`)
+            )
+              throw new Error('Unverified Plex identity.');
+            return result.guid;
+          })()
+        );
+      }
+      const primaryGuid = await this.collectionLookupGuids.get(tmdbId)!;
+      if (!primaryGuid) return [];
+      items = metadataItems(await lookup(primaryGuid));
+    }
+    if (items.length >= 100)
+      throw new Error('Plex movie lookup exceeded its limit.');
+    return items.flatMap((item) => {
+      const movie = sanitizePlexLibraryItem(item);
+      return movie?.type === mediaType &&
+        /^\d+$/.test(movie.ratingKey) &&
+        (mediaType === 'movie' ||
+          (isRecord(item) &&
+            typeof item.leafCount === 'number' &&
+            item.leafCount > 0)) &&
+        (movie.guid === guid || movie.Guid?.some((entry) => entry.id === guid))
+        ? [movie]
+        : [];
+    });
+  }
+
+  /** Title bounds the candidate set; only an exact MusicBrainz identity admits a member. */
+  public async findCollectionAlbums(
+    libraryId: string,
+    mbId: string,
+    title: string
+  ): Promise<PlexLibraryItem[]> {
+    const response = await this.get<unknown>(
+      `/library/sections/${encodeURIComponent(libraryId)}/all`,
+      {
+        params: { type: 9, title, includeGuids: 1 },
+        headers: {
+          'X-Plex-Container-Start': '0',
+          'X-Plex-Container-Size': '100',
+        },
+      },
+      0
+    );
+    const candidates = metadataItems(response);
+    if (candidates.length >= 100)
+      throw new Error('Album lookup exceeded its limit.');
+    const matches: PlexLibraryItem[] = [];
+    const musicbrainz = new MusicBrainz();
+    for (const candidate of candidates) {
+      const album = sanitizePlexLibraryItem(candidate);
+      if (album?.type !== 'album' || !/^\d+$/.test(album.ratingKey)) continue;
+      const ids = [album.guid, ...(album.Guid ?? []).map((entry) => entry.id)]
+        .filter((guid) => guid.startsWith('mbid://'))
+        .map((guid) => guid.slice(7));
+      for (const id of ids) {
+        if (
+          id === mbId ||
+          (await musicbrainz.collectionReleaseGroup(id)) === mbId
+        ) {
+          const tracks = await this.getChildrenMetadata(album.ratingKey);
+          if (
+            tracks.some(
+              (track) =>
+                track.type === 'track' && (track.Media?.length ?? 0) > 0
+            )
+          )
+            matches.push(album);
+          break;
+        }
+      }
+    }
+    return matches;
+  }
+
+  public async getCollection(id: string): Promise<PlexCollection | null> {
+    try {
+      const response = await this.get<unknown>(
+        `/library/collections/${encodeURIComponent(id)}`,
+        undefined,
+        0
+      );
+      const items = metadataItems(response);
+      if (items.length !== 1)
+        throw new Error('Plex did not identify the collection.');
+      return parseCollection(items[0]);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404)
+        return null;
+      throw error;
+    }
+  }
+
+  public async findCollections(
+    libraryId: string,
+    title: string
+  ): Promise<PlexCollection[]> {
+    const matches: PlexCollection[] = [];
+    for (let offset = 0; offset < 10000; offset += 100) {
+      const response = await this.get<unknown>(
+        `/library/sections/${encodeURIComponent(libraryId)}/collections`,
+        {
+          headers: {
+            'X-Plex-Container-Start': String(offset),
+            'X-Plex-Container-Size': '100',
+          },
+        },
+        0
+      );
+      const items = metadataItems(response).map((item) =>
+        parseCollection(item, libraryId)
+      );
+      matches.push(
+        ...items.filter(
+          (item) => item.title === title && item.librarySectionID === libraryId
+        )
+      );
+      if (items.length < 100) return matches;
+    }
+    throw new Error('Plex collection lookup exceeded its limit.');
+  }
+
+  public async removeCollection(id: string, libraryId: string): Promise<void> {
+    const remote = await this.getCollection(id);
+    if (!remote) return;
+    if (
+      remote.ratingKey !== id ||
+      remote.librarySectionID !== libraryId ||
+      remote.smart
+    ) {
+      throw new Error('Collection identity changed.');
+    }
+    await this.request(
+      'DELETE',
+      `/library/collections/${encodeURIComponent(id)}`
+    );
+    if (await this.getCollection(id))
+      throw new Error('Collection removal was not confirmed.');
+  }
+
+  private collectionUri(machineId: string, ids: string[]): string {
+    if (!machineId || !ids.length || ids.some((id) => !/^\d+$/.test(id))) {
+      throw new Error('Invalid collection members.');
+    }
+    return `server://${encodeURIComponent(machineId)}/com.plexapp.plugins.library/library/metadata/${[...new Set(ids)].join(',')}`;
+  }
+
+  public async createCollection(
+    title: string,
+    libraryId: string,
+    ids: string[],
+    machineId: string,
+    mediaType: 'movie' | 'show' | 'album' = 'movie'
+  ): Promise<PlexCollection> {
+    const response = await this.request<unknown>(
+      'POST',
+      '/library/collections',
+      null,
+      {
+        params: {
+          title,
+          sectionId: libraryId,
+          type: mediaType === 'movie' ? 1 : mediaType === 'show' ? 2 : 9,
+          smart: 0,
+          uri: this.collectionUri(machineId, ids),
+        },
+      }
+    );
+    return parseCollection(metadataItems(response.data)[0], libraryId);
+  }
+
+  public async addCollectionItems(
+    id: string,
+    ids: string[],
+    machineId: string
+  ): Promise<void> {
+    // Compare first: repeated scans must not append duplicate members.
+    const existing = new Set<string>();
+    for (let offset = 0; offset < 10000; offset += 100) {
+      const response = await this.get<unknown>(
+        `/library/collections/${encodeURIComponent(id)}/children`,
+        {
+          headers: {
+            'X-Plex-Container-Start': String(offset),
+            'X-Plex-Container-Size': '100',
+          },
+        },
+        0
+      );
+      const items = metadataItems(response);
+      for (const item of items) {
+        if (!isRecord(item) || !/^\d+$/.test(String(item.ratingKey)))
+          throw new Error('Invalid collection member.');
+        existing.add(String(item.ratingKey));
+      }
+      if (items.length < 100) break;
+      if (offset === 9900)
+        throw new Error('Plex collection membership exceeded its limit.');
+    }
+    const missing = [...new Set(ids)].filter((id) => !existing.has(id));
+    for (let offset = 0; offset < missing.length; offset += 100) {
+      await this.request(
+        'PUT',
+        `/library/collections/${encodeURIComponent(id)}/items`,
+        null,
+        {
+          params: {
+            uri: this.collectionUri(
+              machineId,
+              missing.slice(offset, offset + 100)
+            ),
+          },
+        }
+      );
+    }
   }
 
   public async syncLibraries({
@@ -569,6 +916,28 @@ class PlexAPI extends ExternalAPI {
       .flatMap((item) => {
         const normalized = sanitizePlexMetadata(item);
         return normalized ? [normalized] : [];
+      });
+  }
+
+  public async getAllLeavesMetadata(key: string): Promise<PlexMetadata[]> {
+    const response = await this.get<unknown>(
+      `/library/metadata/${encodeURIComponent(
+        boundedPlexText(key, 128)
+      )}/allLeaves`,
+      { params: { 'X-Plex-Container-Size': MAX_PLEX_METADATA_ITEMS } }
+    );
+    const mediaContainer =
+      isRecord(response) && isRecord(response.MediaContainer)
+        ? response.MediaContainer
+        : {};
+
+    return (
+      Array.isArray(mediaContainer.Metadata) ? mediaContainer.Metadata : []
+    )
+      .slice(0, MAX_PLEX_METADATA_ITEMS)
+      .flatMap((item) => {
+        const normalized = sanitizePlexMetadata(item);
+        return normalized?.type === 'episode' ? [normalized] : [];
       });
   }
 

@@ -62,7 +62,7 @@ const PlaybackTrackList = ({
   }
 
   return (
-    <section className="refreshed-inset-surface mt-[5px] overflow-hidden rounded-lg border border-gray-700 p-2">
+    <section className="app-card-inset refreshed-inset-surface card-spacing-before overflow-hidden rounded-lg border border-gray-700 p-2">
       <div className="media-inset-table-heading media-scroll-grid-header request-divider-dark grid grid-cols-[2rem_3rem_minmax(0,1fr)_2.5rem] items-center gap-x-2 border-b pb-2 pl-1">
         <SelectionCircle
           onClick={toggleAll}
@@ -80,7 +80,7 @@ const PlaybackTrackList = ({
           </span>
         </Tooltip>
       </div>
-      <div className="scrollable-card -mr-2 max-h-[214px] space-y-0.5 overflow-y-auto pt-1 pr-2">
+      <div className="scrollable-card -mr-2 max-h-[133px] space-y-0.5 overflow-y-auto pt-1 pr-2">
         {tracks.map((track, index) => {
           const selected = selection.has(track.id);
           return (

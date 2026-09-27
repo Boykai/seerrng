@@ -59,9 +59,14 @@ const messages = defineMessages('components.RequestBlock', {
 interface RequestBlockProps {
   request: MediaRequest;
   onUpdate?: () => void;
+  hideDeleteAction?: boolean;
 }
 
-const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
+const RequestBlock = ({
+  request,
+  onUpdate,
+  hideDeleteAction = false,
+}: RequestBlockProps) => {
   const { user } = useUser();
   const intl = useIntl();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -234,17 +239,18 @@ const RequestBlock = ({ request, onUpdate }: RequestBlockProps) => {
                 </Tooltip>
               </>
             )}
-            {request.status !== MediaRequestStatus.PENDING && (
-              <Tooltip content={intl.formatMessage(messages.delete)}>
-                <Button
-                  buttonType="danger"
-                  onClick={() => deleteRequest()}
-                  disabled={isUpdating}
-                >
-                  <TrashIcon className="icon-sm" />
-                </Button>
-              </Tooltip>
-            )}
+            {!hideDeleteAction &&
+              request.status !== MediaRequestStatus.PENDING && (
+                <Tooltip content={intl.formatMessage(messages.delete)}>
+                  <Button
+                    buttonType="danger"
+                    onClick={() => deleteRequest()}
+                    disabled={isUpdating}
+                  >
+                    <TrashIcon className="icon-sm" />
+                  </Button>
+                </Tooltip>
+              )}
           </div>
         </div>
         <div className="mt-2 sm:flex sm:justify-between">

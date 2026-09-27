@@ -159,6 +159,42 @@ export class PlexScanner
     this.isRecentOnly = isRecentOnly;
   }
 
+  /** Refresh one already verified collection member without starting a library scan. */
+  public async refreshCollectionMember(
+    id: string,
+    kind: 'tv' | 'music'
+  ): Promise<void> {
+    if (!/^\d+$/.test(id)) throw new Error('Invalid collection member');
+    const settings = getSettings();
+    this.enable4kShow = true;
+    this.configurationSnapshot = captureConfigurationAuthority(
+      'plex',
+      settings
+    );
+    this.plexSettingsSnapshot = structuredClone(settings.plex);
+    this.ownerAuthoritySnapshot = await captureMediaServerUserAuthority(
+      1,
+      'plex'
+    );
+    if (!this.ownerAuthoritySnapshot.plexToken)
+      throw new Error('Media server owner unavailable');
+    this.plexClient = new PlexAPI({
+      plexToken: this.ownerAuthoritySnapshot.plexToken,
+      plexSettings: this.plexSettingsSnapshot,
+      timeout: 8000,
+    });
+    const item = await this.withConfigurationSnapshot(() =>
+      this.plexClient.getMetadata(id)
+    );
+    if (
+      item.ratingKey !== id ||
+      item.type !== (kind === 'tv' ? 'show' : 'album')
+    )
+      throw new Error('Collection member identity changed');
+    if (kind === 'tv') await this.processPlexShow(item);
+    else await this.processPlexAlbum(item);
+  }
+
   public status(): SyncStatus {
     return {
       running: this.running,

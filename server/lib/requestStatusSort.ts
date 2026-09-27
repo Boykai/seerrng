@@ -21,6 +21,7 @@ import { getSettings } from '@server/lib/settings';
 import { mapWithConcurrency } from '@server/utils/concurrency';
 import { matchesAllSearchTerms } from '@server/utils/searchTerms';
 import { In } from 'typeorm';
+import { isIncompleteRequestStatus } from './requestStatusIncomplete';
 
 export const REQUEST_STATUS_SORT_FIELDS = [
   'added',
@@ -412,7 +413,15 @@ const getSortValue = (
     case 'status':
       return STATUS_ORDER.indexOf(item.status.stage);
     case 'incomplete':
-      return item.status.stage === 'library' ? 1 : 0;
+      return isIncompleteRequestStatus(
+        item.status.stage,
+        item.request.type,
+        item.request.is4k
+          ? item.request.media?.status4k
+          : item.request.media?.status
+      )
+        ? 1
+        : 0;
     case 'title':
       return metadata.title;
     case 'director':

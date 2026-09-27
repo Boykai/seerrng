@@ -1,4 +1,5 @@
 import ExternalAPI from '@server/api/externalapi';
+import { MUSIC_PRIMARY_TYPES } from '@server/constants/musicReleaseTypes';
 import cacheManager from '@server/lib/cache';
 import {
   isValidMusicBrainzResourceId,
@@ -88,7 +89,10 @@ const sanitizeLinks = (value: unknown): MbLink[] =>
             return undefined;
           }
           const type = boundText(link.type, 128);
-          const target = boundText(link.target, 2_048);
+          const target = boundText(
+            link.target ?? (isRecord(link.url) ? link.url.resource : undefined),
+            2_048
+          );
           return type && target ? { type, target } : undefined;
         })
         .filter((link): link is MbLink => !!link)
@@ -153,26 +157,26 @@ export const sanitizeMusicBrainzAlbum = (
           (release): release is MbAlbumDetails['releases'][number] => !!release
         )
     : [];
-  const tags = Array.isArray(value.tags)
-    ? value.tags
-        .slice(0, MAX_MUSICBRAINZ_TAGS)
-        .map((tag) =>
-          isRecord(tag) && typeof tag.name === 'string'
-            ? {
-                name: boundText(tag.name, 256),
-                count:
-                  typeof tag.count === 'number' && Number.isFinite(tag.count)
-                    ? tag.count
-                    : 0,
-              }
-            : undefined
-        )
-        .filter((tag): tag is { name: string; count: number } => !!tag?.name)
-    : [];
+  const readTags = (items: unknown) =>
+    Array.isArray(items)
+      ? items
+          .slice(0, MAX_MUSICBRAINZ_TAGS)
+          .map((tag) =>
+            isRecord(tag) && typeof tag.name === 'string'
+              ? {
+                  name: boundText(tag.name, 256),
+                  count:
+                    typeof tag.count === 'number' && Number.isFinite(tag.count)
+                      ? tag.count
+                      : 0,
+                }
+              : undefined
+          )
+          .filter((tag): tag is { name: string; count: number } => !!tag?.name)
+      : [];
   const primaryType =
-    value['primary-type'] === 'Single' || value['primary-type'] === 'EP'
-      ? value['primary-type']
-      : 'Album';
+    MUSIC_PRIMARY_TYPES.find((type) => type === value['primary-type']) ??
+    'Album';
   const rawRating = isRecord(value.rating) ? value.rating : undefined;
   const ratingValue = rawRating?.value;
   const ratingVotes = rawRating?.['votes-count'];
@@ -209,8 +213,9 @@ export const sanitizeMusicBrainzAlbum = (
     'secondary-type-ids': boundStringArray(value['secondary-type-ids'], 20),
     releases,
     releasedate: boundText(value.releasedate, 128),
-    tags,
-    links: sanitizeLinks(value.links),
+    tags: readTags(value.tags),
+    genres: readTags(value.genres),
+    links: sanitizeLinks(value.links ?? value.relations),
     poster_path: boundText(value.poster_path, 2_048) || undefined,
     rating,
   };
@@ -368,6 +373,89 @@ export const sanitizeMusicBrainzRecording = (
 };
 
 class MusicBrainz extends ExternalAPI {
+  /** Distinguish a release ID from an unrelated release-group ID without hiding outages. */
+  public async collectionReleaseGroup(
+    releaseId: string
+  ): Promise<string | null> {
+    if (!isValidMusicBrainzResourceId(releaseId)) return null;
+    try {
+      const data = await this.get<{ 'release-group'?: { id?: string } }>(
+        `/release/${encodeURIComponent(releaseId)}`,
+        { params: { inc: 'release-groups', fmt: 'json' }, timeout: 8000 },
+        43200
+      );
+      const id = data?.['release-group']?.id;
+      return id && isValidMusicBrainzResourceId(id) ? id : null;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404)
+        return null;
+      throw new Error('Cannot verify album identity', { cause: error });
+    }
+  }
+  /** Paginate the complete album catalogue; release groups deduplicate editions. */
+  public async getArtistAlbumCollection(
+    artistId: string
+  ): Promise<{ name: string; albums: MbAlbumDetails[]; links?: MbLink[] }> {
+    if (!isValidMusicBrainzResourceId(artistId))
+      throw new Error('Invalid artist ID');
+    const artist = await this.get<{
+      id: string;
+      name: string;
+      relations?: unknown;
+    }>(
+      `/artist/${encodeURIComponent(artistId)}`,
+      { params: { fmt: 'json', inc: 'url-rels' } },
+      43200
+    );
+    if (artist.id !== artistId || typeof artist.name !== 'string')
+      throw new Error('Unverified artist');
+    const albums = new Map<string, MbAlbumDetails>();
+    for (let offset = 0; offset < 500; offset += 100) {
+      const response = await this.get<{
+        'release-groups': unknown[];
+        'release-group-count': number;
+      }>(
+        '/release-group',
+        {
+          params: {
+            artist: artistId,
+            type: 'album',
+            limit: 100,
+            offset,
+            fmt: 'json',
+            inc: 'artist-credits+genres',
+          },
+        },
+        300
+      );
+      if (
+        !Array.isArray(response['release-groups']) ||
+        !Number.isSafeInteger(response['release-group-count']) ||
+        response['release-group-count'] > 500
+      )
+        throw new Error('Artist catalogue exceeds its limit or is incomplete');
+      for (const raw of response['release-groups']) {
+        const album = sanitizeMusicBrainzAlbum(raw);
+        if (!album || !isValidMusicBrainzResourceId(album.id))
+          throw new Error('Invalid album catalogue item');
+        if (album['primary-type'] === 'Album') albums.set(album.id, album);
+      }
+      if (
+        offset + response['release-groups'].length >=
+        response['release-group-count']
+      )
+        return {
+          name: artist.name.slice(0, 512),
+          links: sanitizeLinks(artist.relations),
+          albums: [...albums.values()].sort((a, b) =>
+            a['first-release-date'].localeCompare(b['first-release-date'])
+          ),
+        };
+      if (!response['release-groups'].length)
+        throw new Error('Incomplete artist catalogue');
+    }
+    throw new Error('Artist catalogue exceeds its limit');
+  }
   constructor() {
     super(
       'https://musicbrainz.org/ws/2',
@@ -647,7 +735,7 @@ class MusicBrainz extends ExternalAPI {
         `/release-group/${encodeURIComponent(normalizedReleaseGroupId)}`,
         {
           params: {
-            inc: 'artist-credits+releases+ratings',
+            inc: 'artist-credits+releases+ratings+url-rels+genres',
             fmt: 'json',
           },
         },

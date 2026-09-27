@@ -29,19 +29,16 @@ const Tooltip = ({
     usePopperTooltip(popperConfig);
 
   const tooltipClassName = useMemo(
-    () =>
-      [
-        'z-50 text-sm absolute font-normal bg-gray-800 px-2 py-1 rounded border border-gray-600 shadow text-gray-100',
-        className,
-      ]
-        .filter(Boolean)
-        .join(' '),
+    () => ['app-tooltip', className].filter(Boolean).join(' '),
     [className]
   );
 
   return (
     <>
-      {React.cloneElement(children, { ref: setTriggerRef })}
+      {React.cloneElement(children, {
+        ref: setTriggerRef,
+        'data-app-tooltip-owned': true,
+      })}
       {visible &&
         content &&
         ReactDOM.createPortal(

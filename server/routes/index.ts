@@ -42,7 +42,6 @@ import {
   getTlsConfigurationStatus,
   getTlsRuntimeInfo,
 } from '@server/utils/tls';
-import { isPerson } from '@server/utils/typeHelpers';
 import {
   parseBoundedString,
   parseOptionalBoundedString,
@@ -59,6 +58,7 @@ import authorRoutes from './author';
 import blocklistRoutes from './blocklist';
 import bookRoutes from './book';
 import collectionRoutes from './collection';
+import collectionCatalogRoutes from './collectionCatalog';
 import comicRoutes from './comic';
 import discoverRoutes, { createTmdbWithRegionLanguage } from './discover';
 import { imageCacheWarmRateLimit, warmImageCache } from './imageproxy';
@@ -520,6 +520,12 @@ router.use(
   collectionRoutes
 );
 router.use('/service', isAuthenticated(), serviceRoutes);
+router.use(
+  '/collection-catalog',
+  isAuthenticated(),
+  externalMetadataRateLimit,
+  collectionCatalogRoutes
+);
 router.use('/issue', isAuthenticated(), issueRoutes);
 router.use('/issueComment', isAuthenticated(), issueCommentRoutes);
 router.post(
@@ -687,15 +693,24 @@ router.get('/backdrops', publicBackdropsRateLimit, async (req, res, next) => {
         page: 1,
         timeWindow: 'week',
       })
-    ).results.filter((result) => !isPerson(result)) as (
-      TmdbMovieResult | TmdbTvResult
-    )[];
+    ).results.filter(
+      (result) => result.media_type === 'movie' || result.media_type === 'tv'
+    ) as (TmdbMovieResult | TmdbTvResult)[];
 
     return res.status(200).json(
       data
-        .map((result) => result.backdrop_path)
-        .filter((backdropPath) => !!backdropPath)
+        .filter((result) => !!result.backdrop_path)
         .slice(0, 8)
+        .map((result) => ({
+          path: result.backdrop_path!,
+          title: result.media_type === 'movie' ? result.title : result.name,
+          mediaType: result.media_type,
+          year:
+            (result.media_type === 'movie'
+              ? result.release_date
+              : result.first_air_date
+            )?.slice(0, 4) || undefined,
+        }))
     );
   } catch (e) {
     logger.debug('Something went wrong retrieving backdrops', {

@@ -1,3 +1,4 @@
+import ThreeItemScroll from '@app/components/Common/ThreeItemScroll';
 import type {
   AssociationEdge,
   AssociationGraph,
@@ -10,12 +11,12 @@ const messages = defineMessages('components.Association', {
   similar: 'More like this',
   recommended: 'Recommended',
   similarartists: 'Similar artists',
-  music: 'Connected music',
-  screen: 'On screen',
-  sharedgenre: 'Shared genre',
-  listeneroverlap: 'Listener overlap',
-  relatedbooks: 'Related books',
-  books: 'Same author',
+  music: 'Connected Music',
+  screen: 'On Screen',
+  sharedgenre: 'Shared Genre',
+  listeneroverlap: 'Listener Overlap',
+  relatedbooks: 'Related Books',
+  books: 'Same Author',
   empty: 'No associations found yet',
 });
 
@@ -25,7 +26,13 @@ interface Section {
   match: (edge: AssociationEdge) => boolean;
 }
 
-const AssociationWall = ({ graph }: { graph: AssociationGraph }) => {
+const AssociationWall = ({
+  graph,
+  onSelect,
+}: {
+  graph: AssociationGraph;
+  onSelect?: () => void;
+}) => {
   const intl = useIntl();
   const similarTitle =
     graph.root.mediaType === 'album' || graph.root.mediaType === 'artist'
@@ -94,19 +101,22 @@ const AssociationWall = ({ graph }: { graph: AssociationGraph }) => {
     <div className="space-y-8" data-testid="association-wall">
       {rendered.map(({ section, edges }) => (
         <div key={section.key}>
-          <div className="slider-header">
-            <div className="slider-title">
-              <span>{section.title}</span>
+          {section.key !== 'similar' && (
+            <div className="slider-header">
+              <div className="slider-title">
+                <span>{section.title}</span>
+              </div>
             </div>
-          </div>
-          <div className="grid grid-cols-1 gap-3">
+          )}
+          <ThreeItemScroll label={section.title}>
             {edges.map((edge) => (
               <AssociationDetailCard
                 key={`${edge.node.mediaType}:${edge.node.id}`}
                 edge={edge}
+                onSelect={onSelect}
               />
             ))}
-          </div>
+          </ThreeItemScroll>
         </div>
       ))}
     </div>

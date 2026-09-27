@@ -24,6 +24,7 @@ import {
 import logger from '@server/logger';
 import type { EntityManager, Repository } from 'typeorm';
 import { In, MoreThan } from 'typeorm';
+import { isIncompleteRequestStatus } from './requestStatusIncomplete';
 import {
   filterRequestStatusItems,
   isMetadataRequestStatusSort,
@@ -894,6 +895,28 @@ const getStageFromRequest = (
       downloads,
     };
   }
+  if (
+    (request.type === MediaType.MOVIE || request.type === MediaType.TV) &&
+    hasRequestedServiceLink(request)
+  ) {
+    // An Arr tracking entry and PROCESSING status are created at dispatch,
+    // before any release is grabbed. Only the queue/import-history evidence
+    // above may advance an unavailable video into download/import stages.
+    // Recompute this even when old events or a request flag claim completion.
+    return {
+      stage: options.dispatchPending
+        ? RequestStatusStage.APPROVED
+        : RequestStatusStage.SEARCHING,
+      queueFailure: false,
+      downloads,
+      ...(options.dispatchPending
+        ? {}
+        : {
+            message:
+              'Waiting for a usable release. No active download or import is currently reported.',
+          }),
+    };
+  }
   if (request.status === MediaRequestStatus.COMPLETED) {
     return {
       stage: hasRequestedServiceLink(request)
@@ -1421,7 +1444,11 @@ const stageMatchesFilter = (
     case 'active':
       return ACTIVE_STAGES.includes(stage);
     case 'incomplete':
-      return stage === RequestStatusStage.LIBRARY;
+      return isIncompleteRequestStatus(
+        stage,
+        request.type,
+        getRequestedMediaStatus(request)
+      );
     case 'attention':
       return [
         RequestStatusStage.UNAVAILABLE,
@@ -1452,6 +1479,7 @@ const getRequestStatusCounts = async (options: {
     .groupBy('statusEventCountFilter.requestId');
   const query = requestRepository
     .createQueryBuilder('requestCount')
+    .leftJoin('requestCount.media', 'mediaCount')
     .leftJoin('requestCount.requestedBy', 'requestedByCount')
     .leftJoin(
       `(${latestEventQuery.getQuery()})`,
@@ -1464,7 +1492,12 @@ const getRequestStatusCounts = async (options: {
       'latestStatusCount.id = latestStatusCountId.eventId'
     )
     .select('requestCount.status', 'requestStatus')
-    .addSelect('latestStatusCount.stage', 'stage');
+    .addSelect('latestStatusCount.stage', 'stage')
+    .addSelect('requestCount.type', 'mediaType')
+    .addSelect(
+      'CASE WHEN requestCount.is4k THEN mediaCount.status4k ELSE mediaCount.status END',
+      'mediaStatus'
+    );
   query.setParameters(latestEventQuery.getParameters());
   if (options.ownerId) {
     query.andWhere('requestedByCount.id = :countOwnerId', {
@@ -1495,6 +1528,8 @@ const getRequestStatusCounts = async (options: {
   const rows = await query.getRawMany<{
     requestStatus: string | number;
     stage?: string | null;
+    mediaType: MediaType;
+    mediaStatus: string | number;
   }>();
   let active = 0;
   let incomplete = 0;
@@ -1528,7 +1563,9 @@ const getRequestStatusCounts = async (options: {
       completed += 1;
     } else {
       active += 1;
-      if (stage === RequestStatusStage.LIBRARY) {
+      if (
+        isIncompleteRequestStatus(stage, row.mediaType, Number(row.mediaStatus))
+      ) {
         incomplete += 1;
       }
     }

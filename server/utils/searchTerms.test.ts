@@ -47,11 +47,11 @@ describe('search terms', () => {
   it('keeps the main music search while narrowing album titles', () => {
     assert.strictEqual(
       toMusicAlbumRefinementQuery('Madonna', 'Prayer'),
-      '(releasegroup:madonna OR artist:madonna) AND releasegroup:prayer'
+      '(releasegroup:madonna OR artist:madonna OR tag:madonna) AND releasegroup:prayer'
     );
     assert.strictEqual(
       toMusicAlbumRefinementQuery('Taylor Swift', 'Tortured Poets'),
-      '(releasegroup:taylor OR artist:taylor) AND (releasegroup:swift OR artist:swift) AND releasegroup:tortured AND releasegroup:poets'
+      '(releasegroup:taylor OR artist:taylor OR tag:taylor) AND (releasegroup:swift OR artist:swift OR tag:swift) AND releasegroup:tortured AND releasegroup:poets'
     );
   });
 });

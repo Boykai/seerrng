@@ -1,90 +1,77 @@
+import FormatRequestControl from '@app/components/Common/FormatRequestControl';
 import defineMessages from '@app/utils/defineMessages';
-import { Listbox, Transition } from '@headlessui/react';
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
-import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/solid';
-import { Fragment } from 'react';
+import { useEffect } from 'react';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.MediaDetails.MediaQualitySelect', {
   selectQuality: 'Select Quality',
+  unavailable: 'This quality is not available in your library.',
+  select: 'Use {quality} for playback.',
+  report: 'Report an issue with the {quality} version.',
+  request: 'Request the {quality} version.',
 });
 
 interface MediaQualitySelectProps<Quality extends string> {
-  value: Quality;
-  options: { label: string; value: Quality }[];
+  value: Quality | undefined;
+  options: { label: string; value: Quality; disabled?: boolean }[];
   onChange: (quality: Quality) => void;
   className?: string;
   label?: string;
+  purpose?: 'playback' | 'issue' | 'request';
+  autoSelectAvailable?: boolean;
 }
 
 const MediaQualitySelect = <Quality extends string>({
   value,
   options,
   onChange,
-  className = '',
-  label: labelOverride,
+  className,
+  label,
+  purpose = 'playback',
+  autoSelectAvailable = true,
 }: MediaQualitySelectProps<Quality>) => {
   const intl = useIntl();
-  const label = labelOverride ?? intl.formatMessage(messages.selectQuality);
-  const selected =
-    options.find((option) => option.value === value) ?? options[0];
+  const firstAvailable = options.find((option) => !option.disabled)?.value;
+  const selectedAvailable = options.some(
+    (option) => option.value === value && !option.disabled
+  );
+  useEffect(() => {
+    if (
+      autoSelectAvailable &&
+      !selectedAvailable &&
+      firstAvailable !== undefined
+    ) {
+      onChange(firstAvailable);
+    }
+  }, [autoSelectAvailable, selectedAvailable, firstAvailable, onChange]);
 
   return (
-    <Listbox
-      value={selected}
-      onChange={(option) => onChange(option.value as Quality)}
-    >
-      <div className={`relative w-max max-w-full ${className}`}>
-        <Listbox.Button
-          aria-label={`${label}: ${selected?.label ?? ''}`}
-          className="app-button app-button-detail-request button-standard media-quality-select-control group min-w-0"
-        >
-          <AdjustmentsHorizontalIcon className="flex-none" aria-hidden="true" />
-          <span className="truncate">{label}</span>
-          <span className="media-quality-select-value font-semibold">
-            {selected?.label}
-          </span>
-          <ChevronDownIcon
-            className="media-quality-select-chevron"
-            aria-hidden="true"
-          />
-        </Listbox.Button>
-        <Transition
-          as={Fragment}
-          leave="transition ease-in duration-100"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <Listbox.Options className="media-quality-select-menu">
-            {options.map((option) => (
-              <Listbox.Option
-                key={option.value}
-                value={option}
-                className={({ active }) =>
-                  `media-quality-select-option ${
-                    active ? 'media-quality-select-option-active' : ''
-                  }`
-                }
-              >
-                {({ selected: optionSelected }) => (
-                  <>
-                    {optionSelected && (
-                      <CheckIcon
-                        className="media-quality-select-check"
-                        aria-hidden="true"
-                      />
-                    )}
-                    <span className="media-quality-select-option-label">
-                      {option.label}
-                    </span>
-                  </>
-                )}
-              </Listbox.Option>
-            ))}
-          </Listbox.Options>
-        </Transition>
-      </div>
-    </Listbox>
+    <FormatRequestControl
+      label={label ?? intl.formatMessage(messages.selectQuality)}
+      icon={<AdjustmentsHorizontalIcon aria-hidden="true" />}
+      className={`${firstAvailable === undefined ? 'media-quality-unavailable' : ''} ${className ?? ''}`}
+      options={options.map((option) => ({
+        id: option.value,
+        label: option.label,
+        selected: !option.disabled && option.value === value,
+        disabled: option.disabled,
+        disabledReason: intl.formatMessage(messages.unavailable),
+        description: intl.formatMessage(
+          purpose === 'issue'
+            ? messages.report
+            : purpose === 'request'
+              ? messages.request
+              : messages.select,
+          {
+            quality: option.label,
+          }
+        ),
+        onClick: () => {
+          if (!option.disabled) onChange(option.value);
+        },
+      }))}
+    />
   );
 };
 

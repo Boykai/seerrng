@@ -9,6 +9,7 @@ import { getRepository } from '@server/datasource';
 import OverrideRule from '@server/entity/OverrideRule';
 import type { User } from '@server/entity/User';
 import { getSettings } from '@server/lib/settings';
+import { languageCodesMatch } from '@server/utils/preferredLanguage';
 
 export const overrideRuleConditionFields = [
   'users',
@@ -95,6 +96,82 @@ export type OverrideRulesResult = {
   rootFolder: string | null;
   profileId: number | null;
   tags: number[] | null;
+};
+
+export type CatalogRuleMetadata = {
+  genres?: string[];
+  keywords?: string[];
+  languages?: string[];
+};
+
+const matchesCatalogTerms = (
+  configured: string | undefined,
+  available: string[] | undefined,
+  separator = ','
+): boolean =>
+  !hasConditionValue(configured) ||
+  (!!available?.length &&
+    configured!
+      .split(separator)
+      .some((value) =>
+        available.some(
+          (candidate) =>
+            candidate.trim().toLocaleLowerCase() ===
+            value.trim().toLocaleLowerCase()
+        )
+      ));
+
+export const catalogOverrideRuleMatches = (
+  rule: OverrideRule,
+  userId: number,
+  metadata: CatalogRuleMetadata = {}
+): boolean =>
+  overrideRuleMatchesUser(rule, userId) &&
+  matchesCatalogTerms(rule.genre, metadata.genres) &&
+  matchesCatalogTerms(rule.keywords, metadata.keywords) &&
+  (!hasConditionValue(rule.language) ||
+    (!!metadata.languages?.length &&
+      rule
+        .language!.split('|')
+        .some((language) =>
+          metadata.languages!.some((candidateLanguage) =>
+            languageCodesMatch(candidateLanguage, language)
+          )
+        )));
+
+export const evaluateRequesterOverrideRules = async ({
+  serviceField,
+  serviceId,
+  requestUser,
+  tags,
+  metadata,
+}: {
+  serviceField: 'lidarrServiceId' | 'readarrServiceId';
+  serviceId: number | undefined;
+  requestUser: User;
+  tags?: number[] | null;
+  metadata?: CatalogRuleMetadata;
+}): Promise<OverrideRulesResult> => {
+  const rules = serviceId
+    ? await getRepository(OverrideRule).find({
+        where: { [serviceField]: serviceId },
+      })
+    : [];
+  const rule = selectMostSpecificOverrideRule(
+    rules.filter((candidate) =>
+      catalogOverrideRuleMatches(candidate, requestUser.id, metadata)
+    )
+  );
+  const overrideTags = rule ? getOverrideRuleTagIds(rule) : [];
+
+  return {
+    rootFolder: rule?.rootFolder || null,
+    profileId: rule ? (getOverrideRuleProfileId(rule) ?? null) : null,
+    tags:
+      overrideTags.length > 0
+        ? [...new Set([...(tags ?? []), ...overrideTags])]
+        : (tags ?? null),
+  };
 };
 
 const hasTmdbKeyword = (media: TmdbMovieDetails | TmdbTvDetails): boolean => {

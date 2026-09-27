@@ -15,6 +15,41 @@ import SonarrAPI, {
   sanitizeSonarrSeries,
 } from './sonarr';
 
+describe('Sonarr deletion-check inventory', () => {
+  afterEach(() => mock.restoreAll());
+  it('rejects malformed records rather than interpreting them as missing series', async () => {
+    const api = new SonarrAPI({
+      url: 'http://localhost:8989/api/v3',
+      apiKey: 'test',
+    });
+    const transport = (api as unknown as { axios: AxiosInstance }).axios;
+    for (const data of [
+      {},
+      [null],
+      [{ id: 0, tvdbId: 33, title: 'Invalid' }],
+    ]) {
+      const get = mock.method(transport, 'get', async () => ({ data }));
+      await assert.rejects(api.getSeries({ strict: true }));
+      get.mock.restore();
+    }
+  });
+  it('accepts an empty result and filters by TVDB identity', async () => {
+    const api = new SonarrAPI({
+      url: 'http://localhost:8989/api/v3',
+      apiKey: 'test',
+    });
+    const get = mock.method(
+      (api as unknown as { axios: AxiosInstance }).axios,
+      'get',
+      async () => ({ data: [] })
+    );
+    assert.deepEqual(await api.getSeries({ strict: true, tvdbId: 33 }), []);
+    const options = get.mock.calls[0].arguments[1] as
+      { params?: { tvdbId?: number } } | undefined;
+    assert.equal(options?.params?.tvdbId, 33);
+  });
+});
+
 function buildSonarr(): SonarrAPI {
   return new SonarrAPI({ url: 'http://localhost:8989/api/v3', apiKey: 'test' });
 }

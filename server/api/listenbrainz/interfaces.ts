@@ -76,6 +76,7 @@ export interface LbListeningStats {
 }
 
 export interface LbAlbumDetails {
+  secondaryTypes?: string[];
   caa_id: number;
   caa_release_mbid: string;
   listening_stats: LbListeningStats;

@@ -69,6 +69,45 @@ export class JellyfinScanner
     this.isRecentOnly = isRecentOnly ?? false;
   }
 
+  /** Refresh a verified collection member, never enumerate or clean up a library. */
+  public async refreshCollectionMember(
+    id: string,
+    kind: 'tv' | 'music'
+  ): Promise<void> {
+    if (!/^[a-zA-Z0-9-]{1,128}$/.test(id))
+      throw new Error('Invalid collection member');
+    const settings = getSettings();
+    this.enable4kShow = true;
+    this.configurationSnapshot = captureConfigurationAuthority(
+      'jellyfin',
+      settings
+    );
+    this.jellyfinSettingsSnapshot = structuredClone(settings.jellyfin);
+    this.ownerAuthoritySnapshot = await captureMediaServerUserAuthority(
+      1,
+      'jellyfin'
+    );
+    if (!this.ownerAuthoritySnapshot.jellyfinUserId)
+      throw new Error('Media server owner unavailable');
+    this.jfClient = new JellyfinAPI(
+      getHostname(this.jellyfinSettingsSnapshot),
+      this.jellyfinSettingsSnapshot.apiKey,
+      this.ownerAuthoritySnapshot.jellyfinDeviceId
+    );
+    this.jfClient.setUserId(this.ownerAuthoritySnapshot.jellyfinUserId);
+    this.processedAnidbSeason = new Map();
+    const item = await this.withConfigurationSnapshot(() =>
+      this.jfClient.getItemData(id)
+    );
+    if (
+      item?.Id !== id ||
+      item.Type !== (kind === 'tv' ? 'Series' : 'MusicAlbum')
+    )
+      throw new Error('Collection member identity changed');
+    if (kind === 'tv') await this.processJellyfinShow(item);
+    else await this.processJellyfinMusic(item);
+  }
+
   private async extractMovieIds(jellyfinitem: JellyfinLibraryItem): Promise<{
     tmdbId: number;
     imdbId?: string;

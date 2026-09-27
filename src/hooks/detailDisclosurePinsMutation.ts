@@ -17,10 +17,16 @@ export class DetailDisclosurePinsMutationState {
   private key = '';
   private revision = 0;
   private value: DetailDisclosurePins = {
+    details: false,
+    advancedOptions: false,
+    collection: false,
     cast: false,
     crew: false,
     artists: false,
     subjectTags: false,
+    filters: false,
+    mediaFilters: false,
+    sortBy: false,
   };
 
   public synchronize(key: string, value: DetailDisclosurePins): void {

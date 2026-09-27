@@ -1,5 +1,7 @@
 import CachedImage from '@app/components/Common/CachedImage';
 import Modal from '@app/components/Common/Modal';
+import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
+import AdvancedOptionsDisclosureButton from '@app/components/RequestModal/AdvancedOptionsDisclosureButton';
 import type { RequestOverrides } from '@app/components/RequestModal/AdvancedRequester';
 import AdvancedRequester from '@app/components/RequestModal/AdvancedRequester';
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
@@ -10,19 +12,16 @@ import {
   createRequestDestination,
   isRequestDestinationAvailable,
   isRequestDestinationRequested,
+  isVideoQualityAvailable,
 } from '@app/components/RequestModal/requestAvailability';
+import useAdvancedOptionsDisclosure from '@app/hooks/useAdvancedOptionsDisclosure';
 import useToasts from '@app/hooks/useToasts';
 import { useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import { sortCrewPriority } from '@app/utils/creditHelpers';
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
-import {
-  AdjustmentsHorizontalIcon,
-  ArrowDownTrayIcon,
-  ChevronDownIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
@@ -43,8 +42,8 @@ const messages = defineMessages('components.RequestModal', {
   edit: 'Edit Request',
   approve: 'Approve Request',
   cancel: 'Cancel Request',
-  pendingrequest: 'Pending Movie Request',
-  pending4krequest: 'Pending 4K Movie Request',
+  pendingMovieRequest: 'Pending Movie Request',
+  pending4kMovieRequest: 'Pending 4K Movie Request',
   requestfrom: "{username}'s request is pending approval.",
   errorediting: 'Something went wrong while editing the request.',
   requestedited: 'Request for <strong>{title}</strong> edited successfully!',
@@ -61,8 +60,9 @@ const messages = defineMessages('components.RequestModal', {
   approval: 'Approval',
   requested: 'Requested',
   readyToRequest: 'Ready to Request',
-  notAvailable: 'Not available',
+  notAvailable: 'Not Available',
   advancedOptions: 'Advanced Options',
+  quality: 'Quality',
 });
 
 interface RequestModalProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -85,6 +85,8 @@ const MovieRequestModal = ({
   allow4kServerSelection = false,
 }: RequestModalProps) => {
   const [isUpdating, setIsUpdating] = useState(false);
+  const [selectedIs4k, setSelectedIs4k] = useState(is4k);
+  const [qualityRevision, setQualityRevision] = useState(0);
   const [requestOverrides, setRequestOverrides] =
     useState<RequestOverrides | null>(null);
   const { addToast } = useToasts();
@@ -110,10 +112,15 @@ const MovieRequestModal = ({
       revalidateOnFocus: false,
     }
   );
-  const [advancedOptionsOpen, setAdvancedOptionsOpen] = useState(true);
+  const {
+    open: advancedOptionsOpen,
+    pinned: advancedOptionsPinned,
+    toggleOpen: toggleAdvancedOptions,
+    togglePin: toggleAdvancedOptionsPin,
+  } = useAdvancedOptionsDisclosure('movie');
   const [requestedByPortal, setRequestedByPortal] =
     useState<HTMLDivElement | null>(null);
-  const effectiveIs4k = requestOverrides?.is4k ?? is4k;
+  const effectiveIs4k = requestOverrides?.is4k ?? selectedIs4k;
   const selectedService = radarrServers?.find(
     (server) => server.id === requestOverrides?.server
   );
@@ -128,7 +135,8 @@ const MovieRequestModal = ({
   );
   const selectedDestinationAvailable =
     !editRequest &&
-    isRequestDestinationAvailable(data?.mediaInfo, selectedDestination);
+    (isVideoQualityAvailable(data?.mediaInfo, 'movie', effectiveIs4k) ||
+      isRequestDestinationAvailable(data?.mediaInfo, selectedDestination));
   const selectedDestinationRequested =
     !editRequest &&
     isRequestDestinationRequested(
@@ -319,7 +327,7 @@ const MovieRequestModal = ({
         backgroundClickable
         onCancel={onCancel}
         title={intl.formatMessage(
-          is4k ? messages.pending4krequest : messages.pendingrequest
+          is4k ? messages.pending4kMovieRequest : messages.pendingMovieRequest
         )}
         subTitle={data?.title}
         onOk={() =>
@@ -330,6 +338,14 @@ const MovieRequestModal = ({
               : cancelRequest()
         }
         okDisabled={isUpdating}
+        okButtonProps={{
+          buttonIcon:
+            !hasPermission(Permission.MANAGE_REQUESTS) &&
+            !hasPermission(Permission.REQUEST_ADVANCED)
+              ? 'cancel'
+              : undefined,
+        }}
+        secondaryButtonProps={{ buttonIcon: 'cancel' }}
         okText={
           hasPermission(Permission.MANAGE_REQUESTS)
             ? intl.formatMessage(messages.approve)
@@ -366,42 +382,45 @@ const MovieRequestModal = ({
         secondaryButtonType="danger"
         cancelText={intl.formatMessage(globalMessages.close)}
         cancelButtonType="danger"
-        backdrop={
-          data?.backdropPath
-            ? `https://image.tmdb.org/t/p/original${data.backdropPath}`
-            : undefined
-        }
-        backdropFull
         alignTop
         actionButtonSize="standard"
-        dialogClass="refreshed-card-surface refreshed-detail-text !w-[calc(100%-2rem)] rounded-xl border border-gray-700 shadow-lg shadow-gray-950/20 sm:!max-w-5xl"
+        dialogClass="app-card-main request-modal-site-surface sm:max-w-5xl"
       >
-        <div className="refreshed-inset-surface rounded-lg border border-gray-700 p-3">
-          {isOwner
-            ? intl.formatMessage(messages.pendingapproval)
-            : intl.formatMessage(messages.requestfrom, {
-                username: editRequest.requestedBy.displayName,
-              })}
-        </div>
-        {(hasPermission(Permission.REQUEST_ADVANCED) ||
-          hasPermission(Permission.MANAGE_REQUESTS)) && (
-          <AdvancedRequester
-            type="movie"
-            tmdbId={tmdbId}
-            is4k={is4k}
-            requestUser={editRequest.requestedBy}
-            requestId={editRequest.id}
-            defaultOverrides={{
-              folder: editRequest.rootFolder,
-              profile: editRequest.profileId,
-              server: editRequest.serverId,
-              tags: editRequest.tags,
-            }}
-            onChange={(overrides) => {
-              setRequestOverrides(overrides);
-            }}
-          />
-        )}
+        <RequestMediaCard
+          artwork={
+            data?.backdropPath
+              ? `https://image.tmdb.org/t/p/original${data.backdropPath}`
+              : undefined
+          }
+          artworkType="tmdb"
+        >
+          <div className="app-card-inset refreshed-inset-surface rounded-lg border border-gray-700 p-3">
+            {isOwner
+              ? intl.formatMessage(messages.pendingapproval)
+              : intl.formatMessage(messages.requestfrom, {
+                  username: editRequest.requestedBy.displayName,
+                })}
+          </div>
+          {(hasPermission(Permission.REQUEST_ADVANCED) ||
+            hasPermission(Permission.MANAGE_REQUESTS)) && (
+            <AdvancedRequester
+              type="movie"
+              tmdbId={tmdbId}
+              is4k={is4k}
+              requestUser={editRequest.requestedBy}
+              requestId={editRequest.id}
+              defaultOverrides={{
+                folder: editRequest.rootFolder,
+                profile: editRequest.profileId,
+                server: editRequest.serverId,
+                tags: editRequest.tags,
+              }}
+              onChange={(overrides) => {
+                setRequestOverrides(overrides);
+              }}
+            />
+          )}
+        </RequestMediaCard>
       </Modal>
     );
   }
@@ -452,7 +471,7 @@ const MovieRequestModal = ({
       )}
       okText={requestButtonLabel}
       okButtonType={'primary'}
-      dialogClass="request-modal-site-surface sm:max-w-5xl"
+      dialogClass="app-card-main request-modal-site-surface sm:max-w-5xl"
     >
       {(quota?.movie.limit ?? 0) > 0 && (
         <QuotaDisplay
@@ -473,8 +492,8 @@ const MovieRequestModal = ({
         }
         artworkType="tmdb"
       >
-        <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[80px_minmax(0,1fr)]">
-          <div className="relative h-24 w-16 overflow-hidden rounded-lg ring-1 ring-gray-600 sm:h-[120px] sm:w-20">
+        <div className="app-card-inset refreshed-inset-surface detail-summary-card grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[80px_minmax(0,1fr)]">
+          <div className="detail-card-poster relative overflow-hidden rounded-lg ring-1 ring-gray-600">
             <CachedImage
               type="tmdb"
               src={
@@ -489,14 +508,14 @@ const MovieRequestModal = ({
           </div>
 
           <div className="flex min-w-0 flex-col">
-            <h3 className="-mt-0.5 truncate text-lg leading-5 font-semibold text-white">
+            <h3 className="detail-summary-title truncate text-lg leading-5 font-semibold text-white">
               {data?.title}
               {releaseYear ? ` (${releaseYear})` : ''}
             </h3>
 
-            <div className="card:grid-cols-3 mt-4 grid min-h-0 min-w-0 flex-1 grid-cols-1 items-stretch">
-              <div className="card:col-span-2 card:pr-3 min-w-0">
-                <dl className="card:grid-cols-[max-content_0.75rem_6rem_0.75rem_minmax(0,1fr)] card:gap-x-0 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-0.5 text-xs leading-4 text-gray-400">
+            <div className="detail-card-heading-spacing detail-three-column-grid grid min-h-0 min-w-0 flex-1 items-stretch">
+              <div className="detail-paired-column-span min-w-0">
+                <dl className="media-detail-rows detail-paired-columns refreshed-detail-text grid min-w-0 content-start text-xs">
                   <dt className="card:col-start-1 card:row-start-1 font-medium text-gray-100">
                     {intl.formatMessage(messages.mediaAndFormat)}:
                   </dt>
@@ -518,7 +537,7 @@ const MovieRequestModal = ({
                       : notAvailable}
                   </dd>
 
-                  <div className="media-detail-column-divider card:col-span-1 card:col-start-5 card:row-span-3 card:row-start-1 col-span-2 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-0.5">
+                  <div className="media-detail-rows media-detail-column-divider card:col-span-1 card:col-start-5 card:row-span-3 card:row-start-1 col-span-2 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3">
                     {featuredCrew.map((person) => (
                       <div
                         className="contents"
@@ -536,10 +555,10 @@ const MovieRequestModal = ({
                     <dd className="m-0 truncate">{studio}</dd>
                   </div>
 
-                  <dt className="card:col-start-1 card:row-start-4 mt-0.5 font-medium text-gray-100">
+                  <dt className="card:col-start-1 card:row-start-4 font-medium text-gray-100">
                     {intl.formatMessage(messages.genres)}:
                   </dt>
-                  <dd className="card:col-span-3 card:col-start-3 card:row-start-4 m-0 mt-0.5 line-clamp-2 min-w-0 break-words">
+                  <dd className="card:col-span-3 card:col-start-3 card:row-start-4 m-0 line-clamp-2 min-w-0 break-words">
                     {data?.genres?.length
                       ? data.genres
                           .slice(0, 3)
@@ -550,7 +569,7 @@ const MovieRequestModal = ({
                 </dl>
               </div>
 
-              <dl className="media-detail-column-divider grid h-full min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 gap-y-0.5 text-xs leading-4 text-gray-400">
+              <dl className="media-detail-rows media-detail-column-divider refreshed-detail-text grid h-full min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
                 <dt className="font-medium text-gray-100">
                   {intl.formatMessage(messages.status)}:
                 </dt>
@@ -586,10 +605,30 @@ const MovieRequestModal = ({
           </div>
         </div>
 
+        <div className="mt-2 flex items-center">
+          <MediaQualitySelect
+            value={effectiveIs4k ? '4k' : 'hd'}
+            options={[
+              { label: 'HD', value: 'hd' },
+              { label: '4K', value: '4k' },
+            ]}
+            onChange={(quality) => {
+              setSelectedIs4k(quality === '4k');
+              setRequestOverrides(null);
+              setQualityRevision((current) => current + 1);
+            }}
+            label={intl.formatMessage(messages.quality)}
+            autoSelectAvailable={false}
+            purpose="request"
+          />
+        </div>
+
         {canUseAdvancedOptions && (
           <AdvancedRequester
+            key={(selectedIs4k ? '4k' : 'hd') + '-' + qualityRevision}
             type="movie"
-            is4k={is4k}
+            tmdbId={tmdbId}
+            is4k={selectedIs4k}
             allow4kServerSelection={allow4kServerSelection}
             quota={quota}
             mediaTitle={data?.title}
@@ -607,22 +646,13 @@ const MovieRequestModal = ({
         <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
           <div className="mr-auto flex items-center gap-2">
             {canUseAdvancedOptions && (
-              <button
-                type="button"
-                className="request-form-control compact-control inline-flex items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium transition focus:ring-2 focus:ring-indigo-400 focus:outline-none focus:ring-inset"
-                aria-expanded={advancedOptionsOpen}
-                onClick={() => setAdvancedOptionsOpen((open) => !open)}
-              >
-                <AdjustmentsHorizontalIcon
-                  className="h-3.5 w-3.5"
-                  aria-hidden="true"
-                />
-                {intl.formatMessage(messages.advancedOptions)}
-                <ChevronDownIcon
-                  className={`h-3.5 w-3.5 transition-transform ${advancedOptionsOpen ? 'rotate-180' : ''}`}
-                  aria-hidden="true"
-                />
-              </button>
+              <AdvancedOptionsDisclosureButton
+                label={intl.formatMessage(messages.advancedOptions)}
+                open={advancedOptionsOpen}
+                pinned={advancedOptionsPinned}
+                onToggle={toggleAdvancedOptions}
+                onPin={toggleAdvancedOptionsPin}
+              />
             )}
           </div>
           <div
@@ -633,7 +663,7 @@ const MovieRequestModal = ({
             type="button"
             onClick={onCancel}
             data-testid="modal-cancel-button"
-            className="compact-control inline-flex items-center gap-1 rounded-md border border-red-600/80 bg-red-800/25 px-2 text-[11px] leading-none font-semibold text-red-200 transition hover:border-red-500 hover:text-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+            className="app-button app-button-danger button-standard"
           >
             <XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
             {intl.formatMessage(globalMessages.cancel)}
@@ -647,7 +677,7 @@ const MovieRequestModal = ({
               selectedDestinationCovered ||
               (quota?.movie.restricted && !requestOverrides?.ignoreQuota)
             }
-            className="compact-control inline-flex items-center gap-1 rounded-md border border-emerald-600/80 bg-emerald-800/25 px-2 text-[11px] leading-none font-semibold text-emerald-200 transition hover:border-emerald-500 hover:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+            className="app-button app-button-success button-standard"
           >
             <ArrowDownTrayIcon className="h-3.5 w-3.5" aria-hidden="true" />
             {requestButtonLabel}

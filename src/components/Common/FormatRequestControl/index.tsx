@@ -1,6 +1,7 @@
 import Tooltip from '@app/components/Common/Tooltip';
 import defineMessages from '@app/utils/defineMessages';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import type { ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.Common.FormatRequestControl', {
@@ -13,16 +14,22 @@ export interface FormatRequestOption {
   onClick: () => void;
   disabled?: boolean;
   disabledReason?: string;
+  selected?: boolean;
+  description?: string;
 }
 
 interface FormatRequestControlProps {
   options: FormatRequestOption[];
   className?: string;
+  label?: string;
+  icon?: ReactNode;
 }
 
 const FormatRequestControl = ({
   options,
   className,
+  label,
+  icon,
 }: FormatRequestControlProps) => {
   const intl = useIntl();
 
@@ -67,10 +74,12 @@ const FormatRequestControl = ({
     <div
       className={`format-request-control ${className ?? ''}`}
       data-testid="format-request-control"
+      role="group"
+      aria-label={label ?? intl.formatMessage(messages.request)}
     >
       <span className="format-request-label">
-        <ArrowDownTrayIcon className="h-4 w-4" />
-        {intl.formatMessage(messages.request)}
+        {icon ?? <ArrowDownTrayIcon aria-hidden="true" />}
+        {label ?? intl.formatMessage(messages.request)}
       </span>
       {options.map((option) => {
         const button = (
@@ -79,7 +88,11 @@ const FormatRequestControl = ({
             type="button"
             data-testid={`format-request-option-${option.id}`}
             disabled={option.disabled}
-            title={option.disabled ? option.disabledReason : undefined}
+            aria-pressed={option.selected}
+            data-button-help={option.description}
+            data-disabled-reason={
+              option.disabled ? option.disabledReason : undefined
+            }
             onClick={option.onClick}
             className="format-request-option"
           >
