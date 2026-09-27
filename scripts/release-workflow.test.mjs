@@ -399,7 +399,7 @@ test('a workflow dispatch can correct omitted notes for a published release', ()
   );
   assert.equal(
     correction.if,
-    "github.event_name == 'workflow_dispatch' && inputs.announce_security_correction == true"
+    "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.announce_security_correction == true"
   );
   assert.match(
     correction.steps.find((step) => step.name === 'Post omitted security notes')
