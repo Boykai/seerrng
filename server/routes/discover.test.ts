@@ -4386,6 +4386,33 @@ describe('GET /discover/magazines', () => {
     assert.strictEqual(res.body.results[0].title, 'Science Monthly');
   });
 
+  it('bounds concurrent requests across tracked catalogs', async () => {
+    getSettings().lazylibrarian = Array.from({ length: 5 }, (_, index) =>
+      magazineService(index + 1)
+    );
+    let activeRequests = 0;
+    let maximumActiveRequests = 0;
+    let calls = 0;
+    mock.method(LazyLibrarianAPI.prototype, 'getMagazines', async () => {
+      const call = ++calls;
+      activeRequests += 1;
+      maximumActiveRequests = Math.max(maximumActiveRequests, activeRequests);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      activeRequests -= 1;
+      return [{ title: 'Science Monthly ' + call }];
+    });
+
+    const agent = await login();
+    const res = await agent
+      .get('/discover/magazines')
+      .query({ catalog: 'tracked' });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(calls, 5);
+    assert.ok(maximumActiveRequests <= 2);
+    assert.strictEqual(res.body.results.length, 5);
+  });
+
   it('reports an unavailable catalog when every service fails', async () => {
     getSettings().lazylibrarian = [magazineService(1)];
     mock.method(LazyLibrarianAPI.prototype, 'getMagazines', async () => {

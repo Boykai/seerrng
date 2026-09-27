@@ -3927,27 +3927,43 @@ discoverRoutes.get('/magazines', async (req, res) => {
         serviceId: number;
       }
     >();
-    const catalogs = await Promise.allSettled(
-      settings.lazylibrarian.map((service) =>
-        runWithServarrServiceSnapshot(
-          'lazylibrarian',
-          service,
-          async (current) =>
-            (
-              await new LazyLibrarianAPI({
-                url: LazyLibrarianAPI.buildUrl(current),
-                apiKey: current.apiKey,
-              }).getMagazines()
-            ).map((magazine) => ({ ...magazine, serviceId: current.id }))
-        )
-      )
+    const configuredServices = [...settings.lazylibrarian];
+    const catalogs = await mapWithConcurrency(
+      configuredServices,
+      2,
+      async (service) => {
+        try {
+          const magazines = await runWithServarrServiceSnapshot(
+            'lazylibrarian',
+            service,
+            async (current) =>
+              (
+                await new LazyLibrarianAPI({
+                  url: LazyLibrarianAPI.buildUrl(current),
+                  apiKey: current.apiKey,
+                }).getMagazines()
+              ).map((magazine) => ({ ...magazine, serviceId: current.id }))
+          );
+          return {
+            status: 'fulfilled' as const,
+            serviceId: service.id,
+            value: magazines,
+          };
+        } catch (reason) {
+          return {
+            status: 'rejected' as const,
+            serviceId: service.id,
+            reason,
+          };
+        }
+      }
     );
     let availableCatalogs = 0;
-    for (const [index, catalog] of catalogs.entries()) {
+    for (const catalog of catalogs) {
       if (catalog.status === 'rejected') {
         logger.warn('Failed to fetch a LazyLibrarian magazine catalog', {
           label: 'Discover Magazines',
-          serviceId: settings.lazylibrarian[index].id,
+          serviceId: catalog.serviceId,
           ...getErrorLogFields(catalog.reason),
         });
         continue;
