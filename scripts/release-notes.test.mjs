@@ -73,6 +73,20 @@ test('release-note fragments reject unsupported metadata', () => {
   assert.match(note.errors.join('\n'), /not supported/u);
 });
 
+test('release-note areas require lowercase slugs without spaces', () => {
+  const invalid = parseReleaseNote(
+    'release-notes/library-removal.md',
+    validContent.replace('area: metadata', 'area: library management')
+  );
+  const valid = parseReleaseNote(
+    'release-notes/library-removal.md',
+    validContent.replace('area: metadata', 'area: library-removal')
+  );
+
+  assert.match(invalid.errors.join('\n'), /area must be a 2-32 character/u);
+  assert.deepEqual(valid.errors, []);
+});
+
 test('breaking notes require an explicit upgrade action', () => {
   const note = parseReleaseNote(
     'release-notes/breaking.md',
