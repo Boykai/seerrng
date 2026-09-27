@@ -18,7 +18,7 @@ import type {
   CollectorServiceSettings,
   DVRSettings,
 } from '@server/lib/settings';
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 
 export const libraryServiceType = (
   type: MediaType,
@@ -64,7 +64,7 @@ export const libraryPlanToken = (
   targets: LibraryCopy[],
   authority: unknown
 ) =>
-  createHash('sha256')
+  createHmac('sha256', getExternalRuntimeConfig().main.apiKey)
     .update(
       JSON.stringify({
         mediaId,
