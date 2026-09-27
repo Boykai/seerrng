@@ -1,7 +1,7 @@
 ---
 category: security
 audience: operators
-area: library management
+area: library-removal
 action: none
 breaking: false
 ---
