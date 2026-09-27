@@ -156,33 +156,72 @@ const searchLazyLibrarianCatalogs = async (
   query: string,
   page: number
 ): Promise<MagazineCatalogSearchResults> => {
-  const settled = await Promise.allSettled(
-    services.map((service) =>
-      runWithServarrServiceSnapshot('lazylibrarian', service, async (current) =>
-        (
-          await new LazyLibrarianAPI({
-            url: LazyLibrarianAPI.buildUrl(current),
-            apiKey: current.apiKey,
-          }).getMagazines()
-        ).map((magazine) => ({ ...magazine, serviceId: current.id }))
-      )
-    )
+  type CatalogOutcome =
+    | {
+        status: 'fulfilled';
+        index: number;
+        value: (LazyLibrarianMagazine & { serviceId: number })[];
+      }
+    | { status: 'rejected'; index: number; reason: unknown };
+  const completed: CatalogOutcome[] = [];
+  let nextService = 0;
+  let deadlineReached = false;
+  const workers = Array.from(
+    { length: Math.min(2, services.length) },
+    async () => {
+      while (!deadlineReached && nextService < services.length) {
+        const index = nextService++;
+        const service = services[index];
+        try {
+          const magazines = await runWithServarrServiceSnapshot(
+            'lazylibrarian',
+            service,
+            async (current) =>
+              (
+                await new LazyLibrarianAPI({
+                  url: LazyLibrarianAPI.buildUrl(current),
+                  apiKey: current.apiKey,
+                }).getMagazines()
+              ).map((magazine) => ({ ...magazine, serviceId: current.id }))
+          );
+          completed.push({ status: 'fulfilled', index, value: magazines });
+        } catch (reason) {
+          completed.push({ status: 'rejected', index, reason });
+        }
+      }
+    }
+  );
+  const { timedOut } = await settlePromisesWithin(
+    [Promise.all(workers)],
+    SEARCH_PROVIDER_TIMEOUT_MS - 1_000
+  );
+  deadlineReached = true;
+  const settled = [...completed].sort(
+    (left, right) => left.index - right.index
   );
   const successful = settled.flatMap((result) =>
     result.status === 'fulfilled' ? [result.value] : []
   );
   const failures = settled.filter(
-    (result): result is PromiseRejectedResult => result.status === 'rejected'
+    (result): result is Extract<CatalogOutcome, { status: 'rejected' }> =>
+      result.status === 'rejected'
   );
 
-  if (successful.length === 0 && failures.length > 0) {
-    throw failures[0].reason;
+  if (successful.length === 0 && (failures.length > 0 || timedOut)) {
+    throw failures[0]?.reason ?? new Error('Magazine search timed out.');
   }
-  if (failures.length > 0) {
-    logger.warn('Some LazyLibrarian instances failed during magazine search', {
-      label: 'Search',
-      failedServices: failures.map(({ reason }) => getHttpErrorDetails(reason)),
-    });
+  if (failures.length > 0 || timedOut) {
+    logger.warn(
+      'Some LazyLibrarian instances failed or timed out during magazine search',
+      {
+        label: 'Search',
+        failedServices: failures.map(({ index, reason }) => ({
+          serviceId: services[index].id,
+          ...getHttpErrorDetails(reason),
+        })),
+        timedOut,
+      }
+    );
   }
 
   const magazinesByTitle = new Map<

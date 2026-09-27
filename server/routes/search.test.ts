@@ -4,6 +4,9 @@ import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
 import ComicVineAPI from '@server/api/comicvine';
 import ExternalAPI from '@server/api/externalapi';
+import LazyLibrarianAPI, {
+  type LazyLibrarianMagazine,
+} from '@server/api/lazylibrarian';
 import MusicBrainz from '@server/api/musicbrainz';
 import OpenLibraryAPI from '@server/api/openlibrary';
 import ReadarrAPI from '@server/api/servarr/readarr';
@@ -19,6 +22,7 @@ import MetadataAlbum from '@server/entity/MetadataAlbum';
 import MetadataArtist from '@server/entity/MetadataArtist';
 import {
   getSettings,
+  type LazyLibrarianSettings,
   type LidarrSettings,
   type ReadarrSettings,
 } from '@server/lib/settings';
@@ -147,6 +151,7 @@ afterEach(async () => {
   mock.restoreAll();
   getSettings().lidarr = [];
   getSettings().readarr = [];
+  getSettings().lazylibrarian = [];
 });
 
 setupTestDb();
@@ -178,6 +183,19 @@ async function loginAs(email: string, password: string) {
 }
 
 describe('GET /search', () => {
+  const magazineService = (id: number): LazyLibrarianSettings => ({
+    id,
+    name: `LazyLibrarian ${id}`,
+    hostname: `lazylibrarian-${id}.test`,
+    port: 5299,
+    apiKey: 'test-key',
+    useSsl: false,
+    isDefault: id === 1,
+    tags: [],
+    syncEnabled: false,
+    preventSearch: false,
+  });
+
   it('omits optional catalog providers without configured services', async () => {
     const settings = getSettings();
     const priorLidarr = settings.lidarr;
@@ -218,6 +236,87 @@ describe('GET /search', () => {
       settings.lidarr = priorLidarr;
       settings.readarr = priorReadarr;
     }
+  });
+
+  it('keeps healthy magazine matches when another catalog stalls', async () => {
+    getSettings().lazylibrarian = [magazineService(1), magazineService(2)];
+    let releaseStalledCatalog!: (value: LazyLibrarianMagazine[]) => void;
+    const stalledCatalog = new Promise<LazyLibrarianMagazine[]>((resolve) => {
+      releaseStalledCatalog = resolve;
+    });
+    let calls = 0;
+    mock.method(LazyLibrarianAPI.prototype, 'getMagazines', () =>
+      ++calls === 1
+        ? Promise.resolve([{ title: 'Science Monthly' }])
+        : stalledCatalog
+    );
+
+    try {
+      const agent = await loginAs('friend@seerr.dev', 'test1234');
+      const res = await agent
+        .get('/search')
+        .query({ query: 'Science', type: 'magazine' });
+
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.results[0]?.title, 'Science Monthly');
+    } finally {
+      releaseStalledCatalog([]);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+  });
+
+  it('limits concurrent magazine catalog lookups in global search', async () => {
+    getSettings().lazylibrarian = [1, 2, 3, 4, 5].map(magazineService);
+    let active = 0;
+    let peak = 0;
+    const getMagazines = mock.method(
+      LazyLibrarianAPI.prototype,
+      'getMagazines',
+      async () => {
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        active -= 1;
+        return [{ title: 'Science Monthly' }];
+      }
+    );
+
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const res = await agent
+      .get('/search')
+      .query({ query: 'Science', type: 'magazine' });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(getMagazines.mock.callCount(), 5);
+    assert.ok(peak <= 2, `expected at most two lookups, saw ${peak}`);
+  });
+
+  it('keeps configured service order when magazine titles overlap', async () => {
+    getSettings().lazylibrarian = [magazineService(1), magazineService(2)];
+    let calls = 0;
+    mock.method(LazyLibrarianAPI.prototype, 'getMagazines', async () => {
+      const call = ++calls;
+      if (call === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }
+      return [
+        {
+          title: 'Science Monthly',
+          latestCover: `cache/magazine/${(call === 1 ? 'a' : 'b').repeat(40)}.jpg`,
+        },
+      ];
+    });
+
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const res = await agent
+      .get('/search')
+      .query({ query: 'Science', type: 'magazine' });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(
+      res.body.results[0]?.posterPath,
+      `/api/v1/magazine/cover/1/${'a'.repeat(40)}`
+    );
   });
 
   it('returns comics from ComicVine, merges local media, and respects the comic type filter', async () => {
