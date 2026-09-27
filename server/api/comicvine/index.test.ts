@@ -181,3 +181,57 @@ describe('ComicVineAPI.getVolume', () => {
     assert.strictEqual(volume, undefined);
   });
 });
+
+describe('ComicVineAPI.getVolumeIssues', () => {
+  afterEach(() => {
+    mock.restoreAll();
+  });
+
+  it('fetches a bounded volume page and sanitizes issue art', async () => {
+    const getMock = mockGet(async () => ({
+      offset: 20,
+      number_of_total_results: 42,
+      results: [
+        {
+          id: 123,
+          name: 'The Return',
+          issue_number: '21',
+          cover_date: '2025-09-01',
+          image: {
+            medium_url: 'https://comicvine.gamespot.com/a/uploads/cover.jpg',
+          },
+        },
+        {
+          id: 124,
+          image: { medium_url: 'https://evil.example.com/cover.jpg' },
+        },
+        { name: 'No ID' },
+      ],
+    }));
+
+    const response = await new ComicVineAPI('key').getVolumeIssues({
+      volumeId: 4567,
+      page: 2,
+    });
+
+    assert.strictEqual(getMock.mock.calls[0].arguments[0], '/issues/');
+    assert.deepStrictEqual(getMock.mock.calls[0].arguments[1], {
+      params: {
+        filter: 'volume:4567',
+        limit: 20,
+        offset: 20,
+        field_list: 'id,name,issue_number,cover_date,image',
+      },
+    });
+    assert.strictEqual(response.number_of_total_results, 42);
+    assert.strictEqual(response.results.length, 2);
+    assert.strictEqual(response.results[0].issue_number, '21');
+    assert.strictEqual(response.results[1].image, undefined);
+  });
+
+  it('rejects invalid volume IDs and pages', async () => {
+    const api = new ComicVineAPI('key');
+    await assert.rejects(() => api.getVolumeIssues({ volumeId: 0 }));
+    await assert.rejects(() => api.getVolumeIssues({ volumeId: 1, page: 0 }));
+  });
+});

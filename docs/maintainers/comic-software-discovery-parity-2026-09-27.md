@@ -5,7 +5,7 @@ This audit compares the current comic, ROM, and PC game discovery paths with mov
 | Capability | Movies and TV | Comics | ROMs and PC games |
 | --- | --- | --- | --- |
 | Catalog lookup | TMDB discover and search | ComicVine volume search | QuestarrNG IGDB search and popular; ROMarrNG systems constrain ROM requests |
-| Incremental results | Paginated `useDiscover` list | Paginated `useDiscover` list | Cursor-paged search and offset-paged popular titles with platform filtering when QuestarrNG supports the new contract; older builds retain the first window |
+| Incremental results | Paginated `useDiscover` list | Paginated `useDiscover` volume search and lazy, paged back-issue list | Cursor-paged search and offset-paged popular titles with platform filtering when QuestarrNG supports the new contract; older builds retain the first window |
 | Returning from details | Loaded pages and scroll restored | Loaded pages and scroll restored | No game detail page; software catalog request modal stays on the catalog |
 | Metadata cache | Bounded TMDB cache | Bounded ComicVine cache | Bounded 10-minute QuestarrNG catalog cache and 5-minute ROMarrNG system cache |
 | Covers | Lazy browser images, optional image proxy, bounded prewarming | Same path for ComicVine hosts | Same path for IGDB covers |
@@ -18,4 +18,4 @@ This audit compares the current comic, ROM, and PC game discovery paths with mov
 3. **Game detail and global search.** Software catalog cards open a request modal; they have no persistent detail route or entries in SeerrNG's global search. Add catalog game detail and global search after the paged provider contract exists, preserving selected ROM system or PC target through navigation.
 4. **Availability outside requests.** Software request status tracks SeerrNG-created acquisitions. The catalog does not yet merge an existing QuestarrNG or ROMarrNG library inventory into per-title availability the way movie and TV cards do with their media libraries.
 
-ComicVine volume discovery is paged and cached, but its issue list is a bounded summary. Per-issue catalog browsing would need a separate ComicVine issue lookup and a request model that distinguishes full-volume requests from issue-specific requests.
+ComicVine volume discovery and back-issue browsing are paged and cached. Requests still acquire full volumes; issue-specific acquisition needs a request model that distinguishes an issue from its parent volume.

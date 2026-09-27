@@ -52,6 +52,10 @@ Mirror-host downloads are generally reliable; direct-site downloads are not.
 ## Full volumes and back issues
 
 SeerrNG requests a complete ComicVine volume, not individual issue numbers.
+Open a comic's detail page to browse its back issues, including cover art and
+cover dates when ComicVine provides them. The issue list loads when you reach
+it and continues in pages of 20 with **Load more issues**. Browsing an issue
+does not submit an individual issue request.
 Mylar3 or Kapowarr receives that volume and handles its issue searches. Older
 issues can be acquired when the selected backend is configured to search for
 them; SeerrNG does not override those backend settings. Enable **Sync** to

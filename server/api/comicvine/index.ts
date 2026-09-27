@@ -121,6 +121,8 @@ export interface ComicVineIssueSummary {
   id: number;
   name?: string;
   issue_number?: string;
+  cover_date?: string;
+  image?: ComicVineImage;
 }
 
 const sanitizeIssueSummary = (
@@ -135,6 +137,8 @@ const sanitizeIssueSummary = (
         id,
         name: boundedString(value.name),
         issue_number: boundedString(value.issue_number, 32),
+        cover_date: boundedString(value.cover_date, 10),
+        image: sanitizeImage(value.image),
       }
     : undefined;
 };
@@ -210,6 +214,12 @@ export interface ComicVineSearchResponse {
   results: ComicVineVolumeResult[];
 }
 
+export interface ComicVineIssuesResponse {
+  offset: number;
+  number_of_total_results: number;
+  results: ComicVineIssueSummary[];
+}
+
 class ComicVineAPI extends ExternalAPI {
   constructor(apiKey: string) {
     super(
@@ -224,6 +234,50 @@ class ComicVineAPI extends ExternalAPI {
         },
       }
     );
+  }
+
+  public async getVolumeIssues({
+    volumeId,
+    page = 1,
+    limit = 20,
+  }: {
+    volumeId: number;
+    page?: number;
+    limit?: number;
+  }): Promise<ComicVineIssuesResponse> {
+    if (!Number.isSafeInteger(volumeId) || volumeId <= 0) {
+      throw new Error('ComicVine volume ID is invalid.');
+    }
+    if (!Number.isSafeInteger(page) || page < 1) {
+      throw new Error('ComicVine issue page is invalid.');
+    }
+    const boundedLimit = Math.min(Math.max(1, limit), MAX_COMICVINE_PAGE_SIZE);
+    const offset = Math.max(0, (page - 1) * boundedLimit);
+    const response = await this.get<ComicVineIssuesResponse>(
+      '/issues/',
+      {
+        params: {
+          filter: `volume:${volumeId}`,
+          limit: boundedLimit,
+          offset,
+          field_list: 'id,name,issue_number,cover_date,image',
+        },
+      },
+      43200
+    );
+    if (!isRecord(response)) {
+      throw new Error('ComicVine returned an invalid issue response.');
+    }
+    return {
+      offset: boundedInteger(response.offset) ?? offset,
+      number_of_total_results:
+        boundedInteger(response.number_of_total_results) ?? 0,
+      results: Array.isArray(response.results)
+        ? response.results
+            .map(sanitizeIssueSummary)
+            .filter((issue): issue is ComicVineIssueSummary => !!issue)
+        : [],
+    };
   }
 
   public async searchVolumes({

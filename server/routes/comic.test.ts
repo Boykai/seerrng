@@ -162,3 +162,49 @@ describe('GET /comic/:id', () => {
     assert.strictEqual(getVolume.mock.callCount(), 0);
   });
 });
+
+describe('GET /comic/:id/issues', () => {
+  it('returns a paged list of back issues with cover metadata', async () => {
+    getSettings().main.comicVineApiKey = 'test-comicvine-key';
+    const getIssues = mock.method(
+      ComicVineAPI.prototype,
+      'getVolumeIssues',
+      async () => ({
+        offset: 20,
+        number_of_total_results: 41,
+        results: [
+          {
+            id: 22,
+            name: 'A back issue',
+            issue_number: '22',
+            cover_date: '2025-09-01',
+          },
+        ],
+      })
+    );
+
+    const agent = await login();
+    const res = await agent.get('/comic/4567/issues?page=2');
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(getIssues.mock.calls[0].arguments[0], {
+      volumeId: 4567,
+      page: 2,
+      limit: 20,
+    });
+    assert.strictEqual(res.body.totalPages, 3);
+    assert.strictEqual(res.body.results[0].issueNumber, '22');
+    assert.strictEqual(res.body.results[0].coverDate, '2025-09-01');
+  });
+
+  it('does not call ComicVine for a malformed volume ID', async () => {
+    getSettings().main.comicVineApiKey = 'test-comicvine-key';
+    const getIssues = mock.method(ComicVineAPI.prototype, 'getVolumeIssues');
+
+    const agent = await login();
+    const res = await agent.get('/comic/not-a-number/issues');
+
+    assert.strictEqual(res.status, 404);
+    assert.strictEqual(getIssues.mock.callCount(), 0);
+  });
+});

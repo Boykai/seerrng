@@ -35,13 +35,25 @@ import {
 import { UserType } from '@server/constants/user';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
-import type { ComicDetails as ComicDetailsType } from '@server/models/Comic';
+import type {
+  ComicDetails as ComicDetailsType,
+  ComicIssueReference,
+} from '@server/models/Comic';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
+import { useInView } from 'react-intersection-observer';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
+import useSWRInfinite from 'swr/infinite';
+
+interface ComicIssuePage {
+  page: number;
+  totalPages: number;
+  totalResults: number;
+  results: ComicIssueReference[];
+}
 
 const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
   ssr: false,
@@ -65,6 +77,9 @@ const messages = defineMessages('components.ComicDetails', {
   manage: 'Manage Comic',
   reportissue: 'Report an Issue',
   openissues: 'Open Issues',
+  volumeIssues: 'Issues in this volume',
+  loadMoreIssues: 'Load more issues',
+  issueListUnavailable: 'The issue list could not be loaded right now.',
   watchlistSuccess: '<strong>{title}</strong> added to watchlist successfully!',
   watchlistDeleted:
     '<strong>{title}</strong> Removed from watchlist successfully!',
@@ -97,6 +112,30 @@ const ComicDetails = () => {
   } = useSWR<ComicDetailsType>(
     comicId ? `/api/v1/comic/${encodeApiPathSegment(comicId)}` : null
   );
+  const { ref: volumeIssuesRef, inView: volumeIssuesInView } = useInView({
+    rootMargin: '400px',
+    triggerOnce: true,
+  });
+  const {
+    data: issuePages,
+    error: issueListError,
+    isLoading: issueListLoading,
+    size: issuePageCount,
+    setSize: setIssuePageCount,
+  } = useSWRInfinite<ComicIssuePage>(
+    (pageIndex, previousPage) => {
+      if (!comicId || !volumeIssuesInView || !data?.issueCount) return null;
+      if (previousPage && pageIndex + 1 > previousPage.totalPages) return null;
+      return `/api/v1/comic/${encodeApiPathSegment(comicId)}/issues?page=${pageIndex + 1}`;
+    },
+    { revalidateFirstPage: false, revalidateOnFocus: false }
+  );
+  const volumeIssues = issuePages?.flatMap((page) => page.results) ?? [];
+  const lastIssuePage = issuePages?.[issuePages.length - 1];
+  const hasMoreVolumeIssues =
+    lastIssuePage !== undefined &&
+    lastIssuePage.page < lastIssuePage.totalPages;
+  const loadingMoreIssues = issuePageCount > (issuePages?.length ?? 0);
 
   useEffect(() => {
     setShowManager(router.query.manage === '1');
@@ -535,6 +574,72 @@ const ComicDetails = () => {
                   intl.formatMessage(messages.overviewUnavailable)}
               </p>
             </section>
+            {(data.issueCount ?? 0) > 0 && (
+              <section
+                ref={volumeIssuesRef}
+                className="app-card-inset refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3"
+              >
+                <h2 className="media-inset-heading">
+                  {intl.formatMessage(messages.volumeIssues)}
+                </h2>
+                {issueListError ? (
+                  <p className="mt-3 text-sm text-gray-400">
+                    {intl.formatMessage(messages.issueListUnavailable)}
+                  </p>
+                ) : issueListLoading ? (
+                  <LoadingSpinner />
+                ) : (
+                  <>
+                    <ol className="mt-3 divide-y divide-gray-700">
+                      {volumeIssues.map((issue) => (
+                        <li
+                          key={issue.id}
+                          className="flex items-center gap-3 py-2"
+                        >
+                          <div className="relative h-14 w-10 shrink-0 overflow-hidden rounded bg-gray-900">
+                            <CachedImage
+                              type="tmdb"
+                              src={
+                                issue.coverUrl ||
+                                '/images/seerr_poster_not_found.png'
+                              }
+                              alt=""
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0 text-sm">
+                            <p className="font-medium text-gray-100">
+                              #{issue.issueNumber || '?'}
+                              {issue.name ? ` · ${issue.name}` : ''}
+                            </p>
+                            {issue.coverDate && (
+                              <p className="text-xs text-gray-400">
+                                {issue.coverDate}
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                    {hasMoreVolumeIssues && (
+                      <div className="mt-3 flex justify-center">
+                        <Button
+                          buttonType="ghost"
+                          buttonSize="sm"
+                          disabled={loadingMoreIssues}
+                          onClick={() =>
+                            void setIssuePageCount((count) => count + 1)
+                          }
+                        >
+                          {intl.formatMessage(messages.loadMoreIssues)}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
+            )}
             {hasPermission([Permission.MANAGE_ISSUES, Permission.VIEW_ISSUES], {
               type: 'or',
             }) &&

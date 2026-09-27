@@ -10,12 +10,55 @@ import { enqueueImageCacheWarm } from '@server/lib/imageCacheWarmer';
 import { hydrateMediaSummaryRelations } from '@server/lib/mediaSummaryHydration';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
-import { mapComicVineVolumeDetails } from '@server/models/Comic';
+import {
+  mapComicVineIssueResult,
+  mapComicVineVolumeDetails,
+} from '@server/models/Comic';
 import { filterEntityResponse } from '@server/utils/entityResponse';
+import { parsePositiveInt } from '@server/utils/pagination';
 import { parsePositiveRouteId } from '@server/utils/routeId';
 import { Router } from 'express';
 
 const comicRoutes = Router();
+
+comicRoutes.get('/:id/issues', async (req, res) => {
+  const comicVineId = parsePositiveRouteId(req.params.id);
+  if (comicVineId === undefined) {
+    return res.status(404).json({ status: 404, message: 'Comic not found' });
+  }
+  const { comicVineApiKey } = getSettings().main;
+  if (!comicVineApiKey) {
+    return res
+      .status(503)
+      .json({ status: 503, message: 'ComicVine is not configured.' });
+  }
+  const page = parsePositiveInt(req.query.page, 1, 500);
+  const itemsPerPage = 20;
+  try {
+    const response = await new ComicVineAPI(comicVineApiKey).getVolumeIssues({
+      volumeId: comicVineId,
+      page,
+      limit: itemsPerPage,
+    });
+    const results = response.results.map(mapComicVineIssueResult);
+    enqueueImageCacheWarm(extractImageCacheUrls(results));
+    return res.status(200).json({
+      page,
+      totalPages: Math.ceil(response.number_of_total_results / itemsPerPage),
+      totalResults: response.number_of_total_results,
+      results,
+    });
+  } catch (error) {
+    logger.error('Failed to retrieve comic issues', {
+      label: 'Comic',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      comicVineId,
+    });
+    return res
+      .status(503)
+      .json({ status: 503, message: 'Unable to retrieve comic issues.' });
+  }
+});
 
 comicRoutes.get('/:id', async (req, res, next) => {
   const comicVineId = parsePositiveRouteId(req.params.id);
