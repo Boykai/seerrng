@@ -104,6 +104,105 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.29.0](https://github.com/snapetech/seerrng/compare/v3.28.0..v3.29.0) - 2026-09-27
+
+### User-facing changes
+
+#### Added
+
+- **Requests:** Available requests can now offer a secure Download copy action in Request Status. Users can save verified imported files, while operators map file-backed libraries or use Mylar's authenticated issue stream.
+  - **Action required:** Configure read-only library path mappings for file-based backends in Settings > Main > Download Copies.
+- **Magazines:** Magazine discovery now includes a Google Books public catalog beside LazyLibrarian tracked titles. Search public titles with an API key; LazyLibrarian remains the request and issue tracking service.
+  - **Action required:** Add a Google Books API key in Settings > Main to enable public catalog searches; configure LazyLibrarian to submit requests and track issues.
+- **Comics:** Comic requests dispatched to Kapowarr now show live download progress (percent, size, and status) on the Requests page and in Manage, the same as movies, TV, music, and books.
+- **Comics:** Comics can now be added to your SeerrNG watchlist, with an optional per-user setting to auto-request a watchlisted comic once it becomes available.
+- **Bookshelf:** Administrators now get a direct link to create a Hardcover API token and a reminder that self-hosted services use one configured token for all connected SeerrNG users. The README explains where a personal token applies and that a shared hosted metadata endpoint controls its own upstream access.
+- **Media Categories:** Administrators can independently show or hide Movies, Series, Music, Books, Audiobooks, Comics, Magazines, Retro, Modern, and PC Games. Disabled categories disappear from browsing and reject new requests while existing requests and available download copies remain accessible.
+- **Software Requests:** Users can browse and request emulation games and PC games, follow acquisition status, receive availability notifications, and download verified files from Request Status.
+  - **Action required:** Configure QuestarrNG and, for emulation requests, ROMarrNG.
+- **Media:** Software requests now support quotas, pending withdrawal, paginated status history, and request updates through notification channels. Advanced comic requests can select a Kapowarr root folder. Fresh BookshelfNG deployments can use one instance for ebooks and audiobooks.
+
+#### Changed
+
+- **Software Requests:** The README now indexes the software guides, which explain provider setup, target selection, request progress, safe retries, availability notifications, and Download copy for ROMs and PC games.
+- **Bookshelf:** Fresh SeerrNG Bookshelf deployments now run one BookshelfNG process for ebooks and audiobooks. Use separate format-specific service entries with the same URL and API key; existing audiobook databases keep their split deployment unless migrated explicitly.
+- **Comics Magazines:** Users can manage comics and magazines with SeerrNG watchlists, blocklists, issue reports, and magazine covers. Administrators can grant format-specific request and auto-request permissions, choose magazine services, and set per-user magazine request limits.
+- **Media Requests:** SeerrNG now shows where indexer searches run by category and where Prowlarr can supply indexers. Book, comic, and magazine issue reports now include specific reasons that remain visible on issue cards and details.
+- **Software Requests:** Software requesters can cancel active QuestarrNG work and ROMarrNG requests before download handoff. SeerrNG asks users to check for duplicate downloads after an interrupted QuestarrNG or ROMarrNG handoff, and can show available titles without a local download copy.
+- **Yunohost:** The SeerrNG YunoHost package now lives in a catalog-ready repository, and installation instructions point to that source. YunoHost's updater proposes stable release archive and checksum updates for administrators to apply through the normal app upgrade flow.
+
+#### Fixed
+
+- **Request Status:** Available media notifications use their Request Status link only after the request is saved, preventing links with a missing request ID.
+- **Software Requests:** After administrators save software provider settings, SeerrNG reloads ROMarrNG's supported systems so they can assign Retro or Modern in the same settings visit.
+- **Software Requests:** Software provider settings and catalog pages now reach their documented APIs, allowing administrators to connect services and users to browse ROM and PC game titles.
+- **Software Requests:** The request dialog now opens when users select a ROM or PC game, so they can choose the emulation system or PC target before submitting.
+- **Software Requests:** Platform and PC target details on software request cards now use SeerrNG's shared detail text style for consistent readability.
+- **Software Requests:** Request Status now explains that its empty state applies to movies, shows, music, books, comics, and magazines when software requests are listed separately above.
+- **Comics:** Editing a comic request from Manage no longer opens a broken movie-shaped request form, and its "Destination Server" override now resolves against the correct Mylar/Kapowarr server instead of Sonarr.
+- **Comics:** Approved comic requests now automatically move to Completed and send the "now available" notification once the comic finishes downloading, instead of staying stuck on Approved forever.
+- **Comics:** Filtering the Requests page by Comics (or Magazines) now actually filters the list instead of silently showing every request, and comic requests can now be removed from the Requests list like other media types.
+- **Comics:** Comic requests on the Requests page now show their issue count and publisher instead of a blank movie-style "Director"/"Studio" placeholder, and can be sorted by publisher or release year like books.
+- **Comics:** Comic requests now show correct in-library/downloading status instead of getting stuck on "Approved", a blocklisted or watchlisted comic no longer gets stuck loading in Manage, and cancelling an in-progress Kapowarr comic download now actually removes it from the queue instead of failing.
+- **Bookshelf:** Bookshelf-backed search and series results now open the correct book details instead of returning Book not found for numeric catalog identifiers.
+- **Bookshelf:** Bookshelf backup restore now completes with automatic backend selection. Fresh deployments continue to use one combined instance for ebooks and audiobooks; choose split mode only when you need isolated instances.
+- **Deployment:** Fresh production builds now resolve SeerrNG's internal server modules correctly, allowing containers and package installs to start after an upgrade.
+- **Books:** Book details now read series membership from the exact linked Bookshelf library record, so populated ebook or audiobook series fields show their link even when catalog lookup omits them. The series page now includes those library books too.
+- **Software Requests:** Request Status displays PC game operating system and architecture targets with human-readable labels such as Linux and ARM64.
+
+### 🚀 Features
+- *(bookshelf)* Default fresh deployments to one instance - ([260da85](https://github.com/snapetech/seerrng/commit/260da85b0cb937fc520d94526edc99177663c1f6))
+- *(comics)* Add live Kapowarr download progress tracking - ([1bca6e9](https://github.com/snapetech/seerrng/commit/1bca6e9060fcc246e2dfc447fc8eab2699a57b29))
+- *(comics)* Add full watchlist support - ([5b0a8fd](https://github.com/snapetech/seerrng/commit/5b0a8fd49f3e777adce1cf043ff8259a7b110ff6))
+- *(comics-magazines)* Complete user workflows - ([652304d](https://github.com/snapetech/seerrng/commit/652304dbdb60480c3144eca2ee9f80357f65e4c0))
+- *(magazines)* Add public catalog discovery and close release blockers - ([387ec52](https://github.com/snapetech/seerrng/commit/387ec529692849c594c783e23a6ded2b59ef2b37))
+- *(media)* Close cross-media search and lifecycle gaps - ([306ee70](https://github.com/snapetech/seerrng/commit/306ee704179ce532a98ad0551b277b2547a8acd3))
+- *(media)* Improve software and comic request parity - ([e2c0be2](https://github.com/snapetech/seerrng/commit/e2c0be295a683853c5f8dedf94e74d82e955c618))
+- *(settings)* Guide admins through Hardcover token setup - ([62d7b10](https://github.com/snapetech/seerrng/commit/62d7b10f431dc1f3cbe399ac1f617e5c9e52cc3d))
+- Add admin media category controls - ([a4ae39d](https://github.com/snapetech/seerrng/commit/a4ae39d42927f204fefdf001b40cf237fa8062de))
+- Add ROM and PC game acquisition - ([5e657a8](https://github.com/snapetech/seerrng/commit/5e657a8e0d6918f63e71dbbe251f4bfab68b9393))
+- Offer request downloads in status - ([757e4b0](https://github.com/snapetech/seerrng/commit/757e4b00d41376472adce515f817353fdcd7ebeb))
+
+### 🐛 Bug Fixes
+- *(books)* Read series from linked Bookshelf records - ([15d9599](https://github.com/snapetech/seerrng/commit/15d9599ad8b4ac55dad8b0cb2916e8080bead3c0))
+- *(bookshelf)* Resolve numeric work IDs explicitly - ([e0a591a](https://github.com/snapetech/seerrng/commit/e0a591a4e9a9c9bc935085c3993bf0695409679a))
+- *(comics)* Fix Requests page media-type filter and removability - ([6efe982](https://github.com/snapetech/seerrng/commit/6efe98278e6f0f87f81ec36856616cbe85070ada))
+- *(comics)* Fix broken edit-request modal and server override in Manage - ([bd1b003](https://github.com/snapetech/seerrng/commit/bd1b003aa77f8628d8733cc505c312ecb6ac19b1))
+- *(comics)* Auto-complete approved requests once the comic is available - ([fd9de41](https://github.com/snapetech/seerrng/commit/fd9de4176a5ec26faffb8c2a7cc0f8aadd2d3e5a))
+- *(comics)* Show issue count/publisher and fix sort metadata on Requests page - ([3001723](https://github.com/snapetech/seerrng/commit/3001723eb3f46c2c2f9e5d5ee6c132ef5eac10ee))
+- *(comics)* Correct status display, blocklist/watchlist lookups, and Kapowarr cancellation - ([d1c1eed](https://github.com/snapetech/seerrng/commit/d1c1eedd548f12387401f7951f5e6d8f88ea1d2d))
+- *(notifications)* Keep available request links valid - ([99b8db1](https://github.com/snapetech/seerrng/commit/99b8db1b8da65d22d4bc84659d496ccbb6fce1ea))
+- *(request-status)* Humanize software target labels - ([c78f9f4](https://github.com/snapetech/seerrng/commit/c78f9f43a25c3cfc751d19544cfdccb5b1218742))
+- *(request-status)* Clarify software empty state - ([2df2804](https://github.com/snapetech/seerrng/commit/2df28044f40b8d4e17922ad22e9b7756c1de00fc))
+- *(software)* Align provider and catalog API routes - ([9bf4c6e](https://github.com/snapetech/seerrng/commit/9bf4c6eaeaba6ebabf3c2bf6be007bf1a7335ab9))
+
+### 📖 Documentation
+- *(comics)* Document Kapowarr cancel support and Mylar's limitation - ([e24ab1e](https://github.com/snapetech/seerrng/commit/e24ab1e225495ae68d445b73614dc33a123b5264))
+- *(software)* Document request and download workflow - ([dafdb42](https://github.com/snapetech/seerrng/commit/dafdb42d78fb437b983c6cca7e0af9d2d3b92652))
+- *(yunohost)* Use dedicated catalog package repo (#136) - ([7411227](https://github.com/snapetech/seerrng/commit/7411227bddc2493451e5f5a4c7ab08b49a010fd9))
+- Record QuestarrNG catalog contract - ([79ae7a0](https://github.com/snapetech/seerrng/commit/79ae7a09972c491152f8d8c38a49b9cfe7910d78))
+- Plan universal request copy delivery - ([7f44af5](https://github.com/snapetech/seerrng/commit/7f44af57c90dc5a4b8387451c54f1b34e5b8eb75))
+- Record acquisition implementation direction - ([e7a0ffa](https://github.com/snapetech/seerrng/commit/e7a0ffa462a29cdafbf76e07ebcede7722656477))
+- Refine ROM and game acquisition plan - ([33008d7](https://github.com/snapetech/seerrng/commit/33008d72e219024e5620b5b3b2dfd3479a23026a))
+- Plan universal request copy delivery - ([5812b07](https://github.com/snapetech/seerrng/commit/5812b07cf6941ace64053dfbd299686c83c3da67))
+- Record acquisition implementation direction - ([b50f56f](https://github.com/snapetech/seerrng/commit/b50f56fe01e2134de2e2698f6c1025a9c443ba18))
+- Refine ROM and game acquisition plan - ([9f26e37](https://github.com/snapetech/seerrng/commit/9f26e3701a37dfd0733fabc7cabaa014110a9d83))
+- Research software acquisition integrations - ([3354a1d](https://github.com/snapetech/seerrng/commit/3354a1d6be60e9283375ea5ffe5b79fbc2ec4149))
+
+### 🚜 Refactor
+- *(comics)* Reuse canRemoveRequestFromService for comic canRemove - ([a981235](https://github.com/snapetech/seerrng/commit/a9812357a5936d82a63e928297c0390e832e83c2))
+
+### 🎨 Styling
+- Format software acquisition settings route - ([cc3e162](https://github.com/snapetech/seerrng/commit/cc3e16263d8e79512ef145d4cf5b5fb8ee7994c2))
+
+### 🧪 Testing
+- Cover software request acquisition flows - ([946549d](https://github.com/snapetech/seerrng/commit/946549de030387e02fa73eeb6fc76bc90e8d9058))
+
+### ⚙️ Miscellaneous Tasks
+- *(comics)* Add comic/magazine breakdown to request count response - ([de551c2](https://github.com/snapetech/seerrng/commit/de551c270fb0f67be74b72df0d1d578170a9fa82))
+
 ## [3.28.0](https://github.com/snapetech/seerrng/compare/v3.27.1..v3.28.0) - 2026-09-25
 
 ### User-facing changes
