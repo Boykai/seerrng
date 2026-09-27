@@ -77,6 +77,10 @@ const messages = defineMessages('components.SoftwareCatalog', {
   chooseAll: 'Choose an operating system and architecture to continue.',
   noCategories: 'No software categories are currently available.',
   titleUnavailable: 'This catalog title could not be loaded.',
+  available: 'In library',
+  tracked: 'Tracked',
+  downloading: 'Downloading',
+  availabilityUnknown: 'Availability unknown',
 });
 
 type Category = 'retro' | 'modern' | 'game';
@@ -109,6 +113,9 @@ interface CatalogGame {
   platformOptions: { id: number; name: string }[];
   genres: string[];
   emulationSystems?: EmulationSystemOption[];
+  availability?:
+    'available' | 'tracked' | 'downloading' | 'missing' | 'unknown';
+  availableSystems?: string[];
 }
 
 interface CatalogResponse {
@@ -362,6 +369,7 @@ const SoftwareCatalog = ({
             : messages.requestSuccess
         )
       );
+      void mutate();
       closeRequest();
     } catch (submitError) {
       const requestFailure =
@@ -385,6 +393,16 @@ const SoftwareCatalog = ({
         ? messages.modern
         : messages.retro
   );
+  const availabilityLabel = (game: CatalogGame) =>
+    game.availability === 'available'
+      ? intl.formatMessage(messages.available)
+      : game.availability === 'tracked'
+        ? intl.formatMessage(messages.tracked)
+        : game.availability === 'downloading'
+          ? intl.formatMessage(messages.downloading)
+          : game.availability === 'unknown'
+            ? intl.formatMessage(messages.availabilityUnknown)
+            : '';
 
   return (
     <>
@@ -555,6 +573,11 @@ const SoftwareCatalog = ({
                 <li key={game.igdbId}>
                   <article className="group h-full overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow transition hover:border-gray-500 hover:shadow-lg">
                     <div className="relative aspect-[2/3] overflow-hidden bg-gray-900">
+                      {availabilityLabel(game) && (
+                        <span className="absolute top-2 left-2 z-10 rounded bg-gray-950/85 px-2 py-1 text-xs font-semibold text-white">
+                          {availabilityLabel(game)}
+                        </span>
+                      )}
                       <button
                         type="button"
                         className="relative block h-full w-full"
@@ -679,6 +702,11 @@ const SoftwareCatalog = ({
                   />
                 </div>
                 <div className="min-w-0 text-sm text-gray-300">
+                  {availabilityLabel(selectedGame) && (
+                    <p className="font-semibold text-indigo-200">
+                      {availabilityLabel(selectedGame)}
+                    </p>
+                  )}
                   {selectedGame.summary && <p>{selectedGame.summary}</p>}
                   {selectedGame.releaseDate && (
                     <p className="mt-2 text-gray-400">
@@ -768,6 +796,9 @@ const SoftwareCatalog = ({
                       {selectedGame.emulationSystems?.map((system) => (
                         <option key={system.slug} value={system.slug}>
                           {system.name}
+                          {selectedGame.availableSystems?.includes(system.slug)
+                            ? ` · ${intl.formatMessage(messages.available)}`
+                            : ''}
                         </option>
                       ))}
                     </select>

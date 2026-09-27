@@ -11222,7 +11222,7 @@ paths:
   /request/software/catalog/search:
     get:
       summary: Search ROM and PC game catalog
-      description: Searches the authenticated QuestarrNG IGDB catalog and filters results to the requested emulation group or PC platform. Pass the returned nextCursor to load the next page.
+      description: Searches the authenticated QuestarrNG IGDB catalog and filters results to the requested emulation group or PC platform. Each result includes availability (available, tracked, downloading, missing, or unknown) and ROM availableSystems when known. Pass the returned nextCursor to load the next page.
       tags:
         - request
       parameters:
@@ -11281,7 +11281,7 @@ paths:
   /request/software/catalog/popular:
     get:
       summary: List popular ROM and PC game catalog titles
-      description: Returns popular QuestarrNG catalog titles filtered to the selected emulation group or PC platform. Pass the returned nextOffset to load the next page.
+      description: Returns popular QuestarrNG catalog titles filtered to the selected emulation group or PC platform, with provider and SeerrNG request availability. Pass the returned nextOffset to load the next page.
       tags:
         - request
       parameters:
@@ -11334,7 +11334,7 @@ paths:
   /request/software/catalog/games/{id}:
     get:
       summary: Get one ROM or PC game catalog title
-      description: Returns QuestarrNG catalog metadata and supported request targets for a shareable software title.
+      description: Returns QuestarrNG catalog metadata, supported request targets, and provider or SeerrNG request availability for a shareable software title.
       tags:
         - request
       parameters:

@@ -13,12 +13,15 @@ type PreviewGame = {
   title: string;
   coverUrl: string;
   releaseDate: string;
+  availability?:
+    'available' | 'tracked' | 'downloading' | 'missing' | 'unknown';
 };
 type PreviewItem = PreviewGame & { category: Category };
 
 const messages = defineMessages('components.Search.SoftwarePreview', {
   title: 'Software',
   seeAll: 'See all software results',
+  available: 'In library',
 });
 
 const SoftwareSearchPreview = ({ query }: { query: string }) => {
@@ -103,6 +106,11 @@ const SoftwareSearchPreview = ({ query }: { query: string }) => {
                 <p className="line-clamp-2 font-medium text-white">
                   {game.title}
                 </p>
+                {game.availability === 'available' && (
+                  <p className="mt-1 text-xs text-indigo-200">
+                    {intl.formatMessage(messages.available)}
+                  </p>
+                )}
                 {game.releaseDate && (
                   <p className="mt-1 text-xs text-gray-400">
                     {game.releaseDate}

@@ -27,6 +27,10 @@ export interface SoftwareCatalogPopularPage {
   nextOffset: number | null;
 }
 
+export interface QuestarrLibraryLookup {
+  games: { igdbId: number; status: string }[];
+}
+
 export interface SoftwareAssetStream {
   stream: Readable;
   filename?: string;
@@ -136,6 +140,14 @@ export class QuestarrNGAPI extends ExternalAPI {
       `/api/integration/seerrng/v1/catalog/games/${igdbId}`,
       {},
       600
+    );
+  }
+
+  public lookupLibrary(igdbIds: number[]): Promise<QuestarrLibraryLookup> {
+    return this.get(
+      '/api/integration/seerrng/v1/library/lookup',
+      { params: { igdbIds: igdbIds.join(',') } },
+      60
     );
   }
 

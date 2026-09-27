@@ -190,6 +190,14 @@ const createSoftwareRequest = async (options: {
 
 beforeEach(() => {
   providerSettings();
+  mock.method(QuestarrNGAPI.prototype, 'lookupLibrary', async () => ({
+    games: [],
+  }));
+  mock.method(ROMarrNGAPI.prototype, 'lookupLibrary', async () => ({
+    ready: true,
+    partial: false,
+    matches: [],
+  }));
 });
 
 afterEach(() => {
@@ -197,6 +205,69 @@ afterEach(() => {
 });
 
 describe('software request routes', () => {
+  it('marks PC titles already owned in QuestarrNG as available', async () => {
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 6, name: 'PC (Microsoft Windows)' },
+    ]);
+    mock.method(QuestarrNGAPI.prototype, 'searchCatalogPage', async () => ({
+      results: [pcGame],
+      nextCursor: null,
+    }));
+    mock.method(QuestarrNGAPI.prototype, 'lookupLibrary', async () => ({
+      games: [{ igdbId: 42, status: 'owned' }],
+    }));
+
+    const response = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'game', q: 'Test Game' });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.results[0].availability, 'available');
+  });
+
+  it('keeps unmatched ROM titles unknown when ROMarrNG has a partial library cache', async () => {
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 130, name: 'Nintendo Entertainment System' },
+    ]);
+    mock.method(QuestarrNGAPI.prototype, 'searchCatalogPage', async () => ({
+      results: [
+        {
+          ...pcGame,
+          platforms: ['Nintendo Entertainment System'],
+          platformOptions: [{ id: 130, name: 'Nintendo Entertainment System' }],
+        },
+      ],
+      nextCursor: null,
+    }));
+    mock.method(ROMarrNGAPI.prototype, 'getPlatforms', async () => [
+      {
+        slug: 'nes',
+        name: 'Nintendo Entertainment System',
+        media: 'rom',
+        extensions: ['.nes'],
+        max_size_mb: 16,
+      },
+    ]);
+    mock.method(ROMarrNGAPI.prototype, 'lookupLibrary', async () => ({
+      ready: true,
+      partial: true,
+      matches: [],
+    }));
+
+    const response = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'retro', q: 'Test Game' });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.results[0].availability, 'unknown');
+
+    await createSoftwareRequest({ status: 'pending' });
+    const tracked = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'retro', q: 'Test Game' });
+    assert.strictEqual(tracked.body.results[0].availability, 'tracked');
+  });
+
   it('returns a sanitized, shareable catalog detail for a PC game', async () => {
     const getGame = mock.method(
       QuestarrNGAPI.prototype,

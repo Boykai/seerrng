@@ -104,6 +104,15 @@ platform before showing each page. This requires a QuestarrNG build with the
 paged SeerrNG catalog endpoints. Older QuestarrNG builds continue to show the
 first available catalog window until upgraded.
 
+Catalog cards show **In library**, **Tracked**, or **Downloading** when the
+acquisition service reports a title. ROM availability is shown for the exact
+emulation system, including in the request target picker. If ROMarrNG is still
+loading its library or only has a partial cache, an unmatched title shows
+**Availability unknown** rather than being treated as absent. These indicators
+require QuestarrNG's bounded IGDB library lookup and ROMarrNG's bounded
+title-and-platform lookup; older builds leave availability unknown until
+upgraded.
+
 Open a title's cover or name to see its summary, genres, release date, and
 supported request targets. The title URL can be copied and reopened directly;
 users without request permission can still inspect its details.

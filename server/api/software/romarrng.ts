@@ -21,6 +21,12 @@ export interface RomarrPlatform {
   max_size_mb: number;
 }
 
+export interface RomarrLibraryLookup {
+  ready: boolean;
+  partial: boolean;
+  matches: { title: string; platform: string }[];
+}
+
 export class ROMarrNGAPI extends ExternalAPI {
   static buildUrl(
     settings: Pick<
@@ -56,6 +62,12 @@ export class ROMarrNGAPI extends ExternalAPI {
 
   public getPlatforms(): Promise<RomarrPlatform[]> {
     return this.get('/api/platforms', {}, 300);
+  }
+
+  public lookupLibrary(
+    titles: { title: string; platform: string }[]
+  ): Promise<RomarrLibraryLookup> {
+    return this.post('/api/v1/integration/library/lookup', { titles });
   }
 
   public createRequest(

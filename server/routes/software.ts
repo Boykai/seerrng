@@ -44,6 +44,7 @@ import axios from 'axios';
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { In } from 'typeorm';
 
 const softwareRoutes = Router();
 const MAX_CATALOG_LIMIT = 50;
@@ -336,12 +337,21 @@ const getCatalogCategoryContext = async (
   };
 };
 
+type CatalogGameResult = SoftwareCatalogGame & {
+  emulationSystems?: {
+    slug: string;
+    name: string;
+    group: 'retro' | 'modern' | null;
+    catalogPlatformId: number;
+  }[];
+};
+
 const mapCategoryGames = (
   games: SoftwareCatalogGame[],
   category: SoftwareRequestCategory,
   systems: (RomarrPlatform & { group: 'retro' | 'modern' | null })[],
   filters: CatalogFilters
-) => {
+): CatalogGameResult[] => {
   const sanitized = games.map(sanitizeGame);
   if (category === 'game') {
     return sanitized.filter((game) =>
@@ -369,6 +379,165 @@ const mapCategoryGames = (
       : [];
   });
 };
+
+type CatalogAvailability =
+  'available' | 'tracked' | 'downloading' | 'missing' | 'unknown';
+
+const addCatalogAvailability = async (
+  results: CatalogGameResult[],
+  category: SoftwareRequestCategory
+): Promise<
+  (CatalogGameResult & {
+    availability: CatalogAvailability;
+    availableSystems?: string[];
+  })[]
+> => {
+  if (!results.length) return [];
+  try {
+    if (category === 'game') {
+      const ids = [...new Set(results.map((game) => game.igdbId))];
+      const response = await getQuestarrApi().lookupLibrary(ids);
+      const statuses = new Map(
+        response.games
+          .filter((game) => Number.isSafeInteger(game.igdbId))
+          .map((game) => [game.igdbId, game.status])
+      );
+      return results.map((game) => {
+        const status = statuses.get(game.igdbId);
+        const availability: CatalogAvailability =
+          status === 'owned' || status === 'completed'
+            ? 'available'
+            : status === 'downloading'
+              ? 'downloading'
+              : status === 'wanted'
+                ? 'tracked'
+                : status === undefined
+                  ? 'missing'
+                  : 'unknown';
+        return { ...game, availability };
+      });
+    }
+
+    const pairs = results.flatMap((game) =>
+      (game.emulationSystems ?? []).map((system) => ({
+        title: game.title,
+        platform: system.slug,
+      }))
+    );
+    if (pairs.length > 1000) {
+      return results.map((game) => ({ ...game, availability: 'unknown' }));
+    }
+    const api = new ROMarrNGAPI(getSettings().softwareAcquisition.romarr);
+    const chunks = Array.from(
+      { length: Math.ceil(pairs.length / 100) },
+      (_, i) => pairs.slice(i * 100, (i + 1) * 100)
+    );
+    const responses = await Promise.all(
+      chunks.map((chunk) => api.lookupLibrary(chunk))
+    );
+    const complete = responses.every(
+      (response) => response.ready && !response.partial
+    );
+    const matches = new Set(
+      responses.flatMap((response) =>
+        response.matches.map((match) => `${match.platform}\u0000${match.title}`)
+      )
+    );
+    return results.map((game) => {
+      const availableSystems = (game.emulationSystems ?? [])
+        .filter((system) => matches.has(`${system.slug}\u0000${game.title}`))
+        .map((system) => system.slug);
+      return {
+        ...game,
+        availability: availableSystems.length
+          ? 'available'
+          : complete
+            ? 'missing'
+            : 'unknown',
+        availableSystems,
+      };
+    });
+  } catch (error) {
+    logger.warn('Software library availability lookup failed', {
+      error: error instanceof Error ? error.message : String(error),
+      category,
+    });
+    return results.map((game) => ({ ...game, availability: 'unknown' }));
+  }
+};
+
+const addTrackedRequestAvailability = async (
+  results: Awaited<ReturnType<typeof addCatalogAvailability>>,
+  category: SoftwareRequestCategory
+) => {
+  if (!results.length) return results;
+  try {
+    const requests = await getRepository(SoftwareRequest).find({
+      where: {
+        category,
+        catalogId: In(results.map((game) => game.igdbId)),
+        status: In([
+          'pending',
+          'approved',
+          'searching',
+          'downloading',
+          'importing',
+          'available',
+        ]),
+      },
+    });
+    return results.map((game) => {
+      const tracked = requests.filter(
+        (request) => request.catalogId === game.igdbId
+      );
+      const availableSystems = [
+        ...new Set([
+          ...(game.availableSystems ?? []),
+          ...tracked
+            .filter(
+              (request) =>
+                request.status === 'available' && request.platformSlug
+            )
+            .map((request) => request.platformSlug as string),
+        ]),
+      ];
+      const statuses = tracked.map((request) => request.status);
+      const availability: CatalogAvailability =
+        game.availability === 'available' || statuses.includes('available')
+          ? 'available'
+          : game.availability === 'downloading' ||
+              statuses.includes('downloading') ||
+              statuses.includes('importing')
+            ? 'downloading'
+            : game.availability === 'tracked' ||
+                statuses.includes('pending') ||
+                statuses.includes('approved') ||
+                statuses.includes('searching')
+              ? 'tracked'
+              : game.availability;
+      return {
+        ...game,
+        availability,
+        ...(category === 'game' ? {} : { availableSystems }),
+      };
+    });
+  } catch (error) {
+    logger.warn('Software request availability lookup failed', {
+      error: error instanceof Error ? error.message : String(error),
+      category,
+    });
+    return results;
+  }
+};
+
+const catalogResultsWithAvailability = async (
+  results: CatalogGameResult[],
+  category: SoftwareRequestCategory
+) =>
+  addTrackedRequestAvailability(
+    await addCatalogAvailability(results, category),
+    category
+  );
 
 const getQuestarrApi = (): QuestarrNGAPI => {
   const settings = getSettings().softwareAcquisition.questarr;
@@ -514,7 +683,10 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
       parsed.filters
     ).slice(0, parsed.limit);
     enqueueImageCacheWarm(extractImageCacheUrls(results));
-    return res.status(200).json({ results, nextCursor });
+    return res.status(200).json({
+      results: await catalogResultsWithAvailability(results, parsed.category),
+      nextCursor,
+    });
   } catch (error) {
     return respondProviderError(res, error);
   }
@@ -577,7 +749,10 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
       limit
     );
     enqueueImageCacheWarm(extractImageCacheUrls(results));
-    return res.status(200).json({ results, nextOffset });
+    return res.status(200).json({
+      results: await catalogResultsWithAvailability(results, category),
+      nextOffset,
+    });
   } catch (error) {
     return respondProviderError(res, error);
   }
@@ -616,7 +791,9 @@ softwareRoutes.get('/catalog/games/:id', async (req, res) => {
         .json({ error: 'Title not found in this category.' });
     }
     enqueueImageCacheWarm(extractImageCacheUrls([result]));
-    return res.status(200).json({ game: result });
+    return res.status(200).json({
+      game: (await catalogResultsWithAvailability([result], category))[0],
+    });
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 404) {
       return res.status(404).json({ error: 'Catalog title not found.' });
