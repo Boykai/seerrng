@@ -77,7 +77,7 @@ export const scanComicCatalogIndexPage = async (): Promise<void> => {
     if (
       response.offset !== (scan.nextPage - 1) * PAGE_SIZE ||
       (scan.nextPage > 1 &&
-        response.number_of_total_results !== scan.totalResults) ||
+        response.number_of_total_results < scan.totalResults) ||
       (response.number_of_page_results === 0 &&
         response.offset < response.number_of_total_results)
     ) {

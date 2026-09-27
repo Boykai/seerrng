@@ -73,7 +73,7 @@ describe('comic catalog index', () => {
     assert.strictEqual(await getRepository(ComicCatalogVolume).count(), 101);
   });
 
-  it('restarts a scan when ComicVine changes its total during pagination', async () => {
+  it('continues a scan when ComicVine adds volumes after the indexed IDs', async () => {
     getSettings().main.comicVineApiKey = 'test-key';
     await getRepository(ComicCatalogScan).save({
       id: 'global',
@@ -87,6 +87,50 @@ describe('comic catalog index', () => {
       lastAttemptAt: 0,
       lastCompletedAt: 0,
     });
+    await getRepository(ComicCatalogVolume).save(
+      Array.from({ length: 100 }, (_, index) => ({
+        generation: 1,
+        id: index + 1,
+        title: `Old volume ${index + 1}`,
+        searchText: `old volume ${index + 1}`,
+        payload: JSON.stringify({ id: index + 1, name: 'Old volume' }),
+      }))
+    );
+    mock.method(ComicVineAPI.prototype, 'getVolumesPage', async () => ({
+      error: 'OK',
+      limit: 100,
+      offset: 100,
+      number_of_page_results: 2,
+      number_of_total_results: 102,
+      status_code: 1,
+      results: [101, 102].map((id) => ({
+        id,
+        name: `New ${id}`,
+        resource_type: 'volume' as const,
+      })),
+    }));
+    await scanComicCatalogIndexPage();
+    const scan = await getRepository(ComicCatalogScan).findOneByOrFail({
+      id: 'global',
+    });
+    assert.strictEqual(scan.nextPage, 3);
+    assert.strictEqual(scan.completeGeneration, 1);
+    assert.strictEqual(scan.lastError, null);
+    assert.strictEqual(await getRepository(ComicCatalogVolume).count(), 102);
+  });
+
+  it('restarts a scan when ComicVine removes volumes during pagination', async () => {
+    getSettings().main.comicVineApiKey = 'test-key';
+    await getRepository(ComicCatalogScan).save({
+      id: 'global',
+      scanGeneration: 1,
+      completeGeneration: 0,
+      nextPage: 2,
+      totalResults: 102,
+      indexedResults: 100,
+      lastVolumeId: 100,
+      lastAttemptAt: 0,
+    });
     await getRepository(ComicCatalogVolume).save({
       generation: 1,
       id: 1,
@@ -99,9 +143,9 @@ describe('comic catalog index', () => {
       limit: 100,
       offset: 100,
       number_of_page_results: 1,
-      number_of_total_results: 102,
+      number_of_total_results: 101,
       status_code: 1,
-      results: [{ id: 101, name: 'New', resource_type: 'volume' as const }],
+      results: [{ id: 101, name: 'Last', resource_type: 'volume' as const }],
     }));
     await scanComicCatalogIndexPage();
     const scan = await getRepository(ComicCatalogScan).findOneByOrFail({
