@@ -10,6 +10,7 @@ import { Session } from '@server/entity/Session';
 import { User } from '@server/entity/User';
 import { initI18n } from '@server/i18n';
 import { startJobs, stopJobs } from '@server/job/schedule';
+import { resumeComicCatalogIndex } from '@server/lib/comicCatalogIndex';
 import { runWithConfigurationAdmission } from '@server/lib/configurationAdmission';
 import { loadExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import {
@@ -301,6 +302,15 @@ Promise.resolve()
 
       const userRepository = getRepository(User);
       const totalUsers = await userRepository.count();
+      if (!isE2eTest) {
+        try {
+          await resumeComicCatalogIndex();
+        } catch {
+          logger.warn(
+            'ComicVine catalog indexing could not resume at startup.'
+          );
+        }
+      }
       if (totalUsers > 0 && !isE2eTest) {
         startJobs();
       } else if (isE2eTest) {

@@ -1,4 +1,5 @@
 import Alert from '@app/components/Common/Alert';
+import Button from '@app/components/Common/Button';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -79,6 +80,7 @@ const DiscoverComics = ({ titleOverride }: DiscoverComicsProps = {}) => {
       indexedResults?: number;
       expectedResults?: number;
       indexError?: string;
+      comicVineConfigured?: boolean;
     }
   >(
     '/api/v1/discover/comics',
@@ -206,9 +208,9 @@ const DiscoverComics = ({ titleOverride }: DiscoverComicsProps = {}) => {
                 }
               />
             ))}
-            <button className="button button-primary" type="submit">
+            <Button buttonType="primary" buttonSize="sm" type="submit">
               {intl.formatMessage(messages.applyFilters)}
-            </button>
+            </Button>
           </form>
         </div>
         {filterError && (
@@ -245,7 +247,7 @@ const DiscoverComics = ({ titleOverride }: DiscoverComicsProps = {}) => {
       {!discover.error &&
         !discover.isLoadingInitialData &&
         discover.isEmpty &&
-        !query &&
+        discover.firstResultData?.comicVineConfigured === false &&
         !discover.firstResultData?.indexing && (
           <Alert
             title={intl.formatMessage(messages.noComicVineKey)}

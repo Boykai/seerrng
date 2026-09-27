@@ -9585,6 +9585,9 @@ paths:
                   totalResults:
                     type: number
                     example: 200
+                  comicVineConfigured:
+                    type: boolean
+                    description: Whether a ComicVine API key is configured.
                   indexing:
                     type: boolean
                     description: True while the first complete filtered catalog index is building.

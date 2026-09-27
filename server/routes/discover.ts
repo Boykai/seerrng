@@ -3784,9 +3784,13 @@ discoverRoutes.get('/books', async (req, res) => {
 discoverRoutes.get('/comics', async (req, res) => {
   const { comicVineApiKey } = getSettings().main;
   if (!comicVineApiKey) {
-    return res
-      .status(200)
-      .json({ page: 1, totalPages: 0, totalResults: 0, results: [] });
+    return res.status(200).json({
+      page: 1,
+      totalPages: 0,
+      totalResults: 0,
+      results: [],
+      comicVineConfigured: false,
+    });
   }
 
   const itemsPerPage = 20;
@@ -3878,6 +3882,7 @@ discoverRoutes.get('/comics', async (req, res) => {
           totalPages: 0,
           totalResults: 0,
           results: [],
+          comicVineConfigured: true,
           indexing: true,
           indexedResults: scan.indexedResults,
           expectedResults: scan.totalResults,
@@ -3904,6 +3909,7 @@ discoverRoutes.get('/comics', async (req, res) => {
         results: indexed.results.map((volume) =>
           mapComicVineVolumeResult(volume, mediaByComicVineId.get(volume.id))
         ),
+        comicVineConfigured: true,
         indexing: false,
         lastIndexedAt: scan.lastCompletedAt,
       });
@@ -3929,6 +3935,7 @@ discoverRoutes.get('/comics', async (req, res) => {
       results: response.results.map((volume) =>
         mapComicVineVolumeResult(volume, mediaByComicVineId.get(volume.id))
       ),
+      comicVineConfigured: true,
     });
   } catch (e) {
     logger.error('Failed to fetch comic discovery results', {

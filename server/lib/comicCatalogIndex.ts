@@ -230,6 +230,16 @@ export const getComicCatalogIndexStatus =
     return scan;
   };
 
+export const resumeComicCatalogIndex = async (): Promise<void> => {
+  if (!getSettings().main.comicVineApiKey) return;
+  const scan = await getRepository(ComicCatalogScan).findOneBy({
+    id: INDEX_ID,
+  });
+  if (scan && scan.scanGeneration !== scan.completeGeneration) {
+    scheduleScan(0);
+  }
+};
+
 export interface ComicCatalogFilters {
   query: string;
   publisher?: string;

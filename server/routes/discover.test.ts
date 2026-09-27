@@ -4252,6 +4252,7 @@ describe('GET /discover/comics', () => {
       totalPages: 0,
       totalResults: 0,
       results: [],
+      comicVineConfigured: false,
     });
   });
 
@@ -4402,6 +4403,7 @@ describe('GET /discover/comics', () => {
       minIssues: 10,
     });
     assert.strictEqual(firstPage.body.results.length, 19);
+    assert.strictEqual(firstPage.body.comicVineConfigured, true);
     assert.strictEqual(firstPage.body.results[0].title, 'Batman 01');
   });
 
@@ -4418,7 +4420,9 @@ describe('GET /discover/comics', () => {
       lastAttemptAt: Math.floor(Date.now() / 1000),
       lastCompletedAt: 0,
     });
-    const response = await (await login())
+    const response = await (
+      await login()
+    )
       .get('/discover/comics')
       .query({ publisher: 'DC' });
     assert.strictEqual(response.status, 200);
