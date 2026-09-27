@@ -9555,10 +9555,19 @@ paths:
   /discover/magazines:
     get:
       summary: Discover magazines
-      description: Returns magazines tracked by configured LazyLibrarian instances.
+      description: Returns magazines tracked by configured LazyLibrarian instances, or public Google Books results when catalog is public.
       tags:
         - search
       parameters:
+        - in: query
+          name: catalog
+          description: Select the tracked LazyLibrarian catalog or the public Google Books catalog.
+          schema:
+            type: string
+            enum:
+              - tracked
+              - public
+            default: tracked
         - in: query
           name: page
           schema:

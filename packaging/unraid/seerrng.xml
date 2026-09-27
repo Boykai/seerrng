@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <Container version="2">
-  <Name>seerrng</Name>
+  <Name>SeerrNG</Name>
   <Repository>ghcr.io/snapetech/seerrng:latest</Repository>
   <Registry>https://ghcr.io/snapetech/seerrng</Registry>
   <Network>bridge</Network>
@@ -8,15 +8,15 @@
   <Privileged>false</Privileged>
   <Icon>https://raw.githubusercontent.com/snapetech/seerrng/main/public/android-chrome-512x512.png</Icon>
   <WebUI>http://[IP]:[PORT:5055]/</WebUI>
-  <Overview>SeerrNG is a self-hosted request and discovery application for movies, TV, music, ebooks, and audiobooks. It connects to Plex, Jellyfin, or Emby and automates approved requests through Radarr, Sonarr, Lidarr, and Bookshelf or Readarr-compatible services.</Overview>
-  <Description>SeerrNG extends the Seerr request workflow beyond movies and TV into music, ebooks, and audiobooks while retaining familiar request approvals, permissions, notifications, watchlists, quotas, and automation integrations. This template uses the latest stable GHCR image and persists the database, settings, logs, cache, and TLS material under /app/config. The image intentionally runs as the non-root node user with UID 1000 and GID 1000, so the mapped host directory must be writable by that UID and GID. Configure built-in HTTPS from Settings &gt; Network; the optional HTTPS listener is exposed on port 5056. Use a reverse proxy for public access rather than exposing the administration interface directly to the Internet.</Description>
+  <Overview>Self-hosted requests and discovery for movies, TV, music, books, comics, magazines, ROMs, and PC games, with optional integrations including BookshelfNG, Mylar3, Kapowarr, LazyLibrarian, ROMarrNG, and QuestarrNG.</Overview>
+  <Description>SeerrNG extends the Seerr request workflow to music, ebooks, audiobooks, comics, magazines, ROMs, and PC games. Optional integrations include Radarr, Sonarr, Lidarr, BookshelfNG (https://github.com/snapetech/bookshelfng), Chaptarr, Mylar3, Kapowarr, LazyLibrarian, ROMarrNG (https://github.com/snapetech/ROMarrNG), and QuestarrNG (https://github.com/snapetech/QuestarrNG). Configure the integrations you choose in SeerrNG; this catalog entry lists the SeerrNG app. Comic requests target full volumes, with older issue searches handled by Mylar3 or Kapowarr. This template uses the latest stable GHCR image and persists the database, settings, logs, cache, and TLS material under /app/config. The image intentionally runs as the non-root node user with UID 1000 and GID 1000, so the mapped host directory must be writable by that UID and GID. Configure built-in HTTPS from Settings &gt; Network; the optional HTTPS listener is exposed on port 5056. Use a reverse proxy for public access rather than exposing the administration interface directly to the Internet.</Description>
   <Support>https://github.com/snapetech/seerrng/issues</Support>
   <Project>https://github.com/snapetech/seerrng</Project>
   <TemplateURL>https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/seerrng.xml</TemplateURL>
   <ReadMe>https://github.com/snapetech/seerrng/blob/main/README.md</ReadMe>
   <Category>MediaApp:Video Status:Stable</Category>
-  <ExtraSearchTerms>seerrng seerr jellyseerr overseerr plex jellyfin emby requests movies tv music books ebooks audiobooks radarr sonarr lidarr bookshelf readarr</ExtraSearchTerms>
-  <Changes>Initial Community Applications template for the stable SeerrNG release channel.</Changes>
+  <ExtraSearchTerms>seerrng seerr jellyseerr overseerr plex jellyfin emby requests movies tv music books ebooks audiobooks comics magazines radarr sonarr lidarr bookshelf bookshelfng readarr chaptarr mylar3 kapowarr lazylibrarian romarrng questarrng roms games</ExtraSearchTerms>
+  <Changes>Updated supported media workflows and SeerrNG integration references.</Changes>
   <License>MIT License</License>
   <Requires>Requires Docker, network access for metadata and external service integrations, and a persistent host directory for /app/config. Set the host directory ownership to UID 1000 and GID 1000 before the first start because the image does not run as root.</Requires>
   <Screenshot>https://raw.githubusercontent.com/snapetech/seerrng/main/public/readme-discover-covers.jpg</Screenshot>

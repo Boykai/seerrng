@@ -49,6 +49,14 @@ GetComics.org, has a known, unresolved upstream bug where direct-from-site
 downloads (as opposed to its mirror hosts such as MediaFire) frequently fail.
 Mirror-host downloads are generally reliable; direct-site downloads are not.
 
+## Full volumes and back issues
+
+SeerrNG requests a complete ComicVine volume, not individual issue numbers.
+Mylar3 or Kapowarr receives that volume and handles its issue searches. Older
+issues can be acquired when the selected backend is configured to search for
+them; SeerrNG does not override those backend settings. Enable **Sync** to
+show the backend's tracked issue availability in SeerrNG.
+
 Prowlarr can sync indexers to Mylar3. SeerrNG itself does not query Prowlarr;
 Mylar3 runs the search after request approval. After syncing, confirm the
 providers are enabled in Mylar3's search settings. Prowlarr does not add

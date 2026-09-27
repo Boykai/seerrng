@@ -1,6 +1,6 @@
 ---
 title: Unraid (Advanced)
-description: Install Seerr using Unraid
+description: Install SeerrNG using Unraid
 sidebar_position: 2
 ---
 
@@ -10,17 +10,29 @@ import TabItem from '@theme/TabItem';
 # Unraid
 
 :::warning
-Third-party installation methods are maintained by the community. The Seerr team is not responsible for these packages.
+SeerrNG is a community-maintained Seerr fork. Its Unraid template uses the SeerrNG image from `ghcr.io/snapetech/seerrng`, not the upstream Seerr image.
 :::
 
 :::warning
-This method is not recommended for most users. It is intended for advanced users who are using Unraid.
+This guide covers manual template configuration. Most users can install SeerrNG from Community Apps with the default values.
 :::
 
 ## Template installation
 
-Several templates from Unraid Community are available right now
-- [Unraid Community Apps](https://unraid.net/community/apps#community-apps-iframe)
+Search for **SeerrNG** in
+[Unraid Community Apps](https://ca.unraid.net/apps/seerrng-0wrq5ph1rtda55) and
+choose the entry published by snapetech. The similarly named upstream **Seerr**
+listing is a different application. See the
+[SeerrNG repository](https://github.com/snapetech/seerrng) for this fork's
+code and documentation.
+
+The SeerrNG listing covers its optional integrations, including BookshelfNG,
+Mylar3, Kapowarr, LazyLibrarian, ROMarrNG, and QuestarrNG. Configure only the
+services needed for your media workflows in SeerrNG. The backends are not
+required to run SeerrNG itself.
+
+The template's raw XML is available at
+[`packaging/unraid/seerrng.xml`](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/seerrng.xml).
 
 In case you still want to do it manually, please follow the instructions below.
 
@@ -28,25 +40,29 @@ In case you still want to do it manually, please follow the instructions below.
 
 Before proceeding, choose which installation method best suits your server:
 
-**Seerr Default** (`UID 1000:1000`) — Runs with the container's native `node` user. Matches the official image, but may break SMB share access, trigger "Fix Common Problems" warnings, and cause issues with backup plugins (such as CA Appdata Backup) and network integrations (such as Tailscale).
+Use the same host config path already mapped by an existing SeerrNG install to
+keep its database and settings. The examples below use
+`/mnt/user/appdata/seerrng`, which is the template default.
 
-**Unraid Default** (`UID 99:100`) — Runs with Unraid's native `nobody:users` ownership. Follows Unraid best practices, but overrides Seerr's built-in rootless user and may cause compatibility issues with future Seerr updates.
+**SeerrNG Default** (`UID 1000:1000`) — Runs with the container's native `node` user. Matches the SeerrNG image, but may break SMB share access, trigger "Fix Common Problems" warnings, and cause issues with backup plugins (such as CA Appdata Backup) and network integrations (such as Tailscale).
+
+**Unraid Default** (`UID 99:100`) — Runs with Unraid's native `nobody:users` ownership. Follows Unraid best practices, but overrides SeerrNG's built-in rootless user and may cause compatibility issues with future SeerrNG updates.
 
 <Tabs groupId="unraid-permissions" queryString>
-  <TabItem value="seerr-default" label="Seerr Default">
+  <TabItem value="seerr-default" label="SeerrNG Default">
 
   ### 1. Create the config directory
 
   Open the Unraid terminal and run:
 
   ```bash
-  mkdir -p /mnt/user/appdata/seerr
+  mkdir -p /mnt/user/appdata/seerrng
   ```
 
   ### 2. Set folder permissions
 
   ```bash
-  chown -R 1000:1000 /mnt/user/appdata/seerr
+  chown -R 1000:1000 /mnt/user/appdata/seerrng
   ```
 
   ### 3. Add the Docker container
@@ -61,7 +77,7 @@ Before proceeding, choose which installation method best suits your server:
 
   | Field | Value |
   |---|---|
-  | **Name** | `seerr` |
+  | **Name** | `SeerrNG` |
   | **Repository** | `ghcr.io/snapetech/seerrng:latest` |
   | **Icon URL** | `https://raw.githubusercontent.com/snapetech/seerrng/main/public/android-chrome-512x512.png` |
   | **WebUI** | `http://[IP]:[PORT:5055]` |
@@ -82,7 +98,7 @@ Before proceeding, choose which installation method best suits your server:
   | Field | Value |
   |---|---|
   | Container Path | `/app/config` |
-  | Host Path | `/mnt/user/appdata/seerr` |
+  | Host Path | `/mnt/user/appdata/seerrng` |
 
   **Variable:**
   | Field | Value |
@@ -98,9 +114,10 @@ Before proceeding, choose which installation method best suits your server:
 
   Click **Apply** to create and start the container.
 
-  ### 4. Access Seerr
+  ### 4. Access SeerrNG
 
-  Open the WebUI at `http://<your-unraid-ip>:5055` and follow the setup wizard.
+  Open the SeerrNG WebUI at `http://<your-unraid-ip>:5055` and follow the setup
+  wizard.
   Direct HTTP sign-in works by default with a warning. For encrypted sign-in,
   choose built-in HTTPS in the first-run transport section or use an HTTPS
   reverse proxy. Set `SEERR_ALLOW_HTTP_AUTH=false` to require HTTPS.
@@ -113,13 +130,13 @@ Before proceeding, choose which installation method best suits your server:
   Open the Unraid terminal and run:
 
   ```bash
-  mkdir -p /mnt/user/appdata/seerr
+  mkdir -p /mnt/user/appdata/seerrng
   ```
 
   ### 2. Set folder permissions
 
   ```bash
-  chown -R 99:100 /mnt/user/appdata/seerr
+  chown -R 99:100 /mnt/user/appdata/seerrng
   ```
 
   ### 3. Add the Docker container
@@ -134,7 +151,7 @@ Before proceeding, choose which installation method best suits your server:
 
   | Field | Value |
   |---|---|
-  | **Name** | `seerr` |
+  | **Name** | `SeerrNG` |
   | **Repository** | `ghcr.io/snapetech/seerrng:latest` |
   | **Icon URL** | `https://raw.githubusercontent.com/snapetech/seerrng/main/public/android-chrome-512x512.png` |
   | **WebUI** | `http://[IP]:[PORT:5055]` |
@@ -155,7 +172,7 @@ Before proceeding, choose which installation method best suits your server:
   | Field | Value |
   |---|---|
   | Container Path | `/app/config` |
-  | Host Path | `/mnt/user/appdata/seerr` |
+  | Host Path | `/mnt/user/appdata/seerrng` |
 
   **Variable:**
   | Field | Value |
@@ -171,9 +188,10 @@ Before proceeding, choose which installation method best suits your server:
 
   Click **Apply** to create and start the container.
 
-  ### 4. Access Seerr
+  ### 4. Access SeerrNG
 
-  Open the WebUI at `http://<your-unraid-ip>:5055` and follow the setup wizard.
+  Open the SeerrNG WebUI at `http://<your-unraid-ip>:5055` and follow the setup
+  wizard.
   Direct HTTP sign-in works by default with a warning. For encrypted sign-in,
   choose built-in HTTPS in the first-run transport section or use an HTTPS
   reverse proxy. Set `SEERR_ALLOW_HTTP_AUTH=false` to require HTTPS.

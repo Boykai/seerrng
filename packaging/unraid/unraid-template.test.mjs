@@ -24,7 +24,7 @@ test('Unraid template exposes the stable image and canonical raw URL', async () 
   const container = document.Container;
 
   assert.equal(container.$.version, '2');
-  assert.equal(container.Name, 'seerrng');
+  assert.equal(container.Name, 'SeerrNG');
   assert.equal(container.Repository, 'ghcr.io/snapetech/seerrng:latest');
   assert.equal(container.TemplateURL, templateUrl);
   assert.equal(container.WebUI, 'http://[IP]:[PORT:5055]/');
