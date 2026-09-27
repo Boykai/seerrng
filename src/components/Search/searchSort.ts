@@ -45,3 +45,23 @@ export const getSortOrder = (
   field: SortField
 ): SortOrder =>
   value === 'asc' || value === 'desc' ? value : getDefaultSortOrder(field);
+
+export const getBookSearchRelevance = (
+  title: string,
+  query: string
+): number => {
+  const normalize = (value: string) =>
+    value
+      .normalize('NFKD')
+      .toLowerCase()
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+  const normalizedTitle = normalize(title);
+  const normalizedQuery = normalize(query);
+  if (!normalizedQuery) return 0;
+  if (normalizedTitle === normalizedQuery) return 3;
+  if (normalizedTitle.startsWith(`${normalizedQuery} `)) return 2;
+  if (normalizedTitle.includes(normalizedQuery)) return 1;
+  return 0;
+};

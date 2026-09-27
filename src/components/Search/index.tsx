@@ -52,6 +52,7 @@ import {
   searchContextualFilterKeys,
 } from './searchFilters';
 import {
+  getBookSearchRelevance,
   getSortField,
   getSortOrder,
   type SortField,
@@ -576,20 +577,7 @@ const Search = () => {
       if (sortField === 'relevance') {
         const score = (result: SearchResult) => {
           if (result.mediaType !== 'book') return 0;
-          const normalize = (value: string) =>
-            value
-              .normalize('NFKD')
-              .toLowerCase()
-              .replace(/[\u0300-\u036f]/g, '')
-              .replace(/[^\p{L}\p{N}]+/gu, ' ')
-              .trim();
-          const title = normalize(result.title);
-          const term = normalize(query);
-          if (!term) return 0;
-          if (title === term) return 3;
-          if (title.startsWith(`${term} `)) return 2;
-          if (title.includes(term)) return 1;
-          return 0;
+          return getBookSearchRelevance(result.title, query);
         };
         return (score(right) - score(left)) * (sortOrder === 'desc' ? 1 : -1);
       }
