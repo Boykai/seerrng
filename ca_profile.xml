@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <CommunityApplications>
-  <Profile>SeerrNG is a Seerr fork for requests across movies, TV, music, books, comics, magazines, ROMs, and PC games. This repository provides one Unraid Community Applications listing and template for SeerrNG. Its optional integrations include Plex, Jellyfin, Emby, Radarr, Sonarr, Lidarr, BookshelfNG, Chaptarr, Mylar3, Kapowarr, LazyLibrarian, ROMarrNG, and QuestarrNG.</Profile>
+  <Profile>SeerrNG is a Seerr fork for requests across movies, TV, music, books, comics, magazines, ROMs, and PC games. This repository provides a standalone SeerrNG Community Applications template and individual optional companion templates for BookshelfNG, LazyLibrarian, Mylar3, Kapowarr, ROMarrNG, and QuestarrNG. BookshelfNG, ROMarrNG, and QuestarrNG are standalone NG forks with SeerrNG integration contracts; the other companion templates use standalone upstream images. Install only the services you use.</Profile>
   <Icon>https://raw.githubusercontent.com/snapetech/seerrng/main/public/android-chrome-512x512.png</Icon>
   <WebPage>https://github.com/snapetech/seerrng</WebPage>
   <Forum>https://github.com/snapetech/seerrng/issues</Forum>

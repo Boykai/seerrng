@@ -1,5 +1,6 @@
 import { load as loadYaml } from 'js-yaml';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
@@ -124,4 +125,64 @@ test('Unraid Compose project uses the SeerrNG fork images and companion profiles
   assert.deepEqual(services.kapowarr.profiles, ['comics']);
   assert.deepEqual(services.romarrng.profiles, ['software']);
   assert.deepEqual(services.questarrng.profiles, ['software']);
+});
+
+test('optional companion templates are separate standalone containers', async () => {
+  execFileSync(process.execPath, [
+    path.join(repositoryRoot, 'packaging/unraid/companion-templates.mjs'),
+    '--check',
+  ]);
+
+  const expected = new Map([
+    [
+      'bookshelfng',
+      ['BookshelfNG-SeerrNG', 'ghcr.io/snapetech/bookshelfng:hardcover'],
+    ],
+    [
+      'lazylibrarian',
+      ['LazyLibrarian-SeerrNG', 'lscr.io/linuxserver/lazylibrarian:latest'],
+    ],
+    ['mylar3', ['Mylar3-SeerrNG', 'lscr.io/linuxserver/mylar3:latest']],
+    ['kapowarr', ['Kapowarr-SeerrNG', 'mrcas/kapowarr:latest']],
+    ['romarrng', ['ROMarrNG-SeerrNG', 'ghcr.io/snapetech/romarrng:latest']],
+    [
+      'questarrng',
+      ['QuestarrNG-SeerrNG', 'ghcr.io/snapetech/questarrng:latest'],
+    ],
+  ]);
+  for (const [name, [containerName, image]] of expected) {
+    const template = (
+      await readXml(path.join(repositoryRoot, `packaging/unraid/${name}.xml`))
+    ).Container;
+    assert.equal(template.Name, containerName);
+    assert.match(template.Name, /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/u);
+    assert.equal(template.Repository, image);
+    assert.equal(template.Privileged, 'false');
+    assert.match(template.Overview, /Standalone/u);
+    assert.match(
+      template.Description,
+      /does not require SeerrNG|SeerrNG is optional/u
+    );
+    assert.equal(
+      template.TemplateURL,
+      `https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/${name}.xml`
+    );
+    const configs = asArray(template.Config);
+    assert.equal(
+      configs.filter((config) => config.$.Type === 'Port').length,
+      1
+    );
+    assert.equal(
+      configs.filter(
+        (config) =>
+          config.$.Target === '/config' ||
+          config.$.Target === '/app/data' ||
+          config.$.Target === '/app/db'
+      ).length,
+      1
+    );
+    assert.ok(
+      configs.every((config) => config.$.Target !== '/var/run/docker.sock')
+    );
+  }
 });

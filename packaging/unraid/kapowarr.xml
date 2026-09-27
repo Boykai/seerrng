@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Kapowarr-SeerrNG</Name>
+  <Repository>mrcas/kapowarr:latest</Repository>
+  <Registry>https://hub.docker.com/r/mrcas/kapowarr</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <WebUI>http://[IP]:[PORT:5656]/</WebUI>
+  <Overview>Standalone Kapowarr comic acquisition and library management, optionally connected to SeerrNG.</Overview>
+  <Description>Kapowarr runs independently and does not require SeerrNG. This companion template uses the upstream Kapowarr image. Configure its comic root and download sources, then add its API key to SeerrNG for full-volume comic requests. It is not an NG fork.</Description>
+  <Support>https://github.com/Casvt/Kapowarr/issues</Support>
+  <Project>https://github.com/Casvt/Kapowarr</Project>
+  <TemplateURL>https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/kapowarr.xml</TemplateURL>
+  <ReadMe>https://github.com/snapetech/seerrng/blob/main/docs/getting-started/third-parties/unraid.mdx</ReadMe>
+  <Category>MediaApp:Books</Category>
+  <ExtraSearchTerms>kapowarr comic seerrng</ExtraSearchTerms>
+  <Changes>Standalone optional companion template for SeerrNG.</Changes>
+  <Requires>Docker and persistent appdata. Configure this app independently before connecting it to SeerrNG.</Requires>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
+
+  <Config Name="Web UI Port" Target="5656" Default="5656" Mode="tcp" Description="Web UI Port for the standalone web interface." Type="Port" Display="always" Required="false" Mask="false">5656</Config>
+  <Config Name="Appdata" Target="/app/db" Default="/mnt/user/appdata/seerrng-kapowarr" Mode="rw" Description="Persistent Kapowarr database." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/seerrng-kapowarr</Config>
+  <Config Name="Comics" Target="/comics" Default="/mnt/user/media/comics" Mode="rw" Description="Comic library root to configure in Kapowarr." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/media/comics</Config>
+  <Config Name="Downloads" Target="/app/temp_downloads" Default="/mnt/user/downloads" Mode="rw" Description="Temporary downloads shared with the configured download client." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/downloads</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID for files created by this service." Type="Variable" Display="always" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID for files created by this service." Type="Variable" Display="always" Required="false" Mask="false">100</Config>
+  <Config Name="TZ" Target="TZ" Default="Etc/UTC" Mode="" Description="Time zone used by this service." Type="Variable" Display="always" Required="false" Mask="false">Etc/UTC</Config>
+</Container>
