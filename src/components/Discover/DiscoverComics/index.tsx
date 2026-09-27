@@ -4,6 +4,7 @@ import ListView from '@app/components/Common/ListView';
 import PageTitle from '@app/components/Common/PageTitle';
 import useDebouncedState from '@app/hooks/useDebouncedState';
 import useDiscover from '@app/hooks/useDiscover';
+import useDiscoverScrollRestoration from '@app/hooks/useDiscoverScrollRestoration';
 import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
 import { useBatchUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
 import defineMessages from '@app/utils/defineMessages';
@@ -45,6 +46,14 @@ const DiscoverComics = ({ titleOverride }: DiscoverComicsProps = {}) => {
     { query },
     { showErrorToast: false, hideErrorWithResults: false }
   );
+  useDiscoverScrollRestoration({
+    mediaType: 'comic',
+    itemCount: discover.titles.length,
+    shuffleSeed: discover.shuffleSeed,
+    isLoading: discover.isLoadingInitialData || discover.isLoadingMore,
+    isReachingEnd: discover.isReachingEnd,
+    fetchMore: discover.fetchMore,
+  });
   useSearchActivityReporter(
     Boolean(search.trim()) &&
       (search.trim() !== query.trim() ||

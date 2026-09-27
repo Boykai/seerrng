@@ -90,6 +90,22 @@ const PROXIED_IMAGE_PREFIXES = {
     source: /^https:\/\/covers\.openlibrary\.org\//,
     target: '/imageproxy/openlibrarycovers/',
   },
+  comicVine: {
+    source: /^https:\/\/comicvine\.gamespot\.com\//,
+    target: '/imageproxy/comicvine/',
+  },
+  comicVineStatic: {
+    source: /^https:\/\/comicvine\.cbsistatic\.com\//,
+    target: '/imageproxy/comicvinestatic/',
+  },
+  comicVineStatic1: {
+    source: /^https:\/\/comicvine1\.cbsistatic\.com\//,
+    target: '/imageproxy/comicvinestatic1/',
+  },
+  igdb: {
+    source: /^https:\/\/images\.igdb\.com\//,
+    target: '/imageproxy/igdb/',
+  },
 };
 
 const getProxiedImageUrl = (src: string): string | null => {

@@ -64,6 +64,24 @@ const openLibraryCoversImageProxy = new ImageProxy(
     },
   }
 );
+const comicVineImageProxy = new ImageProxy(
+  'comicvine',
+  'https://comicvine.gamespot.com',
+  { rateLimitOptions: { maxRequests: 5, maxRPS: 5 } }
+);
+const comicVineStaticImageProxy = new ImageProxy(
+  'comicvinestatic',
+  'https://comicvine.cbsistatic.com',
+  { rateLimitOptions: { maxRequests: 5, maxRPS: 5 } }
+);
+const comicVineStatic1ImageProxy = new ImageProxy(
+  'comicvinestatic1',
+  'https://comicvine1.cbsistatic.com',
+  { rateLimitOptions: { maxRequests: 5, maxRPS: 5 } }
+);
+const igdbImageProxy = new ImageProxy('igdb', 'https://images.igdb.com', {
+  rateLimitOptions: { maxRequests: 10, maxRPS: 10 },
+});
 
 export const getImageCacheWarmProvider = (url: URL): string | null => {
   switch (url.origin) {
@@ -80,6 +98,14 @@ export const getImageCacheWarmProvider = (url: URL): string | null => {
       return 'theaudiodb';
     case 'https://covers.openlibrary.org':
       return 'openlibrarycovers';
+    case 'https://comicvine.gamespot.com':
+      return 'comicvine';
+    case 'https://comicvine.cbsistatic.com':
+      return 'comicvinestatic';
+    case 'https://comicvine1.cbsistatic.com':
+      return 'comicvinestatic1';
+    case 'https://images.igdb.com':
+      return 'igdb';
     default:
       return null;
   }
@@ -122,6 +148,14 @@ const getProxyForUrl = (url: URL): ImageProxy | null => {
       return theAudioDbImageProxy;
     case 'openlibrarycovers':
       return openLibraryCoversImageProxy;
+    case 'comicvine':
+      return comicVineImageProxy;
+    case 'comicvinestatic':
+      return comicVineStaticImageProxy;
+    case 'comicvinestatic1':
+      return comicVineStatic1ImageProxy;
+    case 'igdb':
+      return igdbImageProxy;
     default:
       return null;
   }

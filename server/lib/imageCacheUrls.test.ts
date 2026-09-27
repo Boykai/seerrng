@@ -24,6 +24,19 @@ describe('resolved poster warming', () => {
 });
 
 describe('extractImageCacheUrls', () => {
+  it('finds software catalog cover URLs for bounded prewarming', () => {
+    assert.deepEqual(
+      extractImageCacheUrls({
+        results: [
+          {
+            coverUrl:
+              'https://images.igdb.com/igdb/image/upload/t_cover_big/abc.jpg',
+          },
+        ],
+      }),
+      ['https://images.igdb.com/igdb/image/upload/t_cover_big/abc.jpg']
+    );
+  });
   it('extracts warmable image URLs from nested media responses', () => {
     const urls = extractImageCacheUrls({
       results: [

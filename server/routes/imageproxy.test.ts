@@ -45,6 +45,25 @@ afterEach(() => {
 });
 
 describe('GET /imageproxy/:type/*path', () => {
+  it('accepts comic and game artwork providers through the image cache', async () => {
+    mock.method(
+      ImageProxy.prototype,
+      'getCachedImage',
+      async () => imageResponse
+    );
+
+    for (const type of [
+      'comicvine',
+      'comicvinestatic',
+      'comicvinestatic1',
+      'igdb',
+    ]) {
+      const response = await request(createApp()).get(
+        `/imageproxy/${type}/cover.jpg`
+      );
+      assert.equal(response.status, 200, type);
+    }
+  });
   it('bounds upstream image proxy waits', () => {
     assert.equal(IMAGE_PROXY_HTTP_OPTIONS.timeout, 10_000);
   });

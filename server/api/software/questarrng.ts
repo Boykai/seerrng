@@ -1,4 +1,5 @@
 import ExternalAPI from '@server/api/externalapi';
+import cacheManager from '@server/lib/cache';
 import type { SoftwareProviderSettings } from '@server/lib/settings';
 import { buildServiceUrl } from '@server/utils/serviceUrl';
 import type { Readable } from 'node:stream';
@@ -49,6 +50,7 @@ export class QuestarrNGAPI extends ExternalAPI {
       {},
       {
         allowPrivateAddresses: true,
+        nodeCache: cacheManager.getCache('questarr').data,
         headers: { 'X-Api-Key': settings.apiKey },
       }
     );
@@ -65,7 +67,7 @@ export class QuestarrNGAPI extends ExternalAPI {
     return this.get(
       '/api/integration/seerrng/v1/catalog/search',
       { params: { q: query, limit } },
-      0
+      600
     );
   }
 
@@ -73,19 +75,19 @@ export class QuestarrNGAPI extends ExternalAPI {
     return this.get(
       '/api/integration/seerrng/v1/catalog/popular',
       { params: { limit } },
-      0
+      600
     );
   }
 
   public getCatalogPlatforms(): Promise<SoftwareCatalogPlatform[]> {
-    return this.get('/api/integration/seerrng/v1/catalog/platforms', {}, 0);
+    return this.get('/api/integration/seerrng/v1/catalog/platforms', {}, 600);
   }
 
   public getCatalogGame(igdbId: number): Promise<SoftwareCatalogGame> {
     return this.get(
       `/api/integration/seerrng/v1/catalog/games/${igdbId}`,
       {},
-      0
+      600
     );
   }
 

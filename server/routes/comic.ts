@@ -5,6 +5,8 @@ import MediaIdentifier, {
   MediaIdentifierProvider,
 } from '@server/entity/MediaIdentifier';
 import { Watchlist } from '@server/entity/Watchlist';
+import { extractImageCacheUrls } from '@server/lib/imageCacheUrls';
+import { enqueueImageCacheWarm } from '@server/lib/imageCacheWarmer';
 import { hydrateMediaSummaryRelations } from '@server/lib/mediaSummaryHydration';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -68,6 +70,7 @@ comicRoutes.get('/:id', async (req, res, next) => {
       media,
       onUserWatchlist
     );
+    enqueueImageCacheWarm(extractImageCacheUrls(comicDetails));
 
     return res.status(200).json(filterEntityResponse(comicDetails, req.user));
   } catch (e) {

@@ -518,9 +518,7 @@ const TitleCard = ({
                   ? `/magazine/${encodeApiPathSegment(canonicalId)}`
                   : `/artist/${encodeApiPathSegment(canonicalId)}`;
   const displayImage = getTmdbPosterImageUrl(artwork);
-  // ComicVine artwork is served from its own CDN hosts and isn't yet routed
-  // through our image cache proxy (deliberate scope cut - see comics plan);
-  // 'tmdb' is a safe no-op default since the proxy leaves non-tmdb URLs as-is.
+  // Resolved provider artwork is routed by URL when image caching is enabled.
   const imageCacheType =
     isResolvedImageUrl(displayImage) && isBook
       ? 'book'

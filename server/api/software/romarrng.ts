@@ -1,4 +1,5 @@
 import ExternalAPI from '@server/api/externalapi';
+import cacheManager from '@server/lib/cache';
 import type { SoftwareProviderSettings } from '@server/lib/settings';
 import { buildServiceUrl } from '@server/utils/serviceUrl';
 import type { Readable } from 'node:stream';
@@ -43,6 +44,7 @@ export class ROMarrNGAPI extends ExternalAPI {
       {},
       {
         allowPrivateAddresses: true,
+        nodeCache: cacheManager.getCache('romarr').data,
         headers: { 'X-Api-Key': settings.apiKey },
       }
     );
@@ -53,7 +55,7 @@ export class ROMarrNGAPI extends ExternalAPI {
   }
 
   public getPlatforms(): Promise<RomarrPlatform[]> {
-    return this.get('/api/platforms', {}, 0);
+    return this.get('/api/platforms', {}, 300);
   }
 
   public createRequest(

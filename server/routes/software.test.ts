@@ -34,7 +34,7 @@ const pcGame: SoftwareCatalogGame = {
   igdbId: 42,
   title: 'Test Game',
   summary: 'A test game.',
-  coverUrl: 'https://images.example.test/cover.jpg',
+  coverUrl: 'https://images.igdb.com/igdb/image/upload/t_cover_big/cover.jpg',
   releaseDate: '2024-01-01',
   platforms: ['PC (Microsoft Windows)'],
   platformOptions: [{ id: 6, name: 'PC (Microsoft Windows)' }],
@@ -84,6 +84,8 @@ const createApp = (userId = 2, permissions = Permission.REQUEST): Express => {
       error: { status?: number; message?: string },
       _req: express.Request,
       res: express.Response,
+      // Express identifies error handlers by their four-argument signature.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       _next: express.NextFunction
     ) =>
       res.status(error.status ?? 500).json({
@@ -114,6 +116,7 @@ const createOpenApiValidatedApp = (): Express => {
       error: { status?: number | string; message?: string },
       _req: express.Request,
       res: express.Response,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       _next: express.NextFunction
     ) =>
       res.status(Number(error.status ?? 500)).json({
@@ -144,6 +147,7 @@ const createOpenApiValidatedSettingsApp = (): Express => {
       error: { status?: number | string; message?: string },
       _req: express.Request,
       res: express.Response,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       _next: express.NextFunction
     ) =>
       res.status(Number(error.status ?? 500)).json({
@@ -292,6 +296,81 @@ describe('software request routes', () => {
         catalogPlatformId: 130,
       },
     ]);
+  });
+
+  it('filters the full provider window before applying the requested catalog limit', async () => {
+    let providerLimit = 0;
+    mock.method(
+      QuestarrNGAPI.prototype,
+      'searchCatalog',
+      async (_query, limit) => {
+        providerLimit = limit;
+        return [
+          ...Array.from({ length: 24 }, (_, index) => ({
+            ...pcGame,
+            igdbId: index + 1,
+            platformOptions: [{ id: 6, name: 'PC (Microsoft Windows)' }],
+          })),
+          {
+            ...pcGame,
+            igdbId: 100,
+            platformOptions: [
+              { id: 130, name: 'Nintendo Entertainment System' },
+            ],
+          },
+        ];
+      }
+    );
+    mock.method(ROMarrNGAPI.prototype, 'getPlatforms', async () => [
+      {
+        slug: 'nes',
+        name: 'Nintendo Entertainment System',
+        media: 'rom',
+        extensions: ['.nes'],
+        max_size_mb: 16,
+      },
+    ]);
+
+    const response = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'retro', q: 'Test Game', limit: 1 });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(providerLimit, 50);
+    assert.deepStrictEqual(
+      response.body.results.map((game: { igdbId: number }) => game.igdbId),
+      [100]
+    );
+  });
+
+  it('only returns catalog cover URLs from the IGDB image host', async () => {
+    mock.method(QuestarrNGAPI.prototype, 'searchCatalog', async () => [
+      pcGame,
+      {
+        ...pcGame,
+        igdbId: 2,
+        coverUrl: 'https://images.igdb.com.attacker.test/cover.jpg',
+      },
+      {
+        ...pcGame,
+        igdbId: 3,
+        coverUrl: 'https://127.0.0.1/cover.jpg',
+      },
+    ]);
+
+    const response = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'game', q: 'Test Game' });
+
+    assert.strictEqual(response.status, 200);
+    assert.deepStrictEqual(
+      response.body.results.map((game: { coverUrl: string }) => game.coverUrl),
+      [
+        'https://images.igdb.com/igdb/image/upload/t_cover_big/cover.jpg',
+        '',
+        '',
+      ]
+    );
   });
 
   it('persists the selected PC target and sends it to QuestarrNG on approval', async () => {

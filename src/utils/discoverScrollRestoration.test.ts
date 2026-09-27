@@ -21,6 +21,8 @@ describe('discover scroll restoration', () => {
     strictEqual(isMediaDetailPath('/tv/123', 'movie'), false);
     strictEqual(isMediaDetailPath('/book/OL123W?from=list', 'book'), true);
     strictEqual(isMediaDetailPath('/discover/books', 'book'), false);
+    strictEqual(isMediaDetailPath('/comic/4050', 'comic'), true);
+    strictEqual(isMediaDetailPath('/movie/4050', 'comic'), false);
   });
 
   it('reads valid restoration data only for the matching history entry', () => {

@@ -55,6 +55,18 @@ describe('getImageCacheWarmProvider', () => {
       ),
       'openlibrarycovers'
     );
+    assert.equal(
+      getImageCacheWarmProvider(
+        new URL('https://comicvine1.cbsistatic.com/a/cover.jpg')
+      ),
+      'comicvinestatic1'
+    );
+    assert.equal(
+      getImageCacheWarmProvider(
+        new URL('https://images.igdb.com/igdb/image/upload/cover.jpg')
+      ),
+      'igdb'
+    );
   });
 
   it('ignores unsupported image providers', () => {

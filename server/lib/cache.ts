@@ -20,6 +20,8 @@ export type AvailableCacheIds =
   | 'coverartarchive'
   | 'openlibrary'
   | 'comicvine'
+  | 'questarr'
+  | 'romarr'
   | 'googlebooks'
   | 'wikidata'
   | 'tadb'
@@ -203,6 +205,16 @@ class CacheManager {
     comicvine: new Cache('comicvine', 'ComicVine API', {
       stdTtl: 43200,
       checkPeriod: 60 * 30,
+    }),
+    questarr: new Cache('questarr', 'QuestarrNG catalog', {
+      stdTtl: 600,
+      maxKeys: 500,
+      maxBytes: 16 * 1024 * 1024,
+    }),
+    romarr: new Cache('romarr', 'ROMarrNG systems', {
+      stdTtl: 300,
+      maxKeys: 32,
+      maxBytes: 4 * 1024 * 1024,
     }),
     googlebooks: new Cache('googlebooks', 'Google Books API', {
       stdTtl: 900,

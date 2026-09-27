@@ -11,6 +11,8 @@ import SoftwareRequest, {
 } from '@server/entity/SoftwareRequest';
 import SoftwareRequestStatusEvent from '@server/entity/SoftwareRequestStatusEvent';
 import { User } from '@server/entity/User';
+import { extractImageCacheUrls } from '@server/lib/imageCacheUrls';
+import { enqueueImageCacheWarm } from '@server/lib/imageCacheWarmer';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
@@ -42,6 +44,7 @@ import path from 'node:path';
 
 const softwareRoutes = Router();
 const MAX_CATALOG_LIMIT = 50;
+const CATALOG_PROVIDER_FETCH_LIMIT = 50;
 const ACTIVE_STATUSES: SoftwareRequestStatus[] = [
   'pending',
   'approved',
@@ -299,38 +302,47 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
 
   try {
     const api = getQuestarrApi();
-    const games = (await api.searchCatalog(parsed.query, parsed.limit)).map(
-      sanitizeGame
-    );
+    // The provider does not filter by SeerrNG category. Fetch its full bounded
+    // window before filtering so the first mixed titles do not crowd out ROMs.
+    const games = (
+      await api.searchCatalog(parsed.query, CATALOG_PROVIDER_FETCH_LIMIT)
+    ).map(sanitizeGame);
     if (parsed.category === 'game') {
-      return res.status(200).json({
-        results: games.filter((game) =>
+      const results = games
+        .filter((game) =>
           game.platformOptions.some(({ name }) => isPcPlatformName(name))
-        ),
+        )
+        .slice(0, parsed.limit);
+      enqueueImageCacheWarm(extractImageCacheUrls(results));
+      return res.status(200).json({
+        results,
       });
     }
 
     const systems = (await getEmulationPlatforms()).filter(
       (system) => system.group === parsed.category
     );
-    const results = games.flatMap((game) => {
-      const systemsForGame = systems.flatMap((system) => {
-        const platform = systemMatchesGame(system, game);
-        return platform
-          ? [
-              {
-                slug: system.slug,
-                name: system.name,
-                group: system.group,
-                catalogPlatformId: platform.id,
-              },
-            ]
+    const results = games
+      .flatMap((game) => {
+        const systemsForGame = systems.flatMap((system) => {
+          const platform = systemMatchesGame(system, game);
+          return platform
+            ? [
+                {
+                  slug: system.slug,
+                  name: system.name,
+                  group: system.group,
+                  catalogPlatformId: platform.id,
+                },
+              ]
+            : [];
+        });
+        return systemsForGame.length > 0
+          ? [{ ...game, emulationSystems: systemsForGame }]
           : [];
-      });
-      return systemsForGame.length > 0
-        ? [{ ...game, emulationSystems: systemsForGame }]
-        : [];
-    });
+      })
+      .slice(0, parsed.limit);
+    enqueueImageCacheWarm(extractImageCacheUrls(results));
     return res.status(200).json({ results });
   } catch (error) {
     return respondProviderError(res, error);
@@ -355,38 +367,45 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
   }
 
   try {
-    const games = (await getQuestarrApi().getPopularCatalog(limit)).map(
-      sanitizeGame
-    );
+    const games = (
+      await getQuestarrApi().getPopularCatalog(CATALOG_PROVIDER_FETCH_LIMIT)
+    ).map(sanitizeGame);
     if (category === 'game') {
-      return res.status(200).json({
-        results: games.filter((game) =>
+      const results = games
+        .filter((game) =>
           game.platformOptions.some(({ name }) => isPcPlatformName(name))
-        ),
+        )
+        .slice(0, limit);
+      enqueueImageCacheWarm(extractImageCacheUrls(results));
+      return res.status(200).json({
+        results,
       });
     }
 
     const systems = (await getEmulationPlatforms()).filter(
       (system) => system.group === category
     );
-    const results = games.flatMap((game) => {
-      const systemsForGame = systems.flatMap((system) => {
-        const platform = systemMatchesGame(system, game);
-        return platform
-          ? [
-              {
-                slug: system.slug,
-                name: system.name,
-                group: system.group,
-                catalogPlatformId: platform.id,
-              },
-            ]
+    const results = games
+      .flatMap((game) => {
+        const systemsForGame = systems.flatMap((system) => {
+          const platform = systemMatchesGame(system, game);
+          return platform
+            ? [
+                {
+                  slug: system.slug,
+                  name: system.name,
+                  group: system.group,
+                  catalogPlatformId: platform.id,
+                },
+              ]
+            : [];
+        });
+        return systemsForGame.length > 0
+          ? [{ ...game, emulationSystems: systemsForGame }]
           : [];
-      });
-      return systemsForGame.length > 0
-        ? [{ ...game, emulationSystems: systemsForGame }]
-        : [];
-    });
+      })
+      .slice(0, limit);
+    enqueueImageCacheWarm(extractImageCacheUrls(results));
     return res.status(200).json({ results });
   } catch (error) {
     return respondProviderError(res, error);

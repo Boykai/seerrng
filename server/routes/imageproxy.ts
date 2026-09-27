@@ -165,6 +165,10 @@ function initOpenLibraryCoversImageProxy() {
 }
 
 let fanartImageProxy: ImageProxy;
+let comicVineImageProxy: ImageProxy;
+let comicVineStaticImageProxy: ImageProxy;
+let comicVineStatic1ImageProxy: ImageProxy;
+let igdbImageProxy: ImageProxy;
 const getImageProxy = (type: string): ImageProxy | null => {
   switch (type) {
     case 'tmdb':
@@ -185,6 +189,30 @@ const getImageProxy = (type: string): ImageProxy | null => {
       ));
     case 'openlibrarycovers':
       return initOpenLibraryCoversImageProxy();
+    case 'comicvine':
+      return (comicVineImageProxy ??= new ImageProxy(
+        'comicvine',
+        'https://comicvine.gamespot.com',
+        { rateLimitOptions: { maxRequests: 5, maxRPS: 5 } }
+      ));
+    case 'comicvinestatic':
+      return (comicVineStaticImageProxy ??= new ImageProxy(
+        'comicvinestatic',
+        'https://comicvine.cbsistatic.com',
+        { rateLimitOptions: { maxRequests: 5, maxRPS: 5 } }
+      ));
+    case 'comicvinestatic1':
+      return (comicVineStatic1ImageProxy ??= new ImageProxy(
+        'comicvinestatic1',
+        'https://comicvine1.cbsistatic.com',
+        { rateLimitOptions: { maxRequests: 5, maxRPS: 5 } }
+      ));
+    case 'igdb':
+      return (igdbImageProxy ??= new ImageProxy(
+        'igdb',
+        'https://images.igdb.com',
+        { rateLimitOptions: { maxRequests: 10, maxRPS: 10 } }
+      ));
     default:
       return null;
   }

@@ -138,7 +138,7 @@ const SoftwareCatalog = () => {
     if (visibleCategories.length === 0) return null;
     const params = new URLSearchParams({
       category: selectedCategory,
-      limit: '24',
+      limit: '50',
     });
     if (query) {
       params.set('q', query);
