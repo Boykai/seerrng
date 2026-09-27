@@ -5,6 +5,7 @@ import ComicVineAPI from '@server/api/comicvine';
 import CoverArtArchive from '@server/api/coverartarchive';
 import ExternalAPI from '@server/api/externalapi';
 import GoogleBooksAPI from '@server/api/googlebooks';
+import LazyLibrarianAPI from '@server/api/lazylibrarian';
 import ListenBrainzAPI from '@server/api/listenbrainz';
 import MusicBrainz from '@server/api/musicbrainz';
 import OpenLibraryAPI from '@server/api/openlibrary';
@@ -29,6 +30,7 @@ import { User } from '@server/entity/User';
 import { Watchlist } from '@server/entity/Watchlist';
 import {
   getSettings,
+  type LazyLibrarianSettings,
   type RadarrSettings,
   type ReadarrSettings,
 } from '@server/lib/settings';
@@ -3306,7 +3308,7 @@ describe('GET /discover/books', () => {
     const searchBooks = mock.method(
       OpenLibraryAPI.prototype,
       'searchBooks',
-      async ({ query }) => {
+      async ({ query }: { query: string }) => {
         assert.match(query, /author:"stephen"/);
         assert.match(query, /author:"king"/);
         assert.match(query, /subject:horror/);
@@ -4342,8 +4344,59 @@ describe('GET /discover/comics', () => {
 });
 
 describe('GET /discover/magazines', () => {
+  const magazineService = (id: number): LazyLibrarianSettings => ({
+    id,
+    name: `LazyLibrarian ${id}`,
+    hostname: `lazylibrarian-${id}.test`,
+    port: 5299,
+    apiKey: 'test-key',
+    useSsl: false,
+    isDefault: id === 1,
+    tags: [],
+    syncEnabled: false,
+    preventSearch: false,
+  });
+
   afterEach(() => {
     getSettings().main.googleBooksApiKey = '';
+    getSettings().lazylibrarian = [];
+  });
+
+  it('keeps tracked titles from a healthy service when another fails', async () => {
+    getSettings().lazylibrarian = [magazineService(1), magazineService(2)];
+    let calls = 0;
+    const getMagazines = mock.method(
+      LazyLibrarianAPI.prototype,
+      'getMagazines',
+      async () => {
+        if (++calls === 1) {
+          throw new Error('First service is unavailable');
+        }
+        return [{ title: 'Science Monthly' }];
+      }
+    );
+
+    const agent = await login();
+    const res = await agent
+      .get('/discover/magazines')
+      .query({ catalog: 'tracked' });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(getMagazines.mock.callCount(), 2);
+    assert.strictEqual(res.body.results[0].title, 'Science Monthly');
+  });
+
+  it('reports an unavailable catalog when every service fails', async () => {
+    getSettings().lazylibrarian = [magazineService(1)];
+    mock.method(LazyLibrarianAPI.prototype, 'getMagazines', async () => {
+      throw new Error('Service is unavailable');
+    });
+
+    const agent = await login();
+    const res = await agent.get('/discover/magazines');
+
+    assert.strictEqual(res.status, 503);
+    assert.match(res.body.message, /LazyLibrarian is unavailable/);
   });
 
   it('explains how to enable public catalog search when no key is configured', async () => {

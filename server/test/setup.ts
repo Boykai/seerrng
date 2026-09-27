@@ -90,6 +90,7 @@ Reflect.set(
       readarr: settings.readarr,
       mylar: settings.mylar,
       kapowarr: settings.kapowarr,
+      lazylibrarian: settings.lazylibrarian,
       notifications: settings.notifications,
       network: settings.network,
     };

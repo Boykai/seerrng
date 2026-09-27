@@ -3927,24 +3927,41 @@ discoverRoutes.get('/magazines', async (req, res) => {
         serviceId: number;
       }
     >();
-    for (const service of settings.lazylibrarian) {
-      const magazines = await runWithServarrServiceSnapshot(
-        'lazylibrarian',
-        service,
-        async (current) =>
-          (
-            await new LazyLibrarianAPI({
-              url: LazyLibrarianAPI.buildUrl(current),
-              apiKey: current.apiKey,
-            }).getMagazines()
-          ).map((magazine) => ({ ...magazine, serviceId: current.id }))
-      );
-      for (const magazine of magazines) {
+    const catalogs = await Promise.allSettled(
+      settings.lazylibrarian.map((service) =>
+        runWithServarrServiceSnapshot(
+          'lazylibrarian',
+          service,
+          async (current) =>
+            (
+              await new LazyLibrarianAPI({
+                url: LazyLibrarianAPI.buildUrl(current),
+                apiKey: current.apiKey,
+              }).getMagazines()
+            ).map((magazine) => ({ ...magazine, serviceId: current.id }))
+        )
+      )
+    );
+    let availableCatalogs = 0;
+    for (const [index, catalog] of catalogs.entries()) {
+      if (catalog.status === 'rejected') {
+        logger.warn('Failed to fetch a LazyLibrarian magazine catalog', {
+          label: 'Discover Magazines',
+          serviceId: settings.lazylibrarian[index].id,
+          ...getErrorLogFields(catalog.reason),
+        });
+        continue;
+      }
+      availableCatalogs += 1;
+      for (const magazine of catalog.value) {
         const key = normalizeMagazineTitle(magazine.title);
         if (key && !magazinesByTitle.has(key)) {
           magazinesByTitle.set(key, magazine);
         }
       }
+    }
+    if (availableCatalogs === 0) {
+      throw new Error('All LazyLibrarian magazine catalogs are unavailable.');
     }
 
     const matched = [...magazinesByTitle.entries()]
