@@ -110,6 +110,41 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.33.0](https://github.com/snapetech/seerrng/compare/v3.32.0..v3.33.0) - 2026-09-27
+
+### User-facing changes
+
+#### Changed
+
+- **Bookshelf:** Fresh setup now recommends one BookshelfNG instance for both formats and offers a shortcut to add its second SeerrNG connection. Existing split installs show how to combine after migrating their separate audiobook library.
+- **Unraid:** The Unraid guide now distinguishes NG fork template files on GitHub from searchable Community Apps listings, so operators know that each fork needs its own catalog submission.
+  - **Action required:** Submit and scan each NG fork repository before expecting its template in Community Apps search.
+- **Unraid:** SeerrNG no longer offers duplicate Unraid templates for the third-party LazyLibrarian, Mylar3, and Kapowarr apps. The Unraid guide links to their existing Community Apps listings, and NG companion templates now link to SeerrNG support.
+  - **Action required:** Install LazyLibrarian, Mylar3, and Kapowarr from their existing Community Apps listings; use SeerrNG templates for the NG forks.
+
+#### Fixed
+
+- **Unraid:** The Unraid guide now links to BookshelfNG's dedicated template repository, avoiding scan warnings caused by unrelated XML files in its application source.
+  - **Action required:** Use https://github.com/snapetech/bookshelfng-unraid for the BookshelfNG Community Apps submission.
+- **Unraid:** SeerrNG's Unraid repository now publishes only SeerrNG. The optional NG forks keep one standalone template each in their own repositories, avoiding duplicate catalog submissions; the Unraid guide links to those templates.
+  - **Action required:** Use the BookshelfNG, ROMarrNG, and QuestarrNG templates in their own repositories when installing those optional apps.
+- **Unraid:** The Unraid guide now shows the exact repository URLs to submit for BookshelfNG, ROMarrNG, and QuestarrNG, preventing the portal from rejecting an already-listed SeerrNG repository.
+  - **Action required:** Submit each NG fork's repository URL, not an XML file URL or the already-listed SeerrNG repository.
+
+### 🚀 Features
+- *(bookshelf)* Guide combined setup and upgrades - ([07fd5ea](https://github.com/snapetech/seerrng/commit/07fd5ea27bfdf9c695d036ff0fcc3b62c5370bb8))
+
+### 🐛 Bug Fixes
+- *(unraid)* Submit clean BookshelfNG template repository - ([83b94dc](https://github.com/snapetech/seerrng/commit/83b94dc14c684d903d374c03667a73effac3e679))
+- *(unraid)* Keep fork templates in their own repositories - ([a866206](https://github.com/snapetech/seerrng/commit/a866206fc2fbaa21c6a89545a1201961f1988bcc))
+- *(unraid)* Use existing upstream Community Apps listings - ([346226f](https://github.com/snapetech/seerrng/commit/346226f09b81cfb78d6173d239dee269cad58212))
+
+### 📖 Documentation
+- *(unraid)* Show fork repository submission URLs - ([7ded089](https://github.com/snapetech/seerrng/commit/7ded089e6a279e142f781488bf704c1bf91ac193))
+- *(unraid)* Distinguish template source from CA listing - ([707eb3e](https://github.com/snapetech/seerrng/commit/707eb3ecdc523a5b7a9399eae082ef3a77b27dae))
+
 ## [3.32.0](https://github.com/snapetech/seerrng/compare/v3.31.0..v3.32.0) - 2026-09-27
 
 ### User-facing changes
