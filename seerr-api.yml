@@ -11202,6 +11202,18 @@ paths:
             type: string
             enum: [retro, modern, game]
         - in: query
+          name: system
+          description: ROMarrNG system slug for Retro or Modern results.
+          schema:
+            type: string
+            maxLength: 64
+        - in: query
+          name: platform
+          description: PC operating-system platform for game results.
+          schema:
+            type: string
+            enum: [windows, linux, macos]
+        - in: query
           name: limit
           schema:
             type: integer
@@ -11233,6 +11245,18 @@ paths:
           schema:
             type: string
             enum: [retro, modern, game]
+        - in: query
+          name: system
+          description: ROMarrNG system slug for Retro or Modern results.
+          schema:
+            type: string
+            maxLength: 64
+        - in: query
+          name: platform
+          description: PC operating-system platform for game results.
+          schema:
+            type: string
+            enum: [windows, linux, macos]
         - in: query
           name: limit
           schema:

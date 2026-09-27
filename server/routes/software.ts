@@ -72,6 +72,36 @@ const disabledCategoryResponse = (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 
+type CatalogFilters = {
+  systemSlug?: string;
+  pcPlatform?: 'windows' | 'linux' | 'macos';
+};
+
+const parseCatalogFilters = (
+  value: Record<string, unknown>,
+  category: SoftwareRequestCategory
+): CatalogFilters | null => {
+  const systemSlug = value.system;
+  const pcPlatform = value.platform;
+  if (
+    (systemSlug !== undefined &&
+      (category === 'game' ||
+        typeof systemSlug !== 'string' ||
+        !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(systemSlug))) ||
+    (pcPlatform !== undefined &&
+      (category !== 'game' ||
+        (pcPlatform !== 'windows' &&
+          pcPlatform !== 'linux' &&
+          pcPlatform !== 'macos')))
+  ) {
+    return null;
+  }
+  return {
+    systemSlug: systemSlug as string | undefined,
+    pcPlatform: pcPlatform as CatalogFilters['pcPlatform'],
+  };
+};
+
 const parseCatalogQuery = (
   value: unknown
 ): {
@@ -79,6 +109,7 @@ const parseCatalogQuery = (
   category: SoftwareRequestCategory;
   limit: number;
   cursor?: string;
+  filters: CatalogFilters;
 } | null => {
   if (!isRecord(value)) return null;
   const query = typeof value.q === 'string' ? value.q.trim() : '';
@@ -97,7 +128,10 @@ const parseCatalogQuery = (
   ) {
     return null;
   }
-  return { query, category, limit, cursor: cursor as string | undefined };
+  const filters = parseCatalogFilters(value, category);
+  return filters
+    ? { query, category, limit, cursor: cursor as string | undefined, filters }
+    : null;
 };
 
 const normalizePlatformName = (value: string): string =>
@@ -173,6 +207,21 @@ const isPcPlatformName = (value: string): boolean => {
   );
 };
 
+const isPcTargetPlatformName = (
+  value: string,
+  target: CatalogFilters['pcPlatform']
+): boolean => {
+  if (!target) return isPcPlatformName(value);
+  const name = normalizePlatformName(value);
+  if (target === 'windows') {
+    return ['pc microsoft windows', 'microsoft windows', 'windows'].includes(
+      name
+    );
+  }
+  if (target === 'linux') return name === 'pc linux' || name === 'linux';
+  return ['pc macintosh', 'mac', 'macintosh', 'macos'].includes(name);
+};
+
 const getEmulationPlatforms = async (): Promise<
   (RomarrPlatform & { group: 'retro' | 'modern' | null })[]
 > => {
@@ -228,19 +277,24 @@ const systemMatchesPlatform = (system: RomarrPlatform, name: string): boolean =>
 
 const getCatalogCategoryContext = async (
   api: QuestarrNGAPI,
-  category: SoftwareRequestCategory
+  category: SoftwareRequestCategory,
+  filters: CatalogFilters
 ) => {
   const [platforms, systems] = await Promise.all([
     api.getCatalogPlatforms(),
     category === 'game'
       ? Promise.resolve([])
       : getEmulationPlatforms().then((all) =>
-          all.filter((system) => system.group === category)
+          all.filter(
+            (system) =>
+              system.group === category &&
+              (!filters.systemSlug || system.slug === filters.systemSlug)
+          )
         ),
   ]);
   const matches = (platform: SoftwareCatalogPlatform) =>
     category === 'game'
-      ? isPcPlatformName(platform.name)
+      ? isPcTargetPlatformName(platform.name, filters.pcPlatform)
       : systems.some((system) => systemMatchesPlatform(system, platform.name));
   return {
     platformIds: platforms
@@ -255,12 +309,15 @@ const getCatalogCategoryContext = async (
 const mapCategoryGames = (
   games: SoftwareCatalogGame[],
   category: SoftwareRequestCategory,
-  systems: (RomarrPlatform & { group: 'retro' | 'modern' | null })[]
+  systems: (RomarrPlatform & { group: 'retro' | 'modern' | null })[],
+  filters: CatalogFilters
 ) => {
   const sanitized = games.map(sanitizeGame);
   if (category === 'game') {
     return sanitized.filter((game) =>
-      game.platformOptions.some(({ name }) => isPcPlatformName(name))
+      game.platformOptions.some(({ name }) =>
+        isPcTargetPlatformName(name, filters.pcPlatform)
+      )
     );
   }
   return sanitized.flatMap((game) => {
@@ -388,7 +445,8 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
     const api = getQuestarrApi();
     const { platformIds, systems } = await getCatalogCategoryContext(
       api,
-      parsed.category
+      parsed.category,
+      parsed.filters
     );
     if (!platformIds.length) {
       return res.status(200).json({ results: [], nextCursor: null });
@@ -419,10 +477,12 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
       );
       nextCursor = null;
     }
-    const results = mapCategoryGames(games, parsed.category, systems).slice(
-      0,
-      parsed.limit
-    );
+    const results = mapCategoryGames(
+      games,
+      parsed.category,
+      systems,
+      parsed.filters
+    ).slice(0, parsed.limit);
     enqueueImageCacheWarm(extractImageCacheUrls(results));
     return res.status(200).json({ results, nextCursor });
   } catch (error) {
@@ -450,12 +510,17 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
   if (!isSoftwareCategoryEnabled(category)) {
     return disabledCategoryResponse(res, category);
   }
+  const filters = parseCatalogFilters(req.query, category);
+  if (!filters) {
+    return res.status(400).json({ error: 'Invalid software catalog filters.' });
+  }
 
   try {
     const api = getQuestarrApi();
     const { platformIds, systems } = await getCatalogCategoryContext(
       api,
-      category
+      category,
+      filters
     );
     if (!platformIds.length) {
       return res.status(200).json({ results: [], nextOffset: null });
@@ -477,7 +542,10 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
       games = await api.getPopularCatalog(CATALOG_PROVIDER_FETCH_LIMIT);
       nextOffset = null;
     }
-    const results = mapCategoryGames(games, category, systems).slice(0, limit);
+    const results = mapCategoryGames(games, category, systems, filters).slice(
+      0,
+      limit
+    );
     enqueueImageCacheWarm(extractImageCacheUrls(results));
     return res.status(200).json({ results, nextOffset });
   } catch (error) {

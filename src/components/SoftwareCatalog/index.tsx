@@ -34,6 +34,8 @@ const messages = defineMessages('components.SoftwareCatalog', {
   retro: 'Retro',
   modern: 'Modern',
   games: 'PC Games',
+  allSystems: 'All systems',
+  allPcPlatforms: 'All PC platforms',
   searchPlaceholder: 'Search software titles',
   search: 'Search',
   popular: 'Popular titles',
@@ -79,6 +81,12 @@ interface EmulationSystemOption {
   catalogPlatformId: number;
 }
 
+interface CatalogSystemOption {
+  slug: string;
+  name: string;
+  group: 'retro' | 'modern' | null;
+}
+
 interface CatalogGame {
   id: string;
   igdbId: number;
@@ -114,6 +122,8 @@ const SoftwareCatalog = () => {
   const [category, setCategory] = useState<Category>('retro');
   const [searchInput, setSearchInput] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
+  const [systemFilter, setSystemFilter] = useState('');
+  const [pcPlatformFilter, setPcPlatformFilter] = useState('');
   const [selectedGame, setSelectedGame] = useState<CatalogGame | null>(null);
   const [selectedSystem, setSelectedSystem] = useState('');
   const [variant, setVariant] = useState<PcVariant>({
@@ -137,6 +147,14 @@ const SoftwareCatalog = () => {
   const selectedCategory = visibleCategories.includes(category)
     ? category
     : (visibleCategories[0] ?? category);
+  const { data: systemCatalog } = useSWR<{ results: CatalogSystemOption[] }>(
+    selectedCategory !== 'game' && visibleCategories.length
+      ? '/api/v1/request/software/catalog/systems'
+      : null
+  );
+  const systemsForCategory = (systemCatalog?.results ?? []).filter(
+    (system) => system.group === selectedCategory
+  );
 
   const query = submittedQuery.trim();
   const { ref: loadMoreRef, inView: loadMoreInView } = useInView({
@@ -150,6 +168,11 @@ const SoftwareCatalog = () => {
         category: selectedCategory,
         limit: '24',
       });
+      if (selectedCategory === 'game' && pcPlatformFilter) {
+        params.set('platform', pcPlatformFilter);
+      } else if (selectedCategory !== 'game' && systemFilter) {
+        params.set('system', systemFilter);
+      }
       if (query) {
         params.set('q', query);
         if (pageIndex > 0) {
@@ -164,7 +187,13 @@ const SoftwareCatalog = () => {
       }
       return `/api/v1/request/software/catalog/popular?${params.toString()}`;
     },
-    [query, selectedCategory, visibleCategories.length]
+    [
+      pcPlatformFilter,
+      query,
+      selectedCategory,
+      systemFilter,
+      visibleCategories.length,
+    ]
   );
   const {
     data: pages,
@@ -202,7 +231,10 @@ const SoftwareCatalog = () => {
   const openRequest = (game: CatalogGame) => {
     setSelectedGame(game);
     setSelectedSystem(game.emulationSystems?.[0]?.slug ?? '');
-    setVariant({ operatingSystem: '', architecture: '' });
+    setVariant({
+      operatingSystem: pcPlatformFilter as PcOperatingSystem | '',
+      architecture: '',
+    });
     setRequestError('');
   };
 
@@ -283,6 +315,8 @@ const SoftwareCatalog = () => {
                 setCategory(value);
                 setSubmittedQuery('');
                 setSearchInput('');
+                setSystemFilter('');
+                setPcPlatformFilter('');
                 setRequestSuccess('');
               }}
               className={`rounded-full border px-4 py-2 text-sm font-semibold transition focus:ring-2 focus:ring-indigo-400 focus:outline-none ${
@@ -301,6 +335,54 @@ const SoftwareCatalog = () => {
             </button>
           ))}
         </div>
+
+        {visibleCategories.length > 0 && (
+          <div className="mt-4 max-w-xs">
+            <select
+              className="input input-lite w-full"
+              aria-label={intl.formatMessage(
+                selectedCategory === 'game'
+                  ? messages.allPcPlatforms
+                  : messages.allSystems
+              )}
+              value={
+                selectedCategory === 'game' ? pcPlatformFilter : systemFilter
+              }
+              onChange={(event) => {
+                if (selectedCategory === 'game') {
+                  setPcPlatformFilter(event.target.value);
+                } else {
+                  setSystemFilter(event.target.value);
+                }
+              }}
+            >
+              <option value="">
+                {intl.formatMessage(
+                  selectedCategory === 'game'
+                    ? messages.allPcPlatforms
+                    : messages.allSystems
+                )}
+              </option>
+              {selectedCategory === 'game'
+                ? operatingSystems.map((system) => (
+                    <option key={system} value={system}>
+                      {intl.formatMessage(
+                        system === 'macos'
+                          ? messages.macos
+                          : system === 'linux'
+                            ? messages.linux
+                            : messages.windows
+                      )}
+                    </option>
+                  ))
+                : systemsForCategory.map((system) => (
+                    <option key={system.slug} value={system.slug}>
+                      {system.name}
+                    </option>
+                  ))}
+            </select>
+          </div>
+        )}
 
         <form
           className="mt-5 flex max-w-2xl gap-2"

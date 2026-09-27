@@ -88,6 +88,11 @@ navigation. The page has three tabs:
 - Search filters the current tab; popular titles appear when no search is
   submitted.
 
+Within Retro or Modern, select a supported emulation system to show its games.
+Within PC Games, select Windows, Linux, or macOS to narrow the catalog. The PC
+platform choice is preselected when opening a request and can still be changed
+before submission.
+
 Software titles load as you scroll, with a **Load more titles** button available
 when another page exists. SeerrNG filters by the selected PC or emulation
 platform before showing each page. This requires a QuestarrNG build with the

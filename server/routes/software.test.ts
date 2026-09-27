@@ -305,9 +305,11 @@ describe('software request routes', () => {
   });
 
   it('passes ROM platform IDs and a search cursor to QuestarrNG', async () => {
+    getSettings().softwareAcquisition.emulationSystemGroups.snes = 'retro';
     mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
       { id: 6, name: 'PC (Microsoft Windows)' },
       { id: 130, name: 'Nintendo Entertainment System' },
+      { id: 19, name: 'Super Nintendo Entertainment System' },
     ]);
     const searchPage = mock.method(
       QuestarrNGAPI.prototype,
@@ -333,6 +335,13 @@ describe('software request routes', () => {
         extensions: ['.nes'],
         max_size_mb: 16,
       },
+      {
+        slug: 'snes',
+        name: 'Super Nintendo Entertainment System',
+        media: 'rom',
+        extensions: ['.sfc'],
+        max_size_mb: 32,
+      },
     ]);
 
     const response = await request(createApp())
@@ -342,6 +351,7 @@ describe('software request routes', () => {
         q: 'Test Game',
         limit: 1,
         cursor: 'prior-page',
+        system: 'nes',
       });
 
     assert.strictEqual(response.status, 200);
@@ -397,21 +407,42 @@ describe('software request routes', () => {
   it('passes the next popular offset and PC platform IDs to QuestarrNG', async () => {
     mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
       { id: 6, name: 'PC (Microsoft Windows)' },
+      { id: 3, name: 'Linux' },
       { id: 130, name: 'Nintendo Entertainment System' },
     ]);
     const popularPage = mock.method(
       QuestarrNGAPI.prototype,
       'getPopularCatalogPage',
-      async () => ({ results: [pcGame], nextOffset: 48 })
+      async () => ({
+        results: [
+          {
+            ...pcGame,
+            platformOptions: [{ id: 3, name: 'Linux' }],
+          },
+        ],
+        nextOffset: 48,
+      })
     );
 
     const response = await request(createApp())
       .get('/request/software/catalog/popular')
-      .query({ category: 'game', limit: 24, offset: 24 });
+      .query({ category: 'game', limit: 24, offset: 24, platform: 'linux' });
 
     assert.strictEqual(response.status, 200);
-    assert.deepStrictEqual(popularPage.mock.calls[0].arguments, [24, 24, [6]]);
+    assert.deepStrictEqual(popularPage.mock.calls[0].arguments, [24, 24, [3]]);
     assert.strictEqual(response.body.nextOffset, 48);
+  });
+
+  it('rejects system and PC platform filters on the wrong categories', async () => {
+    const game = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'game', q: 'Test Game', system: 'nes' });
+    const retro = await request(createApp())
+      .get('/request/software/catalog/popular')
+      .query({ category: 'retro', platform: 'linux' });
+
+    assert.strictEqual(game.status, 400);
+    assert.strictEqual(retro.status, 400);
   });
 
   it('persists the selected PC target and sends it to QuestarrNG on approval', async () => {
