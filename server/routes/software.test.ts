@@ -19,6 +19,7 @@ import SoftwareRequest, {
 import { User } from '@server/entity/User';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
 import type { Express } from 'express';
 import express from 'express';
@@ -225,6 +226,31 @@ describe('software request routes', () => {
     assert.strictEqual(response.body.results[0].availability, 'available');
   });
 
+  it('redacts provider credentials from catalog availability error logs', async () => {
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 6, name: 'PC (Microsoft Windows)' },
+    ]);
+    mock.method(QuestarrNGAPI.prototype, 'searchCatalogPage', async () => ({
+      results: [pcGame],
+      nextCursor: null,
+    }));
+    mock.method(QuestarrNGAPI.prototype, 'lookupLibrary', async () => {
+      throw new Error('Provider rejected api_key=software-provider-secret');
+    });
+    const warnLog = mock.method(logger, 'warn', () => undefined);
+
+    const response = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'game', q: 'Test Game' });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.results[0].availability, 'unknown');
+    assert.doesNotMatch(
+      JSON.stringify(warnLog.mock.calls[0].arguments),
+      /software-provider-secret/
+    );
+  });
+
   it('keeps unmatched ROM titles unknown when ROMarrNG has a partial library cache', async () => {
     mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
       { id: 130, name: 'Nintendo Entertainment System' },
@@ -275,6 +301,7 @@ describe('software request routes', () => {
       async () => ({
         ...pcGame,
         coverUrl: 'https://evil.example/cover.jpg',
+        rating: 87,
         screenshots: [
           'https://images.igdb.com/igdb/image/upload/screenshot.jpg',
           'https://evil.example/screenshot.jpg',
@@ -294,6 +321,7 @@ describe('software request routes', () => {
     assert.strictEqual(getGame.mock.calls[0].arguments[0], 42);
     assert.strictEqual(response.body.game.title, 'Test Game');
     assert.strictEqual(response.body.game.coverUrl, '');
+    assert.strictEqual(response.body.game.rating, 8.7);
     assert.deepStrictEqual(response.body.game.screenshots, [
       'https://images.igdb.com/igdb/image/upload/screenshot.jpg',
     ]);

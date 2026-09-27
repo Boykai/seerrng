@@ -7919,7 +7919,21 @@ paths:
                 value:
                   type: string
                   nullable: true
-                  enum: [all, movie, tv, music, book, ebook, audiobook, comic, magazine, author, software, null]
+                  enum:
+                    [
+                      all,
+                      movie,
+                      tv,
+                      music,
+                      book,
+                      ebook,
+                      audiobook,
+                      comic,
+                      magazine,
+                      author,
+                      software,
+                      null,
+                    ]
       responses:
         '200':
           description: Updated account media filter pins
@@ -11334,7 +11348,7 @@ paths:
   /request/software/catalog/games/{id}:
     get:
       summary: Get one ROM or PC game catalog title
-      description: Returns QuestarrNG catalog metadata, supported request targets, screenshots, video IDs, rating, and provider or SeerrNG request availability for a shareable software title.
+      description: Returns QuestarrNG catalog metadata, supported request targets, screenshots, video IDs, rating normalized to a 0-10 scale, and provider or SeerrNG request availability for a shareable software title.
       tags:
         - request
       parameters:

@@ -39,6 +39,7 @@ import {
 } from '@server/lib/softwareRequests';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { getHttpErrorDetails } from '@server/utils/httpError';
 import { parsePageParams } from '@server/utils/pagination';
 import axios from 'axios';
 import { Router } from 'express';
@@ -226,8 +227,8 @@ const sanitizeGame = (game: SoftwareCatalogGame): SoftwareCatalogGame => ({
     typeof game.rating === 'number' &&
     Number.isFinite(game.rating) &&
     game.rating >= 0 &&
-    game.rating <= 10
-      ? game.rating
+    game.rating <= 100
+      ? Math.round(game.rating) / 10
       : null,
   publishers: Array.isArray(game.publishers)
     ? game.publishers
@@ -495,7 +496,7 @@ const addCatalogAvailability = async (
     });
   } catch (error) {
     logger.warn('Software library availability lookup failed', {
-      error: error instanceof Error ? error.message : String(error),
+      ...getHttpErrorDetails(error),
       category,
     });
     return results.map((game) => ({ ...game, availability: 'unknown' }));
@@ -559,7 +560,7 @@ const addTrackedRequestAvailability = async (
     });
   } catch (error) {
     logger.warn('Software request availability lookup failed', {
-      error: error instanceof Error ? error.message : String(error),
+      ...getHttpErrorDetails(error),
       category,
     });
     return results;
@@ -648,7 +649,7 @@ const respondProviderError = (
     });
   }
   logger.warn('Software acquisition provider request failed', {
-    error: error instanceof Error ? error.message : String(error),
+    ...getHttpErrorDetails(error),
   });
   return res
     .status(502)
@@ -1002,7 +1003,7 @@ softwareRoutes.post('/', async (req, res) => {
     }
     logger.error('Failed to create software request', {
       userId: req.user.id,
-      error: error instanceof Error ? error.message : String(error),
+      ...getHttpErrorDetails(error),
     });
     return res
       .status(502)
