@@ -164,6 +164,7 @@ export const createTmdbWithBlocklistSettings = (): TheMovieDb => {
 const discoverRoutes = Router();
 const MAX_DISCOVER_QUERY_LENGTH = 256;
 const MAX_DISCOVER_FILTER_LENGTH = 512;
+const MAGAZINE_CATALOG_LOOKUP_TIMEOUT_MS = 20_000;
 export const MAX_GENRE_SLIDER_ITEMS = 50;
 export const GENRE_SLIDER_CONCURRENCY = 10;
 export const EXTERNAL_DISCOVER_RATE_LIMIT = {
@@ -3928,36 +3929,85 @@ discoverRoutes.get('/magazines', async (req, res) => {
       }
     >();
     const configuredServices = [...settings.lazylibrarian];
-    const catalogs = await mapWithConcurrency(
-      configuredServices,
-      2,
-      async (service) => {
-        try {
-          const magazines = await runWithServarrServiceSnapshot(
-            'lazylibrarian',
-            service,
-            async (current) =>
-              (
-                await new LazyLibrarianAPI({
-                  url: LazyLibrarianAPI.buildUrl(current),
-                  apiKey: current.apiKey,
-                }).getMagazines()
-              ).map((magazine) => ({ ...magazine, serviceId: current.id }))
-          );
-          return {
-            status: 'fulfilled' as const,
-            serviceId: service.id,
-            value: magazines,
-          };
-        } catch (reason) {
-          return {
-            status: 'rejected' as const,
-            serviceId: service.id,
-            reason,
-          };
+    type MagazineCatalogOutcome =
+      | {
+          status: 'fulfilled';
+          index: number;
+          serviceId: number;
+          value: (Awaited<
+            ReturnType<LazyLibrarianAPI['getMagazines']>
+          >[number] & {
+            serviceId: number;
+          })[];
+        }
+      | {
+          status: 'rejected';
+          index: number;
+          serviceId: number;
+          reason: unknown;
+        };
+    const completedCatalogs: MagazineCatalogOutcome[] = [];
+    let nextService = 0;
+    let deadlineReached = false;
+    const lookupSignal = AbortSignal.timeout(
+      MAGAZINE_CATALOG_LOOKUP_TIMEOUT_MS - 1_000
+    );
+    const workers = Array.from(
+      { length: Math.min(2, configuredServices.length) },
+      async () => {
+        while (
+          !deadlineReached &&
+          !lookupSignal.aborted &&
+          nextService < configuredServices.length
+        ) {
+          const index = nextService++;
+          const service = configuredServices[index];
+          try {
+            const magazines = await runWithServarrServiceSnapshot(
+              'lazylibrarian',
+              service,
+              async (current) =>
+                (
+                  await new LazyLibrarianAPI({
+                    url: LazyLibrarianAPI.buildUrl(current),
+                    apiKey: current.apiKey,
+                  }).getMagazines(lookupSignal)
+                ).map((magazine) => ({ ...magazine, serviceId: current.id }))
+            );
+            completedCatalogs.push({
+              status: 'fulfilled',
+              index,
+              serviceId: service.id,
+              value: magazines,
+            });
+          } catch (reason) {
+            completedCatalogs.push({
+              status: 'rejected',
+              index,
+              serviceId: service.id,
+              reason,
+            });
+          }
         }
       }
     );
+    const { timedOut } = await settlePromisesWithin(
+      [Promise.all(workers)],
+      MAGAZINE_CATALOG_LOOKUP_TIMEOUT_MS
+    );
+    deadlineReached = true;
+    const lookupTimedOut = timedOut || lookupSignal.aborted;
+    const catalogs = [...completedCatalogs].sort(
+      (left, right) => left.index - right.index
+    );
+    if (lookupTimedOut) {
+      logger.warn('Magazine catalog discovery reached its service deadline', {
+        label: 'Discover Magazines',
+        timeoutMs: MAGAZINE_CATALOG_LOOKUP_TIMEOUT_MS,
+        completedServices: catalogs.length,
+        configuredServices: configuredServices.length,
+      });
+    }
     let availableCatalogs = 0;
     for (const catalog of catalogs) {
       if (catalog.status === 'rejected') {

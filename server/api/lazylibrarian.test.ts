@@ -7,6 +7,38 @@ import { MAX_SAFE_REMOTE_IMAGE_BYTES } from '@server/utils/safeRemoteImage';
 describe('LazyLibrarianAPI.getMagazineCover', () => {
   afterEach(() => mock.restoreAll());
 
+  it('passes lookup cancellation through to the LazyLibrarian catalog request', async () => {
+    const api = new LazyLibrarianAPI({
+      url: 'http://localhost:5299',
+      apiKey: 'key',
+    });
+    const controller = new AbortController();
+    const get = mock.fn(
+      async (url: string, options?: { signal?: AbortSignal }) => {
+        assert.ok(url.endsWith('/api'));
+        assert.strictEqual(options?.signal, controller.signal);
+        return {
+          data: [],
+          config: {},
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        };
+      }
+    );
+    (
+      api as unknown as {
+        axios: { get: typeof get };
+      }
+    ).axios.get = get;
+
+    assert.deepStrictEqual(await api.getMagazines(controller.signal), []);
+    assert.strictEqual(
+      get.mock.calls[0].arguments[1]?.signal,
+      controller.signal
+    );
+  });
+
   it('fetches a validated magazine cover below the configured URL base', async () => {
     const api = new LazyLibrarianAPI({
       url: 'http://localhost:5299/lazy',

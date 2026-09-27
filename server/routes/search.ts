@@ -166,10 +166,15 @@ const searchLazyLibrarianCatalogs = async (
   const completed: CatalogOutcome[] = [];
   let nextService = 0;
   let deadlineReached = false;
+  const lookupSignal = AbortSignal.timeout(SEARCH_PROVIDER_TIMEOUT_MS - 1_500);
   const workers = Array.from(
     { length: Math.min(2, services.length) },
     async () => {
-      while (!deadlineReached && nextService < services.length) {
+      while (
+        !deadlineReached &&
+        !lookupSignal.aborted &&
+        nextService < services.length
+      ) {
         const index = nextService++;
         const service = services[index];
         try {
@@ -181,7 +186,7 @@ const searchLazyLibrarianCatalogs = async (
                 await new LazyLibrarianAPI({
                   url: LazyLibrarianAPI.buildUrl(current),
                   apiKey: current.apiKey,
-                }).getMagazines()
+                }).getMagazines(lookupSignal)
               ).map((magazine) => ({ ...magazine, serviceId: current.id }))
           );
           completed.push({ status: 'fulfilled', index, value: magazines });

@@ -4413,6 +4413,39 @@ describe('GET /discover/magazines', () => {
     assert.strictEqual(res.body.results.length, 5);
   });
 
+  it('keeps responsive catalog results and stops scheduling after the deadline', async () => {
+    getSettings().lazylibrarian = Array.from({ length: 5 }, (_, index) =>
+      magazineService(index + 1)
+    );
+    const controller = new AbortController();
+    const timeout = mock.method(
+      AbortSignal,
+      'timeout',
+      () => controller.signal
+    );
+    let calls = 0;
+    mock.method(
+      LazyLibrarianAPI.prototype,
+      'getMagazines',
+      async (signal?: AbortSignal) => {
+        assert.strictEqual(signal, controller.signal);
+        const call = ++calls;
+        controller.abort();
+        return [{ title: `Responsive Magazine ${call}` }];
+      }
+    );
+
+    const agent = await login();
+    const res = await agent
+      .get('/discover/magazines')
+      .query({ catalog: 'tracked' });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(timeout.mock.calls[0].arguments[0], 19_000);
+    assert.ok(calls > 0 && calls <= 2);
+    assert.strictEqual(res.body.totalResults, calls);
+  });
+
   it('reports an unavailable catalog when every service fails', async () => {
     getSettings().lazylibrarian = [magazineService(1)];
     mock.method(LazyLibrarianAPI.prototype, 'getMagazines', async () => {

@@ -173,8 +173,12 @@ class LazyLibrarianAPI extends ExternalAPI {
     return 'Connected';
   }
 
-  public async getMagazines(): Promise<LazyLibrarianMagazine[]> {
-    const response = await this.runCommand<unknown>('getMagazines', {}, 60);
+  public async getMagazines(
+    signal?: AbortSignal
+  ): Promise<LazyLibrarianMagazine[]> {
+    const response = await this.runCommand<unknown>('getMagazines', {}, 60, {
+      signal,
+    });
     return Array.isArray(response)
       ? response
           .map(sanitizeMagazine)
