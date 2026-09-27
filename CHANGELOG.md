@@ -106,6 +106,145 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.30.0](https://github.com/snapetech/seerrng/compare/v3.29.0..v3.30.0) - 2026-09-27
+
+### User-facing changes
+
+#### Added
+
+- **Bookshelf:** Books with series information now open a collection-style page with format filters, related titles, and a collection request flow.
+- **Music:** Music collections can be filtered by release type, genre and year. Selection and playback exclude hidden items; cyan selection controls stay together on the left. Music discovery and search share expanded release types, including Live, Compilation and Remix, with filtering before pagination.
+- **Music:** Music collections show their six most common album genres and a short, attributed artist biography, with a simple fallback. Album and collection ratings now include separate TheAudioDB and Discogs scores, native scales, vote counts and source links; collection averages keep providers separate.
+- **Collections:** Administrators can add and remove collections on Plex, Jellyfin and Emby. Linked collections gain newly indexed movies automatically; visible pages check each minute. Removal requires confirmation, stops automatic updates and preserves media files. Buttons use the configured server logo, with full justification limited to the collection page.
+- **Collections:** Official TV franchises and artist album catalogues now have collection pages with shared selection, quality-specific playback, and media-server Add/Remove controls. Linked collections gain newly available titles automatically. Removing a collection preserves its media files.
+- **Interface:** The collection action row now includes Watch Trailer for the first movie in oldest-first order. It uses the standard trailer button and explains when no trailer is available, without substituting another movie.
+- **Manage Media:** View Details expands each issue's description, comments, comment entry and Close/Reopen Issue actions directly beneath its summary. View Issue remains available one row above. Close All Issues is now named Close Open Issues. Shared controls preserve existing permissions and refresh issue status without leaving Manage.
+- **Interface:** Manage now offers Blocklist Title beside Remove From Blocklist for movies, series, books and music. The red action explains its effect, asks for confirmation, and is disabled when the title is already blocked or you lack permission.
+- **Movie Details:** Movie details now offer View Collection beside View Cast. Expand it to show the collection card directly below the controls, or pin it open across movie pages. Collection pins are saved per user without changing cast and crew preferences.
+- **Media Details:** Movie, series, book and album pages have a details toggle beside their cast, artist or subject buttons. Pin the card open across titles of the same media type; preferences are saved separately for each user and media type.
+
+#### Changed
+
+- **Media Details:** Season, episode, and track lists now show five rows before scrolling inside the list, keeping detail and request screens more compact.
+- **Requests:** The filtered Requests screen now lives directly at `/requests`, with consistent navigation, faster page preloading, and neutral loading labels while media details arrive.
+- **Collections:** Collection selections now apply when creating a collection, without blocking automatic additions of newly available titles. Already-available items left out at creation and items manually removed afterward stay out. Remove and recreate a collection to apply a different selection.
+- **Media Details:** Media disclosure rows place Collection, Cast, Crew or Artists, and Subject Tags before the shortened Details button, where available. Request Discography is aligned to the right without changing other button-row alignment or pin behavior.
+- **Media Details:** Media detail and collection disclosure buttons use shorter Collection, Artists, Cast and Crew labels while preserving their pin and expand/collapse behavior.
+- **Music:** Music collections load posters and ratings in full-list batches of 50, retaining fetched results when filters change. The Release Year row shows loading, then the selected count. Clear Filters gains an icon and Title View a distinct labeled icon. TheAudioDB and Discogs show logos, and unrated badges remain linked to their source.
+- **Ui:** Compact filter and rating dropdowns show at most eight options at once, with scrolling for longer lists and a smaller height when screen space is limited.
+- **Appearance:** The default SeerrNG theme now includes the approved black readability layers and black-to-dark-blue background directly. The redundant Blackout choice has been removed from the theme picker.
+- **Interface:** Primary action buttons now use the compact height while retaining their existing text and styling. Delete From Library confirmations name the title and destination app and explicitly warn that the media files and library entry will be permanently deleted.
+- **Associations:** Browse More now has a magnifying-glass icon in the Associations dialog for every media type, using shared button styling.
+- **Associations:** Associations use the shared details-card layout, with adaptive columns and the association reason retained at the bottom right. Movie cards show the same metadata as movie details, loading extra information only when a card is visible.
+- **Interface:** Blackout now uses a clean black-to-blue background without the grey upper-right glow. Matching menu and dialog backgrounds follow the same treatment; other color schemes are unchanged.
+- **Interface:** Blackout detail dividers use a stronger translucent white shadow without the solid halo. Movie Details again inherits the shared global treatment, matching other detail pages while retaining the black divider line.
+- **Interface:** Blackout detail dividers now have a narrow opaque white halo behind the black line, plus the existing soft outer glow, making their immediate edges consistently white over colorful artwork. Other palettes are unchanged.
+- **Interface:** Buttons now offer consistent help, including why actions are disabled and what playback controls do. Close All Issues explains its effects before confirmation. Media action rows fill their available width; Manage and Report Issue have visible labels while Blocklist stays icon-only.
+- **Media Details:** Bibliography and discography requests now sit with the detail disclosures. Their selection lists use collection-style cards with a three-item scrolling window, also used for association sections. Book and album details can be collapsed and pinned open.
+- **Media Details:** Details cards center the middle divider, headings and values together while keeping the outer columns content-sized. Row-spanning middle dividers cover their full allotted rows, including issue cards with only two populated middle fields. Narrow layouts remain stacked.
+- **Interface:** The media-page collection panel is now a single subcard. Its overview spans the details table and expands to show the full text, followed by genres and collection size. The separate overview card and unused rows are removed.
+- **Interface:** The collection page now places its full overview inside the first details card, matching movie-page collection summaries. Both share poster, table and divider styling, with genres and collection size below the overview and one consistent two-pixel divider width.
+- **Interface:** Collections show separate average ratings from Rotten Tomatoes critics and audiences, IMDb, and TMDB, excluding missing scores. Movie cards use the shared details layout with a ratings row. Playback defaults to HD, with a quality selector that includes only selected titles available in that quality and never substitutes another version.
+- **Interface:** Collection-card ratings are evenly distributed from the first value column through the second value column, leaving the third details column clear. Fixed gaps between rating pairs are removed; icon sizes and text remain unchanged.
+- **Interface:** Collection movie-card ratings now sit together in a compact, left-aligned value cell spanning the details table after an empty label cell. Icon and text sizes stay unchanged, and narrow screens wrap the ratings without overflowing.
+- **Library:** **Breaking:** Availability sync now cleans up confirmed movie and series removals. Remaining qualities, blocklists and watchlists are preserved. When the last copy is gone, requests and issues are deleted and unneeded media records are removed. Failed or inconclusive service checks leave records unchanged.
+  - **Action required:** Review request and issue retention before enabling availability sync after upgrading.
+- **Interface:** Details cards size their first and last columns to their contents, leaving remaining space for the middle column. Movie, series, book and music cards adapt to their different labels instead of fixed percentages. Availability now displays “Not Available” in title case.
+- **Interface:** Details cards use a revised 35% / 43% / 22% column balance across shared layouts, giving the first column more room while keeping the middle column wider. Collection cards and nested details follow the same proportions.
+- **Interface:** Details cards reserve 25% of the table for the third column and divide the remaining space equally between the first two columns. Dates and other leading details have more room across pages and dialogs, including collection cards.
+- **Interface:** Details tables now allocate 30% to the first column, 45% to the middle and 25% to the third. Shared cards, including collection members and music details, keep the same proportions while giving the middle column more room.
+- **Interface:** Detail disclosure buttons such as View Collection, View Cast, View Crew, and Subject Tags now share Manage's purple styling so they stand out from nearby text links. Pin controls retain a distinct selected state, with sizing and behavior unchanged.
+- **Interface:** Main and inset cards now share eight-pixel inner padding and spacing between cards. Detail subcards, request and issue lists, Manage screens, and Settings card grids use the same global spacing, without changing button spacing or text sizes.
+- **Manage Media:** View All Issues expands an inline scrollable card containing all open and resolved issue details, with at most three cards visible at once. Manage keeps a single media summary at the top instead of repeating open issues there. The same layout applies to every media type.
+- **Interface:** Main cards and inset cards now share compact five-pixel inner padding across media details, requests, issues, Manage, dialogs, and Settings. Card colors, transparency, text sizes, page widths, and button sizing are unchanged.
+- **Interface:** Main-menu items now use consistent diagonal dark-to-light blue highlights on desktop and mobile: darker when hovered, normal when selected, and brighter when hovering over the selected item. Keyboard focus remains clearly outlined.
+- **Manage Media:** Manage uses singular Service, Request and Delete Request labels. Action descriptions are shorter, name Delete Request explicitly and omit redundant service, blocklist and empty-request notes.
+- **Interface:** Manage now groups actions under Services, Blocklist, Requests, and Issues, with configured service names, explanatory text, tooltips, and confirmed actions to close or delete this item's issues. Media details no longer show a red dot on Manage.
+- **Manage Media:** Manage summary cards omit request and issue counts. View Issues shows the total; Close All Issues shows the open count. Delete All Issues is unchanged. Disabled buttons retain their colors at reduced opacity without shadows. English text refreshes from the current catalog during development.
+- **Manage Media:** Manage actions now have consistent disclosure, blocklist and deletion icons. View All Issues and Close Open Issues show rounded, color-matched count badges. Expanded issue descriptions, comments and entry fields sit below the details without an extra bordered card.
+- **Interface:** Manage screens now use the request page's confirmed Delete and Delete From Library actions instead of Clear Data, manual availability overrides, and older removal controls. Embedded details match other subcards, service links are orange, and View Issue replaces the linked issue status badge.
+- **Interface:** Manage dialogs now show Services, Blocklist, Requests, and Issues without the redundant Advanced heading.
+- **Movie Details:** Expanded movie collections now show a translucent summary with a linked poster and title, collection genres and size, and an inset overview instead of a backdrop banner. Blackout detail-table dividers are black with a soft white glow; other palettes retain their divider styling.
+- **Interface:** Manage service links are labeled “Open title in” followed by the configured service name, distinguishing navigation from library deletion and service-check retry actions.
+- **Interface:** The shared Quality and Request control labels now use the same green text as the standard green buttons instead of white, across all color schemes. Unavailable quality options remain greyed out.
+- **Interface:** Quality controls now match the segmented Request controls, with unavailable playback qualities disabled. Already available request formats are greyed out, including for advanced users. Request dialogs share grey disabled buttons, while missing formats and partially available series remain requestable.
+- **Interface:** Report an Issue now shares the movie-details segmented Quality control, with unavailable versions disabled and reporting-specific help. Issue Type uses the shared yellow warning palette across all color schemes.
+- **Request Status:** Delete Request and Delete From Library confirmations now use a green Cancel button while keeping the destructive confirmation red.
+- **Interface:** Associations, Issues, and Blocklist list entries now use one card instead of nested cards. Blocklist source badges explain manual and tag-based blocking, and the removal action sits inside the final details column.
+- **Interface:** Cancel buttons now consistently use the same X icon as Report an Issue, including confirmation dialogs, settings, discovery editing and cancellation of requests, scans and jobs. Shared button styling preserves existing colors and sizes.
+- **Interface:** Details cards across movie, series, book, music, collection, request, issue, blocklist and association views now share centralized three-column and title-alignment rules. Equal-third columns and the two-pixel optical title adjustment stay consistent across pages and dialogs.
+- **Interface:** Standard and compact action buttons now use a 16-pixel height and one pixel less horizontal padding per side while retaining their text sizes. View Issue fits the detail-row height, and input fields and dropdowns retain their existing height.
+- **Interface:** Subject tags now share one palette across movies, series, books, music and collections, adding a distinct yellow alongside purple, amber and the existing colors while retaining translucent fills.
+- **Interface:** The repeating subject-tag rainbow includes orange, lime and violet for smoother color transitions. Its green matches the Next/Previous buttons, alongside the Associations button's cyan, with colored labels retained on hover.
+- **Interface:** Subject tags now follow a consistent repeating rainbow in display order across all media cards, including green and the Associations button's cyan. Text keeps each tag's color rather than turning white.
+- **Interface:** Subject-tag labels now match their tag's border color instead of using near-white text, making each color easier to distinguish while retaining translucent backgrounds and hover feedback.
+- **Interface:** Posters and primary cards now use a two-pixel CSS-rendered brushed-steel frame, while detail posters, subcards, and inset cards use the slimmer one-pixel treatment without downloading a border image.
+
+#### Fixed
+
+- **Interface:** Browser Back now closes screens with Cancel before leaving their underlying page. Selection circles are clearer over artwork, music album requests show every track as included, and the request-deletion prompt has clearer wording.
+- **Requests:** Root folders now gain a visible one-pixel border when selected or hovered in Advanced Options on movie, series, music, and book request screens. Root-folder selections no longer show an unnecessary popup on hover.
+- **Media Details:** Media table rows can be clicked to select an item, while select-all stays on the heading circle. Availability icons now explain each item's status on hover.
+- **Interface:** The SeerrNG 3.28 update now works with the refreshed interface and existing preview databases, including verified library removal for comics and magazines, complete keyword matching for books and music, and readable Blackout theme controls in light mode. New browsers now start with the branded SeerrNG black-to-dark-blue palette, while the original blue-gray appearance remains available as Seerr.
+- **Discovery:** Widened the Artist search field and suggestions on Music and Search, and kept compact filter controls aligned when focused or expanded so clear and dropdown icons stay inside their controls.
+- **Search:** Music and main Search share a live Artist dropdown with partial-name matching. Music filters now combine in fresh catalogue searches. Movie, series, book, and audiobook filters retain the keyword instead of narrowing only loaded cards. Sparse filtered pages no longer end a search while more provider pages remain.
+- **Collections:** Genres in TV and music collection summaries and member cards now open the matching series or music discovery filters, just like movie collection genres.
+- **Collections:** Music and TV collections quietly retry failed rating requests in the background with increasing delays, preserving loaded ratings without an error banner. Retries pause while the tab is hidden or offline and stop when leaving the page. Confirmed absent ratings do not keep retrying.
+- **Collections:** TV collection names now use Collection instead of a trailing Franchise label. Expanded TV and music collection cards share the movie collection layout, including linked artwork and title, overview, genres, and collection size.
+- **Development:** Vitest now refuses to run against a disk-backed database, preventing inherited development settings from directing test resets at a preview database.
+  - **Action required:** Start Vitest with NODE_ENV=test and a separate test configuration directory.
+- **Music:** Music collections now show saved MP3 and FLAC library availability even before playback links exist. Missing album covers load as cards come into view in collections and search, with bounded requests and retries for temporary artwork-provider failures.
+- **Collections:** Music collection summaries and collection pages now choose verified album artwork instead of assuming the first catalogue entry has a cover. Existing cached artwork is reused and missing covers are resolved in a bounded batch.
+- **Interface:** The blocklist eye icon on media posters remains readable instead of being squeezed by text-button padding. Text buttons keep their existing size.
+- **Ui:** Compact filter and rating dropdowns open outside their containing cards, keeping options accessible when a collection has no matching results without increasing the card height.
+- **Ui:** English labels now include shared Request Status actions and current page controls. Login and movie-request messages no longer overwrite different labels that previously shared the same translation ID.
+- **Music:** On music collection pages, the Album filter now shows only plain albums. Entries with secondary release types display those types without the repeated Album label. A combined Live and Compilation entry appears under either single-choice filter.
+- **Music:** Music collections use artist portraits from Lidarr's public metadata source, with TheAudioDB fallback, instead of album covers. Album details and requests retain secondary release types such as DJ-mix. Metadata Profile uses shared request styling; approval says Automatically. Modal headings no longer overflow their card padding.
+- **Media Details:** Album ratings can now pass API validation instead of disappearing after a failed request. Music details also use the same compact row spacing above Genres as movie, series and book summaries.
+- **Media Details:** Album Details and Book Details no longer repeat fields already shown in the main summary. Remaining metadata is reorganized into compact, consistently styled columns.
+- **Bookshelf:** Bookshelf search and discovery links now resolve provider-backed books reliably instead of landing on a 404 page, including older links that do not carry a title hint.
+- **Interface:** Collection inset cards now share the cast and crew cards' lighter translucent surface. The collection disclosure uses the same parent treatment, removing its extra darkening while preserving spacing and interactions.
+- **Interface:** The collection page now matches the collection summary layout: Genres starts in the first row and spans the first two column groups, with Collection Size in the third group on wide screens.
+- **Collections Bookshelf:** TV and music collections now open their collection request lists, and Bookshelf search results reliably open the matching book details page.
+- **Interface:** Detail cards now use consistent text-row spacing without extra Description or Genres margins, while allowing taller content to expand. Card and action gaps use a shared 8px setting, separate from card padding.
+- **Confirmations:** Delete confirmation buttons now include the shared trash-can icon for library copies, requests, issues, comments, users and configured services.
+- **Interface:** The gap below detail-card titles is reduced by 2px, keeping the original poster dimensions and consistent text-row heights.
+- **Interface:** Collection and other media summaries now place their poster and details inside consistent translucent subcards. Existing embedded issue subcards keep a single surface without duplicate padding.
+- **Development:** Development startup excludes tests and helpers from settings migrations and keeps ts-node from compiling Next-generated JavaScript. Development previews can allow one explicitly configured LAN origin and use Webpack polling for Windows Docker bind mounts. Production defaults remain unchanged.
+  - **Action required:** None.
+- **Manage Media:** Disabled View Issues uses the standard muted button styling without text or icon shadows. Close All Issues stays yellow and Delete All Issues stays red, including their disabled states, while unavailable actions remain disabled.
+- **Interface:** Details-card dividers now align with equal thirds instead of squeezing the middle column with a fixed-width first value. Movie, series, book, music, request, issue and blocklist summaries share the correction, and collection size aligns with the final third while overview and genres keep their spanning layout.
+- **Manage Media:** Closing an issue returns to the previous page and reopens Manage's expanded issue list when opened there. Issue cards place creator details in the middle column, show rounded red Open or green Closed badges, and restore View Issue at the bottom right.
+- **Interface:** Issue navigation links now share the standard green button colors used by View Issues and Previous/Next media controls, replacing the older emerald styling while preserving their compact size.
+- **Library:** Library verification rejects a matched series or album without a service ID instead of preparing an invalid action. The development backend can load this check with strict type checking enabled.
+- **Interface:** Login buttons regain their original roomy height, padding and text size. Login now has a separate shared sizing rule, leaving compact buttons elsewhere unchanged across all color schemes.
+- **Interface:** Delete From Library now shares the standard red delete styling. Manage keeps unavailable issue actions visibly red or yellow while still disabled. Close All Issues and its confirmation use yellow, and the separate library-check retry button explains why it appears.
+- **Interface:** Remove From Blocklist now uses the shared red button style and standard tooltip in Manage dialogs. Unavailable actions remain greyed out, with an explanatory tooltip that appears above the dialog.
+- **Manage Media:** Manage updates blocklist buttons and their tooltips immediately after a successful action, rather than waiting for the parent media refresh. Failed actions leave the current state unchanged, and refreshed media data remains authoritative after it catches up.
+- **Manage Media:** Manage library deletion identifies copies by media title and year rather than service item IDs. Blocklist, close-issue and delete-issue confirmations use a short action heading and a separate media title card. Issue confirmations retain the affected count.
+- **Library:** Manage checks each Radarr service for the selected movie instead of downloading the entire movie inventory. Large libraries no longer hide service links or disable library removal by exceeding the response-size limit. Verification still fails safely if any service cannot be checked.
+- **Interface:** Manage resolves library copies directly from configured services and shows green Open Service links. Delete From Library confirms all verified copies across qualities and services before permanent removal. Disabled Blocklist removal retains red styling. Movie playback help now describes opening one movie in your media server rather than a playlist.
+- **Interface:** Shared movie-summary titles sit two pixels higher for better visual alignment with their posters, including collection inset cards. Card margins, title size, details-table position and ratings spacing remain unchanged.
+- **Interface:** Quality-row icons and ratings now use a shared 14px content height inside 16px controls, retaining 12px text and image proportions. Play on Device shares playback-button sizing, and disabled playback buttons keep a visible border while dimming their text and logo.
+- **Interface:** Media-detail rating logos, scores, and the quality selector now match the compact action-button height. Collection ratings use the same shared sizing, while form inputs and dropdown options retain their existing sizes.
+- **Interface:** Segmented Request controls now follow the shared action-button height instead of remaining taller on media detail and collection pages. Their text, colors, and request options are unchanged.
+- **Interface:** Collection, advanced-request, and media-details cards now use the same centralized title-to-details spacing as the other detail cards.
+- **Blocklist:** Blocklisting a title on its details page now updates Manage's Blocklist Title and Remove From Blocklist buttons immediately. Both views share confirmed membership state across movies, series, books and music instead of retaining a stale local override.
+- **Request Status:** Movie and series requests no longer say they are being added to the library merely because Radarr or Sonarr accepted them. Requests without download or import evidence show a waiting explanation instead. Real transfer progress and existing history remain intact.
+
+#### Security
+
+- **Library:** Only administrators can delete all verified copies across connected services from Manage, and the API enforces the same rule. Deletion stops when a comic’s backend is unknown. Downloads verify that opened files remain under their configured library, and malformed service filenames are parsed safely. Docker builds no longer send the host `.npmrc` to the builder.
+
+#### Removed
+
+- **Issues:** Issue details now expand inline through View Details in Manage and the Issues list. The standalone issue screen and View Issue buttons have been removed. Existing notification links redirect to an expanded issue card, and affected episode information remains available inline.
+
+### 🚀 Features
+- *(ui)* Integrate SeerrNG v3.28 and complete shared interface system - ([00e85f0](https://github.com/snapetech/seerrng/commit/00e85f097b8b1f06390a90bebbfec15616c6bcb0))
+
 ## [3.29.0](https://github.com/snapetech/seerrng/compare/v3.28.0..v3.29.0) - 2026-09-27
 
 ### User-facing changes
