@@ -1,6 +1,6 @@
 # Unraid companion template audit (2026-09-27)
 
-The SeerrNG Community Apps repository now contains only the SeerrNG XML template. Community Apps Docker templates configure one container at a time. BookshelfNG, ROMarrNG, and QuestarrNG each have one canonical standalone XML template in their own repository. The upstream apps use their existing Community Apps listings. The Compose project remains an alternate deployment path and does not create appfeed listings.
+The SeerrNG Community Apps repository now contains only the SeerrNG XML template. Community Apps Docker templates configure one container at a time. BookshelfNG uses the dedicated [bookshelfng-unraid](https://github.com/snapetech/bookshelfng-unraid) repository because its application source contains 30 unrelated XML files that cause scanner warnings. ROMarrNG and QuestarrNG keep standalone XML templates in their own repositories. The upstream apps use their existing Community Apps listings. The Compose project remains an alternate deployment path and does not create appfeed listings.
 
 | Companion template | Image | Existing Community Apps entry | Standalone check |
 | --- | --- | --- | --- |

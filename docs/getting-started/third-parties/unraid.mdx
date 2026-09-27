@@ -30,11 +30,11 @@ The SeerrNG Community Apps listing installs SeerrNG only. Each optional service
 runs as its own standalone container. Install only what you need, configure it
 through its own web interface, then enter its API key in SeerrNG Settings →
 Services. This repository's Community Apps template installs only SeerrNG. Each
-NG fork has one canonical standalone template in its own repository:
+NG fork has one canonical standalone template in a separate repository:
 
 | Optional service | Purpose | Template source | Repository URL for Community Apps submission |
 | --- | --- | --- | --- |
-| BookshelfNG | Ebooks and audiobooks; one instance can handle both | [BookshelfNG XML](https://github.com/snapetech/bookshelfng/blob/main/packaging/unraid/bookshelfng.xml) | [snapetech/bookshelfng](https://github.com/snapetech/bookshelfng) |
+| BookshelfNG | Ebooks and audiobooks; one instance can handle both | [BookshelfNG XML](https://github.com/snapetech/bookshelfng-unraid/blob/main/templates/bookshelfng.xml) | [snapetech/bookshelfng-unraid](https://github.com/snapetech/bookshelfng-unraid) |
 | ROMarrNG | ROMs and emulation | [ROMarrNG XML](https://github.com/snapetech/ROMarrNG/blob/main/packaging/unraid/romarrng.xml) | [snapetech/ROMarrNG](https://github.com/snapetech/ROMarrNG) |
 | QuestarrNG | PC games and IGDB catalog | [QuestarrNG XML](https://github.com/snapetech/QuestarrNG/blob/main/unraid/questarr.xml) | [snapetech/QuestarrNG](https://github.com/snapetech/QuestarrNG) |
 
@@ -43,6 +43,10 @@ paste a SeerrNG template file URL, the form resolves it to the already-listed
 SeerrNG repository and rejects a duplicate repository submission. A fork
 appears in Community Apps search only after its own repository is submitted
 and indexed; a GitHub XML file alone is not a searchable listing.
+
+BookshelfNG uses a dedicated template repository because its application source
+contains unrelated XML test fixtures. Submit `snapetech/bookshelfng-unraid`, not
+`snapetech/bookshelfng`, to avoid `not_unraid_application` scan warnings.
 
 BookshelfNG, ROMarrNG, and QuestarrNG are Snapetech NG forks that work
 independently and add SeerrNG integration APIs. Use the
