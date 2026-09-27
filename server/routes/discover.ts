@@ -3876,7 +3876,6 @@ discoverRoutes.get('/comics', async (req, res) => {
   try {
     // User-selected filters choose the indexed catalog query; this does not
     // gate authorization or change which catalog data the route can expose.
-    // codeql[js/user-controlled-bypass]
     if (hasMetadataFilters) {
       const scan = await getComicCatalogIndexStatus();
       if (scan.completeGeneration === 0) {
