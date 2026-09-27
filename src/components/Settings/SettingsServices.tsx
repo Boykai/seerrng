@@ -73,7 +73,7 @@ const messages = defineMessages('components.Settings', {
   musicServiceSettingsDescription:
     'Configure your {serverType} server(s) below. You can connect multiple {serverType} servers, but only one of them can be marked as default. Administrators are able to override the server used to process new requests prior to approval.',
   bookServiceSettingsDescription:
-    'Configure your {serverType} server(s) below. You can connect multiple {serverType} servers, with one default for each configured book format. Administrators are able to override the server used to process new requests prior to approval.',
+    'Add one connection for Books and one for Audiobooks to enable both request formats. Both connections can point to the same {serverType} instance; select a different Book Format on each and mark one default for each format. Administrators can override the server before approval.',
   deleteserverconfirm: 'Are you sure you want to delete this server?',
   ssl: 'SSL',
   default: 'Default',

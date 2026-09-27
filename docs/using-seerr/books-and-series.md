@@ -9,6 +9,11 @@ SeerrNG can search books through Open Library and the catalogs exposed by your
 connected Bookshelf-compatible services. The available titles, editions,
 authors, and series depend on those catalogs.
 
+To accept both book and audiobook requests from one BookshelfNG instance, add
+that instance twice in **Settings > Services**. Select **Books** on one
+connection and **Audiobooks** on the other, then mark one default for each
+format. Both connections can use the same address and API key.
+
 ## Browse and search
 
 1. Open **Books** or **Audiobooks** from the navigation menu to browse that

@@ -3,12 +3,13 @@ import { describe, it } from 'node:test';
 import { getDefaultSortOrder, getSortField, getSortOrder } from './searchSort';
 
 describe('search sorting query state', () => {
-  it('falls back to date for removed or unknown sort fields', () => {
-    assert.equal(getSortField('relevance'), 'date');
+  it('accepts relevance and falls back to date for unknown sort fields', () => {
+    assert.equal(getSortField('relevance'), 'relevance');
     assert.equal(getSortField('unknown'), 'date');
   });
 
   it('defaults date and rating to descending', () => {
+    assert.equal(getDefaultSortOrder('relevance'), 'desc');
     assert.equal(getDefaultSortOrder('date'), 'desc');
     assert.equal(getDefaultSortOrder('rating'), 'desc');
   });

@@ -60,6 +60,8 @@ const messages = defineMessages('components.Settings.ReadarrModal', {
   serviceType: 'Book Format',
   ebook: 'Book',
   audiobook: 'Audiobook',
+  serviceTypeHelp:
+    'To handle both books and audiobooks with one Bookshelf instance, add this same server twice: choose Books here and Audiobooks on the second connection.',
   compatibilityNote:
     'Bookshelf is the recommended book backend. Readarr-compatible servers, including Chaptarr, can also be used. For Chaptarr, set Book Format to match the configured root folder; Seerr sends that format explicitly on every request.',
   migrationNote:
@@ -563,6 +565,9 @@ const ReadarrModal = ({ onClose, readarr, onSave }: ReadarrModalProps) => {
                       </option>
                     </Field>
                   </div>
+                  <p className="mt-2 text-sm text-gray-400">
+                    {intl.formatMessage(messages.serviceTypeHelp)}
+                  </p>
                 </div>
               </div>
               <div className="form-row">

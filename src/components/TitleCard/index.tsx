@@ -947,6 +947,11 @@ const TitleCard = ({
                         void router.push({
                           pathname: `/book/${encodeApiPathSegment(canonicalId)}`,
                           query: {
+                            ...getTitleCardBookDetailQuery({
+                              canonicalId,
+                              preferredBookFormat,
+                              title,
+                            }),
                             format: preferredBookFormat ?? 'ebook',
                             request: '1',
                           },

@@ -695,7 +695,7 @@ describe('GET /book/:id/ratings', () => {
         id: 0,
         hostname: 'bookshelf.test',
         port: 8787,
-        apiKey: 'test-key',
+        apiKey: 'ratings-test-key',
         useSsl: false,
         baseUrl: '',
         serviceType: 'ebook',

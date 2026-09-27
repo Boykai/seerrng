@@ -11,6 +11,7 @@ import {
   mapBookshelfBook,
   parseBookshelfAuthorId,
   parseBookshelfBookId,
+  searchBookshelfCatalogs,
 } from './bookshelfCatalog';
 
 describe('Bookshelf catalog identities', () => {
@@ -134,6 +135,132 @@ describe('Bookshelf catalog identities', () => {
     );
 
     expect(details).toBeUndefined();
+  });
+
+  it('opens a catalog result when a later provider lookup omits that edition', async () => {
+    const lookup = vi
+      .spyOn(ReadarrAPI.prototype, 'lookupBook')
+      .mockResolvedValue([]);
+    const server = {
+      id: 42,
+      hostname: 'bookshelf.test',
+      port: 8787,
+      apiKey: 'test-key',
+      useSsl: false,
+      baseUrl: '',
+      serviceType: 'ebook',
+    } as ReadarrSettings;
+    const book = mapBookshelfBook(
+      {
+        title: 'A catalog edition',
+        foreignBookId: 'googlebooks:edition-42',
+        editions: [],
+      },
+      server.id,
+      server
+    );
+
+    const details = await getBookshelfBookDetails([server], book.id);
+
+    expect(details).toMatchObject({ id: book.id, title: book.title });
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('reuses recent catalog results for Bookshelf detail requests', async () => {
+    const server = {
+      id: 113,
+      hostname: 'bookshelf.test',
+      port: 8787,
+      apiKey: 'test-key',
+      useSsl: false,
+      baseUrl: '',
+      serviceType: 'ebook',
+    } as ReadarrSettings;
+    const result: ReadarrBookLookupResult = {
+      title: 'Cached catalog book',
+      foreignBookId: 'googlebooks:cached-volume',
+      editions: [],
+    };
+    const id = makeBookshelfBookId(server.id, result.foreignBookId);
+    mapBookshelfBook(result, server.id, server);
+    const lookupBook = vi.spyOn(ReadarrAPI.prototype, 'lookupBook');
+
+    const details = await getBookshelfBookDetails([server], id);
+
+    expect(lookupBook).not.toHaveBeenCalled();
+    expect(details).toMatchObject({
+      id,
+      title: 'Cached catalog book',
+    });
+  });
+
+  it('does not reuse catalog results after Bookshelf settings change', async () => {
+    const server = {
+      id: 114,
+      hostname: 'bookshelf.test',
+      port: 8787,
+      apiKey: 'test-key',
+      useSsl: false,
+      baseUrl: '',
+      serviceType: 'ebook',
+    } as ReadarrSettings;
+    const replacements = [
+      { ...server, hostname: 'replacement-bookshelf.test' },
+      { ...server, apiKey: 'rotated-key' },
+      { ...server, serviceType: 'audiobook' as const },
+    ];
+    const lookupBook = vi
+      .spyOn(ReadarrAPI.prototype, 'lookupBook')
+      .mockResolvedValue([]);
+
+    for (const [index, replacement] of replacements.entries()) {
+      const result: ReadarrBookLookupResult = {
+        title: `Cached catalog book ${index}`,
+        foreignBookId: `googlebooks:changed-${index}`,
+        editions: [],
+      };
+      const id = makeBookshelfBookId(server.id, result.foreignBookId);
+      mapBookshelfBook(result, server.id, server);
+
+      await getBookshelfBookDetails([replacement], id);
+    }
+
+    expect(lookupBook).toHaveBeenCalledTimes(replacements.length);
+  });
+
+  it('deduplicates catalog editions without collapsing titles missing authors', async () => {
+    const server = {
+      id: 115,
+      hostname: 'bookshelf.test',
+      port: 8787,
+      apiKey: 'test-key',
+      useSsl: false,
+      baseUrl: '',
+      serviceType: 'ebook',
+    } as ReadarrSettings;
+    vi.spyOn(ReadarrAPI.prototype, 'lookupBook').mockResolvedValue([
+      {
+        title: 'The Café Book',
+        foreignBookId: 'provider:edition-1',
+        author: { authorName: 'A. Writer' },
+      },
+      {
+        title: 'The Cafe Book!',
+        foreignBookId: 'provider:edition-2',
+        author: { authorName: 'A. Writer' },
+      },
+      { title: 'Untitled Work', foreignBookId: 'provider:unknown-1' },
+      { title: 'Untitled Work', foreignBookId: 'provider:unknown-2' },
+    ]);
+
+    const results = await searchBookshelfCatalogs([server], 'book');
+
+    expect(results).toHaveLength(3);
+    expect(results.map((result) => result.title)).toEqual([
+      'The Café Book',
+      'Untitled Work',
+      'Untitled Work',
+    ]);
   });
 
   it('uses the explicit work lookup for numeric Bookshelf book IDs', async () => {

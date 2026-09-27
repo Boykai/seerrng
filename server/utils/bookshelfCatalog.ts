@@ -18,6 +18,36 @@ import { matchesAllSearchTerms } from '@server/utils/searchTerms';
 export const BOOKSHELF_BOOK_ID_PREFIX = 'bookshelf:';
 export const BOOKSHELF_AUTHOR_ID_PREFIX = 'bookshelf-author:';
 export const BOOKSHELF_SERIES_ID_PREFIX = 'bookshelf-series:';
+const BOOK_LOOKUP_CACHE_TTL_MS = 5 * 60 * 1000;
+const BOOK_LOOKUP_CACHE_LIMIT = 500;
+const bookLookupCache = new Map<
+  string,
+  {
+    book: ReadarrBookLookupResult;
+    expiresAt: number;
+    serviceUrl: string;
+    apiKey: string;
+    serviceType: 'ebook' | 'audiobook';
+  }
+>();
+
+const getCachedBook = (
+  id: string,
+  server: ReadarrSettings
+): ReadarrBookLookupResult | undefined => {
+  const entry = bookLookupCache.get(id);
+  if (!entry) return undefined;
+  if (
+    entry.expiresAt <= Date.now() ||
+    entry.serviceUrl !== ReadarrAPI.buildUrl(server, '/api/v1') ||
+    entry.apiKey !== server.apiKey ||
+    entry.serviceType !== (server.serviceType ?? 'ebook')
+  ) {
+    bookLookupCache.delete(id);
+    return undefined;
+  }
+  return entry.book;
+};
 
 const encodeForeignId = (foreignBookId: string) =>
   Buffer.from(foreignBookId, 'utf8').toString('base64url');
@@ -257,7 +287,7 @@ export const getBookshelfLibraryBookSeries = async (
         const book = await getApi(server).getBook(bookId, 300);
         if (book.id !== bookId) return [];
 
-        const mapped = mapBookshelfBook(book, serviceId);
+        const mapped = mapBookshelfBook(book, serviceId, server);
         const authorId =
           typeof book.authorId === 'number' &&
           Number.isSafeInteger(book.authorId) &&
@@ -304,8 +334,23 @@ const getIsbnCandidates = (
 
 export const mapBookshelfBook = (
   result: ReadarrBookLookupResult,
-  serviceId: number
+  serviceId: number,
+  server?: ReadarrSettings
 ): BookResult => {
+  if (result.foreignBookId && server?.id === serviceId) {
+    const id = makeBookshelfBookId(serviceId, result.foreignBookId);
+    bookLookupCache.delete(id);
+    bookLookupCache.set(id, {
+      book: result,
+      expiresAt: Date.now() + BOOK_LOOKUP_CACHE_TTL_MS,
+      serviceUrl: ReadarrAPI.buildUrl(server, '/api/v1'),
+      apiKey: server.apiKey,
+      serviceType: server.serviceType ?? 'ebook',
+    });
+    if (bookLookupCache.size > BOOK_LOOKUP_CACHE_LIMIT) {
+      bookLookupCache.delete(bookLookupCache.keys().next().value!);
+    }
+  }
   const isbnCandidates = getIsbnCandidates(result);
   const audioEdition = (result.editions ?? []).find(
     (edition) =>
@@ -440,7 +485,7 @@ export const getBookshelfSeriesDetails = async (
       )
     );
     const books = [...nativeMatches, ...catalogMatches].map((book) => {
-      const mappedBook = mapBookshelfBook(book, server.id);
+      const mappedBook = mapBookshelfBook(book, server.id, server);
       return {
         ...mappedBook,
         series: mappedBook.series?.map((series) =>
@@ -523,7 +568,7 @@ export const getBookshelfAuthorDetails = async (
           book.author?.authorName?.toLowerCase() ===
             parsed.authorName.toLowerCase()
       )
-      .map((book) => mapBookshelfBook(book, server.id));
+      .map((book) => mapBookshelfBook(book, server.id, server));
     return {
       id,
       name: author.authorName,
@@ -558,7 +603,7 @@ export const searchBookshelfCatalogs = async (
     matches.map(async (server) => {
       try {
         const books = await getApi(server).lookupBook(term);
-        return books.map((book) => mapBookshelfBook(book, server.id));
+        return books.map((book) => mapBookshelfBook(book, server.id, server));
       } catch {
         return [];
       }
@@ -566,9 +611,19 @@ export const searchBookshelfCatalogs = async (
   );
   const deduped = new Map<string, BookResult>();
   for (const result of results.flat()) {
-    const key = result.isbn13
-      ? `isbn:${result.isbn13}`
-      : `${result.id}:${result.title.toLowerCase()}`;
+    // Provider catalogs can return many editions of one work as separate
+    // lookup rows. Keep one card per title and author; the detail page retains
+    // the edition choices from the selected work.
+    const normalize = (value: string | undefined) =>
+      (value ?? '')
+        .normalize('NFKD')
+        .toLowerCase()
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim();
+    const title = normalize(result.title);
+    const author = normalize(result.author);
+    const key = author ? `${title}:${author}` : `${title}:${result.id}`;
     if (!deduped.has(key)) deduped.set(key, result);
   }
   return [...deduped.values()];
@@ -588,7 +643,7 @@ export const searchBookshelfNarrators = async (
       const books = await getApi(server).getBooks();
       return books
         .filter((book) => book.foreignBookId)
-        .map((book) => mapBookshelfBook(book, server.id))
+        .map((book) => mapBookshelfBook(book, server.id, server))
         .filter(
           (book) =>
             book.narrators?.length &&
@@ -630,10 +685,11 @@ export const getBookshelfBookDetails = async (
           `metadata-api:${parsed.foreignBookId}`,
         ]
       : [parsed.foreignBookId];
-    let result: ReadarrBookLookupResult | undefined;
+    let result: ReadarrBookLookupResult | undefined = getCachedBook(id, server);
     for (const term of [
       ...new Set([providerLookupId, lookupTitle, ...providerIds]),
     ]) {
+      if (result) break;
       if (!term?.trim()) continue;
       let candidates: ReadarrBookLookupResult[];
       try {
@@ -650,7 +706,7 @@ export const getBookshelfBookDetails = async (
     if (result.foreignBookId !== parsed.foreignBookId) {
       result = { ...result, foreignBookId: parsed.foreignBookId };
     }
-    const base = mapBookshelfBook(result, server.id);
+    const base = mapBookshelfBook(result, server.id, server);
     const editions = result.editions ?? [];
     const description = (
       editions as ((typeof editions)[number] & { overview?: string })[]

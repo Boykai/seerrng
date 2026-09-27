@@ -26,6 +26,7 @@ const useSearchInput = (): SearchObject => {
   const isSearchPage = router.pathname === '/search';
   const routeQuery = isSearchPage ? getSearchQuery(router.query.query) : '';
   const [searchOpen, setSearchOpen] = useState(false);
+  const [routeRetry, setRouteRetry] = useState(0);
   const [lastRoute, setLastRoute] = useState<Url | null>(null);
   const pendingSearchQuery = useRef<string | null>(null);
   const searchOpenedOnCurrentRoute = useRef(false);
@@ -42,11 +43,19 @@ const useSearchInput = (): SearchObject => {
     const handleRouteChangeStart = () => {
       searchOpenedOnCurrentRoute.current = false;
     };
+    const handleRouteChangeError = (error: { cancelled?: boolean }) => {
+      if (error.cancelled && pendingSearchQuery.current !== null) {
+        pendingSearchQuery.current = null;
+        setRouteRetry((value) => value + 1);
+      }
+    };
 
     router.events.on('routeChangeStart', handleRouteChangeStart);
+    router.events.on('routeChangeError', handleRouteChangeError);
 
     return () => {
       router.events.off('routeChangeStart', handleRouteChangeStart);
+      router.events.off('routeChangeError', handleRouteChangeError);
     };
   }, [router.events]);
 
@@ -73,14 +82,18 @@ const useSearchInput = (): SearchObject => {
       pendingSearchQuery.current = '';
       const remainingQuery = { ...router.query };
       delete remainingQuery.query;
-      void router.replace(
-        {
-          pathname: router.pathname,
-          query: remainingQuery,
-        },
-        undefined,
-        { shallow: true }
-      );
+      void router
+        .replace(
+          {
+            pathname: router.pathname,
+            query: remainingQuery,
+          },
+          undefined,
+          { shallow: true }
+        )
+        .catch(() => {
+          pendingSearchQuery.current = null;
+        });
     } else if (
       shouldNavigateToSearch(
         router.pathname,
@@ -94,17 +107,21 @@ const useSearchInput = (): SearchObject => {
       pendingSearchQuery.current = debouncedValue;
 
       if (isSearchPage) {
-        void router.replace(
-          {
-            pathname: router.pathname,
-            query: {
-              ...router.query,
-              query: debouncedValue,
+        void router
+          .replace(
+            {
+              pathname: router.pathname,
+              query: {
+                ...router.query,
+                query: debouncedValue,
+              },
             },
-          },
-          undefined,
-          { shallow: true }
-        );
+            undefined,
+            { shallow: true }
+          )
+          .catch(() => {
+            pendingSearchQuery.current = null;
+          });
       } else {
         setLastRoute(router.asPath);
         const defaultSearchType = getDefaultSearchType(router.pathname);
@@ -118,13 +135,17 @@ const useSearchInput = (): SearchObject => {
               ...(defaultSearchFormat ? { format: defaultSearchFormat } : {}),
             },
           })
-          .then(() => window.scrollTo(0, 0));
+          .then(() => window.scrollTo(0, 0))
+          .catch(() => {
+            pendingSearchQuery.current = null;
+          });
       }
     }
   }, [
     debouncedValue,
     isSearchPage,
     routeQuery,
+    routeRetry,
     router,
     router.isReady,
     router.pathname,

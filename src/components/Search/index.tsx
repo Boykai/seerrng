@@ -73,6 +73,7 @@ const messages = defineMessages('components.Search', {
   filter: 'Filters',
   mediaFilters: 'Media Filters',
   sortBy: 'Sort By',
+  relevance: 'Best Match',
   title: 'Title',
   author: 'Author',
   authors: 'Authors',
@@ -139,6 +140,11 @@ type SortOption = {
 };
 
 const sortOptionDefinitions: Record<SortField, SortOption> = {
+  relevance: {
+    field: 'relevance',
+    message: messages.relevance,
+    defaultOrder: 'desc',
+  },
   date: { field: 'date', message: messages.date, defaultOrder: 'desc' },
   title: { field: 'title', message: messages.title, defaultOrder: 'asc' },
   rating: { field: 'rating', message: messages.rating, defaultOrder: 'desc' },
@@ -165,8 +171,8 @@ const sortFieldsByCategory: Record<
   movie: ['date', 'title', 'rating', 'writer', 'director'],
   tv: ['date', 'title', 'rating', 'writer', 'director'],
   music: ['date', 'title', 'artist'],
-  book: ['date', 'title', 'author', 'publisher'],
-  audiobook: ['date', 'title', 'author', 'publisher'],
+  book: ['relevance', 'date', 'title', 'author', 'publisher'],
+  audiobook: ['relevance', 'date', 'title', 'author', 'publisher'],
   author: ['title'],
   comic: ['date', 'title'],
   magazine: ['date', 'title'],
@@ -408,11 +414,13 @@ const Search = () => {
     (field) => sortOptionDefinitions[field]
   );
   const requestedSortField = getSortField(router.query.sort);
-  const sortField = sortOptions.some(
-    (option) => option.field === requestedSortField
-  )
-    ? requestedSortField
-    : 'date';
+  const sortField =
+    !router.query.sort &&
+    (category.key === 'book' || category.key === 'audiobook')
+      ? 'relevance'
+      : sortOptions.some((option) => option.field === requestedSortField)
+        ? requestedSortField
+        : 'date';
   const sortOrder = getSortOrder(router.query.order, sortField);
   const getRoutedString = (key: string) => {
     const value = router.query[key];
@@ -565,6 +573,26 @@ const Search = () => {
     });
 
     return [...visibleTitles].sort((left, right) => {
+      if (sortField === 'relevance') {
+        const score = (result: SearchResult) => {
+          if (result.mediaType !== 'book') return 0;
+          const normalize = (value: string) =>
+            value
+              .normalize('NFKD')
+              .toLowerCase()
+              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/[^\p{L}\p{N}]+/gu, ' ')
+              .trim();
+          const title = normalize(result.title);
+          const term = normalize(query);
+          if (!term) return 0;
+          if (title === term) return 3;
+          if (title.startsWith(`${term} `)) return 2;
+          if (title.includes(term)) return 1;
+          return 0;
+        };
+        return (score(right) - score(left)) * (sortOrder === 'desc' ? 1 : -1);
+      }
       if (sortField === 'date') {
         return compareOptional(
           getResultDate(left),
@@ -615,7 +643,7 @@ const Search = () => {
         sortOrder
       );
     });
-  }, [sortField, sortOrder, visibleTitles]);
+  }, [query, sortField, sortOrder, visibleTitles]);
   const orderKey = `${router.asPath}|${searchEndpoint}|${sortField}:${sortOrder}`;
   const previousOrder = useRef<{ key: string; ids: string[] }>({
     key: '',
