@@ -5,6 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import * as yaml from 'js-yaml';
+import { splitDiscordReleaseBody } from './discord-release-notes.mjs';
 
 const rootDirectory = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -358,6 +359,52 @@ test('release notes flow into the draft release and Discord announcement', () =>
   assert.equal(
     discord.env.RELEASE_BODY,
     '${{ needs.changelog.outputs.release_body }}'
+  );
+  const discordScript = discord.steps.find(
+    (step) => step.name === 'Send Discord announcement'
+  ).run;
+  assert.ok(
+    discord.steps.some((step) => step.name === 'Checkout release tooling')
+  );
+  assert.match(discordScript, /discord-release-notes\.mjs --split/u);
+  assert.match(discordScript, /wait=true/u);
+  assert.doesNotMatch(
+    discordScript,
+    /3797|3800/u,
+    'Discord announcements must not silently truncate later release-note sections'
+  );
+});
+
+test('Discord release-note chunks preserve all text and stay within the limit', () => {
+  const body = '#### Security\n- Secure every copy 🛡️.\n\n'.repeat(240);
+  const chunks = splitDiscordReleaseBody(body, 3600);
+
+  assert.ok(chunks.length > 1);
+  assert.equal(chunks.join(''), body);
+  assert.ok(chunks.every((chunk) => chunk.length <= 3600));
+  assert.ok(chunks.every((chunk) => !/[\uD800-\uDBFF]$/u.test(chunk)));
+  assert.throws(
+    () => splitDiscordReleaseBody('🛡️', 1),
+    /cannot fit this Unicode character/u
+  );
+});
+
+test('a workflow dispatch can correct omitted notes for a published release', () => {
+  const release = readWorkflow('release.yml');
+  const correction = release.jobs['announce-security-correction'];
+
+  assert.equal(
+    release.on.workflow_dispatch.inputs.announce_security_correction.type,
+    'boolean'
+  );
+  assert.equal(
+    correction.if,
+    "github.event_name == 'workflow_dispatch' && inputs.announce_security_correction == true"
+  );
+  assert.match(
+    correction.steps.find((step) => step.name === 'Post omitted security notes')
+      .run,
+    /releases\/tags\/\$\{TAG\}/u
   );
 });
 
