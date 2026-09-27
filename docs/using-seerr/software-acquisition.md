@@ -88,6 +88,11 @@ navigation. The page has three tabs:
 - Search filters the current tab; popular titles appear when no search is
   submitted.
 
+The main Search page also has a **Software** category. Its query searches these
+same paged catalogs, and **All** search shows a small software preview when
+matching titles are available. Opening a preview takes you to the title's
+shareable detail view.
+
 Within Retro or Modern, select a supported emulation system to show its games.
 Within PC Games, select Windows, Linux, or macOS to narrow the catalog. The PC
 platform choice is preselected when opening a request and can still be changed

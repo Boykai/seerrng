@@ -72,6 +72,14 @@ describe('contextual global search filters', () => {
       isSearchDataReady({ routerReady: true, category: 'music', query: '' }),
       true
     );
+    assert.equal(
+      isSearchDataReady({
+        routerReady: true,
+        category: 'software',
+        query: 'zelda',
+      }),
+      false
+    );
   });
 
   it('preserves the main query but removes stale contextual and sort state when media type changes', () => {

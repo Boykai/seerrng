@@ -12,12 +12,14 @@ import {
 import MediaFilterOption from '@app/components/Discover/MediaFilterOption';
 import PinnedFilterSection from '@app/components/Discover/PinnedFilterSection';
 import { prepareFilterValues } from '@app/components/Discover/constants';
+import SoftwareCatalog from '@app/components/SoftwareCatalog';
 import useDiscover from '@app/hooks/useDiscover';
 import useMediaFilterPin from '@app/hooks/useMediaFilterPin';
 import { setSearchActivity } from '@app/hooks/useSearchActivity';
 import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
 import {
+  isAnySoftwareCategoryEnabled,
   isConfiguredMediaCategoryEnabled,
   isOptionalCatalogPathEnabled,
 } from '@app/utils/serviceAvailability';
@@ -39,6 +41,7 @@ import { useRouter } from 'next/router';
 import { useEffect, useMemo, useRef } from 'react';
 import { useIntl } from 'react-intl';
 import ContextualSearchFilters from './ContextualSearchFilters';
+import SoftwareSearchPreview from './SoftwareSearchPreview';
 import {
   getMusicSearchParams,
   getSearchCategoryQuery,
@@ -66,6 +69,7 @@ const messages = defineMessages('components.Search', {
   music: 'Music',
   comics: 'Comics',
   magazines: 'Magazines',
+  software: 'Software',
   filter: 'Filters',
   mediaFilters: 'Media Filters',
   sortBy: 'Sort By',
@@ -108,6 +112,7 @@ const searchCategories = [
   { key: 'music', type: 'music', message: messages.music },
   { key: 'comic', type: 'comic', message: messages.comics },
   { key: 'magazine', type: 'magazine', message: messages.magazines },
+  { key: 'software', type: 'software', message: messages.software },
   { key: 'author', type: 'author', message: messages.authors },
 ] as const;
 
@@ -165,6 +170,7 @@ const sortFieldsByCategory: Record<
   author: ['title'],
   comic: ['date', 'title'],
   magazine: ['date', 'title'],
+  software: [],
 };
 
 const getSearchCategory = (
@@ -194,6 +200,8 @@ const matchesCategory = (result: SearchResult, category: SearchCategory) => {
   if (category.type === 'music') {
     return result.mediaType === 'album' || result.mediaType === 'artist';
   }
+
+  if (category.type === 'software') return false;
 
   return result.mediaType === category.type;
 };
@@ -341,6 +349,8 @@ const Search = () => {
           '/discover/magazines',
           currentSettings
         );
+      case 'software':
+        return isAnySoftwareCategoryEnabled(currentSettings);
       default:
         return true;
     }
@@ -734,97 +744,106 @@ const Search = () => {
           })}
         </div>
       </PinnedFilterSection>
-      <PinnedFilterSection
-        mediaType={filterMediaType}
-        section="filters"
-        label={intl.formatMessage(messages.filter)}
-      >
-        <div
-          className="flex flex-wrap items-center gap-2"
-          aria-label={intl.formatMessage(messages.filter)}
+      {category.key !== 'software' && (
+        <PinnedFilterSection
+          mediaType={filterMediaType}
+          section="filters"
+          label={intl.formatMessage(messages.filter)}
         >
-          <FilterResetButton
-            label={intl.formatMessage(messages.clearFilters)}
-            selected={!hasActiveFilters}
-            onClick={() => {
-              void router.replace(
-                {
-                  pathname: router.pathname,
-                  query: { query: query || undefined },
-                },
-                undefined,
-                { shallow: true, scroll: false }
+          <div
+            className="flex flex-wrap items-center gap-2"
+            aria-label={intl.formatMessage(messages.filter)}
+          >
+            <FilterResetButton
+              label={intl.formatMessage(messages.clearFilters)}
+              selected={!hasActiveFilters}
+              onClick={() => {
+                void router.replace(
+                  {
+                    pathname: router.pathname,
+                    query: { query: query || undefined },
+                  },
+                  undefined,
+                  { shallow: true, scroll: false }
+                );
+              }}
+            />
+            <CardTextVisibilityToggle
+              mediaType={['movie', 'tv', 'album', 'book']}
+            />
+            <ContextualSearchFilters category={category.key} />
+          </div>
+        </PinnedFilterSection>
+      )}
+      {category.key !== 'software' && (
+        <PinnedFilterSection
+          mediaType={filterMediaType}
+          section="sortBy"
+          label={intl.formatMessage(messages.sortBy)}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            {sortOptions.map((sortOption) => {
+              const isSelected = sortField === sortOption.field;
+              const displayedOrder = isSelected
+                ? sortOrder
+                : sortOption.defaultOrder;
+              const directionLabel = intl.formatMessage(
+                displayedOrder === 'asc'
+                  ? messages.ascending
+                  : messages.descending
               );
-            }}
-          />
-          <CardTextVisibilityToggle
-            mediaType={['movie', 'tv', 'album', 'book']}
-          />
-          <ContextualSearchFilters category={category.key} />
-        </div>
-      </PinnedFilterSection>
-      <PinnedFilterSection
-        mediaType={filterMediaType}
-        section="sortBy"
-        label={intl.formatMessage(messages.sortBy)}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          {sortOptions.map((sortOption) => {
-            const isSelected = sortField === sortOption.field;
-            const displayedOrder = isSelected
-              ? sortOrder
-              : sortOption.defaultOrder;
-            const directionLabel = intl.formatMessage(
-              displayedOrder === 'asc'
-                ? messages.ascending
-                : messages.descending
-            );
-            const SortDirectionIcon =
-              displayedOrder === 'asc' ? BarsArrowUpIcon : BarsArrowDownIcon;
+              const SortDirectionIcon =
+                displayedOrder === 'asc' ? BarsArrowUpIcon : BarsArrowDownIcon;
 
-            return (
-              <Tooltip key={sortOption.field} content={directionLabel}>
-                <button
-                  type="button"
-                  className={getFilterToggleButtonClass(isSelected)}
-                  aria-pressed={isSelected}
-                  aria-label={`${intl.formatMessage(
-                    sortOption.message
-                  )}: ${directionLabel}`}
-                  onClick={() => {
-                    const nextOrder = isSelected
-                      ? sortOrder === 'asc'
-                        ? 'desc'
-                        : 'asc'
-                      : sortOption.defaultOrder;
+              return (
+                <Tooltip key={sortOption.field} content={directionLabel}>
+                  <button
+                    type="button"
+                    className={getFilterToggleButtonClass(isSelected)}
+                    aria-pressed={isSelected}
+                    aria-label={`${intl.formatMessage(
+                      sortOption.message
+                    )}: ${directionLabel}`}
+                    onClick={() => {
+                      const nextOrder = isSelected
+                        ? sortOrder === 'asc'
+                          ? 'desc'
+                          : 'asc'
+                        : sortOption.defaultOrder;
 
-                    void router.replace(
-                      {
-                        pathname: router.pathname,
-                        query: {
-                          ...router.query,
-                          sort: sortOption.field,
-                          order: nextOrder,
+                      void router.replace(
+                        {
+                          pathname: router.pathname,
+                          query: {
+                            ...router.query,
+                            sort: sortOption.field,
+                            order: nextOrder,
+                          },
                         },
-                      },
-                      undefined,
-                      { shallow: true, scroll: false }
-                    );
-                  }}
-                >
-                  {intl.formatMessage(sortOption.message)}
-                  <SortDirectionIcon className="h-4 w-4 flex-shrink-0" />
-                </button>
-              </Tooltip>
-            );
-          })}
-        </div>
-      </PinnedFilterSection>
-      {error && stableTitles.length === 0 ? (
+                        undefined,
+                        { shallow: true, scroll: false }
+                      );
+                    }}
+                  >
+                    {intl.formatMessage(sortOption.message)}
+                    <SortDirectionIcon className="h-4 w-4 flex-shrink-0" />
+                  </button>
+                </Tooltip>
+              );
+            })}
+          </div>
+        </PinnedFilterSection>
+      )}
+      {category.key === 'software' ? (
+        <SoftwareCatalog externalQuery={query} embedded />
+      ) : error && stableTitles.length === 0 ? (
         searchError
       ) : (
         <>
           {error && searchError}
+          {category.key === 'all' && query && (
+            <SoftwareSearchPreview query={query} />
+          )}
           <ListView
             items={stableTitles}
             preferredBookFormat={preferredBookFormat}

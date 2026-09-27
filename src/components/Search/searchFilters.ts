@@ -9,7 +9,8 @@ export type SearchFilterCategory =
   | 'music'
   | 'author'
   | 'comic'
-  | 'magazine';
+  | 'magazine'
+  | 'software';
 
 export const searchContextualFilterKeys = [
   'artist',
@@ -120,6 +121,7 @@ export const isSearchDataReady = ({
   query: string;
 }): boolean =>
   routerReady &&
+  category !== 'software' &&
   (category === 'all' ||
   category === 'author' ||
   category === 'comic' ||

@@ -121,7 +121,13 @@ const categories: Category[] = ['retro', 'modern', 'game'];
 const operatingSystems: PcOperatingSystem[] = ['windows', 'linux', 'macos'];
 const architectures: PcArchitecture[] = ['x64', 'arm64', 'x86', 'universal'];
 
-const SoftwareCatalog = () => {
+const SoftwareCatalog = ({
+  externalQuery,
+  embedded = false,
+}: {
+  externalQuery?: string;
+  embedded?: boolean;
+}) => {
   const router = useRouter();
   const intl = useIntl();
   const { user, hasPermission } = useUser();
@@ -210,7 +216,7 @@ const SoftwareCatalog = () => {
     (system) => system.group === selectedCategory
   );
 
-  const query = submittedQuery.trim();
+  const query = (externalQuery ?? submittedQuery).trim();
   const { ref: loadMoreRef, inView: loadMoreInView } = useInView({
     rootMargin: '600px',
   });
@@ -382,11 +388,13 @@ const SoftwareCatalog = () => {
 
   return (
     <>
-      <PageTitle title={intl.formatMessage(messages.title)} />
+      {!embedded && <PageTitle title={intl.formatMessage(messages.title)} />}
       <main className="mb-10">
-        <Header subtext={intl.formatMessage(messages.intro)}>
-          {intl.formatMessage(messages.title)}
-        </Header>
+        {!embedded && (
+          <Header subtext={intl.formatMessage(messages.intro)}>
+            {intl.formatMessage(messages.title)}
+          </Header>
+        )}
 
         <div className="mt-6 flex flex-wrap gap-2" role="tablist">
           {visibleCategories.map((value) => (
@@ -468,31 +476,33 @@ const SoftwareCatalog = () => {
           </div>
         )}
 
-        <form
-          className="mt-5 flex max-w-2xl gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setSubmittedQuery(searchInput.trim());
-            setRequestSuccess('');
-          }}
-        >
-          <label className="relative min-w-0 flex-1">
-            <MagnifyingGlassIcon
-              className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-gray-400"
-              aria-hidden="true"
-            />
-            <input
-              className="input input-lite w-full pl-10"
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              placeholder={intl.formatMessage(messages.searchPlaceholder)}
-              maxLength={200}
-            />
-          </label>
-          <Button buttonType="primary" buttonSize="standard" type="submit">
-            {intl.formatMessage(messages.search)}
-          </Button>
-        </form>
+        {externalQuery === undefined && (
+          <form
+            className="mt-5 flex max-w-2xl gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSubmittedQuery(searchInput.trim());
+              setRequestSuccess('');
+            }}
+          >
+            <label className="relative min-w-0 flex-1">
+              <MagnifyingGlassIcon
+                className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-gray-400"
+                aria-hidden="true"
+              />
+              <input
+                className="input input-lite w-full pl-10"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder={intl.formatMessage(messages.searchPlaceholder)}
+                maxLength={200}
+              />
+            </label>
+            <Button buttonType="primary" buttonSize="standard" type="submit">
+              {intl.formatMessage(messages.search)}
+            </Button>
+          </form>
+        )}
 
         {requestSuccess && (
           <div

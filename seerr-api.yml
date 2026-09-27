@@ -7919,7 +7919,7 @@ paths:
                 value:
                   type: string
                   nullable: true
-                  enum: [all, movie, tv, music, book, ebook, audiobook, null]
+                  enum: [all, movie, tv, music, book, ebook, audiobook, comic, magazine, author, software, null]
       responses:
         '200':
           description: Updated account media filter pins

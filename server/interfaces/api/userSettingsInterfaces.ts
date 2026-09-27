@@ -35,6 +35,7 @@ export const mediaFilterValues = [
   'comic',
   'magazine',
   'author',
+  'software',
 ] as const;
 export type MediaFilterValue = (typeof mediaFilterValues)[number];
 export type UserMediaFilterPins = Partial<
