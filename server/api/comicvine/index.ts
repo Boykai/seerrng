@@ -7,10 +7,8 @@ const MAX_COMICVINE_ARRAY_ITEMS = 100;
 export const MAX_COMICVINE_PAGE_SIZE = 100;
 
 // ComicVine serves its own cover art from a small, fixed set of CDN hosts.
-// Unlike a Servarr instance URL (admin-supplied, could point anywhere), this
-// is a value we're relaying from a trusted third party's response body, so a
-// plain host allowlist is enough - no need for the async
-// resolves-to-private-address check that admin-facing URLs go through.
+// Require standard HTTPS URLs on those hosts, without userinfo or custom
+// ports, before relaying URLs from the upstream response.
 const COMICVINE_IMAGE_HOSTS = new Set([
   'comicvine.gamespot.com',
   'comicvine1.cbsistatic.com',
@@ -57,7 +55,11 @@ const sanitizeUrlAgainstHosts = (
   }
   try {
     const url = new URL(candidate);
-    return url.protocol === 'https:' && allowedHosts.has(url.hostname)
+    return url.protocol === 'https:' &&
+      url.port === '' &&
+      !url.username &&
+      !url.password &&
+      allowedHosts.has(url.hostname)
       ? url.toString()
       : undefined;
   } catch {

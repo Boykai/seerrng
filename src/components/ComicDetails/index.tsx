@@ -55,6 +55,8 @@ interface ComicIssuePage {
   results: ComicIssueReference[];
 }
 
+const MAX_COMIC_ISSUE_PAGES = 500;
+
 const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
   ssr: false,
 });
@@ -80,6 +82,7 @@ const messages = defineMessages('components.ComicDetails', {
   volumeIssues: 'Issues in this volume',
   loadMoreIssues: 'Load more issues',
   issueListUnavailable: 'The issue list could not be loaded right now.',
+  retryIssueList: 'Retry loading issues',
   watchlistSuccess: '<strong>{title}</strong> added to watchlist successfully!',
   watchlistDeleted:
     '<strong>{title}</strong> Removed from watchlist successfully!',
@@ -122,9 +125,12 @@ const ComicDetails = () => {
     isLoading: issueListLoading,
     size: issuePageCount,
     setSize: setIssuePageCount,
+    isValidating: issuePagesValidating,
+    mutate: mutateIssuePages,
   } = useSWRInfinite<ComicIssuePage>(
     (pageIndex, previousPage) => {
       if (!comicId || !volumeIssuesInView || !data?.issueCount) return null;
+      if (pageIndex >= MAX_COMIC_ISSUE_PAGES) return null;
       if (previousPage && pageIndex + 1 > previousPage.totalPages) return null;
       return `/api/v1/comic/${encodeApiPathSegment(comicId)}/issues?page=${pageIndex + 1}`;
     },
@@ -134,8 +140,10 @@ const ComicDetails = () => {
   const lastIssuePage = issuePages?.[issuePages.length - 1];
   const hasMoreVolumeIssues =
     lastIssuePage !== undefined &&
+    lastIssuePage.page < MAX_COMIC_ISSUE_PAGES &&
     lastIssuePage.page < lastIssuePage.totalPages;
-  const loadingMoreIssues = issuePageCount > (issuePages?.length ?? 0);
+  const loadingMoreIssues =
+    issuePageCount > (issuePages?.length ?? 0) && issuePagesValidating;
 
   useEffect(() => {
     setShowManager(router.query.manage === '1');
@@ -582,47 +590,61 @@ const ComicDetails = () => {
                 <h2 className="media-inset-heading">
                   {intl.formatMessage(messages.volumeIssues)}
                 </h2>
-                {issueListError ? (
-                  <p className="mt-3 text-sm text-gray-400">
-                    {intl.formatMessage(messages.issueListUnavailable)}
-                  </p>
-                ) : issueListLoading ? (
+                {issueListError && (
+                  <div
+                    role="alert"
+                    className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-amber-300"
+                  >
+                    <p>{intl.formatMessage(messages.issueListUnavailable)}</p>
+                    <Button
+                      buttonType="ghost"
+                      buttonSize="sm"
+                      disabled={issuePagesValidating}
+                      onClick={() => void mutateIssuePages()}
+                    >
+                      {intl.formatMessage(messages.retryIssueList)}
+                    </Button>
+                  </div>
+                )}
+                {!issuePages && issueListLoading ? (
                   <LoadingSpinner />
                 ) : (
                   <>
-                    <ol className="mt-3 divide-y divide-gray-700">
-                      {volumeIssues.map((issue) => (
-                        <li
-                          key={issue.id}
-                          className="flex items-center gap-3 py-2"
-                        >
-                          <div className="relative h-14 w-10 shrink-0 overflow-hidden rounded bg-gray-900">
-                            <CachedImage
-                              type="tmdb"
-                              src={
-                                issue.coverUrl ||
-                                '/images/seerr_poster_not_found.png'
-                              }
-                              alt=""
-                              fill
-                              className="object-cover"
-                            />
-                          </div>
-                          <div className="min-w-0 text-sm">
-                            <p className="font-medium text-gray-100">
-                              #{issue.issueNumber || '?'}
-                              {issue.name ? ` · ${issue.name}` : ''}
-                            </p>
-                            {issue.coverDate && (
-                              <p className="text-xs text-gray-400">
-                                {issue.coverDate}
+                    {volumeIssues.length > 0 && (
+                      <ol className="mt-3 divide-y divide-gray-700">
+                        {volumeIssues.map((issue) => (
+                          <li
+                            key={issue.id}
+                            className="flex items-center gap-3 py-2"
+                          >
+                            <div className="relative h-14 w-10 shrink-0 overflow-hidden rounded bg-gray-900">
+                              <CachedImage
+                                type="tmdb"
+                                src={
+                                  issue.coverUrl ||
+                                  '/images/seerr_poster_not_found.png'
+                                }
+                                alt=""
+                                fill
+                                className="object-cover"
+                              />
+                            </div>
+                            <div className="min-w-0 text-sm">
+                              <p className="font-medium text-gray-100">
+                                #{issue.issueNumber || '?'}
+                                {issue.name ? ` · ${issue.name}` : ''}
                               </p>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ol>
-                    {hasMoreVolumeIssues && (
+                              {issue.coverDate && (
+                                <p className="text-xs text-gray-400">
+                                  {issue.coverDate}
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                    {hasMoreVolumeIssues && !issueListError && (
                       <div className="mt-3 flex justify-center">
                         <Button
                           buttonType="ghost"

@@ -15,6 +15,7 @@ import {
   mapComicVineVolumeDetails,
 } from '@server/models/Comic';
 import { filterEntityResponse } from '@server/utils/entityResponse';
+import { getHttpErrorDetails } from '@server/utils/httpError';
 import { parsePositiveInt } from '@server/utils/pagination';
 import { parsePositiveRouteId } from '@server/utils/routeId';
 import { Router } from 'express';
@@ -51,7 +52,7 @@ comicRoutes.get('/:id/issues', async (req, res) => {
   } catch (error) {
     logger.error('Failed to retrieve comic issues', {
       label: 'Comic',
-      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      ...getHttpErrorDetails(error),
       comicVineId,
     });
     return res
@@ -119,7 +120,7 @@ comicRoutes.get('/:id', async (req, res, next) => {
   } catch (e) {
     logger.error('Failed to retrieve comic details', {
       label: 'Comic',
-      errorMessage: e instanceof Error ? e.message : 'Unknown error',
+      ...getHttpErrorDetails(e),
       comicVineId,
     });
     return next({ status: 500, message: 'Unable to retrieve comic details.' });

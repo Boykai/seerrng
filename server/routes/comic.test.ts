@@ -11,6 +11,7 @@ import MediaIdentifier, {
 import { User } from '@server/entity/User';
 import { Watchlist } from '@server/entity/Watchlist';
 import { getSettings } from '@server/lib/settings';
+import logger from '@server/logger';
 import { checkUser } from '@server/middleware/auth';
 import { setupTestDb } from '@server/test/db';
 import type { Express } from 'express';
@@ -161,6 +162,22 @@ describe('GET /comic/:id', () => {
     assert.strictEqual(res.status, 404);
     assert.strictEqual(getVolume.mock.callCount(), 0);
   });
+
+  it('redacts ComicVine API keys from detail lookup failure logs', async () => {
+    getSettings().main.comicVineApiKey = 'test-comicvine-key';
+    mock.method(ComicVineAPI.prototype, 'getVolume', async () => {
+      throw new Error('Upstream rejected api_key=test-comicvine-key');
+    });
+    const errorLog = mock.method(logger, 'error', () => undefined);
+
+    const agent = await login();
+    const res = await agent.get('/comic/4567');
+
+    assert.strictEqual(res.status, 500);
+    const loggedArguments = errorLog.mock.calls[0]
+      .arguments as unknown as unknown[];
+    assert.doesNotMatch(JSON.stringify(loggedArguments), /test-comicvine-key/);
+  });
 });
 
 describe('GET /comic/:id/issues', () => {
@@ -206,5 +223,21 @@ describe('GET /comic/:id/issues', () => {
 
     assert.strictEqual(res.status, 404);
     assert.strictEqual(getIssues.mock.callCount(), 0);
+  });
+
+  it('redacts ComicVine API keys from issue lookup failure logs', async () => {
+    getSettings().main.comicVineApiKey = 'test-comicvine-key';
+    mock.method(ComicVineAPI.prototype, 'getVolumeIssues', async () => {
+      throw new Error('Upstream rejected api_key=test-comicvine-key');
+    });
+    const errorLog = mock.method(logger, 'error', () => undefined);
+
+    const agent = await login();
+    const res = await agent.get('/comic/4567/issues');
+
+    assert.strictEqual(res.status, 503);
+    const loggedArguments = errorLog.mock.calls[0]
+      .arguments as unknown as unknown[];
+    assert.doesNotMatch(JSON.stringify(loggedArguments), /test-comicvine-key/);
   });
 });

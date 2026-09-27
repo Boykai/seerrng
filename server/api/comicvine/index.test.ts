@@ -126,6 +126,44 @@ describe('ComicVineAPI.searchVolumes', () => {
     assert.strictEqual(response.results[0].site_detail_url, undefined);
   });
 
+  it('rejects ComicVine URLs with userinfo or a nonstandard port', async () => {
+    mockGet(async () => ({
+      error: 'OK',
+      limit: 20,
+      offset: 0,
+      number_of_page_results: 2,
+      number_of_total_results: 2,
+      status_code: 1,
+      results: [
+        {
+          id: 1,
+          name: 'Userinfo URL',
+          image: {
+            small_url:
+              'https://viewer@comicvine.gamespot.com/a/uploads/cover.jpg',
+          },
+        },
+        {
+          id: 2,
+          name: 'Custom port URL',
+          image: {
+            small_url:
+              'https://comicvine.gamespot.com:8443/a/uploads/cover.jpg',
+          },
+          site_detail_url: 'https://comicvine.gamespot.com:8443/comic/2/',
+        },
+      ],
+    }));
+
+    const response = await new ComicVineAPI('key').searchVolumes({
+      query: 'x',
+    });
+
+    assert.strictEqual(response.results[0].image, undefined);
+    assert.strictEqual(response.results[1].image, undefined);
+    assert.strictEqual(response.results[1].site_detail_url, undefined);
+  });
+
   it('throws when the response is not an object', async () => {
     mockGet(async () => null);
 
