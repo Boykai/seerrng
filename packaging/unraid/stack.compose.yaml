@@ -5,6 +5,7 @@ name: seerrng
 services:
   seerrng:
     image: ghcr.io/snapetech/seerrng:latest
+    init: true
     restart: unless-stopped
     ports:
       - '${SEERRNG_HTTP_PORT:-5055}:5055'

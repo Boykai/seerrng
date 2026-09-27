@@ -20,7 +20,7 @@
   <License>MIT License</License>
   <Requires>Requires Docker, network access for metadata and external service integrations, and a persistent host directory for /app/config. Set the host directory ownership to UID 1000 and GID 1000 before the first start because the image does not run as root.</Requires>
   <Screenshot>https://raw.githubusercontent.com/snapetech/seerrng/main/public/readme-discover-covers.jpg</Screenshot>
-  <ExtraParams>--restart=unless-stopped</ExtraParams>
+  <ExtraParams>--init --restart=unless-stopped</ExtraParams>
 
   <Config Name="Web UI Port" Target="5055" Default="5055" Mode="tcp" Description="HTTP port for the SeerrNG web interface." Type="Port" Display="always" Required="true" Mask="false">5055</Config>
   <Config Name="HTTPS Port" Target="5056" Default="5056" Mode="tcp" Description="HTTPS listener port when built-in TLS is enabled in Settings &gt; Network." Type="Port" Display="always" Required="true" Mask="false">5056</Config>

@@ -31,6 +31,7 @@ test('Unraid template exposes the stable image and canonical raw URL', async () 
   assert.equal(container.WebUI, 'http://[IP]:[PORT:5055]/');
   assert.equal(container.Network, 'bridge');
   assert.equal(container.Privileged, 'false');
+  assert.match(container.ExtraParams, /(?:^|\s)--init(?:\s|$)/u);
   assert.equal(container.License, 'MIT License');
   assert.match(container.Icon, /^https:\/\/raw\.githubusercontent\.com\//u);
   assert.match(
@@ -103,6 +104,7 @@ test('Unraid Compose project uses the SeerrNG fork images and companion profiles
   const services = compose.services;
   assert.equal(compose.name, 'seerrng');
   assert.equal(services.seerrng.image, 'ghcr.io/snapetech/seerrng:latest');
+  assert.equal(services.seerrng.init, true);
   assert.equal(
     services['bookshelf-ebooks'].image,
     'ghcr.io/snapetech/bookshelfng:hardcover'
