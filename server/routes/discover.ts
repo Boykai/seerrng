@@ -47,6 +47,10 @@ import type {
   WatchlistResponse,
 } from '@server/interfaces/api/discoverInterfaces';
 import { findBookMediaByOpenLibraryIds } from '@server/lib/bookMediaMatcher';
+import {
+  getComicCatalogIndexStatus,
+  searchComicCatalogIndex,
+} from '@server/lib/comicCatalogIndex';
 import { findComicMediaByComicVineIds } from '@server/lib/comicMediaMatcher';
 import {
   normalizeMusicBrainzId,
@@ -3797,8 +3801,113 @@ discoverRoutes.get('/comics', async (req, res) => {
       .json({ status: 400, message: parsedSearchQuery.error });
   }
   const query = parsedSearchQuery.value || '*';
+  const parsedPublisher = parseOptionalDiscoverString(
+    req.query.publisher,
+    'Publisher',
+    128
+  );
+  const parseIntegerFilter = (
+    value: unknown,
+    fieldName: string,
+    minimum: number,
+    maximum: number
+  ): { value?: number; error?: string } => {
+    if (value === undefined) return {};
+    if (
+      typeof value !== 'string' ||
+      !/^\d{1,6}$/.test(value) ||
+      Number(value) < minimum ||
+      Number(value) > maximum
+    ) {
+      return {
+        error: `${fieldName} must be between ${minimum} and ${maximum}.`,
+      };
+    }
+    return { value: Number(value) };
+  };
+  const startYear = parseIntegerFilter(
+    req.query.startYear,
+    'Start year',
+    1800,
+    2200
+  );
+  const minIssues = parseIntegerFilter(
+    req.query.minIssues,
+    'Minimum issues',
+    0,
+    100000
+  );
+  const maxIssues = parseIntegerFilter(
+    req.query.maxIssues,
+    'Maximum issues',
+    0,
+    100000
+  );
+  if (
+    'error' in parsedPublisher ||
+    startYear.error ||
+    minIssues.error ||
+    maxIssues.error ||
+    (minIssues.value !== undefined &&
+      maxIssues.value !== undefined &&
+      minIssues.value > maxIssues.value)
+  ) {
+    return res.status(400).json({
+      status: 400,
+      message:
+        ('error' in parsedPublisher && parsedPublisher.error) ||
+        startYear.error ||
+        minIssues.error ||
+        maxIssues.error ||
+        'Minimum issues cannot exceed maximum issues.',
+    });
+  }
+  const publisher = parsedPublisher.value?.trim() || undefined;
+  const hasMetadataFilters =
+    publisher !== undefined ||
+    startYear.value !== undefined ||
+    minIssues.value !== undefined ||
+    maxIssues.value !== undefined;
 
   try {
+    if (hasMetadataFilters) {
+      const scan = await getComicCatalogIndexStatus();
+      if (scan.completeGeneration === 0) {
+        return res.status(200).json({
+          page: 1,
+          totalPages: 0,
+          totalResults: 0,
+          results: [],
+          indexing: true,
+          indexedResults: scan.indexedResults,
+          expectedResults: scan.totalResults,
+          indexError: scan.lastError,
+        });
+      }
+      const indexed = await searchComicCatalogIndex(scan.completeGeneration, {
+        query,
+        publisher,
+        startYear: startYear.value,
+        minIssues: minIssues.value,
+        maxIssues: maxIssues.value,
+        page,
+        limit: itemsPerPage,
+      });
+      const mediaByComicVineId = await findComicMediaByComicVineIds(
+        indexed.results.map((volume) => volume.id),
+        req.user
+      );
+      return res.status(200).json({
+        page,
+        totalPages: Math.ceil(indexed.totalResults / itemsPerPage),
+        totalResults: indexed.totalResults,
+        results: indexed.results.map((volume) =>
+          mapComicVineVolumeResult(volume, mediaByComicVineId.get(volume.id))
+        ),
+        indexing: false,
+        lastIndexedAt: scan.lastCompletedAt,
+      });
+    }
     const comicVine = new ComicVineAPI(comicVineApiKey);
     const response = await comicVine.searchVolumes({
       query,

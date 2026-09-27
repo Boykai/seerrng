@@ -9530,7 +9530,7 @@ paths:
   /discover/comics:
     get:
       summary: Discover comics
-      description: Returns comic discovery results from ComicVine. Empty if no ComicVine API key is configured.
+      description: Returns comic discovery results from ComicVine. Publisher, start-year, and issue-count filters use a durable local volume index; while its first scan runs, the response includes indexing progress and no filtered results. Empty if no ComicVine API key is configured.
       tags:
         - search
       parameters:
@@ -9545,6 +9545,29 @@ paths:
           schema:
             type: string
             example: Batman
+        - in: query
+          name: publisher
+          schema:
+            type: string
+            maxLength: 128
+        - in: query
+          name: startYear
+          schema:
+            type: integer
+            minimum: 1800
+            maximum: 2200
+        - in: query
+          name: minIssues
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
+        - in: query
+          name: maxIssues
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
       responses:
         '200':
           description: Comic discovery results
@@ -9562,6 +9585,22 @@ paths:
                   totalResults:
                     type: number
                     example: 200
+                  indexing:
+                    type: boolean
+                    description: True while the first complete filtered catalog index is building.
+                  indexedResults:
+                    type: integer
+                    description: Volumes scanned so far when indexing is true.
+                  expectedResults:
+                    type: integer
+                    description: ComicVine's reported volume count when indexing is true.
+                  indexError:
+                    type: string
+                    nullable: true
+                    description: A safe, non-secret code describing the most recent index retry.
+                  lastIndexedAt:
+                    type: integer
+                    description: Unix timestamp of the last complete index used for filtered results.
                   results:
                     type: array
                     items:

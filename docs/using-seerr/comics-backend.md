@@ -35,6 +35,14 @@ With a key configured, global Search includes a **Comics** category backed by
 ComicVine. Use the main search query to find volume titles; the category also
 lets you narrow matches by title, aliases, publisher, or start year.
 
+On the Comics Discover page, filter volumes by publisher, start year, and
+minimum or maximum issue count. The first filtered search starts a resumable
+ComicVine volume index in the background. The page shows indexing progress
+until that first scan is complete; filtered counts and pages are shown only
+afterward. SeerrNG keeps the last complete index available during periodic
+refreshes. ComicVine limits how quickly the first scan can finish, so a large
+catalog can take hours to index.
+
 ## Choosing a backend
 
 | | Mylar3 | Kapowarr |

@@ -238,6 +238,56 @@ class ComicVineAPI extends ExternalAPI {
     );
   }
 
+  public async getVolumesPage(page: number): Promise<ComicVineSearchResponse> {
+    if (!Number.isSafeInteger(page) || page < 1) {
+      throw new Error('ComicVine catalog page is invalid.');
+    }
+    const offset = (page - 1) * MAX_COMICVINE_PAGE_SIZE;
+    const response = await this.get<ComicVineSearchResponse>(
+      '/volumes/',
+      {
+        params: {
+          limit: MAX_COMICVINE_PAGE_SIZE,
+          offset,
+          sort: 'id:asc',
+          field_list: [
+            'id',
+            'name',
+            'aliases',
+            'start_year',
+            'count_of_issues',
+            'publisher',
+            'image',
+            'deck',
+            'site_detail_url',
+          ].join(','),
+        },
+      },
+      43200
+    );
+    if (
+      !isRecord(response) ||
+      response.status_code !== 1 ||
+      !Array.isArray(response.results) ||
+      !Number.isSafeInteger(response.number_of_page_results) ||
+      !Number.isSafeInteger(response.number_of_total_results) ||
+      response.results.length !== response.number_of_page_results
+    ) {
+      throw new Error('ComicVine returned an invalid volume index page.');
+    }
+    return {
+      error: 'OK',
+      limit: MAX_COMICVINE_PAGE_SIZE,
+      offset,
+      number_of_page_results: response.number_of_page_results,
+      number_of_total_results: response.number_of_total_results,
+      status_code: 1,
+      results: response.results
+        .map(sanitizeVolumeResult)
+        .filter((result): result is ComicVineVolumeResult => !!result),
+    };
+  }
+
   public async getVolumeIssues({
     volumeId,
     page = 1,

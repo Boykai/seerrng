@@ -172,6 +172,39 @@ describe('ComicVineAPI.searchVolumes', () => {
   });
 });
 
+describe('ComicVineAPI.getVolumesPage', () => {
+  afterEach(() => mock.restoreAll());
+
+  it('requests stable, bounded volume pages for the local index', async () => {
+    const get = mock.method(
+      ComicVineAPI.prototype as unknown as MockableComicVine,
+      'get',
+      async () => ({
+        status_code: 1,
+        number_of_page_results: 1,
+        number_of_total_results: 101,
+        results: [{ id: 101, name: 'Final volume' }],
+      })
+    );
+    const response = await new ComicVineAPI('key').getVolumesPage(2);
+    assert.strictEqual(response.results[0].name, 'Final volume');
+    assert.strictEqual(response.offset, 100);
+    assert.strictEqual(get.mock.calls[0].arguments[0], '/volumes/');
+    assert.deepStrictEqual(get.mock.calls[0].arguments[1]?.params, {
+      limit: 100,
+      offset: 100,
+      sort: 'id:asc',
+      field_list:
+        'id,name,aliases,start_year,count_of_issues,publisher,image,deck,site_detail_url',
+    });
+  });
+
+  it('rejects incomplete upstream index responses', async () => {
+    mockGet(async () => ({ status_code: 1, results: [] }));
+    await assert.rejects(() => new ComicVineAPI('key').getVolumesPage(1));
+  });
+});
+
 describe('ComicVineAPI.getVolume', () => {
   afterEach(() => {
     mock.restoreAll();

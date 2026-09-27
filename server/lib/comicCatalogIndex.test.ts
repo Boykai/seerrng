@@ -1,0 +1,114 @@
+import assert from 'node:assert/strict';
+import { afterEach, describe, it, mock } from 'node:test';
+
+import ComicVineAPI from '@server/api/comicvine';
+import { getRepository } from '@server/datasource';
+import { ComicCatalogScan } from '@server/entity/ComicCatalogScan';
+import { ComicCatalogVolume } from '@server/entity/ComicCatalogVolume';
+import { getSettings } from '@server/lib/settings';
+import { setupTestDb } from '@server/test/db';
+import {
+  scanComicCatalogIndexPage,
+  searchComicCatalogIndex,
+} from './comicCatalogIndex';
+
+setupTestDb();
+
+describe('comic catalog index', () => {
+  afterEach(() => {
+    mock.restoreAll();
+    getSettings().main.comicVineApiKey = '';
+  });
+
+  it('resumes pages and promotes only a completed generation', async () => {
+    getSettings().main.comicVineApiKey = 'test-key';
+    await getRepository(ComicCatalogScan).save({ id: 'global' });
+    const getPage = mock.method(
+      ComicVineAPI.prototype,
+      'getVolumesPage',
+      async (page: number) => ({
+        error: 'OK',
+        limit: 100,
+        offset: (page - 1) * 100,
+        number_of_page_results: page === 1 ? 100 : 1,
+        number_of_total_results: 101,
+        status_code: 1,
+        results: Array.from({ length: page === 1 ? 100 : 1 }, (_, index) => ({
+          id: (page - 1) * 100 + index + 1,
+          name: `Volume ${(page - 1) * 100 + index + 1}`,
+          publisher: { id: 5, name: 'DC Comics' },
+          start_year: '1994',
+          count_of_issues: 12,
+          resource_type: 'volume' as const,
+        })),
+      })
+    );
+
+    await scanComicCatalogIndexPage();
+    let scan = await getRepository(ComicCatalogScan).findOneByOrFail({
+      id: 'global',
+    });
+    assert.strictEqual(scan.completeGeneration, 0);
+    assert.strictEqual(scan.nextPage, 2);
+    await getRepository(ComicCatalogScan).update(
+      { id: 'global' },
+      { lastAttemptAt: 0 }
+    );
+    await scanComicCatalogIndexPage();
+    scan = await getRepository(ComicCatalogScan).findOneByOrFail({
+      id: 'global',
+    });
+    assert.strictEqual(scan.completeGeneration, 1);
+    assert.strictEqual(scan.indexedResults, 101);
+    assert.strictEqual(getPage.mock.callCount(), 2);
+    const indexed = await searchComicCatalogIndex(1, {
+      query: 'volume',
+      publisher: 'dc',
+      startYear: 1994,
+      minIssues: 10,
+      page: 1,
+      limit: 20,
+    });
+    assert.strictEqual(indexed.totalResults, 101);
+    assert.strictEqual(await getRepository(ComicCatalogVolume).count(), 101);
+  });
+
+  it('restarts a scan when ComicVine changes its total during pagination', async () => {
+    getSettings().main.comicVineApiKey = 'test-key';
+    await getRepository(ComicCatalogScan).save({
+      id: 'global',
+      scanGeneration: 1,
+      completeGeneration: 0,
+      nextPage: 2,
+      totalResults: 101,
+      indexedResults: 100,
+      invalidResults: 0,
+      lastVolumeId: 100,
+      lastAttemptAt: 0,
+      lastCompletedAt: 0,
+    });
+    await getRepository(ComicCatalogVolume).save({
+      generation: 1,
+      id: 1,
+      title: 'Old volume',
+      searchText: 'old volume',
+      payload: JSON.stringify({ id: 1, name: 'Old volume' }),
+    });
+    mock.method(ComicVineAPI.prototype, 'getVolumesPage', async () => ({
+      error: 'OK',
+      limit: 100,
+      offset: 100,
+      number_of_page_results: 1,
+      number_of_total_results: 102,
+      status_code: 1,
+      results: [{ id: 101, name: 'New', resource_type: 'volume' as const }],
+    }));
+    await scanComicCatalogIndexPage();
+    const scan = await getRepository(ComicCatalogScan).findOneByOrFail({
+      id: 'global',
+    });
+    assert.strictEqual(scan.nextPage, 1);
+    assert.strictEqual(scan.lastError, 'unstable-order');
+    assert.strictEqual(await getRepository(ComicCatalogVolume).count(), 0);
+  });
+});

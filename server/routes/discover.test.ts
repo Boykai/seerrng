@@ -20,6 +20,8 @@ import {
 } from '@server/constants/media';
 import { UserType } from '@server/constants/user';
 import { getRepository } from '@server/datasource';
+import { ComicCatalogScan } from '@server/entity/ComicCatalogScan';
+import { ComicCatalogVolume } from '@server/entity/ComicCatalogVolume';
 import Media from '@server/entity/Media';
 import MediaIdentifier, {
   MediaIdentifierProvider,
@@ -4340,6 +4342,100 @@ describe('GET /discover/comics', () => {
       res.body.results[0].mediaInfo.status,
       MediaStatus.AVAILABLE
     );
+  });
+
+  it('filters a completed volume index before paginating', async () => {
+    getSettings().main.comicVineApiKey = 'test-key';
+    await getRepository(ComicCatalogScan).save({
+      id: 'global',
+      scanGeneration: 1,
+      completeGeneration: 1,
+      nextPage: 2,
+      totalResults: 22,
+      indexedResults: 22,
+      lastVolumeId: 22,
+      lastAttemptAt: Math.floor(Date.now() / 1000),
+      lastCompletedAt: Math.floor(Date.now() / 1000),
+    });
+    await getRepository(ComicCatalogVolume).save(
+      Array.from({ length: 22 }, (_, index) => {
+        const id = index + 1;
+        const volume = {
+          id,
+          name: `Batman ${String(id).padStart(2, '0')}`,
+          aliases: ['Dark Knight'],
+          publisher: { id: 10, name: index === 21 ? 'Marvel' : 'DC Comics' },
+          start_year: index === 20 ? '1995' : '1994',
+          count_of_issues: index === 19 ? 1 : 12,
+          resource_type: 'volume' as const,
+        };
+        return {
+          generation: 1,
+          id,
+          title: volume.name,
+          searchText: `${volume.name.toLowerCase()} dark knight`,
+          publisherKey: volume.publisher.name.toLowerCase(),
+          startYear: Number(volume.start_year),
+          issueCount: volume.count_of_issues,
+          payload: JSON.stringify(volume),
+        };
+      })
+    );
+
+    const response = await (await login()).get('/discover/comics').query({
+      query: 'Dark Knight',
+      publisher: 'DC',
+      startYear: 1994,
+      minIssues: 10,
+      page: 2,
+    });
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.indexing, false);
+    assert.strictEqual(response.body.totalResults, 19);
+    assert.strictEqual(response.body.totalPages, 1);
+    assert.deepStrictEqual(response.body.results, []);
+
+    const firstPage = await (await login()).get('/discover/comics').query({
+      query: 'Dark Knight',
+      publisher: 'DC',
+      startYear: 1994,
+      minIssues: 10,
+    });
+    assert.strictEqual(firstPage.body.results.length, 19);
+    assert.strictEqual(firstPage.body.results[0].title, 'Batman 01');
+  });
+
+  it('reports first-scan progress without presenting partial filtered results', async () => {
+    getSettings().main.comicVineApiKey = 'test-key';
+    await getRepository(ComicCatalogScan).save({
+      id: 'global',
+      scanGeneration: 1,
+      completeGeneration: 0,
+      nextPage: 2,
+      totalResults: 1000,
+      indexedResults: 100,
+      lastVolumeId: 100,
+      lastAttemptAt: Math.floor(Date.now() / 1000),
+      lastCompletedAt: 0,
+    });
+    const response = await (await login())
+      .get('/discover/comics')
+      .query({ publisher: 'DC' });
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.indexing, true);
+    assert.strictEqual(response.body.indexedResults, 100);
+    assert.strictEqual(response.body.expectedResults, 1000);
+    assert.deepStrictEqual(response.body.results, []);
+  });
+
+  it('rejects invalid comic index filters', async () => {
+    getSettings().main.comicVineApiKey = 'test-key';
+    const response = await (
+      await login()
+    )
+      .get('/discover/comics')
+      .query({ publisher: 'DC', minIssues: 20, maxIssues: 10 });
+    assert.strictEqual(response.status, 400);
   });
 });
 
