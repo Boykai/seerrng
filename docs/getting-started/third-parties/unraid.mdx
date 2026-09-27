@@ -26,10 +26,26 @@ listing is a different application. See the
 [SeerrNG repository](https://github.com/snapetech/seerrng) for this fork's
 code and documentation.
 
-The SeerrNG listing covers its optional integrations, including BookshelfNG,
-Mylar3, Kapowarr, LazyLibrarian, ROMarrNG, and QuestarrNG. Configure only the
-services needed for your media workflows in SeerrNG. The backends are not
-required to run SeerrNG itself.
+The Community Apps listing installs SeerrNG itself. For one managed project
+containing SeerrNG and its companion services, use the
+[SeerrNG Unraid Compose stack](https://github.com/snapetech/seerrng/tree/main/packaging/unraid).
+That stack includes BookshelfNG for ebooks and audiobooks, LazyLibrarian for
+magazines, Mylar3 and Kapowarr for comics, and the ROMarrNG and QuestarrNG
+forks for software. Choose only the service profiles you need. Unraid does not
+include Docker Compose natively, so install a Compose manager first.
+
+Copy `stack.compose.yaml` and `stack.env.example` to one directory on your
+Unraid host. Rename `stack.env.example` to `.env`, set your appdata, media, and
+download paths, and choose `COMPOSE_PROFILES`. Then run `docker compose -f
+stack.compose.yaml up -d` from that directory through your Compose manager or
+terminal. The SeerrNG appdata directory must be writable by UID/GID
+`1000:1000`; the companion services use the `PUID` and `PGID` values in `.env`.
+Set `HARDCOVER_AUTH` for BookshelfNG, then complete each service's own setup
+and enter its API key in SeerrNG Settings → Services. Within the stack, use
+`bookshelf-ebooks`, `bookshelf-audiobooks`, `lazylibrarian`, `mylar3`,
+`kapowarr`, `romarrng`, and `questarrng` as service hostnames. An existing
+Bookshelf softcover database needs migration before changing to the Hardcover
+image; see the [Bookshelf migration guide](/docs/using-seerr/bookshelf-hardcover-migration).
 
 The template's raw XML is available at
 [`packaging/unraid/seerrng.xml`](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/seerrng.xml).

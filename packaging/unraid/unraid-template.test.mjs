@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
+import { load as loadYaml } from 'js-yaml';
 import { parseStringPromise } from 'xml2js';
 
 const repositoryRoot = path.resolve(import.meta.dirname, '../..');
@@ -90,4 +91,35 @@ test('repository license keeps the canonical MIT header for feed detection', asy
     license,
     /^MIT License\n\nCopyright \(c\) 2020 sct\n\nPermission is hereby granted/u
   );
+});
+
+test('Unraid Compose project uses the SeerrNG fork images and companion profiles', async () => {
+  const compose = loadYaml(
+    await fs.readFile(
+      path.join(repositoryRoot, 'packaging/unraid/stack.compose.yaml'),
+      'utf8'
+    )
+  );
+  const services = compose.services;
+  assert.equal(compose.name, 'seerrng');
+  assert.equal(services.seerrng.image, 'ghcr.io/snapetech/seerrng:latest');
+  assert.equal(
+    services['bookshelf-ebooks'].image,
+    'ghcr.io/snapetech/bookshelfng:hardcover'
+  );
+  assert.equal(
+    services['bookshelf-audiobooks'].image,
+    'ghcr.io/snapetech/bookshelfng:hardcover'
+  );
+  assert.equal(services.romarrng.image, 'ghcr.io/snapetech/romarrng:latest');
+  assert.equal(
+    services.questarrng.image,
+    'ghcr.io/snapetech/questarrng:latest'
+  );
+  assert.deepEqual(services['bookshelf-ebooks'].profiles, ['bookshelf']);
+  assert.deepEqual(services.lazylibrarian.profiles, ['magazines']);
+  assert.deepEqual(services.mylar3.profiles, ['comics']);
+  assert.deepEqual(services.kapowarr.profiles, ['comics']);
+  assert.deepEqual(services.romarrng.profiles, ['software']);
+  assert.deepEqual(services.questarrng.profiles, ['software']);
 });

@@ -1,0 +1,128 @@
+name: seerrng
+
+# One Compose project for SeerrNG and its optional acquisition backends.
+# Set COMPOSE_PROFILES in stack.env before starting the project.
+services:
+  seerrng:
+    image: ghcr.io/snapetech/seerrng:latest
+    restart: unless-stopped
+    ports:
+      - '${SEERRNG_HTTP_PORT:-5055}:5055'
+      - '${SEERRNG_HTTPS_PORT:-5056}:5056'
+    volumes:
+      - '${APPDATA_ROOT:-/mnt/user/appdata}/seerrng:/app/config'
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+
+  bookshelf-ebooks:
+    profiles: [bookshelf]
+    image: ghcr.io/snapetech/bookshelfng:hardcover
+    restart: unless-stopped
+    ports:
+      - '${BOOKSHELF_EBOOKS_PORT:-8787}:8787'
+    volumes:
+      - '${APPDATA_ROOT:-/mnt/user/appdata}/seerrng-bookshelf-ebooks:/config'
+      - '${MEDIA_ROOT:-/mnt/user/media}:/data'
+      - '${DOWNLOAD_ROOT:-/mnt/user/downloads}:/download'
+    environment:
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      TZ: ${TZ:-Etc/UTC}
+      HARDCOVER: 'true'
+      HARDCOVER_NATIVE: 'true'
+      HARDCOVER_AUTH: ${HARDCOVER_AUTH:-}
+
+  bookshelf-audiobooks:
+    profiles: [bookshelf]
+    image: ghcr.io/snapetech/bookshelfng:hardcover
+    restart: unless-stopped
+    ports:
+      - '${BOOKSHELF_AUDIOBOOKS_PORT:-8788}:8787'
+    volumes:
+      - '${APPDATA_ROOT:-/mnt/user/appdata}/seerrng-bookshelf-audiobooks:/config'
+      - '${MEDIA_ROOT:-/mnt/user/media}:/data'
+      - '${DOWNLOAD_ROOT:-/mnt/user/downloads}:/download'
+    environment:
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      TZ: ${TZ:-Etc/UTC}
+      HARDCOVER: 'true'
+      HARDCOVER_NATIVE: 'true'
+      HARDCOVER_AUTH: ${HARDCOVER_AUTH:-}
+
+  lazylibrarian:
+    profiles: [magazines]
+    image: lscr.io/linuxserver/lazylibrarian:latest
+    restart: unless-stopped
+    ports:
+      - '${LAZYLIBRARIAN_PORT:-5299}:5299'
+    volumes:
+      - '${APPDATA_ROOT:-/mnt/user/appdata}/seerrng-lazylibrarian:/config'
+      - '${MEDIA_ROOT:-/mnt/user/media}:/books'
+      - '${DOWNLOAD_ROOT:-/mnt/user/downloads}:/downloads'
+    environment:
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      TZ: ${TZ:-Etc/UTC}
+
+  mylar3:
+    profiles: [comics]
+    image: lscr.io/linuxserver/mylar3:latest
+    restart: unless-stopped
+    ports:
+      - '${MYLAR3_PORT:-8090}:8090'
+    volumes:
+      - '${APPDATA_ROOT:-/mnt/user/appdata}/seerrng-mylar3:/config'
+      - '${MEDIA_ROOT:-/mnt/user/media}/comics:/comics'
+      - '${DOWNLOAD_ROOT:-/mnt/user/downloads}:/downloads'
+    environment:
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      TZ: ${TZ:-Etc/UTC}
+
+  kapowarr:
+    profiles: [comics]
+    image: mrcas/kapowarr:latest
+    restart: unless-stopped
+    ports:
+      - '${KAPOWARR_PORT:-5656}:5656'
+    volumes:
+      - '${APPDATA_ROOT:-/mnt/user/appdata}/seerrng-kapowarr:/app/db'
+      - '${MEDIA_ROOT:-/mnt/user/media}/comics:/comics'
+      - '${DOWNLOAD_ROOT:-/mnt/user/downloads}:/app/temp_downloads'
+    environment:
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      TZ: ${TZ:-Etc/UTC}
+
+  romarrng:
+    profiles: [software]
+    image: ghcr.io/snapetech/romarrng:latest
+    restart: unless-stopped
+    ports:
+      - '${ROMARRNG_PORT:-6868}:6868'
+    volumes:
+      - '${APPDATA_ROOT:-/mnt/user/appdata}/seerrng-romarrng:/config'
+      - '${MEDIA_ROOT:-/mnt/user/media}/roms:/roms'
+      - '${DOWNLOAD_ROOT:-/mnt/user/downloads}:/downloads'
+    environment:
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      LIBRARY_PATH: /roms
+      TZ: ${TZ:-Etc/UTC}
+
+  questarrng:
+    profiles: [software]
+    image: ghcr.io/snapetech/questarrng:latest
+    restart: unless-stopped
+    ports:
+      - '${QUESTARRNG_PORT:-5000}:5000'
+    volumes:
+      - '${APPDATA_ROOT:-/mnt/user/appdata}/seerrng-questarrng:/app/data'
+      - '${MEDIA_ROOT:-/mnt/user/media}:/data'
+      - '${DOWNLOAD_ROOT:-/mnt/user/downloads}:/downloads'
+    environment:
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      PORT: 5000
+      TZ: ${TZ:-Etc/UTC}
