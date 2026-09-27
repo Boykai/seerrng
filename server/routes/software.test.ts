@@ -684,11 +684,15 @@ describe('software request routes', () => {
       ...pcGame,
       igdbId: index + 1,
     }));
-    mock.method(QuestarrNGAPI.prototype, 'searchCatalog', async () =>
-      legacyGames
+    mock.method(
+      QuestarrNGAPI.prototype,
+      'searchCatalog',
+      async () => legacyGames
     );
-    mock.method(QuestarrNGAPI.prototype, 'getPopularCatalog', async () =>
-      legacyGames
+    mock.method(
+      QuestarrNGAPI.prototype,
+      'getPopularCatalog',
+      async () => legacyGames
     );
 
     const searchResponse = await request(createApp())

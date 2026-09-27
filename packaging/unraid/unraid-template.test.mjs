@@ -1,8 +1,8 @@
+import { load as loadYaml } from 'js-yaml';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
-import { load as loadYaml } from 'js-yaml';
 import { parseStringPromise } from 'xml2js';
 
 const repositoryRoot = path.resolve(import.meta.dirname, '../..');
