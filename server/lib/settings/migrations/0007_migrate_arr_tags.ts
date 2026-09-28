@@ -13,7 +13,16 @@ const migrationArrTags = async (settings: any): Promise<AllSettings> => {
   }
 
   const userRepository = getRepository(User);
-  const users = await userRepository.find();
+  const users = await userRepository
+    .createQueryBuilder('user')
+    .select([
+      'user.id',
+      'user.email',
+      'user.username',
+      'user.plexUsername',
+      'user.jellyfinUsername',
+    ])
+    .getMany();
 
   let errorOccurred = false;
 

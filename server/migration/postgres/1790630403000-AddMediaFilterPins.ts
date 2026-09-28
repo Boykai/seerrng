@@ -1,7 +1,7 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddMediaFilterPins1790100000000 implements MigrationInterface {
-  name = 'AddMediaFilterPins1790100000000';
+export class AddMediaFilterPins1790630403000 implements MigrationInterface {
+  name = 'AddMediaFilterPins1790630403000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasColumn('user_settings', 'mediaFilterPins'))) {
