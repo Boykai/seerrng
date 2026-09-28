@@ -11,6 +11,7 @@ import { isAuthenticated } from '@server/middleware/auth';
 import type { Express } from 'express';
 import express from 'express';
 import * as OpenApiValidator from 'express-openapi-validator';
+import rateLimit from 'express-rate-limit';
 import request from 'supertest';
 import indexerSearchRoutes from './indexerSearch';
 import prowlarrSettingsRoutes from './settings/prowlarr';
@@ -34,6 +35,7 @@ function createValidatedApp(permission = Permission.MANAGE_REQUESTS): Express {
   });
   app.use(
     '/api/v1/indexer-search',
+    rateLimit({ windowMs: 60_000, limit: 10_000 }),
     isAuthenticated(Permission.MANAGE_REQUESTS),
     indexerSearchRoutes
   );
@@ -69,6 +71,7 @@ function createValidatedSettingsApp(permission = Permission.ADMIN): Express {
   });
   app.use(
     '/api/v1/settings/prowlarr',
+    rateLimit({ windowMs: 60_000, limit: 10_000 }),
     isAuthenticated(Permission.ADMIN),
     prowlarrSettingsRoutes
   );
