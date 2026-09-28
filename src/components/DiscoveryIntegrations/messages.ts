@@ -43,7 +43,7 @@ export default defineMessages('discovery', {
   'providers.failed':
     'This feed could not be loaded because the provider is temporarily unavailable.',
   'providers.rateLimited':
-    'The provider request limit was reached. You can retry in {seconds} seconds.',
+    'The provider request limit was reached. Retry in {seconds}s.',
   'providers.reconnectRequired':
     'Your provider account needs to be reconnected before this feed can load.',
   'providers.setupRequired':

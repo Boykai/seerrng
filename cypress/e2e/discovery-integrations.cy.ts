@@ -109,6 +109,63 @@ describe('Discovery provider integrations', () => {
       );
       cy.screenshot(`provider-discovery-${width}`);
     });
+  it('holds provider retries until the reported quota cooldown ends', () => {
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/feeds/anilist/trending*',
+      {
+        statusCode: 429,
+        headers: { 'retry-after': '2' },
+        body: { code: 'PROVIDER_RATE_LIMITED' },
+      }
+    ).as('limitedFeed');
+
+    cy.visit('/discover/providers');
+    cy.wait('@limitedFeed');
+    cy.get('[role="alert"]').should(
+      'contain.text',
+      'The provider request limit was reached.'
+    );
+    cy.contains('[role="alert"] button', 'Retry').should('be.disabled');
+    cy.wait(2100);
+    cy.contains('[role="alert"] button', 'Retry').should('be.enabled');
+    cy.contains('[role="alert"] button', 'Retry').click();
+    cy.wait('@limitedFeed');
+  });
+  it('links expired accounts to recovery and identifies missing public lists', () => {
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/feeds/anilist/trending*',
+      {
+        statusCode: 409,
+        body: { code: 'RECONNECT_REQUIRED' },
+      }
+    ).as('expiredFeed');
+    cy.intercept('GET', '/api/v1/integrations/discovery/feeds/mdblist/list*', {
+      statusCode: 404,
+      body: { code: 'PROVIDER_LIST_NOT_FOUND' },
+    }).as('missingList');
+
+    cy.visit('/discover/providers');
+    cy.wait('@expiredFeed');
+    cy.contains('[role="alert"]', 'needs to be reconnected').should(
+      'be.visible'
+    );
+    cy.contains('a', 'Manage linked accounts').should(
+      'have.attr',
+      'href',
+      '/profile/settings/linked-accounts'
+    );
+
+    cy.get('#provider-feed').select('mdblist/list');
+    cy.get('#mdblist-reference').type('123');
+    cy.contains('button', 'Browse list').click();
+    cy.wait('@missingList');
+    cy.contains('[role="alert"]', 'make sure the list is public').should(
+      'be.visible'
+    );
+    cy.get('[role="alert"] button').should('not.exist');
+  });
   for (const width of [390, 1280])
     it(`browses and updates a personal library at ${width}px`, () => {
       cy.viewport(width, 900);

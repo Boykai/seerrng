@@ -3704,7 +3704,7 @@
   "discovery.providers.next": "Next",
   "discovery.providers.page": "Page {page}",
   "discovery.providers.previous": "Previous",
-  "discovery.providers.rateLimited": "The provider request limit was reached. You can retry in {seconds} seconds.",
+  "discovery.providers.rateLimited": "The provider request limit was reached. Retry in {seconds}s.",
   "discovery.providers.reconnectAction": "Manage linked accounts",
   "discovery.providers.reconnectRequired": "Your provider account needs to be reconnected before this feed can load.",
   "discovery.providers.retry": "Retry",
