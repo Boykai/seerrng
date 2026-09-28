@@ -4284,6 +4284,46 @@ paths:
                 $ref: '#/components/schemas/AssociationGraph'
         '400':
           description: Invalid association media type.
+  /imageproxy/warm:
+    post:
+      summary: Warm the image cache for visible media
+      description: Queues a bounded set of image URLs for authenticated, background cache warming. The response confirms the URLs were accepted, not that upstream downloads have completed.
+      tags:
+        - other
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - urls
+              properties:
+                urls:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: string
+                    maxLength: 2048
+      responses:
+        '202':
+          description: Image URLs were accepted for background cache warming.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - accepted
+                properties:
+                  accepted:
+                    type: boolean
+                    enum: [true]
+        '400':
+          description: The image URL list is invalid or exceeds the request limits.
+        '403':
+          description: Authentication is required.
+        '429':
+          description: The cache warming request rate limit was exceeded.
   /status:
     get:
       summary: Get Seerr status
