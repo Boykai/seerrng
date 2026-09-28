@@ -1027,5 +1027,38 @@ describe('software request routes', () => {
     assert.strictEqual(download.status, 200);
     assert.match(download.headers['content-disposition'], /attachment/);
     assert.strictEqual(download.body.toString('utf8'), 'rom-data');
+    mock.method(
+      QuestarrNGAPI.prototype,
+      'streamAsset',
+      async (_requestId: string, _assetId: string, range?: string) => {
+        assert.strictEqual(range, 'bytes=4-7');
+        return {
+          stream: Readable.from([Buffer.from('data')]),
+          contentLength: 4,
+          contentType: 'application/octet-stream',
+          rangeSupported: true,
+          statusCode: 206,
+          contentRange: 'bytes 4-7/8',
+        };
+      }
+    );
+    const resumed = await request(ownerApp)
+      .get(`/request/software/status/${saved.id}/downloads/asset-1`)
+      .set('Range', 'bytes=4-7');
+    assert.strictEqual(resumed.status, 206);
+    assert.strictEqual(resumed.headers['content-range'], 'bytes 4-7/8');
+    assert.strictEqual(resumed.body.toString('utf8'), 'data');
+    mock.method(QuestarrNGAPI.prototype, 'streamAsset', async () => ({
+      stream: Readable.from([]),
+      contentLength: 0,
+      rangeSupported: true,
+      statusCode: 416,
+      contentRange: 'bytes */8',
+    }));
+    const invalidRange = await request(ownerApp)
+      .get(`/request/software/status/${saved.id}/downloads/asset-1`)
+      .set('Range', 'bytes=100-');
+    assert.strictEqual(invalidRange.status, 416);
+    assert.strictEqual(invalidRange.headers['content-range'], 'bytes */8');
   });
 });

@@ -2,7 +2,7 @@ import ExternalAPI from '@server/api/externalapi';
 import cacheManager from '@server/lib/cache';
 import type { SoftwareProviderSettings } from '@server/lib/settings';
 import { buildServiceUrl } from '@server/utils/serviceUrl';
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import type { SoftwareAssetStream } from './questarrng';
 import type { SoftwareAssetsResponse, SoftwareProviderRequest } from './types';
 
@@ -132,9 +132,25 @@ export class ROMarrNGAPI extends ExternalAPI {
       {
         responseType: 'stream',
         headers: range ? { Range: range } : {},
-        validateStatus: (status) => status === 200 || status === 206,
+        validateStatus: (status) =>
+          status === 200 || status === 206 || status === 416,
       }
     );
+    if (response.status === 416) {
+      response.data.destroy();
+      const contentRange = response.headers['content-range'];
+      return {
+        stream: Readable.from([]),
+        contentLength: 0,
+        rangeSupported: true,
+        statusCode: 416,
+        contentRange:
+          typeof contentRange === 'string' &&
+          /^bytes \*\/\d+$/.test(contentRange)
+            ? contentRange
+            : undefined,
+      };
+    }
     return {
       stream: response.data,
       filename: response.headers['content-disposition'],

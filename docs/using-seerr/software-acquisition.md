@@ -110,8 +110,8 @@ requirements, or establish that a particular game can run.
 
 Folder dumps keep their complete directory tree. Request Status offers them as
 one streamed TAR download, including games with more than 100 files. Individual
-file downloads retain byte-range support; generated TAR bundles require a fresh
-download after interruption. ROMarrNG refuses to offer a truncated bundle when
+file downloads and generated TAR bundles support byte-range resume after an
+interruption. ROMarrNG refuses to offer a truncated bundle when
 a game exceeds its 10,000-file or directory traversal limits. Library
 availability and downloadable-file availability remain separate in that case.
 

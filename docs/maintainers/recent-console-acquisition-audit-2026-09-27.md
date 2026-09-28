@@ -53,8 +53,9 @@ implementation has no Switch 2 acquisition definition; its container and
 import contract still needs verified format evidence. Existing Switch,
 Wii U, PS3, original Xbox and Xbox 360 definitions remain available.
 
-TAR bundles do not support byte ranges. Individual package files retain range
-support. Trees beyond 10,000 files or bounded traversal are not offered as
+TAR bundles and individual packages support byte ranges. Archive ranges seek
+past earlier game files rather than reading the whole archive prefix. Trees
+beyond 10,000 files or bounded traversal are not offered as
 partial bundles; availability and deliverability remain separate.
 
 ## Sources checked
