@@ -61,4 +61,21 @@ export default defineMessages('discovery', {
   'providers.page': 'Page {page}',
   'providers.next': 'Next',
   'providers.explore': 'Explore provider recommendations and lists',
+  'personalized.title': 'Picked for You',
+  'personalized.traktMovies': 'Recommended Movies from Trakt',
+  'personalized.traktSeries': 'Recommended Series from Trakt',
+  'personalized.traktWatchlist': 'Your Trakt Watchlist',
+  'personalized.anilistWatching': 'Continue Watching on AniList',
+  'personalized.anilistPlanning': 'Planned Anime on AniList',
+  'personalized.simklWatching': 'Continue Watching on Simkl',
+  'personalized.simklPlanning': 'Your Simkl Watchlist',
+  'personalized.failed': 'Your personalized provider rows could not load.',
+  'personalized.rowFailed':
+    'This {provider} row could not load because the provider is temporarily unavailable.',
+  'personalized.rateLimited':
+    'The provider request limit was reached. Retry in {seconds}s.',
+  'personalized.reconnectRequired':
+    'Reconnect this provider account to load the row.',
+  'personalized.retry': 'Retry',
+  'personalized.manage': 'Manage connected accounts',
 });

@@ -13,6 +13,9 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   account disconnect and explicit write-consent storage.
 - Provider discovery pages for Trakt, AniList and MDBList; known TMDB IDs use
   existing lazy title-card hydration. Unmatched candidates are displayed as such.
+- Discover now adds signed-in-user rows for Trakt recommendations and watchlists,
+  AniList planning/in-progress shelves, and Simkl planning/in-progress shelves.
+  Rows are limited to that user's connected providers and keep unmapped titles.
 - Movie/series release calendar with personal/shared scopes, bounded cached
   backend reads, episode hydration and partial-source reporting.
 - Dedicated-permission download intervention inbox with durable warnings, explicit
@@ -24,8 +27,8 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
 
 ## Remaining work
 
-- Complete personalized dashboard rows and verify provider feeds, credentials,
-  and quota recovery with live provider accounts.
+- Verify personalized dashboard feeds, credentials, and quota recovery with
+  live provider accounts.
 - Extend manual matching/import controls to unmatched files and additional backends;
   verify acquisition actions against live services.
 - Calendar date-change history and additional media sources.

@@ -33,6 +33,13 @@ Use **Explore provider recommendations and lists** on Discover. Trakt offers
 personal recommendations, watchlists and history. AniList offers anime catalogs
 and your linked anime library. MDBList accepts public list URLs or list IDs.
 
+When you connect a personal account, Discover also shows a **Picked for You**
+section with that account's available rows: Trakt movie and series
+recommendations and watchlist, plus AniList and Simkl planning and in-progress
+lists. Rows with no titles are hidden. These rows use the signed-in user's
+connection and keep provider titles visible when SeerrNG cannot confirm a TMDB
+match.
+
 Titles with confirmed TMDB IDs use the normal movie/series cards. Titles without
 a confirmed match retain their original provider identity and are marked
 **Catalog match pending**. SeerrNG does not invent an ID from a matching title.

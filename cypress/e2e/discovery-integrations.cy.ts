@@ -109,6 +109,89 @@ describe('Discovery provider integrations', () => {
       );
       cy.screenshot(`provider-discovery-${width}`);
     });
+  it('shows personalized Discover rows only for connected provider accounts', () => {
+    cy.intercept('GET', '/api/v1/integrations/discovery/accounts', {
+      accounts: [
+        { provider: 'trakt', username: 'MovieFan', allowWrites: false },
+        { provider: 'anilist', username: 'AnimeFan', allowWrites: false },
+      ],
+    }).as('personalAccounts');
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/feeds/trakt/recommendations-movie*',
+      {
+        page: 1,
+        hasMore: false,
+        missingMappings: 1,
+        items: [
+          {
+            id: 'trakt:movie:101',
+            source: 'trakt',
+            sourceId: '101',
+            title: 'A Trakt movie recommendation',
+            mediaType: 'movie',
+          },
+        ],
+      }
+    ).as('traktRecommendations');
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/feeds/trakt/recommendations-tv*',
+      { page: 1, hasMore: false, missingMappings: 0, items: [] }
+    ).as('traktSeriesRecommendations');
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/feeds/trakt/watchlist*',
+      { page: 1, hasMore: false, missingMappings: 0, items: [] }
+    ).as('traktWatchlist');
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/library/anilist*',
+      (request) => {
+        const watching = request.query.shelf === 'in-progress';
+        request.reply({
+          items: watching
+            ? [
+                {
+                  id: 'anilist:202',
+                  source: 'anilist',
+                  sourceId: '202',
+                  title: 'An AniList series in progress',
+                  mediaType: 'tv',
+                  status: 'watching',
+                },
+              ]
+            : [],
+          page: 1,
+          hasMore: false,
+          allowWrites: false,
+          missingMappings: 0,
+          truncated: false,
+        });
+      }
+    ).as('anilistPersonalRows');
+
+    cy.visit('/');
+    cy.wait('@personalAccounts');
+    cy.wait('@traktRecommendations');
+    cy.wait('@traktSeriesRecommendations');
+    cy.wait('@traktWatchlist');
+    cy.wait('@anilistPersonalRows');
+    cy.contains('h2', 'Picked for You').should('be.visible');
+    cy.get('[data-testid=personal-discovery-row-trakt-recommended-movies]')
+      .should('contain', 'A Trakt movie recommendation')
+      .and('contain', 'Catalog match pending');
+    cy.get('[data-testid=personal-discovery-row-anilist-watching]').should(
+      'contain',
+      'An AniList series in progress'
+    );
+    cy.get(
+      '[data-testid=personal-discovery-row-trakt-recommended-series]'
+    ).should('not.exist');
+    cy.get('[data-testid=personal-discovery-row-simkl-watching]').should(
+      'not.exist'
+    );
+  });
   it('holds provider retries until the reported quota cooldown ends', () => {
     cy.intercept(
       'GET',

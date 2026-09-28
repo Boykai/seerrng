@@ -45,6 +45,9 @@ const NetworkSlider = dynamic(
 const PlexWatchlistSlider = dynamic(
   () => import('@app/components/Discover/PlexWatchlistSlider')
 );
+const PersonalizedRows = dynamic(
+  () => import('@app/components/Discover/PersonalizedRows')
+);
 const RecentRequestsSlider = dynamic(
   () => import('@app/components/Discover/RecentRequestsSlider')
 );
@@ -222,6 +225,7 @@ const Discover = ({ initialSliders }: DiscoverProps) => {
       >
         <FormattedMessage {...discoveryMessages['providers.explore']} />
       </Link>
+      {!isEditing && <PersonalizedRows />}
       {hasPermission(Permission.ADMIN) && (
         <>
           {isEditing && (
