@@ -63,14 +63,20 @@ it('uses the configured reverse-proxy base path and API v1 prefix', () => {
   );
 });
 
-it('uses narrow Newznab categories for books, comics, magazines, and music', () => {
+it('uses media-specific standard categories across every search medium', () => {
   const mappings = defaultProwlarrCategoryMappings();
 
-  assert.deepEqual(mappings.music, [3010, 3020, 3040]);
+  assert.deepEqual(mappings.music, [3000]);
   assert.deepEqual(mappings.ebook, [7020]);
   assert.deepEqual(mappings.audiobook, [3030]);
   assert.deepEqual(mappings.comic, [7030]);
   assert.deepEqual(mappings.magazine, [7010]);
+  assert.deepEqual(
+    mappings.retro,
+    [1010, 1020, 1030, 1040, 1050, 1060, 1070, 1080, 1110, 1120, 1130]
+  );
+  assert.deepEqual(mappings.modern, [1090, 1140, 1180]);
+  assert.deepEqual(mappings.game, [4000]);
 });
 
 it('counts searchable indexers by selected standard category groups', () => {
@@ -84,7 +90,7 @@ it('counts searchable indexers by selected standard category groups', () => {
         protocol: 'torrent',
         capabilities: {
           categories: [
-            { id: 2000, name: 'Movies' },
+            { id: 2010, name: 'Movies/Foreign' },
             {
               id: 7000,
               name: 'Books',

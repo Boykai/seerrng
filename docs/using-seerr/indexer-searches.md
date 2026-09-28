@@ -36,17 +36,21 @@ software provider, which owns acquisition, import, and progress tracking.
 3. Select **Test connection and inspect coverage**. SeerrNG shows the enabled,
    searchable indexers and how many advertise at least one selected category
    for each medium.
-4. Review **Category filters** and save. Defaults use specific Newznab/Torznab
-   categories for ebooks, audiobooks, comics, magazines, and music. Your
+4. Review **Category filters** and save. Defaults use the standard movie, TV,
+   audio, book, console-generation, and PC-game categories. Prowlarr's broad
+   Audio category can include audiobooks; select narrower music categories if
+   you want to keep those results separate. The broad PC category can also
+   include non-game software; select PC/Games for a narrower search. Your
    Prowlarr indexers can report custom category IDs, which appear after a
    successful connection test; select the IDs that fit your indexer setup.
 
-The **Retro ROMs**, **Modern ROMs**, and **PC games** filters use the categories
-reported by your indexers. Newznab's standard console categories cover older
-systems through PS4 and Xbox One; newer console groups such as PS5 and Xbox
-Series may be indexer-specific. After testing the connection, map each SeerrNG
-filter to the matching categories shown by Prowlarr. SeerrNG does not infer a
-console generation from a game's title.
+The **Retro ROMs**, **Modern ROMs**, and **PC games** filters start with
+generation-specific standard console categories and the broad PC category.
+Prowlarr's standard console list ends at PS4 and Xbox One; newer
+systems such as PS5 and Xbox Series may use custom categories. After testing
+the connection, add the matching categories shown by Prowlarr to the relevant
+SeerrNG filter. SeerrNG does not infer a console generation from a game's
+title.
 
 Coverage counts are an estimate based on the categories each enabled indexer
 advertises. A nonzero count does not guarantee that an indexer returns results

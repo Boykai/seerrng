@@ -80,6 +80,25 @@ const isIndexerResource = (
   parsePositiveInteger(value.id) !== undefined &&
   cleanText(value.name, 160) !== undefined;
 
+const standardCategoryParent = (id: number): number | undefined => {
+  if (id <= 1000 || id >= 10_000) return undefined;
+  const parent = Math.floor(id / 1000) * 1000;
+  return parent <= 8000 ? parent : undefined;
+};
+
+const supportsSelectedCategories = (
+  advertisedCategoryIds: Set<number>,
+  selectedCategoryIds: number[]
+) => {
+  const selected = new Set(selectedCategoryIds);
+  for (const advertisedId of advertisedCategoryIds) {
+    if (selected.has(advertisedId)) return true;
+    const parent = standardCategoryParent(advertisedId);
+    if (parent !== undefined && selected.has(parent)) return true;
+  }
+  return false;
+};
+
 export const summarizeProwlarrCoverage = (
   rawIndexers: ProwlarrIndexerResource[],
   mappings: ProwlarrCategoryMappings
@@ -105,8 +124,11 @@ export const summarizeProwlarrCoverage = (
     Object.entries(mappings).map(([category, ids]) => [
       category,
       enabledSearchable.filter((indexer) =>
-        indexer.categories.some((providerCategory) =>
-          ids.includes(providerCategory.id)
+        supportsSelectedCategories(
+          new Set(
+            indexer.categories.map((providerCategory) => providerCategory.id)
+          ),
+          ids
         )
       ).length,
     ])
