@@ -112,6 +112,33 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.34.0](https://github.com/snapetech/seerrng/compare/v3.33.0..v3.34.0) - 2026-09-28
+
+### User-facing changes
+
+#### Added
+
+- **Software:** Modern catalogs can now include PS4, PS5, Vita, Xbox One and Xbox Series titles through updated ROMarrNG. Complete folder dumps preserve their assets and download as one archive. Console acquisition support does not imply emulator compatibility.
+  - **Action required:** Update ROMarrNG and assign the new systems to Modern in Software Acquisition settings.
+- **Software:** Complete console game archives now support resumable downloads through updated ROMarrNG. Interrupted transfers can continue from a byte range while preserving the whole game directory structure.
+  - **Action required:** Update ROMarrNG to enable resumable complete-game archive downloads.
+
+#### Fixed
+
+- **Unraid:** The Unraid guide now focuses on installing and configuring optional services, with a direct BookshelfNG listing link and manual template links. Repository submission instructions have been removed from user setup guidance.
+- **Software:** Invalid or out-of-bounds game download resume ranges now return HTTP 416 instead of a generic provider failure. ROMarrNG and QuestarrNG error bodies remain private, while clients receive the file size needed to restart the transfer.
+
+### 🚀 Features
+- *(software)* Document and verify recent-console acquisition contracts - ([2bf1fdd](https://github.com/snapetech/seerrng/commit/2bf1fdd317f68a0c03dffbf7eff75aaec61348c9))
+
+### 🐛 Bug Fixes
+- *(downloads)* Preserve resumable game transfers and range errors - ([7fbde17](https://github.com/snapetech/seerrng/commit/7fbde173cc142426a191c9fa69b4f10e244126b9))
+
+### 📖 Documentation
+- *(unraid)* Focus companion guidance on installation and setup - ([a6128d2](https://github.com/snapetech/seerrng/commit/a6128d20123ce7d49e2cec65a4886387187e4421))
+
 ## [3.33.0](https://github.com/snapetech/seerrng/compare/v3.32.0..v3.33.0) - 2026-09-27
 
 ### User-facing changes
