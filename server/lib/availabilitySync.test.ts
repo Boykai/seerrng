@@ -240,6 +240,7 @@ function fakePlexSeason(seasonNumber: number, ratingKey: string): PlexMetadata {
     index: seasonNumber,
     leafCount: 0,
     viewedLeafCount: 0,
+    viewCount: 0,
     addedAt: 0,
     updatedAt: 0,
     Media: [],
@@ -256,6 +257,7 @@ function fakePlexEpisodes(count: number): PlexMetadata[] {
     index: i + 1,
     leafCount: 0,
     viewedLeafCount: 0,
+    viewCount: 0,
     addedAt: 0,
     updatedAt: 0,
     Media: [
@@ -288,6 +290,7 @@ function fakePlexShow(ratingKey: string): PlexMetadata {
     index: 1,
     leafCount: 0,
     viewedLeafCount: 0,
+    viewCount: 0,
     addedAt: 0,
     updatedAt: 0,
     Media: [],

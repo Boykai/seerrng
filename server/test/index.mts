@@ -2,7 +2,7 @@
 
 import { Command, Option } from 'commander';
 import { createWriteStream, mkdirSync } from 'node:fs';
-import { glob } from 'node:fs/promises';
+import { glob, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { run } from 'node:test';
 import * as reporters from 'node:test/reporters';
@@ -11,6 +11,13 @@ import { fileURLToPath } from 'node:url';
 const resolveImport = (specifier: string) =>
   fileURLToPath(import.meta.resolve(specifier));
 const BASE_DIR = join(import.meta.dirname, '../..');
+const isVitestFile = async (file: string) => {
+  if (file.endsWith('.vitest.test.ts')) return true;
+  const source = await readFile(file, 'utf8');
+  return /\bfrom\s*['"]vitest['"]|\bimport\s*(?:\(\s*)?['"]vitest['"]/.test(
+    source
+  );
+};
 
 const program = new Command();
 program
@@ -58,12 +65,12 @@ if (positionals.length > 0) {
 } else {
   files = [];
   for await (const entry of glob(join(BASE_DIR, 'server/**/*.test.ts'))) {
-    if (!entry.endsWith('.vitest.test.ts')) {
+    if (!(await isVitestFile(entry))) {
       files.push(resolve(entry));
     }
   }
   for await (const entry of glob(join(BASE_DIR, 'src/**/*.test.ts'))) {
-    if (!entry.endsWith('.vitest.test.ts')) {
+    if (!(await isVitestFile(entry))) {
       files.push(resolve(entry));
     }
   }
