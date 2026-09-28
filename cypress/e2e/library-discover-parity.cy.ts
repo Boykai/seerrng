@@ -782,6 +782,13 @@ describe('Books and Music discover parity', () => {
     cy.contains(
       'Bookshelf is the recommended book backend. Readarr-compatible servers, including Chaptarr, can also be used. For Chaptarr, set Book Format to match the configured root folder; Seerr sends that format explicitly on every request.'
     ).should('be.visible');
+    cy.contains('a', 'Bookshelf Hardcover migration guide')
+      .should(
+        'have.attr',
+        'href',
+        'https://github.com/snapetech/seerrng/blob/main/docs/using-seerr/bookshelf-hardcover-migration.md'
+      )
+      .and('have.attr', 'target', '_blank');
     cy.contains('label', 'Book Format').should('be.visible');
     cy.get('select[name=serviceType]').should('be.visible');
     cy.contains('label', 'API Key')
@@ -827,6 +834,54 @@ describe('Books and Music discover parity', () => {
     cy.get('select[name=activeMetadataProfileId]')
       .scrollIntoView()
       .should('be.visible');
+  });
+
+  it('links split Bookshelf deployment guidance to SeerrNG documentation', () => {
+    cy.intercept('GET', '/api/v1/settings/radarr', []);
+    cy.intercept('GET', '/api/v1/settings/sonarr', []);
+    cy.intercept('GET', '/api/v1/settings/lidarr', []);
+    cy.intercept('GET', '/api/v1/settings/readarr', [
+      {
+        id: 1,
+        name: 'Bookshelf Ebooks',
+        hostname: 'bookshelf-ebook',
+        port: 8787,
+        useSsl: false,
+        baseUrl: '',
+        isDefault: true,
+        serviceType: 'ebook',
+        activeProfileName: 'Books',
+      },
+      {
+        id: 2,
+        name: 'Bookshelf Audiobooks',
+        hostname: 'bookshelf-audiobook',
+        port: 8788,
+        useSsl: false,
+        baseUrl: '',
+        isDefault: true,
+        serviceType: 'audiobook',
+        activeProfileName: 'Audiobooks',
+      },
+    ]);
+    cy.intercept('GET', '/api/v1/overrideRule', []);
+
+    cy.visit('/settings/services');
+
+    cy.contains('h3', 'Bookshelf Settings')
+      .scrollIntoView()
+      .should('be.visible');
+    cy.contains(
+      'Your Book and Audiobook connections use different addresses.'
+    ).should('be.visible');
+    cy.contains('a', 'Bookshelf deployment options')
+      .should(
+        'have.attr',
+        'href',
+        'https://github.com/snapetech/seerrng/blob/main/docs/using-seerr/bookshelf-backend.md'
+      )
+      .and('have.attr', 'target', '_blank')
+      .and('have.attr', 'rel', 'noopener noreferrer');
   });
 
   it('uses medium-specific default service warnings for music and book formats', () => {

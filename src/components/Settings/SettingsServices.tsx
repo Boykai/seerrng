@@ -925,7 +925,7 @@ const SettingsServices = () => {
                 {!hasSharedBookshelf && (
                   <a
                     className="text-primary-400 hover:underline"
-                    href="https://docs.seerr.dev/using-seerr/bookshelf-backend"
+                    href="https://github.com/snapetech/seerrng/blob/main/docs/using-seerr/bookshelf-backend.md"
                     target="_blank"
                     rel="noopener noreferrer"
                   >

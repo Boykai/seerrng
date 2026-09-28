@@ -69,4 +69,4 @@ Many thanks to those making their first contribution to Seerr in this release:
 
 Now that the post-merger feature freeze has ended, the team is resuming active feature development. Stay tuned to our blog for upcoming releases and in-depth looks at what we're building next.
 
-In the meantime, please upgrade to **v3.1.0** right away, especially if you are using a Plex Media Server configuration. See our [migration guide](https://snapetech.github.io/seerrng/migration-guide) if you need help upgrading from Overseerr/Jellyseerr.
+In the meantime, please upgrade to **v3.1.0** right away, especially if you are using a Plex Media Server configuration. See our [migration guide](https://github.com/snapetech/seerrng/blob/main/docs/migration-guide.mdx) if you need help upgrading from Overseerr/Jellyseerr.

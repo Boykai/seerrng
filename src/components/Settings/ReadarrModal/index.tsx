@@ -443,7 +443,7 @@ const ReadarrModal = ({
               <p className="description mt-2">
                 {intl.formatMessage(messages.migrationNote)}{' '}
                 <a
-                  href="https://docs.seerr.dev/using-seerr/bookshelf-hardcover-migration"
+                  href="https://github.com/snapetech/seerrng/blob/main/docs/using-seerr/bookshelf-hardcover-migration.md"
                   target="_blank"
                   rel="noreferrer"
                   className="text-indigo-500 transition duration-300 hover:text-indigo-400"

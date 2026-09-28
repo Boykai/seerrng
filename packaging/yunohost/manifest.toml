@@ -11,8 +11,8 @@ maintainers = ["snapetech"]
 [upstream]
 license = "MIT"
 website = "https://github.com/snapetech/seerrng"
-userdoc = "https://snapetech.github.io/seerrng/"
-admindoc = "https://snapetech.github.io/seerrng/"
+userdoc = "https://github.com/snapetech/seerrng/blob/main/docs/getting-started/third-parties/yunohost.mdx"
+admindoc = "https://github.com/snapetech/seerrng/blob/main/docs/getting-started/third-parties/yunohost.mdx"
 code = "https://github.com/snapetech/seerrng"
 
 [integration]

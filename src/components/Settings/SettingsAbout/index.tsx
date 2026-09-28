@@ -166,12 +166,12 @@ const SettingsAbout = () => {
         <List title={intl.formatMessage(messages.gettingsupport)}>
           <List.Item title={intl.formatMessage(messages.documentation)}>
             <a
-              href="https://snapetech.github.io/seerrng"
+              href="https://github.com/snapetech/seerrng/tree/main/docs"
               target="_blank"
               rel="noreferrer"
               className="text-indigo-500 transition duration-300 hover:underline"
             >
-              https://snapetech.github.io/seerrng
+              https://github.com/snapetech/seerrng/tree/main/docs
             </a>
           </List.Item>
           <List.Item title={intl.formatMessage(messages.githubdiscussions)}>

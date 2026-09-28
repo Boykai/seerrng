@@ -25,14 +25,14 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
 - [What SeerrNG Does](#what-seerrng-does)
 - [Project Status](#project-status)
 - [Documentation and feature guides](#documentation)
-  - [Choose available media categories](https://snapetech.github.io/seerrng/using-seerr/settings/media-categories/)
-  - [Software requests: ROMs and PC games](https://snapetech.github.io/seerrng/using-seerr/software-acquisition/)
-  - [Request Status and Download copy](https://snapetech.github.io/seerrng/using-seerr/request-status/)
-  - [Books, authors, and series](https://snapetech.github.io/seerrng/using-seerr/books-and-series/)
-  - [Configure comics](https://snapetech.github.io/seerrng/using-seerr/comics-backend/)
-  - [Configure magazines](https://snapetech.github.io/seerrng/using-seerr/magazines-backend/)
-  - [Indexer searches by media category](https://snapetech.github.io/seerrng/using-seerr/indexer-searches/)
-  - [Configure services](https://snapetech.github.io/seerrng/using-seerr/settings/services/)
+  - [Choose available media categories](./docs/using-seerr/settings/media-categories.md)
+  - [Software requests: ROMs and PC games](./docs/using-seerr/software-acquisition.md)
+  - [Request Status and Download copy](./docs/using-seerr/request-status.md)
+  - [Books, authors, and series](./docs/using-seerr/books-and-series.md)
+  - [Configure comics](./docs/using-seerr/comics-backend.md)
+  - [Configure magazines](./docs/using-seerr/magazines-backend.md)
+  - [Indexer searches by media category](./docs/using-seerr/indexer-searches.md)
+  - [Configure services](./docs/using-seerr/settings/services.md)
 - [Screenshots](#screenshots)
 - [Install](#install)
   - [Docker](#docker)
@@ -101,29 +101,27 @@ SeerrNG fork, not the upstream Seerr repository.
 
 ## Documentation
 
-The [SeerrNG documentation site](https://snapetech.github.io/seerrng/) covers
-installation, setup, user workflows, and integrations. These guides are useful
-starting points:
+SeerrNG documentation is maintained in the [docs folder](https://github.com/snapetech/seerrng/tree/main/docs). The links below open the corresponding guides directly:
 
-- [Install SeerrNG](https://snapetech.github.io/seerrng/getting-started/)
-- [Install on Unraid](https://snapetech.github.io/seerrng/getting-started/third-parties/unraid)
-- [Find books, authors, and series](https://snapetech.github.io/seerrng/using-seerr/books-and-series/)
-- [Discover and request comics](https://snapetech.github.io/seerrng/using-seerr/comics-backend/)
-- [Discover and request magazines](https://snapetech.github.io/seerrng/using-seerr/magazines-backend/)
-- [Track requests and status history](https://snapetech.github.io/seerrng/using-seerr/request-status/)
-- [Browse and request emulation games and PC games](https://snapetech.github.io/seerrng/using-seerr/software-acquisition/)
-- [Download verified files from Request Status](https://snapetech.github.io/seerrng/using-seerr/request-status/)
-- [Use media detail and playback controls](https://snapetech.github.io/seerrng/using-seerr/media-details-and-playback/)
-- [Configure media-server libraries, including Plex Music and Audiobooks](https://snapetech.github.io/seerrng/using-seerr/settings/mediaserver)
-- [Enable built-in HTTPS](https://snapetech.github.io/seerrng/using-seerr/advanced/built-in-tls/)
-- [Configure notifications](https://snapetech.github.io/seerrng/using-seerr/notifications/)
-- [Hide requested or available media](https://snapetech.github.io/seerrng/using-seerr/settings/general)
-- [Choose which media categories are available](https://snapetech.github.io/seerrng/using-seerr/settings/media-categories/)
-- [Configure Bookshelf](https://snapetech.github.io/seerrng/using-seerr/bookshelf-backend/)
-- [Bookshelf metadata sources](https://snapetech.github.io/seerrng/using-seerr/bookshelf-metadata-sources/)
-- [Configure override rules](https://snapetech.github.io/seerrng/using-seerr/override-rules/)
-- [Manage users and request preferences](https://snapetech.github.io/seerrng/using-seerr/users/editing-users/)
-- [REST API reference](https://snapetech.github.io/seerrng/api/seerr-api/)
+- [Install SeerrNG](./docs/getting-started/index.mdx)
+- [Install on Unraid](./docs/getting-started/third-parties/unraid.mdx)
+- [Find books, authors, and series](./docs/using-seerr/books-and-series.md)
+- [Discover and request comics](./docs/using-seerr/comics-backend.md)
+- [Discover and request magazines](./docs/using-seerr/magazines-backend.md)
+- [Track requests and status history](./docs/using-seerr/request-status.md)
+- [Browse and request emulation games and PC games](./docs/using-seerr/software-acquisition.md)
+- [Download verified files from Request Status](./docs/using-seerr/request-status.md)
+- [Use media detail and playback controls](./docs/using-seerr/media-details-and-playback.md)
+- [Configure media-server libraries, including Plex Music and Audiobooks](./docs/using-seerr/settings/mediaserver.mdx)
+- [Enable built-in HTTPS](./docs/using-seerr/advanced/built-in-tls.mdx)
+- [Configure notifications](./docs/using-seerr/notifications/index.mdx)
+- [Hide requested or available media](./docs/using-seerr/settings/general.md)
+- [Choose which media categories are available](./docs/using-seerr/settings/media-categories.md)
+- [Configure Bookshelf](./docs/using-seerr/bookshelf-backend.md)
+- [Bookshelf metadata sources](./docs/using-seerr/bookshelf-metadata-sources.md)
+- [Configure override rules](./docs/using-seerr/override-rules.md)
+- [Manage users and request preferences](./docs/using-seerr/users/editing-users.md)
+- [REST API reference](./seerr-api.yml)
 
 ## Screenshots
 
@@ -220,7 +218,7 @@ Software requests:
 - ROMarrNG is also required for emulation requests. In **Settings > Services > Software Acquisition**, connect each provider and assign supported ROMarrNG systems to **Retro** or **Modern** before users can request them.
 - Software requests support global and per-user quotas. Requesters can withdraw pending requests and cancel active QuestarrNG work that is linked to their request. ROMarrNG requests can be cancelled before download-client handoff; active transfers must be stopped in ROMarrNG or the download client.
 - Provider hostnames and ports must be reachable from the SeerrNG server or container. Use each provider's SeerrNG integration API key; keys stay server-side.
-- See the [software requests guide](https://snapetech.github.io/seerrng/using-seerr/software-acquisition/) for provider setup, request targets, status, retries, notifications, and downloads. See [Request Status](https://snapetech.github.io/seerrng/using-seerr/request-status/) for the shared Download copy workflow.
+- See the [software requests guide](./docs/using-seerr/software-acquisition.md) for provider setup, request targets, status, retries, notifications, and downloads. See [Request Status](./docs/using-seerr/request-status.md) for the shared Download copy workflow.
 
 ## Bookshelf and Hardcover
 
