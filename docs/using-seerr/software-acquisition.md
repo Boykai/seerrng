@@ -16,7 +16,8 @@ console categories for manual inspection by users with **Manage Requests**.
 The page does not grab or track results. Approved requests still go through
 QuestarrNG or ROMarrNG, which own acquisition and progress tracking. Those
 providers may also use Prowlarr-synced or direct Torznab/Newznab indexers. IGDB
-remains the catalog for game discovery. See [Indexer searches by media
+remains the catalog for game discovery, served by the selected catalog provider.
+See [Indexer searches by media
 category](./indexer-searches.md) for the full routing map.
 
 This feature covers **Retro**, **Modern**, and **PC Games**. General desktop
@@ -28,8 +29,8 @@ layers.
 
 | Provider | Used for | What SeerrNG reads or sends |
 | --- | --- | --- |
-| [QuestarrNG](https://github.com/snapetech/QuestarrNG) | IGDB catalog for all software categories and acquisition for PC games | Searches and popular titles, IGDB platform details, request identity and selected PC target, request progress, and imported files |
-| [ROMarrNG](https://github.com/snapetech/ROMarrNG) | Supported emulation systems and acquisition for ROM requests | Supported platform list and aliases, request identity and selected system, request progress, and imported files |
+| [QuestarrNG](https://github.com/snapetech/QuestarrNG) | Default IGDB catalog source and PC game acquisition | Searches and popular titles, IGDB platform details, stable request identity and selected PC target, request progress, and imported files |
+| [ROMarrNG](https://github.com/snapetech/ROMarrNG) | Supported emulation systems and acquisition for ROM requests; optional IGDB catalog source for emulation | Supported platform list and aliases, optional IGDB search and browse, stable request identity and selected system, request progress, and imported files |
 
 Both providers are separate **NG** forks maintained for SeerrNG integration.
 Their project documentation identifies the upstream project, describes the
@@ -37,21 +38,33 @@ SeerrNG integration, and links back to the SeerrNG repository. Use the
 provider's SeerrNG integration API key and contract. SeerrNG does not use a
 provider's browser UI or expose its credentials to requesters.
 
+Provider handshakes can report retry, cancel, asset, and catalog capabilities.
+Request Status follows reported retry and cancel availability and shows the
+provider's reason when an action is unavailable. Providers that do not report
+these optional capabilities continue to use the existing v1 acquisition
+contract. The emulation catalog source is QuestarrNG by default; SeerrNG only
+saves ROMarrNG as the source when ROMarrNG explicitly advertises the SeerrNG
+catalog capability.
+
 ## Configure the providers
 
 An administrator opens **Settings > Services > Software Acquisition**. The
 provider fields are the address as seen from the SeerrNG server or container,
 port, optional base path, SSL setting, and API key.
 
-1. Configure **QuestarrNG**. It is required for the software catalog and PC
-   game requests.
-2. Configure **ROMarrNG** if users should request emulation games.
-3. Select **Test connection** for each configured provider. SeerrNG checks the
-   provider's SeerrNG integration contract; a successful ROMarrNG check also
-   validates the service and its supported-system endpoint.
-4. Select **Save settings**. SeerrNG reloads the ROMarrNG system list after the
+1. Configure **QuestarrNG** for PC game requests and as the default IGDB catalog
+   source.
+2. Configure **ROMarrNG** if users should request emulation games. To use its
+   IGDB catalog, configure an IGDB metadata provider in ROMarrNG first.
+3. Select **Test connection** for each provider. ROMarrNG also reports its
+   supported-system count and whether that version advertises the optional
+   SeerrNG IGDB catalog API.
+4. Under **Emulation catalog source**, choose QuestarrNG or ROMarrNG. Save
+   verifies ROMarrNG's catalog capability again. PC game catalog and
+   acquisition always use QuestarrNG, and ROM acquisition always uses ROMarrNG.
+5. Select **Save settings**. SeerrNG reloads the ROMarrNG system list after the
    provider settings are saved.
-5. Assign each supported ROMarrNG system to **Retro** or **Modern**, then save
+6. Assign each supported ROMarrNG system to **Retro** or **Modern**, then save
    the settings again.
 
 Saved API keys are masked. Leave the key field blank to keep the saved key, or
@@ -59,10 +72,13 @@ use **Remove saved API key** to clear it. Only administrators can read or
 change provider settings. Configure credentials in SeerrNG; do not put them in
 browser URLs or user-facing links.
 
-QuestarrNG must be configured for **Software** to load. ROMarrNG must also be
-configured for emulation systems to appear. These provider connections are
-independent of Radarr, Sonarr, Bookshelf, and the other media automation
-services.
+The selected catalog provider must be configured for its categories to load.
+QuestarrNG remains required for PC game requests, and ROMarrNG is required for
+emulation systems and ROM acquisition. Existing ROMarrNG installations keep
+using their documented v1 request and status routes. The newer ROMarrNG
+catalog is enabled only by a provider build that advertises that capability.
+These connections are independent of Radarr, Sonarr, Bookshelf, and the other
+media automation services.
 
 ## Assign emulation systems
 
@@ -121,16 +137,14 @@ Within PC Games, select Windows, Linux, or macOS to narrow the catalog. The PC
 platform choice is preselected when opening a request and can still be changed
 before submission.
 Use **Genre** and **Release year** to narrow any software category. These filters
-apply across the full QuestarrNG catalog before pages are returned and require
-an updated QuestarrNG build.
+apply to the selected catalog provider before pages are returned and require a
+build with SeerrNG's paged catalog contract.
 
 Software titles load as you scroll, with a **Load more titles** button available
 when another page exists. SeerrNG filters by the selected PC or emulation
-platform before showing each page. This requires a QuestarrNG build with the
-paged SeerrNG catalog endpoints. Older QuestarrNG builds continue to show the
-first available catalog window until upgraded.
-Genre and release-year filtering requires the updated paged endpoints; an older
-QuestarrNG build cannot reliably filter beyond its first catalog window.
+platform before showing each page. This requires the selected catalog provider
+to support SeerrNG's paged catalog endpoints. Older provider builds continue
+to show the first available catalog window until upgraded.
 
 Catalog cards show **In library**, **Tracked**, or **Downloading** when the
 acquisition service reports a title. ROM availability is shown for the exact
@@ -276,8 +290,8 @@ alongside other media quotas.
 - **No emulation systems appear:** Configure and test ROMarrNG, assign its
   systems to Retro or Modern, and save the settings.
 - **A title does not appear for an emulation system:** Check that the system is
-  assigned and that the QuestarrNG catalog platform name matches its ROMarrNG
-  name, slug, or alias.
+  assigned and that the selected catalog provider's platform name matches its
+  ROMarrNG name, slug, or alias.
 - **There is no Request button:** The signed-in user needs the existing
   **Request** permission.
 - **The request is still waiting:** An administrator may need to approve it,

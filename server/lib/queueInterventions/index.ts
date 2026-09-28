@@ -24,7 +24,9 @@ import {
 import {
   candidateFingerprint,
   importCandidates,
+  importTargets,
   selectImportFiles,
+  type ManualImportSource,
 } from './manualImport';
 
 const work = new BoundedTaskQueue(3, 32);
@@ -53,6 +55,102 @@ function client(type: DownloadRecoveryServiceType, server: DVRSettings) {
     ),
     apiKey: server.apiKey,
   });
+}
+function manualImportSource(
+  type: DownloadRecoveryServiceType,
+  api: ReturnType<typeof client>
+): ManualImportSource {
+  const getManualImportCandidates = api.getManualImportCandidates.bind(api);
+  if (type === 'radarr') {
+    const radarr = api as RadarrAPI;
+    return {
+      getManualImportCandidates,
+      getTargets: async () =>
+        (await radarr.getMovies()).map((movie) => ({
+          id: movie.id,
+          title: movie.title,
+          subtitle: movie.year ? String(movie.year) : undefined,
+        })),
+      getTarget: async (id) => {
+        const movie = await radarr.getMovie({ id });
+        return {
+          id: movie.id,
+          title: movie.title,
+          subtitle: movie.year ? String(movie.year) : undefined,
+        };
+      },
+    };
+  }
+  if (type === 'sonarr') {
+    const sonarr = api as SonarrAPI;
+    return {
+      getManualImportCandidates,
+      getTargets: async () =>
+        (await sonarr.getSeries()).flatMap((series) =>
+          Number.isSafeInteger(series.id) && series.id! > 0
+            ? [
+                {
+                  id: series.id!,
+                  title: series.title,
+                  subtitle: series.year ? String(series.year) : undefined,
+                },
+              ]
+            : []
+        ),
+      getTarget: async (id) => {
+        const series = await sonarr.getSeriesById(id);
+        return series.id
+          ? {
+              id: series.id,
+              title: series.title,
+              subtitle: series.year ? String(series.year) : undefined,
+            }
+          : undefined;
+      },
+    };
+  }
+  if (type === 'lidarr') {
+    const lidarr = api as LidarrAPI;
+    return {
+      getManualImportCandidates,
+      getTargets: async () =>
+        (await lidarr.getAlbums()).map((album) => ({
+          id: album.id,
+          title: album.title,
+          subtitle: album.artistName ?? album.artist?.artistName,
+          parentId: album.artistId,
+        })),
+      getTarget: async (id) => {
+        const album = await lidarr.getAlbum({ id }, 0);
+        return {
+          id: album.id,
+          title: album.title,
+          subtitle: album.artistName ?? album.artist?.artistName,
+          parentId: album.artistId,
+        };
+      },
+    };
+  }
+  const readarr = api as ReadarrAPI;
+  return {
+    getManualImportCandidates,
+    getTargets: async () =>
+      (await readarr.getBooks()).map((book) => ({
+        id: book.id,
+        title: book.title,
+        subtitle: book.authorTitle,
+        parentId: book.authorId ?? book.author?.id,
+      })),
+    getTarget: async (id) => {
+      const book = await readarr.getBook(id, 0);
+      return {
+        id: book.id,
+        title: book.title,
+        subtitle: book.authorTitle,
+        parentId: book.authorId ?? book.author?.id,
+      };
+    },
+  };
 }
 type ActionRecord = {
   at: string;
@@ -101,8 +199,7 @@ export function projectIntervention(item: QueueIntervention) {
     state: item.state,
     resolution: item.resolution,
     actorId: item.actorId,
-    manualImportCapable:
-      item.serviceType === 'radarr' || item.serviceType === 'sonarr',
+    manualImportCapable: true,
     createdAt: item.createdAt,
     lastSeenAt: item.lastSeenAt,
     actionAt: item.actionAt,
@@ -397,11 +494,23 @@ async function admitted<T>(
     }
   );
 }
-export const previewIntervention = (id: number) =>
+export const previewIntervention = (id: number, targetId?: number) =>
   admitted(id, async (row, api, item, server) => {
-    const candidates = await importCandidates(row.serviceType, api, item);
+    const { candidates, target } = await importCandidates(
+      row.serviceType,
+      manualImportSource(row.serviceType, api),
+      item,
+      targetId
+    );
     return {
-      fingerprint: candidateFingerprint(candidates),
+      target: target
+        ? {
+            id: target.id,
+            title: safeDiagnostic(target.title, server.apiKey),
+            subtitle: safeDiagnostic(target.subtitle ?? '', server.apiKey),
+          }
+        : null,
+      fingerprint: candidateFingerprint(candidates, target?.id),
       candidates: candidates.map((candidate) => ({
         id: candidate.id,
         name: safeDiagnostic(candidate.name, server.apiKey),
@@ -412,6 +521,18 @@ export const previewIntervention = (id: number) =>
         eligible: candidate.eligible,
       })),
     };
+  });
+export const searchInterventionTargets = (id: number, query: string) =>
+  admitted(id, async (row, api, _item, server) => {
+    const targets = await importTargets(
+      manualImportSource(row.serviceType, api),
+      query
+    );
+    return targets.map((target) => ({
+      id: target.id,
+      title: safeDiagnostic(target.title, server.apiKey),
+      subtitle: safeDiagnostic(target.subtitle ?? '', server.apiKey),
+    }));
   });
 export const rejectIntervention = (
   id: number,
@@ -451,11 +572,17 @@ export const importIntervention = (
   actorId: number,
   selection: number[],
   mode: 'copy' | 'move',
-  fingerprint: string
+  fingerprint: string,
+  targetId?: number
 ) =>
   admitted(id, async (row, api, item) => {
-    const candidates = await importCandidates(row.serviceType, api, item);
-    if (candidateFingerprint(candidates) !== fingerprint)
+    const { candidates, target } = await importCandidates(
+      row.serviceType,
+      manualImportSource(row.serviceType, api),
+      item,
+      targetId
+    );
+    if (candidateFingerprint(candidates, target?.id) !== fingerprint)
       throw new InterventionError(
         409,
         'The import preview changed. Preview files again before importing.'

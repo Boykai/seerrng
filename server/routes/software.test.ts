@@ -69,6 +69,7 @@ const providerSettings = () => {
       baseUrl: '',
       apiKey: 'questarr-test-key',
     },
+    emulationCatalogProvider: 'questarr',
     emulationSystemGroups: { nes: 'retro' },
   };
 };
@@ -389,8 +390,16 @@ describe('software request routes', () => {
     const app = createOpenApiValidatedSettingsApp();
     mock.method(QuestarrNGAPI.prototype, 'getHandshake', async () => ({
       service: 'QuestarrNG',
+      version: '1.6.0',
       apiVersion: 1,
       requestContractVersion: 1,
+      capabilities: {
+        catalog: true,
+        pcAcquisition: true,
+        emulationAcquisition: false,
+        requestActions: { retry: true, cancel: true },
+        assetStreaming: true,
+      },
     }));
 
     const settings = await request(app).get(
@@ -410,15 +419,136 @@ describe('software request routes', () => {
     );
 
     assert.strictEqual(settings.status, 200);
+    assert.strictEqual(settings.body.emulationCatalogProvider, 'questarr');
     assert.strictEqual(connection.status, 200);
     assert.strictEqual(connection.body.service, 'QuestarrNG');
+    assert.deepStrictEqual(connection.body.capabilities, {
+      catalog: true,
+      pcAcquisition: true,
+      emulationAcquisition: false,
+      requestActions: { retry: true, cancel: true },
+      assetStreaming: true,
+    });
     assert.strictEqual(oldCamelCasePath.status, 404);
+  });
+
+  it('accepts the current QuestarrNG handshake without optional capabilities', async () => {
+    const app = createOpenApiValidatedSettingsApp();
+    mock.method(QuestarrNGAPI.prototype, 'getHandshake', async () => ({
+      service: 'questarr',
+      apiVersion: 1,
+      requestContractVersion: 1,
+    }));
+
+    const response = await request(app)
+      .post('/api/v1/settings/software-acquisition/test/questarr')
+      .send({
+        hostname: '127.0.0.1',
+        port: 3000,
+        useSsl: false,
+        baseUrl: '',
+        apiKey: 'questarr-test-key',
+      });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.service, 'QuestarrNG');
+    assert.strictEqual('capabilities' in response.body, false);
+  });
+
+  it('validates and persists the selected emulation catalog provider', async () => {
+    const app = createOpenApiValidatedSettingsApp();
+    mock.method(ROMarrNGAPI.prototype, 'getHandshake', async () => ({
+      service: 'ROMarrNG',
+      version: '1.0.0',
+      apiVersion: 1,
+      requestContractVersion: 1,
+      capabilities: {
+        catalog: true,
+        pcAcquisition: false,
+        emulationAcquisition: true,
+        requestActions: { retry: true, cancel: true },
+        assetStreaming: true,
+      },
+    }));
+    const response = await request(app)
+      .put('/api/v1/settings/software-acquisition')
+      .send({
+        emulationCatalogProvider: 'romarr',
+        emulationSystemGroups: { nes: 'retro' },
+      });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.emulationCatalogProvider, 'romarr');
+    assert.strictEqual(
+      getSettings().softwareAcquisition.emulationCatalogProvider,
+      'romarr'
+    );
+
+    const invalid = await request(app)
+      .put('/api/v1/settings/software-acquisition')
+      .send({ emulationCatalogProvider: 'unknown' });
+    assert.strictEqual(invalid.status, 400);
+  });
+
+  it('requires ROMarrNG to advertise catalog support before selecting it', async () => {
+    const app = createOpenApiValidatedSettingsApp();
+    mock.method(ROMarrNGAPI.prototype, 'getHandshake', async () => ({
+      service: 'romarr',
+      version: '0.9.0',
+      apiVersion: 1,
+    }));
+
+    const response = await request(app)
+      .put('/api/v1/settings/software-acquisition')
+      .send({
+        romarr: {
+          hostname: '127.0.0.1',
+          port: 6868,
+          useSsl: false,
+          baseUrl: '',
+          apiKey: 'romarr-test-key',
+        },
+        emulationCatalogProvider: 'romarr',
+      });
+
+    assert.strictEqual(response.status, 400);
+    assert.match(response.body.error, /does not advertise.*IGDB catalog/i);
+  });
+
+  it('rejects a QuestarrNG handshake missing its required catalog contract', async () => {
+    const app = createOpenApiValidatedSettingsApp();
+    mock.method(QuestarrNGAPI.prototype, 'getHandshake', async () => ({
+      service: 'QuestarrNG',
+      version: '1.6.0',
+      apiVersion: 1,
+      requestContractVersion: 1,
+      capabilities: {
+        catalog: false,
+        pcAcquisition: true,
+        emulationAcquisition: false,
+        requestActions: { retry: true, cancel: true },
+        assetStreaming: true,
+      },
+    }));
+
+    const response = await request(app)
+      .post('/api/v1/settings/software-acquisition/test/questarr')
+      .send({
+        hostname: '127.0.0.1',
+        port: 3000,
+        useSsl: false,
+        baseUrl: '',
+        apiKey: 'questarr-test-key',
+      });
+
+    assert.strictEqual(response.status, 502);
+    assert.match(response.body.error, /unsupported integration contract/i);
   });
 
   it('refreshes ROMarr systems while testing edited settings and reports the count', async () => {
     const app = createOpenApiValidatedSettingsApp();
     mock.method(ROMarrNGAPI.prototype, 'getHandshake', async () => ({
-      service: 'ROMarrNG',
+      service: 'romarr',
       version: 'test',
       apiVersion: 1,
     }));
@@ -452,6 +582,7 @@ describe('software request routes', () => {
 
     assert.strictEqual(response.status, 200);
     assert.strictEqual(forceFresh, true);
+    assert.strictEqual(response.body.apiVersion, 1);
     assert.strictEqual(response.body.platformCount, 1);
   });
 
@@ -560,12 +691,28 @@ describe('software request routes', () => {
         response: { status: 404 },
       });
     });
-    const dispatched: { externalRequestId: string; platform: string }[] = [];
+    const dispatched: {
+      externalRequestId: string;
+      platform: string;
+      catalogId: number;
+      platformId: number;
+    }[] = [];
     mock.method(
       ROMarrNGAPI.prototype,
       'createRequest',
-      async (externalRequestId: string, _title: string, platform: string) => {
-        dispatched.push({ externalRequestId, platform });
+      async (
+        externalRequestId: string,
+        _title: string,
+        platform: string,
+        catalogId: number,
+        platformId: number
+      ) => {
+        dispatched.push({
+          externalRequestId,
+          platform,
+          catalogId,
+          platformId,
+        });
         return acceptedRequest(externalRequestId);
       }
     );
@@ -591,6 +738,8 @@ describe('software request routes', () => {
       assert.deepStrictEqual(dispatched.at(-1), {
         externalRequestId: saved.externalRequestId,
         platform: system.slug,
+        catalogId: pcGame.igdbId,
+        platformId: system.id,
       });
     }
   });
@@ -701,6 +850,74 @@ describe('software request routes', () => {
       response.body.results.map((game: { igdbId: number }) => game.igdbId),
       [100]
     );
+  });
+
+  it('uses the selected ROMarr catalog for emulation and keeps Questarr for PC games', async () => {
+    getSettings().softwareAcquisition.emulationCatalogProvider = 'romarr';
+    const emulationGame = {
+      ...pcGame,
+      igdbId: 1300,
+      platforms: ['Nintendo Entertainment System'],
+      platformOptions: [{ id: 130, name: 'Nintendo Entertainment System' }],
+    };
+    mock.method(ROMarrNGAPI.prototype, 'getPlatforms', async () => [
+      {
+        slug: 'nes',
+        name: 'Nintendo Entertainment System',
+        media: 'rom',
+        extensions: ['.nes'],
+        max_size_mb: 16,
+      },
+    ]);
+    mock.method(ROMarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 130, name: 'Nintendo Entertainment System' },
+      { id: 6, name: 'PC (Microsoft Windows)' },
+    ]);
+    const romarrSearch = mock.method(
+      ROMarrNGAPI.prototype,
+      'searchCatalogPage',
+      async () => ({ results: [emulationGame], nextCursor: null })
+    );
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 6, name: 'PC (Microsoft Windows)' },
+    ]);
+    const questarrSearch = mock.method(
+      QuestarrNGAPI.prototype,
+      'searchCatalogPage',
+      async () => ({ results: [pcGame], nextCursor: null })
+    );
+
+    const emulation = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'retro', q: 'Test Game' });
+    const pc = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'game', q: 'Test Game' });
+
+    assert.strictEqual(emulation.status, 200);
+    assert.deepStrictEqual(romarrSearch.mock.calls[0].arguments[3], [130]);
+    assert.strictEqual(emulation.body.results[0].igdbId, 1300);
+    assert.strictEqual(pc.status, 200);
+    assert.strictEqual(questarrSearch.mock.callCount(), 1);
+    assert.strictEqual(pc.body.results[0].igdbId, pcGame.igdbId);
+  });
+
+  it('explains when the selected ROMarr catalog contract is unavailable', async () => {
+    getSettings().softwareAcquisition.emulationCatalogProvider = 'romarr';
+    const unavailable = Object.assign(new AxiosError('Not found'), {
+      response: { status: 404 },
+    });
+    mock.method(ROMarrNGAPI.prototype, 'getCatalogPlatforms', async () => {
+      throw unavailable;
+    });
+
+    const response = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'retro', q: 'Test Game' });
+
+    assert.strictEqual(response.status, 503);
+    assert.match(response.body.error, /configure IGDB/i);
+    assert.match(response.body.error, /select QuestarrNG/i);
   });
 
   it('only returns catalog cover URLs from the IGDB image host', async () => {

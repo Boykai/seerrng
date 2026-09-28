@@ -61,6 +61,13 @@ const messages = defineMessages('components.SettingsProwlarr', {
     'No enabled searchable indexers are available. Enable an indexer in Prowlarr or adjust the category filters.',
   testHint:
     'Searches started from SeerrNG query Prowlarr directly. Approved requests still go through their configured media manager or software provider, which owns acquisition and tracking.',
+  diagnosticTitle: 'Indexer connection results',
+  diagnosticDescription:
+    'Prowlarr accepted the management API connection. These results test each enabled searchable indexer separately; disabled-until dates come from Prowlarr.',
+  diagnosticOk: 'Connected',
+  diagnosticFailed: 'Failed',
+  disabledUntil: 'Disabled until {date}',
+  recentFailure: 'Recent failure: {date}',
 });
 
 type MediaCategoryKey = keyof ProwlarrCategoryMappings;
@@ -78,6 +85,16 @@ interface ProwlarrCoverageResponse {
   categories?: Record<MediaCategoryKey, number>;
   categoryCatalog?: { id: number; name: string; indexerCount: number }[];
   error?: string;
+  diagnostics?: {
+    id?: number;
+    name: string;
+    layer: 'indexer-feed';
+    success: boolean;
+    status?: number;
+    error?: string;
+    disabledTill?: string | null;
+    mostRecentFailure?: string | null;
+  }[];
 }
 
 interface ProwlarrForm extends Omit<ProwlarrSettings, 'apiKey'> {
@@ -85,6 +102,30 @@ interface ProwlarrForm extends Omit<ProwlarrSettings, 'apiKey'> {
   apiKeyConfigured: boolean;
   clearApiKey: boolean;
 }
+
+const DiagnosticDate = ({
+  value,
+  message,
+  intl,
+}: {
+  value: string | null | undefined;
+  message: 'disabledUntil' | 'recentFailure';
+  intl: ReturnType<typeof useIntl>;
+}) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return (
+    <p className="mt-0.5 text-xs text-gray-400">
+      {intl.formatMessage(messages[message], {
+        date: intl.formatDate(date, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }),
+      })}
+    </p>
+  );
+};
 
 const categoryKeys: MediaCategoryKey[] = [
   'movie',
@@ -167,10 +208,17 @@ const SettingsProwlarr = () => {
     !form.apiKey &&
     !form.clearApiKey
   );
-  const availableCategoryCatalog =
-    inventory?.categoryCatalog ??
-    (usingSavedConnection ? savedCoverage?.categoryCatalog : undefined) ??
-    [];
+  const availableCategoryCatalog = useMemo(
+    () =>
+      inventory?.categoryCatalog ??
+      (usingSavedConnection ? savedCoverage?.categoryCatalog : undefined) ??
+      [],
+    [
+      inventory?.categoryCatalog,
+      usingSavedConnection,
+      savedCoverage?.categoryCatalog,
+    ]
+  );
 
   const categoryOptions = useMemo(() => {
     const options = new Map<number, { name: string; indexerCount: number }>();
@@ -236,9 +284,14 @@ const SettingsProwlarr = () => {
           version: response.data.version || 'Prowlarr',
         })
       );
-    } catch {
+    } catch (error) {
       setInventory(null);
-      setErrorMessage(intl.formatMessage(messages.testFailed));
+      const detail =
+        axios.isAxiosError(error) &&
+        typeof error.response?.data?.error === 'string'
+          ? error.response.data.error
+          : intl.formatMessage(messages.testFailed);
+      setErrorMessage(detail);
     } finally {
       setTesting(false);
     }
@@ -538,6 +591,65 @@ const SettingsProwlarr = () => {
               </li>
             ))}
           </ul>
+          {inventory?.diagnostics && (
+            <div className="mt-5">
+              <h5 className="font-semibold text-white">
+                {intl.formatMessage(messages.diagnosticTitle)}
+              </h5>
+              <p className="mt-1 text-sm text-gray-300">
+                {intl.formatMessage(messages.diagnosticDescription)}
+              </p>
+              {inventory.diagnostics.length === 0 ? (
+                <p className="mt-3 text-sm text-gray-400">
+                  {intl.formatMessage(messages.noSearchableIndexers)}
+                </p>
+              ) : (
+                <ul className="mt-3 divide-y divide-gray-700 rounded border border-gray-700">
+                  {inventory.diagnostics.map((item) => (
+                    <li
+                      key={item.id ?? item.name}
+                      className="flex flex-col gap-1 px-3 py-2 sm:flex-row sm:items-start sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-gray-100">
+                          {item.name}
+                        </p>
+                        {item.error && (
+                          <p className="mt-0.5 text-xs break-words text-amber-200">
+                            {item.error}
+                          </p>
+                        )}
+                        <DiagnosticDate
+                          value={item.disabledTill}
+                          message="disabledUntil"
+                          intl={intl}
+                        />
+                        <DiagnosticDate
+                          value={item.mostRecentFailure}
+                          message="recentFailure"
+                          intl={intl}
+                        />
+                      </div>
+                      <span
+                        className={
+                          item.success
+                            ? 'shrink-0 text-xs font-medium text-green-300'
+                            : 'shrink-0 text-xs font-medium text-red-300'
+                        }
+                      >
+                        {intl.formatMessage(
+                          item.success
+                            ? messages.diagnosticOk
+                            : messages.diagnosticFailed
+                        )}
+                        {item.status ? ` · HTTP ${item.status}` : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       )}
       {coverage?.configured &&

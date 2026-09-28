@@ -1,6 +1,7 @@
 import Spinner from '@app/assets/spinner.svg';
 import AssociationBadge from '@app/components/Association/AssociationBadge';
 import Button from '@app/components/Common/Button';
+import IndexerSearchLink from '@app/components/Common/IndexerSearchLink';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import MediaServerPlayButton from '@app/components/Common/MediaServerPlayButton';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -440,6 +441,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
         isShowComplete={isComplete}
         is4kShowComplete={is4kComplete}
       />
+      <IndexerSearchLink category="tv" title={data.name} />
     </>
   );
 

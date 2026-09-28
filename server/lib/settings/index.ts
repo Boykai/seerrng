@@ -121,6 +121,7 @@ export type EmulationSystemGroup = 'retro' | 'modern';
 export interface SoftwareAcquisitionSettings {
   romarr: SoftwareProviderSettings;
   questarr: SoftwareProviderSettings;
+  emulationCatalogProvider: 'questarr' | 'romarr';
   emulationSystemGroups: Record<string, EmulationSystemGroup>;
 }
 
@@ -675,6 +676,7 @@ class Settings {
           baseUrl: '',
           apiKey: '',
         },
+        emulationCatalogProvider: 'questarr',
         emulationSystemGroups: {},
       },
       prowlarr: {
@@ -1519,6 +1521,7 @@ class Settings {
           baseUrl: '',
           apiKey: '',
         },
+        emulationCatalogProvider: 'questarr',
         emulationSystemGroups: {},
       },
       prowlarr: {

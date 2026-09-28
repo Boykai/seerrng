@@ -8,6 +8,7 @@ import {
 } from '@app/components/Common/BookFormatBadge';
 import Button from '@app/components/Common/Button';
 import FormatRequestControl from '@app/components/Common/FormatRequestControl';
+import IndexerSearchLink from '@app/components/Common/IndexerSearchLink';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import MediaServerPlayButton from '@app/components/Common/MediaServerPlayButton';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -687,6 +688,10 @@ const BookDetails = () => {
           ]}
         />
       )}
+      <IndexerSearchLink
+        category={preferredBookFormat === 'audiobook' ? 'audiobook' : 'ebook'}
+        title={data.title}
+      />
     </>
   );
 

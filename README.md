@@ -55,7 +55,7 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
 - Requests and approvals for movies, shows, music, ebooks, audiobooks, comics, magazines, emulation ROMs, and PC games.
 - Media-server integration with Plex, Jellyfin, and Emby, including watch-state-aware My Library views scoped to each linked account.
 - Automation service integration with Radarr, Sonarr, Lidarr, and Bookshelf/Readarr-compatible APIs.
-- Admin-configured Prowlarr connection, category coverage, and manual indexer search across movies, TV, music, books, comics, magazines, ROMs, and PC games; approved requests still go through their configured acquisition providers.
+- Admin-configured Prowlarr connection, per-indexer diagnostics, category coverage, and format-aware manual search across movies, TV, music, books, comics, magazines, ROMs, and PC games, with title-prefilled search links from media details; approved requests still go through their configured acquisition providers.
 - Music discovery and metadata through MusicBrainz, ListenBrainz, Cover Art Archive, TheAudioDB, and archive-backed artwork sources.
 - Book discovery and identity matching through Open Library, ISBN-10/ISBN-13 normalization, foreign book IDs, and edition IDs.
 - Audiobook discovery from connected audiobook catalogs, with author and narrator filtering and no ebook-only search results.
@@ -406,12 +406,12 @@ The migration is layered:
 These catalogs support **normal BookshelfNG search and metadata lookups**, as
 well as migration recovery. SeerrNG merges BookshelfNG results with its
 Open Library results and carries each Bookshelf result's source identity
-through details and book requests. The optional split deployment enables
-Library of Congress on the audiobook instance by default to coordinate request
-pacing across processes. A single BookshelfNG instance uses one catalog
-selection for both formats. Google Books and Europeana are added when their API
-keys are configured. Apify remains
-operator-enabled. A provider result does not need a numeric Goodreads ID. See
+through details and book requests. The default deployment uses one BookshelfNG
+instance and one catalog selection for both formats. The optional split
+deployment can configure catalogs separately per process; it enables Library
+of Congress on the audiobook process by default to coordinate request pacing.
+Google Books and Europeana are added when their API keys are configured. Apify
+remains operator-enabled. A provider result does not need a numeric Goodreads ID. See
 the [metadata source support matrix](./docs/using-seerr/bookshelf-metadata-sources.md)
 for setup, coverage, limits, and identity details.
 

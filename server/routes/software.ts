@@ -5,6 +5,7 @@ import ROMarrNGAPI, {
 import type {
   SoftwareCatalogGame,
   SoftwareCatalogPlatform,
+  SoftwareProviderActions,
 } from '@server/api/software/types';
 import { getRepository } from '@server/datasource';
 import SoftwareRequest, {
@@ -53,6 +54,15 @@ const CATALOG_PROVIDER_FETCH_LIMIT = 50;
 const MAX_CATALOG_CURSOR_LENGTH = 20000;
 const MAX_CATALOG_OFFSET = 10000;
 const QUESTARR_CATALOG_IMAGE_ORIGIN = 'https://images.igdb.com';
+type SoftwareCatalogApi = Pick<
+  QuestarrNGAPI | ROMarrNGAPI,
+  | 'getCatalogPlatforms'
+  | 'searchCatalog'
+  | 'searchCatalogPage'
+  | 'getPopularCatalog'
+  | 'getPopularCatalogPage'
+  | 'getCatalogGame'
+>;
 const ACTIVE_STATUSES: SoftwareRequestStatus[] = [
   'pending',
   'approved',
@@ -363,7 +373,7 @@ const systemMatchesPlatform = (system: RomarrPlatform, name: string): boolean =>
   );
 
 const getCatalogCategoryContext = async (
-  api: QuestarrNGAPI,
+  api: SoftwareCatalogApi,
   category: SoftwareRequestCategory,
   filters: CatalogFilters
 ) => {
@@ -605,7 +615,31 @@ const getQuestarrApi = (): QuestarrNGAPI => {
   return new QuestarrNGAPI(settings);
 };
 
-const serializeRequest = (request: SoftwareRequest) => ({
+const getCatalogProviderName = (category: SoftwareRequestCategory) =>
+  category !== 'game' &&
+  getSettings().softwareAcquisition.emulationCatalogProvider === 'romarr'
+    ? 'ROMarrNG'
+    : 'QuestarrNG';
+
+const getCatalogApi = (
+  category: SoftwareRequestCategory
+): SoftwareCatalogApi => {
+  const settings = getSettings().softwareAcquisition;
+  if (category !== 'game' && settings.emulationCatalogProvider === 'romarr') {
+    if (!settings.romarr.hostname || !settings.romarr.apiKey) {
+      throw new SoftwareProviderNotConfiguredError(
+        'ROMarrNG is not configured.'
+      );
+    }
+    return new ROMarrNGAPI(settings.romarr);
+  }
+  return getQuestarrApi();
+};
+
+const serializeRequest = (
+  request: SoftwareRequest,
+  actions?: SoftwareProviderActions | null
+) => ({
   id: request.id,
   requestedBy: request.requestedBy
     ? {
@@ -622,6 +656,7 @@ const serializeRequest = (request: SoftwareRequest) => ({
   summary: request.summary ?? null,
   coverUrl: request.coverUrl ?? null,
   catalogId: request.catalogId ?? null,
+  actions: actions ?? null,
   platform: request.platformSlug
     ? {
         slug: request.platformSlug,
@@ -675,6 +710,30 @@ const respondProviderError = (
     .json({ error: 'Software acquisition provider is unavailable.' });
 };
 
+const respondEmulationCatalogUnavailable = (
+  res: Parameters<Parameters<typeof softwareRoutes.get>[1]>[1],
+  category: SoftwareRequestCategory,
+  error: unknown,
+  includeNotFound = true
+): boolean => {
+  const status =
+    axios.isAxiosError(error) && Number(error.response?.status)
+      ? Number(error.response?.status)
+      : undefined;
+  if (
+    category === 'game' ||
+    getCatalogProviderName(category) !== 'ROMarrNG' ||
+    (status !== 503 && !(includeNotFound && status === 404))
+  ) {
+    return false;
+  }
+  res.status(503).json({
+    error:
+      'ROMarrNG’s emulation catalog is unavailable. Configure IGDB and the SeerrNG catalog contract in ROMarrNG, or select QuestarrNG as the emulation catalog source.',
+  });
+  return true;
+};
+
 softwareRoutes.use(isAuthenticated());
 
 softwareRoutes.get('/catalog/systems', async (_req, res) => {
@@ -697,7 +756,7 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
   }
 
   try {
-    const api = getQuestarrApi();
+    const api = getCatalogApi(parsed.category);
     const { platformIds, systems } = await getCatalogCategoryContext(
       api,
       parsed.category,
@@ -727,7 +786,21 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
         error.response?.status === 404
       ) {
         return res.status(503).json({
-          error: 'Upgrade QuestarrNG to use software genre and year filters.',
+          error: `Upgrade ${getCatalogProviderName(parsed.category)} to use software genre and year filters.`,
+        });
+      }
+      if (
+        parsed.category !== 'game' &&
+        getCatalogProviderName(parsed.category) === 'ROMarrNG' &&
+        !parsed.cursor &&
+        !parsed.filters.genre &&
+        !parsed.filters.releaseYear &&
+        axios.isAxiosError(error) &&
+        error.response?.status === 404
+      ) {
+        return res.status(503).json({
+          error:
+            'Upgrade ROMarrNG to the SeerrNG catalog contract or switch the emulation catalog source to QuestarrNG.',
         });
       }
       if (
@@ -759,6 +832,9 @@ softwareRoutes.get('/catalog/search', async (req, res) => {
       nextCursor,
     });
   } catch (error) {
+    if (respondEmulationCatalogUnavailable(res, parsed.category, error)) {
+      return;
+    }
     return respondProviderError(res, error);
   }
 });
@@ -789,7 +865,7 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
   }
 
   try {
-    const api = getQuestarrApi();
+    const api = getCatalogApi(category);
     const { platformIds, systems } = await getCatalogCategoryContext(
       api,
       category,
@@ -818,7 +894,21 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
         error.response?.status === 404
       ) {
         return res.status(503).json({
-          error: 'Upgrade QuestarrNG to use software genre and year filters.',
+          error: `Upgrade ${getCatalogProviderName(category)} to use software genre and year filters.`,
+        });
+      }
+      if (
+        category !== 'game' &&
+        getCatalogProviderName(category) === 'ROMarrNG' &&
+        offset === 0 &&
+        !filters.genre &&
+        !filters.releaseYear &&
+        axios.isAxiosError(error) &&
+        error.response?.status === 404
+      ) {
+        return res.status(503).json({
+          error:
+            'Upgrade ROMarrNG to the SeerrNG catalog contract or switch the emulation catalog source to QuestarrNG.',
         });
       }
       if (
@@ -844,6 +934,9 @@ softwareRoutes.get('/catalog/popular', async (req, res) => {
       nextOffset,
     });
   } catch (error) {
+    if (respondEmulationCatalogUnavailable(res, category, error)) {
+      return;
+    }
     return respondProviderError(res, error);
   }
 });
@@ -865,8 +958,22 @@ softwareRoutes.get('/catalog/games/:id', async (req, res) => {
   }
 
   try {
+    const api = getCatalogApi(category);
+    if (
+      category !== 'game' &&
+      getCatalogProviderName(category) === 'ROMarrNG'
+    ) {
+      try {
+        await api.getCatalogPlatforms();
+      } catch (error) {
+        if (respondEmulationCatalogUnavailable(res, category, error)) {
+          return;
+        }
+        throw error;
+      }
+    }
     const [game, systems] = await Promise.all([
-      getQuestarrApi().getCatalogGame(catalogId),
+      api.getCatalogGame(catalogId),
       category === 'game' ? Promise.resolve([]) : getEmulationPlatforms(),
     ]);
     const result = mapCategoryGames(
@@ -885,6 +992,9 @@ softwareRoutes.get('/catalog/games/:id', async (req, res) => {
       game: (await catalogResultsWithAvailability([result], category))[0],
     });
   } catch (error) {
+    if (respondEmulationCatalogUnavailable(res, category, error, false)) {
+      return;
+    }
     if (axios.isAxiosError(error) && error.response?.status === 404) {
       return res.status(404).json({ error: 'Catalog title not found.' });
     }
@@ -924,7 +1034,7 @@ softwareRoutes.post('/', async (req, res) => {
   const repository = getRepository(SoftwareRequest);
   try {
     const selectedGame = sanitizeGame(
-      await getQuestarrApi().getCatalogGame(catalogId)
+      await getCatalogApi(category).getCatalogGame(catalogId)
     );
     let provider: SoftwareRequestProvider;
     let platformSlug: string | null = null;
@@ -1116,8 +1226,8 @@ softwareRoutes.get('/status', async (req, res) => {
   const [requests, total] = await query.getManyAndCount();
   const views = await refreshSoftwareRequests(requests);
   return res.status(200).json({
-    results: views.map(({ request, status, message, assets }) => ({
-      request: serializeRequest(request),
+    results: views.map(({ request, status, message, assets, actions }) => ({
+      request: serializeRequest(request, actions),
       status,
       message,
       assets: assets.map((asset) => ({
@@ -1149,7 +1259,7 @@ softwareRoutes.get('/status/:id', async (req, res) => {
     order: { createdAt: 'ASC' },
   });
   return res.status(200).json({
-    request: serializeRequest(view.request),
+    request: serializeRequest(view.request, view.actions),
     status: view.status,
     message: view.message,
     history,
@@ -1177,9 +1287,10 @@ softwareRoutes.post('/status/:id/approve', async (req, res) => {
     return res.status(404).json({ error: 'Software request not found.' });
   try {
     const view = await approveSoftwareRequest(request, req.user.id);
-    return res
-      .status(200)
-      .json({ request: serializeRequest(view.request), status: view.status });
+    return res.status(200).json({
+      request: serializeRequest(view.request, view.actions),
+      status: view.status,
+    });
   } catch (error) {
     if (error instanceof SoftwareRequestStateError)
       return res.status(409).json({ error: error.message });
@@ -1318,9 +1429,10 @@ softwareRoutes.post('/status/:id/retry', async (req, res) => {
     isRecord(req.body) && req.body.confirmNoExistingDownload === true;
   try {
     const view = await retrySoftwareRequest(request, confirmNoExistingDownload);
-    return res
-      .status(200)
-      .json({ request: serializeRequest(view.request), status: view.status });
+    return res.status(200).json({
+      request: serializeRequest(view.request, view.actions),
+      status: view.status,
+    });
   } catch (error) {
     if (error instanceof SoftwareRequestStateError)
       return res.status(409).json({ error: error.message });

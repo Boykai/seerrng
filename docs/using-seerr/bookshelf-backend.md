@@ -262,15 +262,15 @@ Applying the generated rebuild payload is opt-in. Set
 `rebuild-blocked.json`.
 
 BookshelfNG also searches Library of Congress and Gutendex alongside Hardcover
-by default. The bundled split-instance deployment enables LOC on the
-audiobook instance by default to coordinate outbound request pacing across
-processes; it enables Gutendex on both instances. A single BookshelfNG
-instance uses one shared catalog selection for both formats. Google Books
-and Europeana are added when `GOOGLE_BOOKS_API_KEY` and `EUROPEANA_API_KEY` are
-configured. Internet Archive and NDL Search are opt-in. Europeana is limited
-to openly reusable text records from its cultural heritage collection. These
-runtime catalogs return source-qualified IDs that SeerrNG retains through
-search, details, and requests.
+by default. The standard deployment runs one BookshelfNG instance, which uses
+the same catalog selection for ebooks and audiobooks. The optional split
+deployment enables Library of Congress for the audiobook process by default to
+coordinate outbound request pacing across processes, and enables Gutendex in
+both processes. Google Books and Europeana are added when
+`GOOGLE_BOOKS_API_KEY` and `EUROPEANA_API_KEY` are configured. Internet Archive
+and NDL Search are opt-in. Europeana is limited to openly reusable text records
+from its cultural heritage collection. These runtime catalogs return
+source-qualified IDs that SeerrNG retains through search, details, and requests.
 Set `BOOKSHELF_EBOOKS_METADATA_SOURCES` and
 `BOOKSHELF_AUDIOBOOKS_METADATA_SOURCES` to override each service; the legacy
 `BOOKSHELF_METADATA_SOURCES` value applies to both when supplied to the

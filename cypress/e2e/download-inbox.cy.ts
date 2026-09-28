@@ -43,6 +43,7 @@ describe('Download Inbox', () => {
         })
       ).as('inbox');
       cy.intercept('GET', '/api/v1/downloads/interventions/1/preview', {
+        target: { id: 15, title: 'Confirmed movie', subtitle: '2024' },
         candidates: [
           {
             id: 7,
@@ -69,6 +70,7 @@ describe('Download Inbox', () => {
             candidateIds: [7],
             importMode: 'copy',
             fingerprint: 'a'.repeat(64),
+            targetId: 15,
           });
           state = 'importing';
           req.reply(row());
@@ -101,6 +103,88 @@ describe('Download Inbox', () => {
       );
       cy.screenshot(`download-inbox-${width}`);
     });
+  it('searches a backend library to match and import an unmatched download', () => {
+    cy.viewport(1280, 900);
+    const row = {
+      id: 3,
+      serviceType: 'sonarr',
+      serviceId: 1,
+      serviceName: 'Series acquisition',
+      title: 'Unmatched episode download',
+      warnings: ['Series could not be identified.'],
+      state: 'active',
+      resolution: null,
+      actorId: null,
+      manualImportCapable: true,
+      actions: [],
+      createdAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
+      actionAt: null,
+      resolvedAt: null,
+    };
+    cy.intercept('GET', '/api/v1/downloads/interventions?*', {
+      results: [row],
+      total: 1,
+      page: 1,
+      partialSources: [],
+      truncated: false,
+    });
+    cy.intercept('GET', '/api/v1/downloads/interventions/3/preview', {
+      target: null,
+      candidates: [
+        {
+          id: 9,
+          name: 'Episode file.mkv',
+          size: 1048576,
+          eligible: false,
+          rejections: ['Series match required'],
+        },
+      ],
+      fingerprint: 'c'.repeat(64),
+    });
+    cy.intercept('GET', '/api/v1/downloads/interventions/3/targets*', [
+      { id: 44, title: 'Matched series', subtitle: '2022' },
+    ]).as('targetSearch');
+    cy.intercept('GET', '/api/v1/downloads/interventions/3/preview?*', {
+      target: { id: 44, title: 'Matched series', subtitle: '2022' },
+      candidates: [
+        {
+          id: 9,
+          name: 'Episode file.mkv',
+          size: 1048576,
+          eligible: true,
+          rejections: [],
+        },
+      ],
+      fingerprint: 'd'.repeat(64),
+    }).as('matchedPreview');
+    cy.intercept('POST', '/api/v1/downloads/interventions/3/import', (req) => {
+      expect(req.body).to.deep.equal({
+        candidateIds: [9],
+        importMode: 'copy',
+        fingerprint: 'd'.repeat(64),
+        targetId: 44,
+      });
+      req.reply({ ...row, state: 'importing' });
+    }).as('matchedImport');
+
+    cy.visit('/downloads');
+    cy.contains('button', 'Preview files').click();
+    cy.contains('Series could not be identified.').should('be.visible');
+    cy.get('input[aria-label="Movie, series, album, or book"]')
+      .clear()
+      .type('Matched');
+    cy.contains('button', 'Search').click();
+    cy.wait('@targetSearch');
+    cy.contains('option', 'Matched series — 2022')
+      .parent('select')
+      .select('44');
+    cy.wait('@matchedPreview');
+    cy.get('input[aria-label="Select Episode file.mkv"]').check();
+    cy.contains('button', 'Import selected files').click();
+    cy.wait('@matchedImport');
+  });
+
   it('requires confirmation and keeps client deletion opt-in', () => {
     cy.viewport(390, 900);
     const row = {

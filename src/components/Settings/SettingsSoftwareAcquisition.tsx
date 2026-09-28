@@ -15,10 +15,10 @@ const messages = defineMessages('components.SettingsSoftwareAcquisition', {
     'Connect the ROM and PC-game acquisition services used by SeerrNG requests.',
   questarrTitle: 'QuestarrNG',
   questarrDescription:
-    'Provides the IGDB catalog and acquires approved Windows, Linux, and macOS game requests. QuestarrNG can use indexers synced from Prowlarr; SeerrNG also provides a separate manual Prowlarr search across media categories.',
+    'Acquires approved Windows, Linux, and macOS game requests. QuestarrNG can also provide the IGDB catalog and use indexers synced from Prowlarr; SeerrNG provides a separate manual Prowlarr search across media categories.',
   romarrTitle: 'ROMarrNG',
   romarrDescription:
-    'Provides supported emulation systems and acquires approved ROM requests. ROMarrNG can search Prowlarr, direct Torznab/Newznab sources, and plugins; SeerrNG’s manual Prowlarr search does not grab results.',
+    'Provides supported emulation systems and acquires approved ROM requests. Newer ROMarrNG builds can also provide the IGDB catalog; ROMarrNG may search Prowlarr, direct Torznab/Newznab sources, and plugins. SeerrNG’s manual Prowlarr search does not grab results.',
   hostname: 'Hostname',
   port: 'Port',
   basePath: 'Base path',
@@ -33,6 +33,10 @@ const messages = defineMessages('components.SettingsSoftwareAcquisition', {
   connectionSuccess: '{service} is connected.',
   romarrConnectionSuccess:
     '{service} is connected. Found {platformCount} systems.',
+  catalogReady: 'IGDB catalog ready',
+  catalogUnavailable:
+    'This ROMarrNG version does not advertise the SeerrNG IGDB catalog. QuestarrNG remains the default.',
+  contractVersion: 'Integration API v{version}',
   saved: 'Software acquisition settings saved.',
   systemGroups: 'Emulation system groups',
   systemGroupsDescription:
@@ -50,6 +54,9 @@ const messages = defineMessages('components.SettingsSoftwareAcquisition', {
   systemsError: 'Supported systems could not be loaded.',
   testError: 'Connection test failed.',
   saveError: 'Settings could not be saved.',
+  emulationCatalog: 'Emulation catalog source',
+  emulationCatalogDescription:
+    'QuestarrNG is the default. Choose ROMarrNG only when its connection test reports the SeerrNG IGDB catalog capability. ROMarrNG still acquires ROM requests; PC game requests always use QuestarrNG.',
 });
 
 interface ProviderSettings {
@@ -66,6 +73,7 @@ interface SoftwareSettingsResponse {
   romarr: Omit<ProviderSettings, 'clearApiKey'>;
   questarr: Omit<ProviderSettings, 'clearApiKey'>;
   emulationSystemGroups: Record<string, EmulationSystemGroup>;
+  emulationCatalogProvider: 'questarr' | 'romarr';
 }
 
 interface EmulationSystem {
@@ -121,6 +129,9 @@ const SettingsSoftwareAcquisition = () => {
   const [systemGroups, setSystemGroups] = useState<
     Record<string, EmulationSystemGroup>
   >({});
+  const [emulationCatalogProvider, setEmulationCatalogProvider] = useState<
+    'questarr' | 'romarr'
+  >('questarr');
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<'romarr' | 'questarr' | null>(null);
   const [testState, setTestState] = useState<TestState | null>(null);
@@ -133,6 +144,7 @@ const SettingsSoftwareAcquisition = () => {
     if (!data) return;
     setRomarr(toProviderState(data.romarr));
     setQuestarr(toProviderState(data.questarr));
+    setEmulationCatalogProvider(data.emulationCatalogProvider ?? 'questarr');
     setSystemGroups(data.emulationSystemGroups ?? {});
   }, [data]);
 
@@ -166,23 +178,42 @@ const SettingsSoftwareAcquisition = () => {
       const response = await axios.post<{
         service: string;
         platformCount?: number;
+        apiVersion?: number;
+        requestContractVersion?: number;
+        capabilities?: { catalog?: boolean };
       }>(
         `/api/v1/settings/software-acquisition/test/${provider}`,
         getProviderPayload(current)
       );
+      const connectionMessage =
+        provider === 'romarr' && typeof response.data.platformCount === 'number'
+          ? intl.formatMessage(messages.romarrConnectionSuccess, {
+              service: response.data.service,
+              platformCount: response.data.platformCount,
+            })
+          : intl.formatMessage(messages.connectionSuccess, {
+              service: response.data.service,
+            });
+      const providerDetail =
+        provider === 'romarr'
+          ? intl.formatMessage(
+              response.data.capabilities?.catalog
+                ? messages.catalogReady
+                : messages.catalogUnavailable
+            )
+          : '';
       setTestState({
         provider,
         success: true,
-        message:
-          provider === 'romarr' &&
-          typeof response.data.platformCount === 'number'
-            ? intl.formatMessage(messages.romarrConnectionSuccess, {
-                service: response.data.service,
-                platformCount: response.data.platformCount,
-              })
-            : intl.formatMessage(messages.connectionSuccess, {
-                service: response.data.service,
-              }),
+        message: `${connectionMessage}${providerDetail ? ` · ${providerDetail}` : ''} · ${intl.formatMessage(
+          messages.contractVersion,
+          {
+            version:
+              response.data.requestContractVersion ??
+              response.data.apiVersion ??
+              1,
+          }
+        )}`,
       });
       if (provider === 'romarr') {
         await mutate('/api/v1/request/software/catalog/systems');
@@ -206,6 +237,7 @@ const SettingsSoftwareAcquisition = () => {
       await axios.put('/api/v1/settings/software-acquisition', {
         romarr: getProviderPayload(romarr),
         questarr: getProviderPayload(questarr),
+        emulationCatalogProvider,
         emulationSystemGroups: systemGroups,
       });
       await Promise.all([
@@ -216,10 +248,15 @@ const SettingsSoftwareAcquisition = () => {
         success: true,
         message: intl.formatMessage(messages.saved),
       });
-    } catch {
+    } catch (error) {
+      const detail =
+        axios.isAxiosError(error) &&
+        typeof error.response?.data?.error === 'string'
+          ? error.response.data.error
+          : intl.formatMessage(messages.saveError);
       setSaveState({
         success: false,
-        message: intl.formatMessage(messages.saveError),
+        message: detail,
       });
     } finally {
       setSaving(false);
@@ -378,6 +415,30 @@ const SettingsSoftwareAcquisition = () => {
           {renderProvider('romarr', romarr)}
           {renderProvider('questarr', questarr)}
         </div>
+
+        <section className="mt-8 rounded-lg border border-gray-700 bg-gray-800/50 p-4 sm:p-5">
+          <h4 className="text-lg font-semibold text-white">
+            {intl.formatMessage(messages.emulationCatalog)}
+          </h4>
+          <p className="mt-1 mb-4 text-sm text-gray-300">
+            {intl.formatMessage(messages.emulationCatalogDescription)}
+          </p>
+          <label className="block max-w-xl text-sm text-gray-200">
+            {intl.formatMessage(messages.emulationCatalog)}
+            <select
+              className="input input-lite mt-1 w-full"
+              value={emulationCatalogProvider}
+              onChange={(event) =>
+                setEmulationCatalogProvider(
+                  event.target.value as 'questarr' | 'romarr'
+                )
+              }
+            >
+              <option value="questarr">QuestarrNG</option>
+              <option value="romarr">ROMarrNG</option>
+            </select>
+          </label>
+        </section>
 
         <section className="mt-8 rounded-lg border border-gray-700 bg-gray-800/50 p-4 sm:p-5">
           <div className="mb-4">

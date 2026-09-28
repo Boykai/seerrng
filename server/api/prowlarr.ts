@@ -1,4 +1,5 @@
 import ExternalAPI from '@server/api/externalapi';
+import type { ProwlarrSearchType } from '@server/constants/prowlarr';
 import type { ProwlarrSettings } from '@server/lib/settings';
 import { buildServiceUrl } from '@server/utils/serviceUrl';
 
@@ -31,6 +32,14 @@ export interface ProwlarrSearchResource {
   publishDate?: string;
   infoUrl?: string;
   categories?: ProwlarrIndexerCategory[];
+}
+
+export interface ProwlarrIndexerStatusResource {
+  id?: number;
+  indexerId?: number;
+  disabledTill?: string | null;
+  mostRecentFailure?: string | null;
+  initialFailure?: string | null;
 }
 
 export class ProwlarrAPI extends ExternalAPI {
@@ -67,15 +76,30 @@ export class ProwlarrAPI extends ExternalAPI {
     return this.get('/indexer', undefined, 0);
   }
 
+  public getIndexerStatuses(): Promise<ProwlarrIndexerStatusResource[]> {
+    return this.get('/indexerstatus', undefined, 0);
+  }
+
+  public testIndexer(indexer: ProwlarrIndexerResource): Promise<unknown> {
+    return this.post(
+      '/indexer/test',
+      { ...indexer },
+      {
+        params: { forceTest: true },
+      }
+    );
+  }
+
   public search(
     query: string,
     categories: number[],
     limit: number,
-    offset: number
+    offset: number,
+    type: ProwlarrSearchType = 'search'
   ): Promise<ProwlarrSearchResource[]> {
     const params = new URLSearchParams({
       query,
-      type: 'search',
+      type,
       limit: String(limit),
       offset: String(offset),
     });

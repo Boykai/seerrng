@@ -42,6 +42,15 @@ const messages = defineMessages('downloads', {
   importMode: 'Import mode',
   importWarning:
     'Confirm the target and review all rejection reasons. The acquisition service determines file quality and episode matching.',
+  targetLabel: 'Library match',
+  targetHelp:
+    'Search titles already in this acquisition service. Choosing a match does not add a new title.',
+  targetQuery: 'Movie, series, album, or book',
+  targetChoose: 'Choose a library match',
+  targetSelected: 'Selected match: {title}{subtitle}',
+  targetNoResults: 'No matching titles were found in this service library.',
+  targetRequired: 'Choose a library match before importing files.',
+  search: 'Search',
   noFiles: 'No files with a confirmed library target were found.',
   ineligible: 'No confirmed match — cannot import',
   pending: 'Action accepted. Refresh to check the backend outcome.',
@@ -73,6 +82,7 @@ type Candidate = {
   eligible: boolean;
   rejections: string[];
 };
+type Target = { id: number; title: string; subtitle: string };
 const base = '/api/v1/downloads/interventions';
 export default function DownloadsPage() {
   const intl = useIntl();
@@ -83,6 +93,9 @@ export default function DownloadsPage() {
   const [selected, setSelected] = useState<Warning | null>(null);
   const [operation, setOperation] = useState<'reject' | 'import' | null>(null);
   const [files, setFiles] = useState<Candidate[] | null>(null);
+  const [target, setTarget] = useState<Target | null>(null);
+  const [targets, setTargets] = useState<Target[]>([]);
+  const [targetQuery, setTargetQuery] = useState('');
   const [ids, setIds] = useState<number[]>([]);
   const [fingerprint, setFingerprint] = useState('');
   const [mode, setMode] = useState<'copy' | 'move'>('copy');
@@ -90,6 +103,16 @@ export default function DownloadsPage() {
   const [remove, setRemove] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const requestErrorMessage = (error: unknown) => {
+    const message =
+      axios.isAxiosError(error) &&
+      typeof error.response?.data?.message === 'string'
+        ? error.response.data.message
+        : undefined;
+    return message && message.length <= 400
+      ? message
+      : intl.formatMessage(messages.outcome);
+  };
   const { data, error, isLoading, mutate } = useSWR<{
     results: Warning[];
     total: number;
@@ -103,6 +126,22 @@ export default function DownloadsPage() {
     setSelected(null);
     setOperation(null);
     setFiles(null);
+    setTarget(null);
+    setTargets([]);
+    setTargetQuery('');
+    setIds([]);
+  };
+  const loadPreview = async (warning: Warning, targetId?: number) => {
+    const response = await axios.get<{
+      target: Target | null;
+      candidates: Candidate[];
+      fingerprint: string;
+    }>(`${base}/${warning.id}/preview`, {
+      params: targetId ? { targetId } : undefined,
+    });
+    setTarget(response.data.target);
+    setFiles(response.data.candidates);
+    setFingerprint(response.data.fingerprint);
     setIds([]);
   };
   const preview = async (warning: Warning) => {
@@ -110,25 +149,63 @@ export default function DownloadsPage() {
     setSelected(warning);
     setOperation('import');
     setFiles(null);
+    setTarget(null);
+    setTargets([]);
+    setTargetQuery(warning.title);
     setIds([]);
     setMode('copy');
     setBusy(true);
     try {
-      const response = await axios.get<{
-        candidates: Candidate[];
-        fingerprint: string;
-      }>(`${base}/${warning.id}/preview`);
-      setFiles(response.data.candidates);
-      setFingerprint(response.data.fingerprint);
-    } catch {
-      setNotice(intl.formatMessage(messages.outcome));
+      await loadPreview(warning);
+    } catch (error) {
+      setNotice(requestErrorMessage(error));
       close();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const searchTargets = async () => {
+    if (!selected || busy) return;
+    setBusy(true);
+    setNotice('');
+    try {
+      const response = await axios.get<Target[]>(
+        `${base}/${selected.id}/targets`,
+        { params: { query: targetQuery } }
+      );
+      setTargets(response.data);
+      if (response.data.length === 0)
+        setNotice(intl.formatMessage(messages.targetNoResults));
+    } catch (error) {
+      setNotice(requestErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const selectTarget = async (targetId: number) => {
+    if (!selected || busy) return;
+    const selectedTarget = targets.find((result) => result.id === targetId);
+    if (!selectedTarget) return;
+    setBusy(true);
+    setNotice('');
+    setTarget(null);
+    setFiles(null);
+    setFingerprint('');
+    setIds([]);
+    try {
+      await loadPreview(selected, targetId);
+    } catch (error) {
+      setNotice(requestErrorMessage(error));
     } finally {
       setBusy(false);
     }
   };
   const apply = async () => {
     if (!selected || busy) return;
+    if (operation === 'import' && !target) {
+      setNotice(intl.formatMessage(messages.targetRequired));
+      return;
+    }
     setBusy(true);
     setNotice('');
     try {
@@ -136,7 +213,12 @@ export default function DownloadsPage() {
         `${base}/${selected.id}/${operation === 'reject' ? 'reject' : 'import'}`,
         operation === 'reject'
           ? { blocklist, removeFromClient: remove }
-          : { candidateIds: ids, importMode: mode, fingerprint }
+          : {
+              candidateIds: ids,
+              importMode: mode,
+              fingerprint,
+              targetId: target?.id,
+            }
       );
       setNotice(
         intl.formatMessage(
@@ -145,8 +227,8 @@ export default function DownloadsPage() {
       );
       close();
       await mutate();
-    } catch {
-      setNotice(intl.formatMessage(messages.outcome));
+    } catch (error) {
+      setNotice(requestErrorMessage(error));
       close();
       await mutate();
     } finally {
@@ -374,6 +456,78 @@ export default function DownloadsPage() {
                     ) : (
                       <>
                         <p>{intl.formatMessage(messages.importWarning)}</p>
+                        <div className="space-y-3 rounded-md bg-gray-900 p-3">
+                          <div>
+                            <p className="font-medium">
+                              {intl.formatMessage(messages.targetLabel)}
+                            </p>
+                            <p className="text-sm text-gray-400">
+                              {intl.formatMessage(messages.targetHelp)}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <input
+                              className="input input-lite min-w-0 flex-1"
+                              type="search"
+                              maxLength={120}
+                              aria-label={intl.formatMessage(
+                                messages.targetQuery
+                              )}
+                              value={targetQuery}
+                              disabled={busy}
+                              onChange={(event) =>
+                                setTargetQuery(event.target.value)
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault();
+                                  void searchTargets();
+                                }
+                              }}
+                            />
+                            <Button
+                              disabled={busy || targetQuery.trim().length < 2}
+                              onClick={() => void searchTargets()}
+                            >
+                              {intl.formatMessage(messages.search)}
+                            </Button>
+                          </div>
+                          {targets.length > 0 && (
+                            <label className="block">
+                              {intl.formatMessage(messages.targetChoose)}
+                              <select
+                                className="input input-lite mt-1 block w-full"
+                                value=""
+                                disabled={busy}
+                                onChange={(event) =>
+                                  void selectTarget(Number(event.target.value))
+                                }
+                              >
+                                <option value="">
+                                  {intl.formatMessage(messages.targetChoose)}
+                                </option>
+                                {targets.map((result) => (
+                                  <option key={result.id} value={result.id}>
+                                    {result.title}
+                                    {result.subtitle
+                                      ? ` — ${result.subtitle}`
+                                      : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+                          {target && (
+                            <p className="text-sm text-green-300">
+                              {intl.formatMessage(messages.targetSelected, {
+                                title: target.title,
+                                subtitle: target.subtitle
+                                  ? ` — ${target.subtitle}`
+                                  : '',
+                              })}
+                            </p>
+                          )}
+                        </div>
                         {files?.length === 0 && (
                           <p>{intl.formatMessage(messages.noFiles)}</p>
                         )}
@@ -447,7 +601,8 @@ export default function DownloadsPage() {
                           operation === 'reject' ? 'warning' : 'primary'
                         }
                         disabled={
-                          busy || (operation === 'import' && !ids.length)
+                          busy ||
+                          (operation === 'import' && (!ids.length || !target))
                         }
                         onClick={() => void apply()}
                       >

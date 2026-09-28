@@ -145,20 +145,110 @@ const settingsView = (settings: ProwlarrSettings) => ({
   apiKeyConfigured: Boolean(settings.apiKey),
 });
 
-const getInventory = async (settings: ProwlarrSettings) => {
+const readInventory = async (settings: ProwlarrSettings) => {
   const api = new ProwlarrAPI(settings);
   const [status, indexers] = await Promise.all([
     api.getSystemStatus(),
     api.getIndexers(),
   ]);
-  return {
-    success: true,
-    version:
-      typeof status.version === 'string' && status.version.length <= 64
-        ? status.version
-        : undefined,
-    ...summarizeProwlarrCoverage(indexers, settings.categoryMappings),
-  };
+  return { api, indexers, status };
+};
+
+const inventoryView = (
+  status: { version?: unknown },
+  indexers: Awaited<ReturnType<ProwlarrAPI['getIndexers']>>,
+  settings: ProwlarrSettings
+) => ({
+  success: true,
+  version:
+    typeof status.version === 'string' && status.version.length <= 64
+      ? status.version
+      : undefined,
+  ...summarizeProwlarrCoverage(indexers, settings.categoryMappings),
+});
+
+const safeDate = (value: unknown): string | null => {
+  if (typeof value !== 'string' || value.length > 128) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+};
+
+const futureDate = (value: unknown): string | null => {
+  const date = safeDate(value);
+  return date && Date.parse(date) > Date.now() ? date : null;
+};
+
+const testIndexerConnections = async (
+  api: ProwlarrAPI,
+  indexers: Awaited<ReturnType<ProwlarrAPI['getIndexers']>>
+) => {
+  const active = indexers.filter(
+    (indexer) => indexer.enable === true && indexer.supportsSearch === true
+  );
+  let cursor = 0;
+  const diagnostics = await Promise.all(
+    Array.from({ length: Math.min(4, active.length) }, async () => {
+      const rows = [];
+      while (cursor < active.length) {
+        const indexer = active[cursor++];
+        const name =
+          typeof indexer.name === 'string' && indexer.name.trim()
+            ? indexer.name.trim().slice(0, 120)
+            : `Indexer ${indexer.id ?? 'unknown'}`;
+        try {
+          await api.testIndexer(indexer);
+          rows.push({
+            id: indexer.id,
+            name,
+            layer: 'indexer-feed',
+            success: true,
+          });
+        } catch (failure) {
+          const status =
+            isRecord(failure) &&
+            isRecord(failure.response) &&
+            Number.isSafeInteger(failure.response.status)
+              ? Number(failure.response.status)
+              : undefined;
+          rows.push({
+            id: indexer.id,
+            name,
+            layer: 'indexer-feed',
+            success: false,
+            status,
+            error: status
+              ? `Indexer test failed with HTTP ${status}.`
+              : 'Indexer test could not reach this feed.',
+          });
+        }
+      }
+      return rows;
+    })
+  );
+  const statuses = await api.getIndexerStatuses().catch(() => []);
+  const byId = new Map(
+    (Array.isArray(statuses) ? statuses : []).flatMap((rawStatus) => {
+      if (!isRecord(rawStatus)) return [];
+      const status = rawStatus as {
+        id?: number;
+        indexerId?: number;
+        disabledTill?: string | null;
+        mostRecentFailure?: string | null;
+      };
+      const id = status.indexerId ?? status.id;
+      return Number.isSafeInteger(id) && Number(id) > 0
+        ? [[Number(id), status] as const]
+        : [];
+    })
+  );
+  return diagnostics.flat().map((diagnostic) => {
+    const status = byId.get(diagnostic.id ?? -1);
+    return {
+      ...diagnostic,
+      disabledTill: futureDate(status?.disabledTill),
+      mostRecentFailure: safeDate(status?.mostRecentFailure),
+    };
+  });
 };
 
 prowlarrRoutes.get('/', (_req, res) => {
@@ -172,7 +262,8 @@ prowlarrRoutes.get('/coverage', async (_req, res) => {
   }
 
   try {
-    const inventory = await getInventory(settings);
+    const { indexers, status } = await readInventory(settings);
+    const inventory = inventoryView(status, indexers, settings);
     return res.status(200).json({ configured: true, ...inventory });
   } catch {
     return res.status(502).json({
@@ -216,10 +307,17 @@ prowlarrRoutes.post(
     }
 
     try {
-      return res.status(200).json(await getInventory(parsed.value));
+      const { api, indexers, status } = await readInventory(parsed.value);
+      const diagnostics = await testIndexerConnections(api, indexers);
+      return res.status(200).json({
+        ...inventoryView(status, indexers, parsed.value),
+        diagnostics,
+      });
     } catch {
       return res.status(502).json({
-        error: 'Prowlarr connection failed. Check its address and API key.',
+        error:
+          'Prowlarr management API could not be reached. Check its address and API key.',
+        diagnostics: [],
       });
     }
   })

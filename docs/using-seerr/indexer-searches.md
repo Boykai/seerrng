@@ -25,7 +25,7 @@ software provider, which owns acquisition, import, and progress tracking.
 | Audiobooks | Book metadata catalogs and configured Bookshelf catalogs | Configured audiobook/audio category IDs | BookshelfNG, Chaptarr, or another configured book service |
 | Comics | ComicVine | Configured comic/book category IDs | Mylar3 or Kapowarr's direct-download sources |
 | Magazines | Google Books public catalog or titles tracked by LazyLibrarian | Configured magazine/book category IDs | LazyLibrarian |
-| Retro and Modern ROMs | IGDB through QuestarrNG, matched to ROMarrNG systems | Configured console/game category IDs | ROMarrNG |
+| Retro and Modern ROMs | IGDB through the selected catalog provider (QuestarrNG by default, or ROMarrNG), matched to ROMarrNG systems | Configured console/game category IDs | ROMarrNG |
 | PC games | IGDB through QuestarrNG | Configured PC/game category IDs | QuestarrNG |
 
 ## Configure Prowlarr
@@ -33,9 +33,12 @@ software provider, which owns acquisition, import, and progress tracking.
 1. Open **Settings > Services > Prowlarr indexers** as an administrator.
 2. Enter the Prowlarr hostname, port, optional base path, SSL setting, and API
    key. The API key stays on the SeerrNG server and is masked after saving.
-3. Select **Test connection and inspect coverage**. SeerrNG shows the enabled,
-   searchable indexers and how many advertise at least one selected category
-   for each medium.
+3. Select **Test connection and inspect coverage**. SeerrNG checks its Prowlarr
+   management API connection, then tests each enabled searchable indexer with
+   at most four concurrent checks. The results separate a management API
+   failure from an individual feed failure, including HTTP status and any
+   Prowlarr cooldown dates, before showing category coverage. These checks
+   contact the configured providers but do not grab or download releases.
 4. Review **Category filters** and save. Defaults use the standard movie, TV,
    audio, book, console-generation, and PC-game categories. Prowlarr's broad
    Audio category can include audiobooks; select narrower music categories if
@@ -61,6 +64,11 @@ for a particular title or that a media manager can import a release. A zero
 count means the selected category IDs do not match any enabled searchable
 indexer in the current inventory.
 
+If an indexer reports `401 Unauthorized`, SeerrNG reached Prowlarr but that
+indexer's feed request was refused. Check the indexer's credentials in
+Prowlarr, then repeat the diagnostic. A management API `401` means the saved
+Prowlarr API key or address is wrong, so SeerrNG cannot read the indexer list.
+
 ## Search indexers
 
 Users with **Manage Requests** open **Indexer Search** from the navigation,
@@ -69,6 +77,13 @@ select a media category, enter at least two search characters, and choose
 size, seeders and leechers when provided, publish date, and indexer categories.
 When Prowlarr supplies a safe HTTP or HTTPS details link, users can open it in a
 new tab. Sensitive query parameters are removed from that link.
+
+Movie, TV, music, and book searches use Prowlarr's corresponding format-aware
+search types; comics, magazines, ROMs, and PC games use category-filtered
+general search. **Search Prowlarr** actions on supported media detail pages
+open this page with the title and category filled in. Book details preserve the
+selected ebook or audiobook format. These shortcuts are available to users
+with **Manage Requests** permission.
 
 Searches are limited to 50 results per page and 12 searches per minute per
 client IP. **Load more results** requests another page. Search results are

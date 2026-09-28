@@ -2,6 +2,28 @@ import type { SoftwareProviderSettings } from '@server/lib/settings';
 
 export type SoftwareProviderConnection = SoftwareProviderSettings;
 
+export interface SoftwareProviderCapabilities {
+  catalog: boolean;
+  pcAcquisition: boolean;
+  emulationAcquisition: boolean;
+  requestActions: { retry: boolean; cancel: boolean };
+  assetStreaming: boolean;
+}
+
+export interface SoftwareProviderHandshake {
+  service: string;
+  version?: string;
+  apiVersion: number;
+  requestContractVersion?: number;
+  capabilities?: SoftwareProviderCapabilities;
+}
+
+export interface SoftwareProviderActions {
+  retry: boolean;
+  cancel: boolean;
+  cancelReason?: string;
+}
+
 export interface SoftwareCatalogGame {
   id: string;
   igdbId: number;
@@ -62,4 +84,10 @@ export interface SoftwareProviderRequest {
   game?: { id: string; title: string; status: string } | null;
   variant?: PcGameVariant;
   platform?: string;
+  identity?: {
+    catalogProvider: string;
+    catalogId: number;
+    platformId?: number;
+  } | null;
+  actions?: SoftwareProviderActions | null;
 }

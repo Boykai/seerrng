@@ -2,14 +2,29 @@ import ExternalAPI from '@server/api/externalapi';
 import cacheManager from '@server/lib/cache';
 import type { SoftwareProviderSettings } from '@server/lib/settings';
 import { buildServiceUrl } from '@server/utils/serviceUrl';
+import axios from 'axios';
 import { Readable } from 'node:stream';
 import type { SoftwareAssetStream } from './questarrng';
-import type { SoftwareAssetsResponse, SoftwareProviderRequest } from './types';
+import type {
+  SoftwareAssetsResponse,
+  SoftwareCatalogGame,
+  SoftwareCatalogPlatform,
+  SoftwareProviderHandshake,
+  SoftwareProviderRequest,
+} from './types';
 
-export interface RomarrHandshake {
-  service: string;
-  version: string;
-  apiVersion: number;
+export interface RomarrHandshake extends SoftwareProviderHandshake {
+  version?: string;
+}
+
+export interface RomarrCatalogSearchPage {
+  results: SoftwareCatalogGame[];
+  nextCursor: string | null;
+}
+
+export interface RomarrCatalogPopularPage {
+  results: SoftwareCatalogGame[];
+  nextOffset: number | null;
 }
 
 export interface RomarrPlatform {
@@ -28,6 +43,8 @@ export interface RomarrLibraryLookup {
 }
 
 export class ROMarrNGAPI extends ExternalAPI {
+  private handshakePromise?: Promise<RomarrHandshake>;
+
   static buildUrl(
     settings: Pick<
       SoftwareProviderSettings,
@@ -57,7 +74,111 @@ export class ROMarrNGAPI extends ExternalAPI {
   }
 
   public getHandshake(): Promise<RomarrHandshake> {
-    return this.get('/api/v1/integration/ping', {}, 0);
+    if (!this.handshakePromise) {
+      const handshake = this.get<RomarrHandshake>(
+        '/api/integration/seerrng/v1/ping',
+        {},
+        60
+      ).catch<RomarrHandshake>((error: unknown) => {
+        if (!axios.isAxiosError(error) || error.response?.status !== 404) {
+          throw error;
+        }
+        return this.get<RomarrHandshake>('/api/v1/integration/ping', {}, 60);
+      });
+      this.handshakePromise = handshake.catch((error: unknown) => {
+        this.handshakePromise = undefined;
+        throw error;
+      });
+    }
+    return this.handshakePromise;
+  }
+
+  private async getIntegrationBase(): Promise<string> {
+    const handshake = await this.getHandshake();
+    return handshake.requestContractVersion === 1
+      ? '/api/integration/seerrng/v1'
+      : '/api/v1/integration';
+  }
+
+  public searchCatalog(
+    query: string,
+    limit = 20
+  ): Promise<SoftwareCatalogGame[]> {
+    return this.get(
+      '/api/integration/seerrng/v1/catalog/search',
+      {
+        params: { q: query, limit },
+      },
+      600
+    );
+  }
+
+  public searchCatalogPage(
+    query: string,
+    limit = 20,
+    cursor?: string,
+    platformIds: number[] = [],
+    genre?: string,
+    releaseYear?: number
+  ): Promise<RomarrCatalogSearchPage> {
+    return this.get(
+      '/api/integration/seerrng/v1/catalog/search-page',
+      {
+        params: {
+          q: query,
+          limit,
+          ...(cursor ? { cursor } : {}),
+          ...(platformIds.length ? { platformIds: platformIds.join(',') } : {}),
+          ...(genre ? { genre } : {}),
+          ...(releaseYear ? { releaseYear } : {}),
+        },
+      },
+      600
+    );
+  }
+
+  public getPopularCatalog(limit = 20): Promise<SoftwareCatalogGame[]> {
+    return this.get(
+      '/api/integration/seerrng/v1/catalog/popular',
+      {
+        params: { limit },
+      },
+      600
+    );
+  }
+
+  public getPopularCatalogPage(
+    limit = 20,
+    offset = 0,
+    platformIds: number[] = [],
+    genre?: string,
+    releaseYear?: number
+  ): Promise<RomarrCatalogPopularPage> {
+    return this.get(
+      '/api/integration/seerrng/v1/catalog/popular-page',
+      {
+        params: {
+          limit,
+          offset,
+          ...(platformIds.length ? { platformIds: platformIds.join(',') } : {}),
+          ...(genre ? { genre } : {}),
+          ...(releaseYear ? { releaseYear } : {}),
+        },
+      },
+      600
+    );
+  }
+
+  public getCatalogPlatforms(): Promise<SoftwareCatalogPlatform[]> {
+    return this.get('/api/integration/seerrng/v1/catalog/platforms', {}, 600);
+  }
+
+  public getCatalogGame(igdbId: number): Promise<SoftwareCatalogGame> {
+    return this.get(
+      `/api/integration/seerrng/v1/catalog/games/${igdbId}`,
+      {},
+      600
+    );
   }
 
   public getPlatforms(forceFresh = false): Promise<RomarrPlatform[]> {
@@ -67,28 +188,39 @@ export class ROMarrNGAPI extends ExternalAPI {
   public lookupLibrary(
     titles: { title: string; platform: string }[]
   ): Promise<RomarrLibraryLookup> {
-    return this.post('/api/v1/integration/library/lookup', { titles });
+    return this.getIntegrationBase().then((base) =>
+      this.post(`${base}/library/lookup`, { titles })
+    );
   }
 
   public createRequest(
     externalRequestId: string,
     game: string,
-    platform: string
+    platform: string,
+    catalogId?: number,
+    platformId?: number
   ): Promise<SoftwareProviderRequest> {
-    return this.post('/api/v1/integration/requests', {
-      externalRequestId,
-      game,
-      platform,
-    });
+    return this.getIntegrationBase().then((base) =>
+      this.post(`${base}/requests`, {
+        externalRequestId,
+        game,
+        platform,
+        ...(base.includes('/seerrng/v1') && catalogId
+          ? { identity: { catalogProvider: 'igdb', catalogId, platformId } }
+          : {}),
+      })
+    );
   }
 
   public getRequest(
     externalRequestId: string
   ): Promise<SoftwareProviderRequest> {
-    return this.get(
-      `/api/v1/integration/requests/${encodeURIComponent(externalRequestId)}`,
-      {},
-      0
+    return this.getIntegrationBase().then((base) =>
+      this.get(
+        `${base}/requests/${encodeURIComponent(externalRequestId)}`,
+        {},
+        0
+      )
     );
   }
 
@@ -96,9 +228,11 @@ export class ROMarrNGAPI extends ExternalAPI {
     externalRequestId: string,
     confirmNoExistingDownload = false
   ): Promise<SoftwareProviderRequest> {
-    return this.post(
-      `/api/v1/integration/requests/${encodeURIComponent(externalRequestId)}/retry`,
-      { confirmNoExistingDownload }
+    return this.getIntegrationBase().then((base) =>
+      this.post(
+        `${base}/requests/${encodeURIComponent(externalRequestId)}/retry`,
+        { confirmNoExistingDownload }
+      )
     );
   }
 
@@ -106,17 +240,21 @@ export class ROMarrNGAPI extends ExternalAPI {
     externalRequestId: string,
     confirmNoExistingDownload = false
   ): Promise<SoftwareProviderRequest> {
-    return this.post(
-      `/api/v1/integration/requests/${encodeURIComponent(externalRequestId)}/cancel`,
-      { confirmNoExistingDownload }
+    return this.getIntegrationBase().then((base) =>
+      this.post(
+        `${base}/requests/${encodeURIComponent(externalRequestId)}/cancel`,
+        { confirmNoExistingDownload }
+      )
     );
   }
 
   public getAssets(externalRequestId: string): Promise<SoftwareAssetsResponse> {
-    return this.get(
-      `/api/v1/integration/requests/${encodeURIComponent(externalRequestId)}/assets`,
-      {},
-      0
+    return this.getIntegrationBase().then((base) =>
+      this.get(
+        `${base}/requests/${encodeURIComponent(externalRequestId)}/assets`,
+        {},
+        0
+      )
     );
   }
 
@@ -125,9 +263,10 @@ export class ROMarrNGAPI extends ExternalAPI {
     assetId: string,
     range?: string
   ): Promise<SoftwareAssetStream> {
+    const base = await this.getIntegrationBase();
     const response = await this.request<Readable>(
       'GET',
-      `/api/v1/integration/requests/${encodeURIComponent(externalRequestId)}/assets/${encodeURIComponent(assetId)}`,
+      `${base}/requests/${encodeURIComponent(externalRequestId)}/assets/${encodeURIComponent(assetId)}`,
       undefined,
       {
         responseType: 'stream',

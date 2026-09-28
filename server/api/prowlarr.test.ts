@@ -22,12 +22,12 @@ const settings = (port: number): ProwlarrSettings => ({
   categoryMappings: defaultProwlarrCategoryMappings(),
 });
 
-it('queries Prowlarr with repeated category parameters and a header API key', async () => {
+it('queries Prowlarr with repeated categories, a typed search, and a header API key', async () => {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
     assert.equal(url.pathname, '/prowlarr/api/v1/search');
     assert.equal(url.searchParams.get('query'), 'Dune');
-    assert.equal(url.searchParams.get('type'), 'search');
+    assert.equal(url.searchParams.get('type'), 'movie');
     assert.equal(url.searchParams.get('limit'), '50');
     assert.equal(url.searchParams.get('offset'), '50');
     assert.deepEqual(url.searchParams.getAll('categories'), ['2000', '2010']);
@@ -42,9 +42,71 @@ it('queries Prowlarr with repeated category parameters and a header API key', as
     const api = new ProwlarrAPI(
       settings((server.address() as AddressInfo).port)
     );
-    const results = await api.search('Dune', [2000, 2010], 50, 50);
+    const results = await api.search('Dune', [2000, 2010], 50, 50, 'movie');
     assert.equal(results.length, 1);
     assert.equal(results[0].title, 'Dune 2021');
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+it('reads indexer health and force-tests a Prowlarr indexer without changing settings', async () => {
+  const calls: string[] = [];
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? '/', 'http://localhost');
+    calls.push(`${request.method} ${url.pathname}`);
+    assert.equal(request.headers['x-api-key'], 'test-prowlarr-key');
+    if (url.pathname.endsWith('/indexerstatus')) {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(
+        JSON.stringify([
+          {
+            id: 3,
+            disabledTill: '2026-09-28T12:00:00Z',
+            mostRecentFailure: '2026-09-28T11:00:00Z',
+          },
+        ])
+      );
+      return;
+    }
+
+    assert.equal(url.pathname.endsWith('/indexer/test'), true);
+    assert.equal(url.searchParams.get('forceTest'), 'true');
+    let body = '';
+    request.setEncoding('utf8');
+    request.on('data', (chunk) => (body += chunk));
+    request.on('end', () => {
+      assert.deepEqual(JSON.parse(body), {
+        id: 3,
+        name: 'Example indexer',
+        enable: true,
+        supportsSearch: true,
+      });
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify('{}'));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+  try {
+    const api = new ProwlarrAPI(
+      settings((server.address() as AddressInfo).port)
+    );
+    const statuses = await api.getIndexerStatuses();
+    assert.equal(statuses[0].id, 3);
+    const testResult = await api.testIndexer({
+      id: 3,
+      name: 'Example indexer',
+      enable: true,
+      supportsSearch: true,
+    });
+    if (typeof testResult === 'string') assert.equal(testResult, '{}');
+    else assert.deepEqual(testResult, {});
+    assert.deepEqual(calls, [
+      'GET /prowlarr/api/v1/indexerstatus',
+      'POST /prowlarr/api/v1/indexer/test',
+    ]);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

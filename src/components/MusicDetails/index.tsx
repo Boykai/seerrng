@@ -2,6 +2,7 @@ import Spinner from '@app/assets/spinner.svg';
 import AssociationBadge from '@app/components/Association/AssociationBadge';
 import Button from '@app/components/Common/Button';
 import FormatRequestControl from '@app/components/Common/FormatRequestControl';
+import IndexerSearchLink from '@app/components/Common/IndexerSearchLink';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import MediaServerPlayButton from '@app/components/Common/MediaServerPlayButton';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -483,6 +484,7 @@ const MusicDetails = () => {
       {canShowRequest && musicRequestOptions.length > 0 && (
         <FormatRequestControl options={musicRequestOptions} />
       )}
+      <IndexerSearchLink category="music" title={data.title} />
     </>
   );
 

@@ -1,6 +1,7 @@
 import AssociationBadge from '@app/components/Association/AssociationBadge';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
+import IndexerSearchLink from '@app/components/Common/IndexerSearchLink';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import MediaTypeBadge from '@app/components/Common/MediaTypeBadge';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -199,6 +200,11 @@ const ArtistDetails = () => {
     return <ErrorPage statusCode={404} />;
   }
 
+  const canRequestDiscography = hasPermission(
+    [Permission.REQUEST, Permission.REQUEST_MUSIC],
+    { type: 'or' }
+  );
+  const canSearchProwlarr = hasPermission(Permission.MANAGE_REQUESTS);
   const albumTypeOrder = [
     'Album',
     'EP',
@@ -249,21 +255,22 @@ const ArtistDetails = () => {
               {biography}
             </p>
           )}
-          {hasPermission([Permission.REQUEST, Permission.REQUEST_MUSIC], {
-            type: 'or',
-          }) && (
-            <div className="mt-5">
-              <Button
-                buttonType="primary"
-                onClick={() =>
-                  void router.push(
-                    `/collections/music/${artistId}?view=discography`
-                  )
-                }
-              >
-                <ArrowDownTrayIcon />
-                <span>{intl.formatMessage(messages.requestdiscography)}</span>
-              </Button>
+          {(canRequestDiscography || canSearchProwlarr) && (
+            <div className="mt-5 flex flex-wrap justify-center gap-3 lg:justify-start">
+              {canRequestDiscography && (
+                <Button
+                  buttonType="primary"
+                  onClick={() =>
+                    void router.push(
+                      `/collections/music/${artistId}?view=discography`
+                    )
+                  }
+                >
+                  <ArrowDownTrayIcon />
+                  <span>{intl.formatMessage(messages.requestdiscography)}</span>
+                </Button>
+              )}
+              <IndexerSearchLink category="music" title={artistName} />
             </div>
           )}
         </div>

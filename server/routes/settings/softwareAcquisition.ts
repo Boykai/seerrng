@@ -1,5 +1,6 @@
 import QuestarrNGAPI from '@server/api/software/questarrng';
 import ROMarrNGAPI from '@server/api/software/romarrng';
+import type { SoftwareProviderCapabilities } from '@server/api/software/types';
 import { Permission } from '@server/lib/permissions';
 import type {
   EmulationSystemGroup,
@@ -117,8 +118,55 @@ const settingsView = (settings: SoftwareAcquisitionSettings) => ({
     apiKey: settings.questarr.apiKey ? REDACTED_SECRET : '',
     apiKeyConfigured: Boolean(settings.questarr.apiKey),
   },
+  emulationCatalogProvider: settings.emulationCatalogProvider ?? 'questarr',
   emulationSystemGroups: settings.emulationSystemGroups,
 });
+
+const hasProviderCapabilities = (
+  value: unknown
+): value is SoftwareProviderCapabilities => {
+  if (!isRecord(value) || !isRecord(value.requestActions)) return false;
+  return (
+    typeof value.catalog === 'boolean' &&
+    typeof value.pcAcquisition === 'boolean' &&
+    typeof value.emulationAcquisition === 'boolean' &&
+    typeof value.requestActions.retry === 'boolean' &&
+    typeof value.requestActions.cancel === 'boolean' &&
+    typeof value.assetStreaming === 'boolean'
+  );
+};
+
+const isSupportedHandshake = (
+  provider: 'romarr' | 'questarr',
+  handshake: {
+    service?: unknown;
+    apiVersion?: unknown;
+    requestContractVersion?: unknown;
+    capabilities?: SoftwareProviderCapabilities;
+  }
+): boolean => {
+  const service =
+    typeof handshake.service === 'string'
+      ? handshake.service.toLowerCase().replace(/[^a-z]/g, '')
+      : '';
+  const expectedServices =
+    provider === 'romarr' ? ['romarr', 'romarrng'] : ['questarr', 'questarrng'];
+  if (
+    handshake.apiVersion !== 1 ||
+    !expectedServices.includes(service) ||
+    (handshake.requestContractVersion !== undefined &&
+      handshake.requestContractVersion !== 1)
+  ) {
+    return false;
+  }
+
+  if (handshake.capabilities === undefined) return true;
+  if (!hasProviderCapabilities(handshake.capabilities)) return false;
+  const capabilities = handshake.capabilities;
+  return provider === 'romarr'
+    ? capabilities.emulationAcquisition === true
+    : capabilities.catalog === true && capabilities.pcAcquisition === true;
+};
 
 softwareAcquisitionRoutes.get('/', (_req, res) => {
   res.status(200).json(settingsView(getSettings().softwareAcquisition));
@@ -155,10 +203,49 @@ softwareAcquisitionRoutes.put(
     if ('error' in emulationSystemGroups) {
       return res.status(400).json({ error: emulationSystemGroups.error });
     }
+    const emulationCatalogProvider =
+      req.body.emulationCatalogProvider ??
+      current.emulationCatalogProvider ??
+      'questarr';
+    if (
+      emulationCatalogProvider !== 'questarr' &&
+      emulationCatalogProvider !== 'romarr'
+    ) {
+      return res.status(400).json({
+        error: 'Emulation catalog provider must be QuestarrNG or ROMarrNG.',
+      });
+    }
+
+    if (emulationCatalogProvider === 'romarr') {
+      if (!romarr.value.hostname || !romarr.value.apiKey) {
+        return res.status(400).json({
+          error:
+            'Connect ROMarrNG and confirm its IGDB catalog capability before selecting it as the emulation catalog.',
+        });
+      }
+      try {
+        const handshake = await new ROMarrNGAPI(romarr.value).getHandshake();
+        if (
+          !isSupportedHandshake('romarr', handshake) ||
+          handshake.capabilities?.catalog !== true
+        ) {
+          return res.status(400).json({
+            error:
+              'This ROMarrNG version does not advertise the SeerrNG IGDB catalog. Keep QuestarrNG selected or upgrade ROMarrNG.',
+          });
+        }
+      } catch {
+        return res.status(400).json({
+          error:
+            'ROMarrNG could not be reached to confirm its IGDB catalog capability.',
+        });
+      }
+    }
 
     const candidate = {
       romarr: romarr.value,
       questarr: questarr.value,
+      emulationCatalogProvider,
       emulationSystemGroups: emulationSystemGroups.value,
     };
     const settings = getSettings();
@@ -201,7 +288,7 @@ softwareAcquisitionRoutes.post(
       if (provider === 'romarr') {
         const api = new ROMarrNGAPI(parsed.value);
         const handshake = await api.getHandshake();
-        if (handshake.apiVersion !== 1 || handshake.service !== 'ROMarrNG') {
+        if (!isSupportedHandshake('romarr', handshake)) {
           return res.status(502).json({
             error: 'ROMarrNG returned an unsupported integration contract.',
           });
@@ -209,25 +296,36 @@ softwareAcquisitionRoutes.post(
         const platforms = await api.getPlatforms(true);
         return res.status(200).json({
           success: true,
-          service: handshake.service,
+          service: 'ROMarrNG',
+          ...(handshake.version ? { version: handshake.version } : {}),
+          apiVersion: handshake.apiVersion,
+          ...(handshake.requestContractVersion !== undefined
+            ? { requestContractVersion: handshake.requestContractVersion }
+            : {}),
+          ...(handshake.capabilities
+            ? { capabilities: handshake.capabilities }
+            : {}),
           platformCount: platforms.length,
         });
       }
 
       const api = new QuestarrNGAPI(parsed.value);
       const handshake = await api.getHandshake();
-      if (
-        handshake.apiVersion !== 1 ||
-        handshake.requestContractVersion !== 1 ||
-        handshake.service !== 'QuestarrNG'
-      ) {
+      if (!isSupportedHandshake('questarr', handshake)) {
         return res.status(502).json({
           error: 'QuestarrNG returned an unsupported integration contract.',
         });
       }
-      return res
-        .status(200)
-        .json({ success: true, service: handshake.service });
+      return res.status(200).json({
+        success: true,
+        service: 'QuestarrNG',
+        ...(handshake.version ? { version: handshake.version } : {}),
+        apiVersion: handshake.apiVersion,
+        requestContractVersion: handshake.requestContractVersion,
+        ...(handshake.capabilities
+          ? { capabilities: handshake.capabilities }
+          : {}),
+      });
     } catch {
       return res.status(502).json({
         error: `${provider === 'romarr' ? 'ROMarrNG' : 'QuestarrNG'} connection failed.`,

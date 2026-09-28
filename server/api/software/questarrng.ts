@@ -8,12 +8,11 @@ import type {
   SoftwareAssetsResponse,
   SoftwareCatalogGame,
   SoftwareCatalogPlatform,
+  SoftwareProviderHandshake,
   SoftwareProviderRequest,
 } from './types';
 
-export interface QuestarrHandshake {
-  service: string;
-  apiVersion: number;
+export interface QuestarrHandshake extends SoftwareProviderHandshake {
   requestContractVersion: number;
 }
 

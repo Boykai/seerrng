@@ -47,8 +47,6 @@ const messages = defineMessages('components.RequestStatus.SoftwareRequests', {
   decline: 'Decline',
   withdraw: 'Withdraw',
   cancel: 'Cancel',
-  romarrCancelUnavailable:
-    'ROMarrNG cannot stop this download after it reaches the download client. Stop it in ROMarrNG or the download client.',
   retry: 'Retry',
   manageError: 'This software request could not be updated.',
   downloadCopy: 'Download copy',
@@ -91,6 +89,11 @@ interface SoftwareRequestRow {
     slug: string;
     name: string | null;
     catalogId: number | null;
+  } | null;
+  actions?: {
+    retry: boolean;
+    cancel: boolean;
+    cancelReason?: string;
   } | null;
   variant?: {
     operatingSystem: PcOperatingSystem;
@@ -329,17 +332,18 @@ const SoftwareRequests = ({
             : messages.x64
     );
 
-  const canRetryRequest = (request: SoftwareRequestRow) =>
+  const canManageRequest = (request: SoftwareRequestRow) =>
     canManage || (canRequest && request.requestedBy?.id === user?.id);
+  const canRetryRequest = (request: SoftwareRequestRow) =>
+    request.status === 'failed' &&
+    (request.actions?.retry ?? true) &&
+    canManageRequest(request);
   const canCancelRequest = (request: SoftwareRequestRow) =>
     ['approved', 'searching', 'downloading', 'importing', 'failed'].includes(
       request.status
     ) &&
-    canRetryRequest(request) &&
-    !(
-      request.provider === 'romarr' &&
-      ['downloading', 'importing'].includes(request.status)
-    );
+    (request.actions?.cancel ?? true) &&
+    canManageRequest(request);
 
   return (
     <section
@@ -419,10 +423,10 @@ const SoftwareRequests = ({
                     {message && status === 'failed' && (
                       <p className="mt-2 text-xs text-amber-200">{message}</p>
                     )}
-                    {request.provider === 'romarr' &&
-                      ['downloading', 'importing'].includes(status) && (
+                    {request.actions?.cancel === false &&
+                      request.actions.cancelReason && (
                         <p className="mt-2 text-xs text-gray-300">
-                          {intl.formatMessage(messages.romarrCancelUnavailable)}
+                          {request.actions.cancelReason}
                         </p>
                       )}
                   </div>

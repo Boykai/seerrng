@@ -54,6 +54,52 @@ servers:
 
 components:
   schemas:
+    SoftwareProviderSettingsInput:
+      type: object
+      properties:
+        hostname:
+          type: string
+          maxLength: 255
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        useSsl:
+          type: boolean
+        baseUrl:
+          type: string
+          maxLength: 512
+        apiKey:
+          type: string
+          maxLength: 2048
+    SoftwareProviderSettingsView:
+      type: object
+      properties:
+        hostname:
+          type: string
+        port:
+          type: integer
+        useSsl:
+          type: boolean
+        baseUrl:
+          type: string
+        apiKey:
+          type: string
+          description: Always redacted when configured.
+        apiKeyConfigured:
+          type: boolean
+    SoftwareRequestActions:
+      type: object
+      nullable: true
+      required: [retry, cancel]
+      properties:
+        retry:
+          type: boolean
+        cancel:
+          type: boolean
+        cancelReason:
+          type: string
+          nullable: true
     MediaRatings:
       type: object
       properties:
@@ -1808,6 +1854,37 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProwlarrIndexerCategorySummary'
+        diagnostics:
+          type: array
+          description: Results of the explicit per-indexer connection test.
+          items:
+            $ref: '#/components/schemas/ProwlarrIndexerDiagnostic'
+    ProwlarrIndexerDiagnostic:
+      type: object
+      required: [name, layer, success]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        layer:
+          type: string
+          enum: [indexer-feed]
+        success:
+          type: boolean
+        status:
+          type: integer
+        error:
+          type: string
+        disabledTill:
+          type: string
+          format: date-time
+          nullable: true
+        mostRecentFailure:
+          type: string
+          format: date-time
+          nullable: true
     ProwlarrSearchResultsResponse:
       type: object
       required: [category, query, offset, limit, results, hasMore]
@@ -1866,6 +1943,7 @@ components:
         provider:
           type: string
           enum: [romarr, questarr]
+          description: Acquisition provider. PC games use QuestarrNG; emulation requests use ROMarrNG.
         status:
           type: string
           enum:
@@ -1891,6 +1969,8 @@ components:
         catalogId:
           type: integer
           nullable: true
+        actions:
+          $ref: '#/components/schemas/SoftwareRequestActions'
         platform:
           type: object
           nullable: true
@@ -5996,7 +6076,7 @@ paths:
   /settings/software-acquisition:
     get:
       summary: Get software acquisition provider settings
-      description: Returns ROMarrNG and QuestarrNG connection settings with API keys redacted, plus administrator-assigned Retro and Modern system groups.
+      description: Returns ROMarrNG and QuestarrNG connection settings with API keys redacted, the selected emulation catalog provider, and administrator-assigned Retro and Modern system groups.
       tags:
         - settings
       responses:
@@ -6008,14 +6088,20 @@ paths:
                 type: object
                 properties:
                   romarr:
-                    type: object
+                    $ref: '#/components/schemas/SoftwareProviderSettingsView'
                   questarr:
-                    type: object
+                    $ref: '#/components/schemas/SoftwareProviderSettingsView'
+                  emulationCatalogProvider:
+                    type: string
+                    enum: [questarr, romarr]
                   emulationSystemGroups:
                     type: object
+                    additionalProperties:
+                      type: string
+                      enum: [retro, modern]
     put:
       summary: Update software acquisition settings
-      description: Updates provider connections and per-system emulation groups. API keys stay server-side and are redacted in responses.
+      description: Updates provider connections, the selected emulation IGDB catalog, and per-system emulation groups. API keys stay server-side and are redacted in responses.
       tags:
         - settings
       requestBody:
@@ -6024,6 +6110,19 @@ paths:
           application/json:
             schema:
               type: object
+              properties:
+                romarr:
+                  $ref: '#/components/schemas/SoftwareProviderSettingsInput'
+                questarr:
+                  $ref: '#/components/schemas/SoftwareProviderSettingsInput'
+                emulationCatalogProvider:
+                  type: string
+                  enum: [questarr, romarr]
+                emulationSystemGroups:
+                  type: object
+                  additionalProperties:
+                    type: string
+                    enum: [retro, modern]
       responses:
         '200':
           description: Software acquisition settings updated
@@ -6031,6 +6130,19 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  romarr:
+                    $ref: '#/components/schemas/SoftwareProviderSettingsView'
+                  questarr:
+                    $ref: '#/components/schemas/SoftwareProviderSettingsView'
+                  emulationCatalogProvider:
+                    type: string
+                    enum: [questarr, romarr]
+                  emulationSystemGroups:
+                    type: object
+                    additionalProperties:
+                      type: string
+                      enum: [retro, modern]
         '400':
           description: Invalid provider or system-group settings
   /settings/software-acquisition/test/{provider}:
@@ -6137,7 +6249,7 @@ paths:
   /settings/prowlarr/test:
     post:
       summary: Test a Prowlarr connection
-      description: Checks Prowlarr connectivity and returns indexer coverage without saving the submitted connection settings. Omit apiKey to use the saved key.
+      description: Checks Prowlarr connectivity and category coverage, then tests each enabled searchable indexer with bounded concurrency. Tests contact the indexer but do not grab or download releases. The submitted connection settings are not saved. Omit apiKey to use the saved key. Requires administrator permission.
       tags:
         - settings
       requestBody:
@@ -6162,7 +6274,7 @@ paths:
                   $ref: '#/components/schemas/ProwlarrCategoryMappings'
       responses:
         '200':
-          description: Prowlarr connection and indexer coverage verified
+          description: Prowlarr management connection, indexer coverage, and per-indexer test results
           content:
             application/json:
               schema:
@@ -6170,7 +6282,18 @@ paths:
         '400':
           description: Invalid Prowlarr settings
         '502':
-          description: Prowlarr connection failed
+          description: Prowlarr management API unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  diagnostics:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProwlarrIndexerDiagnostic'
   /settings/prowlarr/coverage:
     get:
       summary: Get Prowlarr indexer coverage
@@ -12166,7 +12289,7 @@ paths:
   /request/software:
     post:
       summary: Submit a ROM or PC game request
-      description: Creates a SeerrNG software request from a QuestarrNG catalog item. Emulation requests include a ROMarrNG system slug; PC game requests require operating system and architecture.
+      description: Creates a SeerrNG software request from the configured IGDB catalog. Emulation uses the selected QuestarrNG or ROMarrNG catalog and is acquired by ROMarrNG; PC game requests use QuestarrNG and require operating system and architecture.
       tags:
         - request
       requestBody:
@@ -12211,7 +12334,7 @@ paths:
   /request/software/catalog/systems:
     get:
       summary: List ROMarrNG-supported emulation systems
-      description: Returns supported platform slugs and the Retro or Modern group assigned by an administrator. Unassigned systems are not requestable.
+      description: Returns ROMarrNG-supported platform slugs and the Retro or Modern group assigned by an administrator. Unassigned systems are not requestable, regardless of which service supplies the emulation IGDB catalog.
       tags:
         - request
       responses:
@@ -12229,7 +12352,7 @@ paths:
   /request/software/catalog/search:
     get:
       summary: Search ROM and PC game catalog
-      description: Searches the authenticated QuestarrNG IGDB catalog and filters results to the requested emulation group or PC platform. Each result includes availability (available, tracked, downloading, missing, or unknown) and ROM availableSystems when known. Pass the returned nextCursor to load the next page.
+      description: Searches the selected QuestarrNG or ROMarrNG IGDB catalog for emulation categories, or QuestarrNG for PC games. Results are filtered to the requested emulation group or PC platform and include availability (available, tracked, downloading, missing, or unknown) and ROM availableSystems when known. Pass the returned nextCursor to load the next page.
       tags:
         - request
       parameters:
@@ -12299,10 +12422,12 @@ paths:
                   nextCursor:
                     type: string
                     nullable: true
+        '503':
+          description: Selected emulation catalog is unavailable, unconfigured, or needs the SeerrNG integration contract.
   /request/software/catalog/popular:
     get:
       summary: List popular ROM and PC game catalog titles
-      description: Returns popular QuestarrNG catalog titles filtered to the selected emulation group or PC platform, with provider and SeerrNG request availability. Pass the returned nextOffset to load the next page.
+      description: Returns popular titles from the selected QuestarrNG or ROMarrNG IGDB catalog for emulation, or QuestarrNG for PC games. Results are filtered to the selected emulation group or PC platform and include provider and SeerrNG request availability. Pass the returned nextOffset to load the next page.
       tags:
         - request
       parameters:
@@ -12366,10 +12491,12 @@ paths:
                   nextOffset:
                     type: integer
                     nullable: true
+        '503':
+          description: Selected emulation catalog is unavailable, unconfigured, or needs the SeerrNG integration contract.
   /request/software/catalog/games/{id}:
     get:
       summary: Get one ROM or PC game catalog title
-      description: Returns QuestarrNG catalog metadata, supported request targets, screenshots, video IDs, rating normalized to a 0-10 scale, and provider or SeerrNG request availability for a shareable software title.
+      description: Returns metadata from the selected QuestarrNG or ROMarrNG IGDB catalog for emulation, or QuestarrNG for PC games, with supported request targets, screenshots, video IDs, rating normalized to a 0-10 scale, and provider or SeerrNG request availability.
       tags:
         - request
       parameters:
@@ -12397,6 +12524,8 @@ paths:
                     type: object
         '404':
           description: Title not found in the selected category
+        '503':
+          description: Selected emulation catalog is unavailable or unconfigured
   /request/software/status:
     get:
       summary: List software request status
@@ -16204,7 +16333,7 @@ paths:
     get:
       tags:
         - Downloads
-      summary: Preview files with confirmed movie or series targets
+      summary: Preview files for a confirmed library match
       description:
         Requires Manage Downloads permission. Admins have this permission
         automatically.
@@ -16215,6 +16344,14 @@ paths:
           schema:
             type: integer
             minimum: 1
+        - in: query
+          name: targetId
+          required: false
+          description: Existing movie, series, album, or book ID from this backend's library
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
       responses:
         '200':
           description: Download intervention result
@@ -16224,9 +16361,26 @@ paths:
                 type: object
                 additionalProperties: false
                 required:
+                  - target
                   - candidates
                   - fingerprint
                 properties:
+                  target:
+                    type: object
+                    nullable: true
+                    additionalProperties: false
+                    required:
+                      - id
+                      - title
+                      - subtitle
+                    properties:
+                      id:
+                        type: integer
+                        minimum: 1
+                      title:
+                        type: string
+                      subtitle:
+                        type: string
                   candidates:
                     type: array
                     items:
@@ -16257,6 +16411,60 @@ paths:
                     pattern: ^[a-f0-9]{64}$
         '400':
           description: Invalid input
+        '403':
+          description: Download management permission required
+        '409':
+          description: Download or backend changed; refresh before retrying
+        '502':
+          description: Backend unavailable
+  /downloads/interventions/{id}/targets:
+    get:
+      tags:
+        - Downloads
+      summary: Search existing manual-import targets in the acquisition library
+      description:
+        Searches titles already tracked by the selected acquisition service.
+        This does not add media to that service. Requires Manage Downloads
+        permission. Admins have this permission automatically.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 120
+      responses:
+        '200':
+          description: Existing import targets
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 20
+                items:
+                  type: object
+                  additionalProperties: false
+                  required:
+                    - id
+                    - title
+                    - subtitle
+                  properties:
+                    id:
+                      type: integer
+                      minimum: 1
+                    title:
+                      type: string
+                    subtitle:
+                      type: string
+        '400':
+          description: Invalid search input
         '403':
           description: Download management permission required
         '409':
@@ -16366,6 +16574,10 @@ paths:
                   enum:
                     - copy
                     - move
+                targetId:
+                  type: integer
+                  minimum: 1
+                  maximum: 2147483647
 
 security:
   - cookieAuth: []

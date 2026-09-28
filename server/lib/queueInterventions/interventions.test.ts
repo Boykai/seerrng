@@ -1,3 +1,4 @@
+import ExternalAPI from '@server/api/externalapi';
 import RadarrAPI from '@server/api/servarr/radarr';
 import { getRepository } from '@server/datasource';
 import QueueIntervention from '@server/entity/QueueIntervention';
@@ -6,10 +7,10 @@ import { setupTestDb } from '@server/test/db';
 import assert from 'node:assert/strict';
 import { afterEach, it, mock } from 'node:test';
 import {
-  type InterventionQueueItem,
   queueIdentity,
   safeDiagnostic,
   serviceAuthority,
+  type InterventionQueueItem,
 } from './identity';
 import {
   importIntervention,
@@ -17,7 +18,12 @@ import {
   previewIntervention,
   rejectIntervention,
 } from './index';
-import { importCandidates, selectImportFiles } from './manualImport';
+import {
+  importCandidates,
+  importTargets,
+  selectImportFiles,
+  type ManualImportSource,
+} from './manualImport';
 setupTestDb();
 afterEach(() => mock.restoreAll());
 const server = {
@@ -54,6 +60,25 @@ const candidate = {
   size: 100,
   rejections: [{ reason: 'Existing file is better' }],
 };
+const mockRadarrMovieLookup = () =>
+  mock.method(
+    ExternalAPI.prototype as unknown as {
+      request: (method: string, endpoint: string) => Promise<unknown>;
+    },
+    'request',
+    async (method: string, endpoint: string) => {
+      assert.equal(method, 'GET');
+      assert.equal(endpoint, '/movie/15');
+      return {
+        data: {
+          id: 15,
+          tmdbId: 101,
+          title: 'Movie release',
+          year: 2024,
+        },
+      };
+    }
+  );
 async function seed() {
   getSettings().radarr = [server];
   await observeInterventionQueue('radarr', server, [item]);
@@ -73,10 +98,10 @@ it('binds identity to backend authority and download, and redacts diagnostics', 
   );
   assert.equal(
     safeDiagnostic(
-      'secret-value api_key=other-token https://user:password@host/path',
+      'secret-value api_key=other-token passkey=query-secret token=access-secret Bearer header-secret https://user:password@host/path',
       server.apiKey
     ),
-    '[redacted] api_key=[redacted] https://[redacted]@host/path'
+    '[redacted] api_key=[redacted] passkey=[redacted] token=[redacted] Bearer [redacted] https://[redacted]@host/path'
   );
 });
 it('observes warnings durably without marking missing rows resolved from partial recovery snapshots', async () => {
@@ -165,6 +190,7 @@ it('previews confirmed files and revalidates selections before submitting an imp
     'getManualImportCandidates',
     async () => [candidate]
   );
+  mockRadarrMovieLookup();
   const initial = await previewIntervention(row.id);
   assert.equal(initial.candidates[0].eligible, true);
   assert.ok(!JSON.stringify(initial).includes('/downloads/'));
@@ -178,7 +204,8 @@ it('previews confirmed files and revalidates selections before submitting an imp
     1,
     [7],
     'copy',
-    initial.fingerprint
+    initial.fingerprint,
+    initial.target?.id
   );
   assert.equal(preview.mock.callCount(), 2);
   assert.equal(result.state, 'importing');
@@ -191,20 +218,24 @@ it('previews confirmed files and revalidates selections before submitting an imp
   );
 });
 it('rejects mismatched targets, escaped folders, duplicate IDs, and stale candidate selections', async () => {
-  const api = {
+  const source: ManualImportSource = {
     getManualImportCandidates: async () => [
       candidate,
       { ...candidate, id: 8, movieId: 99 },
       { ...candidate, id: 9, path: '/downloads/unrelated/file.mkv' },
+      { ...candidate, id: 10, path: '/downloads/movie' },
     ],
+    getTargets: async () => [],
+    getTarget: async (id) => ({ id, title: 'Movie release' }),
   };
-  const files = await importCandidates('radarr', api, item);
+  const { candidates: files } = await importCandidates('radarr', source, item);
   assert.deepEqual(
     files.map((file) => file.eligible),
-    [true, false, false]
+    [true, false, false, false]
   );
   assert.throws(() => selectImportFiles(files, [8]), /confirmed/);
   assert.throws(() => selectImportFiles(files, [9]), /confirmed/);
+  assert.throws(() => selectImportFiles(files, [10]), /confirmed/);
   assert.throws(() => selectImportFiles(files, [7, 7]), /distinct/);
   assert.throws(() => selectImportFiles(files, [99]), /changed/);
 });
@@ -239,6 +270,7 @@ it('refuses import when a backend reuses a file ID for changed file metadata', a
   const row = await seed();
   mock.method(RadarrAPI.prototype, 'getInterventionQueue', async () => [item]);
   let changed = false;
+  mockRadarrMovieLookup();
   mock.method(RadarrAPI.prototype, 'getManualImportCandidates', async () => [
     {
       ...candidate,
@@ -253,8 +285,127 @@ it('refuses import when a backend reuses a file ID for changed file metadata', a
     async () => ({ id: 44, name: 'ManualImport', status: 'queued' })
   );
   await assert.rejects(
-    () => importIntervention(row.id, 1, [7], 'copy', preview.fingerprint),
+    () =>
+      importIntervention(
+        row.id,
+        1,
+        [7],
+        'copy',
+        preview.fingerprint,
+        preview.target?.id
+      ),
     /preview changed/i
   );
   assert.equal(submission.mock.callCount(), 0);
+});
+
+it('builds backend-specific manual import payloads for movies, series, albums and books', async () => {
+  const cases = [
+    {
+      type: 'radarr' as const,
+      target: { id: 15, title: 'Movie' },
+      row: candidate,
+      expected: { movieId: 15 },
+    },
+    {
+      type: 'sonarr' as const,
+      target: { id: 15, title: 'Series' },
+      row: {
+        ...candidate,
+        seriesId: 15,
+        series: { id: 15 },
+        episodes: [{ id: 151 }],
+        releaseType: 'singleEpisode',
+      },
+      expected: { seriesId: 15, episodeIds: [151] },
+    },
+    {
+      type: 'lidarr' as const,
+      target: { id: 15, title: 'Album', parentId: 8 },
+      row: {
+        id: 7,
+        path: '/downloads/movie/file.mkv',
+        name: 'file.mkv',
+        album: { id: 15 },
+        artist: { id: 8 },
+        albumReleaseId: 150,
+        tracks: [{ id: 151 }, { id: 152 }],
+        quality: { quality: { id: 1 } },
+        size: 100,
+      },
+      expected: {
+        artistId: 8,
+        albumId: 15,
+        albumReleaseId: 150,
+        trackIds: [151, 152],
+      },
+    },
+    {
+      type: 'readarr' as const,
+      target: { id: 15, title: 'Book', parentId: 8 },
+      row: {
+        id: 7,
+        path: '/downloads/movie/file.mkv',
+        name: 'file.mkv',
+        book: { id: 15 },
+        author: { id: 8 },
+        foreignEditionId: 'OL123M',
+        quality: { quality: { id: 1 } },
+        size: 100,
+      },
+      expected: { authorId: 8, bookId: 15, foreignEditionId: 'OL123M' },
+    },
+  ];
+
+  for (const testCase of cases) {
+    const source: ManualImportSource = {
+      getManualImportCandidates: async () => [testCase.row],
+      getTargets: async () => [testCase.target],
+      getTarget: async (id) =>
+        id === testCase.target.id ? testCase.target : undefined,
+    };
+    const { candidates, target } = await importCandidates(
+      testCase.type,
+      source,
+      item,
+      testCase.target.id
+    );
+    assert.equal(target?.id, testCase.target.id, testCase.type);
+    assert.equal(candidates[0].eligible, true, testCase.type);
+    for (const [field, value] of Object.entries(testCase.expected))
+      assert.deepEqual(candidates[0].file[field], value, testCase.type);
+  }
+});
+
+it('searches only existing bounded backend library targets and caps the result list', async () => {
+  const source: ManualImportSource = {
+    getManualImportCandidates: async () => [],
+    getTargets: async () => [
+      { id: 1, title: 'Alpha', subtitle: 'Artist' },
+      { id: 2, title: 'Alpha Extended', subtitle: 'Artist' },
+      ...Array.from({ length: 30 }, (_, index) => ({
+        id: index + 3,
+        title: `Alpha item ${index}`,
+      })),
+    ],
+    getTarget: async () => undefined,
+  };
+  const results = await importTargets(source, 'alpha');
+  assert.equal(results.length, 20);
+  assert.equal(results[0].id, 1);
+  assert.deepEqual(await importTargets(source, ' no match '), []);
+  await assert.rejects(() => importTargets(source, 'x'), /between 2 and 120/i);
+});
+
+it('refuses manual import previews with too many files to review', async () => {
+  const source: ManualImportSource = {
+    getManualImportCandidates: async () =>
+      Array.from({ length: 1001 }, (_, index) => ({ id: index + 1 })),
+    getTargets: async () => [],
+    getTarget: async (id) => ({ id, title: 'Movie release' }),
+  };
+  await assert.rejects(
+    () => importCandidates('radarr', source, item),
+    /too many files for a safe manual import preview/i
+  );
 });

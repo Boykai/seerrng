@@ -18,7 +18,10 @@ function app() {
     res.json({ page: req.query.page })
   );
   result.get('/api/v1/downloads/interventions/:id/preview', (_req, res) =>
-    res.json({ candidates: [], fingerprint: 'a'.repeat(64) })
+    res.json({ target: null, candidates: [], fingerprint: 'a'.repeat(64) })
+  );
+  result.get('/api/v1/downloads/interventions/:id/targets', (_req, res) =>
+    res.json([])
   );
   result.post('/api/v1/downloads/interventions/:id/:action', (req, res) =>
     res.json(req.body)
@@ -51,6 +54,14 @@ it('accepts bounded inbox queries and explicit action contracts', async () => {
   );
   assert.equal(
     (
+      await request(server).get(
+        '/api/v1/downloads/interventions/1/targets?query=Example'
+      )
+    ).status,
+    200
+  );
+  assert.equal(
+    (
       await request(server)
         .post('/api/v1/downloads/interventions/1/reject')
         .send({ blocklist: true, removeFromClient: false })
@@ -65,6 +76,7 @@ it('accepts bounded inbox queries and explicit action contracts', async () => {
           candidateIds: [7],
           importMode: 'copy',
           fingerprint: 'a'.repeat(64),
+          targetId: 9,
         })
     ).status,
     200
@@ -82,6 +94,12 @@ it('rejects duplicate selections, browser-supplied paths, missing fingerprints, 
       path: '/arbitrary/path',
     },
     { candidateIds: [], importMode: 'move', fingerprint: 'a'.repeat(64) },
+    {
+      candidateIds: [7],
+      importMode: 'move',
+      fingerprint: 'a'.repeat(64),
+      targetId: 0,
+    },
   ])
     assert.equal(
       (
@@ -95,6 +113,14 @@ it('rejects duplicate selections, browser-supplied paths, missing fingerprints, 
     (
       await request(server).get(
         '/api/v1/downloads/interventions?scope=everything'
+      )
+    ).status,
+    400
+  );
+  assert.equal(
+    (
+      await request(server).get(
+        '/api/v1/downloads/interventions/1/targets?query=x'
       )
     ).status,
     400

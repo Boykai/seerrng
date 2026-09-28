@@ -1,5 +1,6 @@
 import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
+import IndexerSearchLink from '@app/components/Common/IndexerSearchLink';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
@@ -460,6 +461,7 @@ const MagazineDetails = () => {
                   <span>{intl.formatMessage(messages.requestMagazine)}</span>
                 </Button>
               )}
+              <IndexerSearchLink category="magazine" title={data.title} />
             </div>
 
             {hasPermission([Permission.MANAGE_ISSUES, Permission.VIEW_ISSUES], {

@@ -1,6 +1,7 @@
 import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
+import IndexerSearchLink from '@app/components/Common/IndexerSearchLink';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
@@ -570,6 +571,7 @@ const ComicDetails = () => {
                   <span>{intl.formatMessage(globalMessages.request)}</span>
                 </Button>
               )}
+              <IndexerSearchLink category="comic" title={data.title} />
             </div>
 
             <section className="app-card-inset refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">

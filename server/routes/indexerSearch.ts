@@ -3,6 +3,7 @@ import {
   MEDIA_CATEGORY_KEYS,
   type MediaCategoryKey,
 } from '@server/constants/mediaCategories';
+import { PROWLARR_SEARCH_TYPE_BY_CATEGORY } from '@server/constants/prowlarr';
 import type { ProwlarrSearchResultsResponse } from '@server/interfaces/api/prowlarrInterfaces';
 import { sanitizeProwlarrSearchResource } from '@server/lib/prowlarr';
 import { getSettings } from '@server/lib/settings';
@@ -107,7 +108,8 @@ indexerSearchRoutes.post('/search', searchRateLimit, async (req, res) => {
       query,
       categoryIds,
       SEARCH_RESULT_LIMIT,
-      offset
+      offset,
+      PROWLARR_SEARCH_TYPE_BY_CATEGORY[category]
     );
     const results = Array.isArray(rawResults)
       ? rawResults

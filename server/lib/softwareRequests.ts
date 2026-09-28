@@ -6,6 +6,7 @@ import type {
   PcOperatingSystem,
   SoftwareAsset,
   SoftwareAssetsResponse,
+  SoftwareProviderActions,
   SoftwareProviderRequest,
   SoftwareProviderStatus,
 } from '@server/api/software/types';
@@ -35,6 +36,7 @@ export interface SoftwareRequestView {
   assets: SoftwareAsset[];
   status: SoftwareRequestStatus;
   message: string | null;
+  actions?: SoftwareProviderActions | null;
 }
 
 export class SoftwareProviderNotConfiguredError extends Error {}
@@ -61,6 +63,50 @@ const safeErrorMessage = (status: SoftwareProviderStatus): string | null =>
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
+
+const sanitizeProviderActions = (
+  value: unknown
+): SoftwareProviderActions | null => {
+  if (
+    !isRecord(value) ||
+    typeof value.retry !== 'boolean' ||
+    typeof value.cancel !== 'boolean'
+  ) {
+    return null;
+  }
+  const reason =
+    typeof value.cancelReason === 'string'
+      ? value.cancelReason.replace(/[\r\n\0]/g, ' ').slice(0, 240)
+      : undefined;
+  return {
+    retry: value.retry,
+    cancel: value.cancel,
+    ...(reason ? { cancelReason: reason } : {}),
+  };
+};
+
+const legacyRomarrCancelReason =
+  'ROMarrNG cannot stop a download after it reaches the download client. Cancel it in ROMarrNG or the download client.';
+
+const resolveProviderActions = (
+  provider: SoftwareRequestProvider,
+  status: SoftwareProviderStatus,
+  value: unknown
+): SoftwareProviderActions | null => {
+  const reported = sanitizeProviderActions(value);
+  if (reported) return reported;
+  if (
+    provider === 'romarr' &&
+    (status === 'downloading' || status === 'importing')
+  ) {
+    return {
+      retry: false,
+      cancel: false,
+      cancelReason: legacyRomarrCancelReason,
+    };
+  }
+  return null;
+};
 
 const isRetryConfirmationRequired = (error: unknown): boolean => {
   if (!isRecord(error) || !isRecord(error.response)) return false;
@@ -250,7 +296,9 @@ const getProviderRequest = async (
       : getRomarr().createRequest(
           request.externalRequestId,
           request.title,
-          request.platformSlug ?? ''
+          request.platformSlug ?? '',
+          request.catalogId ?? undefined,
+          request.platformId ?? undefined
         );
   }
 };
@@ -284,7 +332,6 @@ export const refreshSoftwareRequest = async (
   if (
     request.status === 'pending' ||
     request.status === 'declined' ||
-    request.status === 'failed' ||
     request.status === 'cancelled'
   ) {
     return {
@@ -292,6 +339,7 @@ export const refreshSoftwareRequest = async (
       assets: [],
       status: request.status,
       message: request.errorMessage ?? null,
+      actions: { retry: false, cancel: false },
     };
   }
 
@@ -345,6 +393,11 @@ export const refreshSoftwareRequest = async (
       assets,
       status: nextStatus,
       message: request.errorMessage ?? null,
+      actions: resolveProviderActions(
+        request.provider,
+        providerRequest.status,
+        providerRequest.actions
+      ),
     };
   } catch (error) {
     logger.warn('Software request status could not be refreshed', {
@@ -357,6 +410,8 @@ export const refreshSoftwareRequest = async (
       assets: [],
       status: request.status,
       message: request.errorMessage ?? null,
+      actions:
+        request.status === 'failed' ? { retry: true, cancel: true } : null,
     };
   }
 };
@@ -453,12 +508,16 @@ export const cancelSoftwareRequest = async (
       'This software request cannot be cancelled in its current state.'
     );
   }
-  if (
-    request.provider === 'romarr' &&
-    ['downloading', 'importing'].includes(request.status)
-  ) {
+  const current = await getProviderRequest(request, false);
+  const actions = resolveProviderActions(
+    request.provider,
+    current.status,
+    current.actions
+  );
+  if (actions?.cancel === false) {
     throw new SoftwareRequestStateError(
-      'ROMarrNG cannot stop a download after it reaches the download client. Cancel it in ROMarrNG or the download client.'
+      actions.cancelReason ??
+        'The acquisition provider cannot cancel this request in its current state.'
     );
   }
 
@@ -516,6 +575,11 @@ export const retrySoftwareRequest = async (
       assets,
       status: nextStatus,
       message: request.errorMessage,
+      actions: resolveProviderActions(
+        request.provider,
+        providerRequest.status,
+        providerRequest.actions
+      ),
     };
   };
 
@@ -523,6 +587,16 @@ export const retrySoftwareRequest = async (
   // its response. Read the durable provider state before attempting another
   // dispatch so a retry cannot enqueue a duplicate download.
   const current = await getProviderRequest(request, false);
+  const currentActions = resolveProviderActions(
+    request.provider,
+    current.status,
+    current.actions
+  );
+  if (currentActions?.retry === false) {
+    throw new SoftwareRequestStateError(
+      'The acquisition provider cannot retry this request in its current state.'
+    );
+  }
   if (current.status !== 'failed') {
     return saveProviderStatus(current);
   }

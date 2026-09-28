@@ -2,6 +2,26 @@ import type { MediaCategoryKey } from '@server/constants/mediaCategories';
 
 export type ProwlarrCategoryMappings = Record<MediaCategoryKey, number[]>;
 
+export type ProwlarrSearchType =
+  'search' | 'movie' | 'tvsearch' | 'music' | 'book';
+
+/** Use Prowlarr's format-aware search paths where Newznab defines them. */
+export const PROWLARR_SEARCH_TYPE_BY_CATEGORY: Record<
+  MediaCategoryKey,
+  ProwlarrSearchType
+> = {
+  movie: 'movie',
+  tv: 'tvsearch',
+  music: 'music',
+  ebook: 'book',
+  audiobook: 'book',
+  comic: 'search',
+  magazine: 'search',
+  retro: 'search',
+  modern: 'search',
+  game: 'search',
+};
+
 /** Standard Newznab/Torznab categories used as safe defaults for manual search. */
 export const DEFAULT_PROWLARR_CATEGORY_MAPPINGS: ProwlarrCategoryMappings = {
   movie: [2000],

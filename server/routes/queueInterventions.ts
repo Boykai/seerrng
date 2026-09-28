@@ -8,6 +8,7 @@ import {
   projectIntervention,
   refreshInterventions,
   rejectIntervention,
+  searchInterventionTargets,
 } from '@server/lib/queueInterventions';
 import { ServarrServiceAuthorityChangedError } from '@server/lib/serviceAdmission';
 import {
@@ -20,6 +21,15 @@ const identifier = (value: unknown) => {
   if (typeof value !== 'string' || !/^[1-9]\d{0,8}$/.test(value))
     throw new InterventionError(400, 'Invalid warning identifier.');
   return Number(value);
+};
+const targetIdentifier = (value: unknown): number | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !/^[1-9]\d{0,9}$/.test(value))
+    throw new InterventionError(400, 'Invalid library match identifier.');
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id > 2147483647)
+    throw new InterventionError(400, 'Invalid library match identifier.');
+  return id;
 };
 const handleError = (error: unknown, next: (error: unknown) => void) => {
   next(
@@ -78,9 +88,33 @@ router.get('/', async (req, res, next) => {
     handleError(error, next);
   }
 });
+router.get('/:id/targets', async (req, res, next) => {
+  try {
+    if (typeof req.query.query !== 'string')
+      throw new InterventionError(400, 'Enter a library match to search for.');
+    if (req.query.query.trim().length < 2 || req.query.query.length > 120)
+      throw new InterventionError(
+        400,
+        'Search with between 2 and 120 characters.'
+      );
+    res.json(
+      await searchInterventionTargets(
+        identifier(req.params.id),
+        req.query.query
+      )
+    );
+  } catch (error) {
+    handleError(error, next);
+  }
+});
 router.get('/:id/preview', async (req, res, next) => {
   try {
-    res.json(await previewIntervention(identifier(req.params.id)));
+    res.json(
+      await previewIntervention(
+        identifier(req.params.id),
+        targetIdentifier(req.query.targetId)
+      )
+    );
   } catch (error) {
     handleError(error, next);
   }
@@ -127,12 +161,20 @@ router.post(
         typeof body !== 'object' ||
         Array.isArray(body) ||
         Object.keys(body).some(
-          (key) => !['candidateIds', 'importMode', 'fingerprint'].includes(key)
+          (key) =>
+            !['candidateIds', 'importMode', 'fingerprint', 'targetId'].includes(
+              key
+            )
         ) ||
         !Array.isArray(body.candidateIds) ||
         typeof body.fingerprint !== 'string' ||
         !/^[a-f0-9]{64}$/.test(body.fingerprint) ||
-        (body.importMode !== 'copy' && body.importMode !== 'move')
+        (body.importMode !== 'copy' && body.importMode !== 'move') ||
+        (body.targetId !== undefined &&
+          (typeof body.targetId !== 'number' ||
+            !Number.isSafeInteger(body.targetId) ||
+            body.targetId <= 0 ||
+            body.targetId > 2147483647))
       )
         throw new InterventionError(400, 'Select files and an import mode.');
       res.json(
@@ -141,7 +183,8 @@ router.post(
           req.user!.id,
           body.candidateIds,
           body.importMode as 'copy' | 'move',
-          body.fingerprint
+          body.fingerprint,
+          body.targetId as number | undefined
         )
       );
     } catch (error) {

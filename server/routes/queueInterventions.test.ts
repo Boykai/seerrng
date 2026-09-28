@@ -38,6 +38,7 @@ it('requires the current dedicated download permission even for existing request
   for (const endpoint of [
     '/downloads/interventions',
     '/downloads/interventions/1/preview',
+    '/downloads/interventions/1/targets?query=example',
   ])
     assert.equal((await request(server).get(endpoint)).status, 403);
   assert.equal(

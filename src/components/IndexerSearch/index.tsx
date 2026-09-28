@@ -13,8 +13,9 @@ import type {
 } from '@server/interfaces/api/prowlarrInterfaces';
 import axios from 'axios';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -178,6 +179,7 @@ const ResultCard = ({
 
 const IndexerSearch = () => {
   const intl = useIntl();
+  const router = useRouter();
   const { hasPermission } = useUser();
   const {
     data: configuration,
@@ -197,6 +199,23 @@ const IndexerSearch = () => {
   const [offset, setOffset] = useState(0);
   const [searching, setSearching] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (!router.isReady) return;
+
+    const linkedCategory = router.query.category;
+    if (
+      typeof linkedCategory === 'string' &&
+      categories.some((item) => item.key === linkedCategory)
+    ) {
+      setCategory(linkedCategory as MediaCategoryKey);
+    }
+
+    const linkedQuery = router.query.query;
+    if (typeof linkedQuery === 'string') {
+      setQuery(linkedQuery.slice(0, 256));
+    }
+  }, [router.isReady, router.query.category, router.query.query]);
 
   const runSearch = async (nextOffset = 0, append = false) => {
     const searchText = (append ? submittedQuery : query).trim();

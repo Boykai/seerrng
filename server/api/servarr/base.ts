@@ -748,6 +748,10 @@ class ServarrBase<QueueItemAppendT> extends ExternalAPI {
     downloadId?: string;
     movieId?: number;
     seriesId?: number;
+    artistId?: number;
+    authorId?: number;
+    filterExistingFiles?: boolean;
+    replaceExistingFiles?: boolean;
   }): Promise<Record<string, unknown>[]> {
     const response = await this.request<unknown>(
       'GET',

@@ -54,9 +54,10 @@ export function safeDiagnostic(value: unknown, secret: string): string {
     .split(secret || '\0')
     .join('[redacted]')
     .replace(
-      /((?:api[-_]?key|access[-_]?token|password|authorization)\s*[=:]\s*)[^\s&]+/gi,
+      /((?:api[-_]?key|(?:access[-_]?)?token|pass(?:word|key)|secret|auth(?:orization)?)\s*[=:]\s*)[^\s&#]+/gi,
       '$1[redacted]'
     )
+    .replace(/\bBearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
     .replace(/(https?:\/\/)[^/@\s]+:[^/@\s]+@/gi, '$1[redacted]@');
 }
 export const warningText = (

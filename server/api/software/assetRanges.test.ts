@@ -8,6 +8,13 @@ import ROMarrNGAPI from './romarrng';
 for (const Provider of [ROMarrNGAPI, QuestarrNGAPI]) {
   it(`${Provider.name} preserves range errors without forwarding provider error bodies`, async () => {
     const server = createServer((req, res) => {
+      if (req.url === '/api/integration/seerrng/v1/ping') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({ service: 'romarr', requestContractVersion: 1 })
+        );
+        return;
+      }
       assert.strictEqual(req.headers.range, 'bytes=999-');
       res.writeHead(416, {
         'Content-Type': 'application/json',
