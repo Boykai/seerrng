@@ -8,6 +8,7 @@ import axios from 'axios';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { useInView } from 'react-intersection-observer';
 import { FormattedMessage, useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -145,8 +146,12 @@ function PersonalizedRow({
   userId: number;
 }) {
   const intl = useIntl();
+  const { ref, inView } = useInView({
+    rootMargin: '200px 0px',
+    triggerOnce: true,
+  });
   const { data, error, isLoading, mutate } = useSWR<ProviderTitlesResponse>(
-    [row.endpoint, userId],
+    inView ? ([row.endpoint, userId] as const) : null,
     ([endpoint]) =>
       axios
         .get<ProviderTitlesResponse>(endpoint)
@@ -190,7 +195,7 @@ function PersonalizedRow({
         ? retryAfterSeconds
         : Math.max(0, Math.ceil((retryDeadline - now) / 1000));
 
-  if (!isLoading && !error && !data?.items.length) return null;
+  if (inView && !isLoading && !error && !data?.items.length) return null;
 
   const errorMessage =
     failure?.kind === 'rate-limited'
@@ -201,6 +206,7 @@ function PersonalizedRow({
 
   return (
     <section
+      ref={ref}
       className="mb-8"
       aria-label={intl.formatMessage(row.title)}
       data-testid={`personal-discovery-row-${row.id}`}
@@ -240,13 +246,15 @@ function PersonalizedRow({
           )}
         </div>
       )}
-      <Slider
-        sliderKey={row.id}
-        items={data?.items.map((item) => (
-          <ProviderTitleCard key={item.id} item={item} />
-        ))}
-        isLoading={isLoading}
-      />
+      {inView && (
+        <Slider
+          sliderKey={row.id}
+          items={data?.items.map((item) => (
+            <ProviderTitleCard key={item.id} item={item} />
+          ))}
+          isLoading={isLoading}
+        />
+      )}
     </section>
   );
 }

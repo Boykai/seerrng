@@ -176,11 +176,14 @@ describe('Discovery provider integrations', () => {
     cy.wait('@traktRecommendations');
     cy.wait('@traktSeriesRecommendations');
     cy.wait('@traktWatchlist');
-    cy.wait('@anilistPersonalRows');
     cy.contains('h2', 'Picked for You').should('be.visible');
     cy.get('[data-testid=personal-discovery-row-trakt-recommended-movies]')
       .should('contain', 'A Trakt movie recommendation')
       .and('contain', 'Catalog match pending');
+    cy.get('[data-testid=personal-discovery-row-anilist-watching]')
+      .scrollIntoView()
+      .should('be.visible');
+    cy.wait('@anilistPersonalRows');
     cy.get('[data-testid=personal-discovery-row-anilist-watching]').should(
       'contain',
       'An AniList series in progress'
