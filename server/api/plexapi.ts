@@ -23,6 +23,7 @@ export interface PlexLibraryItem {
   grandparentRatingKey?: string;
   title: string;
   year?: number;
+  viewOffset?: number;
   parentTitle?: string;
   guid: string;
   parentGuid?: string;
@@ -285,6 +286,7 @@ export const sanitizePlexLibraryItem = (
       boundedPlexText(value.grandparentRatingKey, 128) || undefined,
     title: boundedPlexText(value.title, 512),
     year: plexInteger(value.year) || undefined,
+    viewOffset: plexInteger(value.viewOffset),
     parentTitle: boundedPlexText(value.parentTitle, 512) || undefined,
     guid: boundedPlexText(value.guid, 512),
     parentGuid: boundedPlexText(value.parentGuid, 512) || undefined,
@@ -830,10 +832,12 @@ class PlexAPI extends ExternalAPI {
       offset = 0,
       size = 50,
       libraryType,
+      isWatched,
     }: {
       offset?: number;
       size?: number;
       libraryType?: 'show' | 'movie' | 'music' | 'book';
+      isWatched?: boolean;
     } = {}
   ): Promise<{ totalSize: number; items: PlexLibraryItem[] }> {
     const safeOffset =
@@ -851,6 +855,10 @@ class PlexAPI extends ExternalAPI {
     const params: Record<string, number> = { includeGuids: 1 };
     if (libraryType === 'music' || libraryType === 'book') {
       params.type = 9;
+    }
+    if (isWatched !== undefined) {
+      // Plex interprets unwatched=0 as watched and unwatched=1 as unplayed.
+      params.unwatched = isWatched ? 0 : 1;
     }
     const response = await this.get<unknown>(
       `/library/sections/${encodeURIComponent(boundedPlexText(id, 128))}/all`,

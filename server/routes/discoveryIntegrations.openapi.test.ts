@@ -123,6 +123,14 @@ describe('discovery integration OpenAPI contracts', () => {
     );
     assert.equal(
       (
+        await request(app).get(
+          '/api/v1/integrations/discovery/library/jellyfin?shelf=in-progress&page=2&cursor=40&libraryId=movies-id'
+        )
+      ).status,
+      200
+    );
+    assert.equal(
+      (
         await request(app)
           .post('/api/v1/integrations/discovery/tracking/trakt')
           .send({

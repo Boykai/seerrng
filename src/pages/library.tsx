@@ -14,7 +14,7 @@ import type {
 } from '@server/lib/discoveryIntegrations/mediaServerLibrary';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -49,7 +49,7 @@ const messages = defineMessages('library', {
   unmapped:
     'Some titles retain their original provider identity until a catalog match is confirmed.',
   limit:
-    'This library reached its page limit. Continue browsing on the provider website.',
+    'This page reached a safety limit. Continue with Next if available, or finish browsing in your provider app.',
   previous: 'Previous page',
   next: 'Next page',
   page: 'Page {page}',
@@ -82,7 +82,12 @@ export default function LibraryPage() {
   const [type, setType] = useState('movie');
   const [libraryId, setLibraryId] = useState('');
   const [page, setPage] = useState(1);
+  const [nativeCursors, setNativeCursors] = useState<number[]>([0]);
   const initializedProvider = useRef(false);
+  const resetPage = useCallback(() => {
+    setPage(1);
+    setNativeCursors([0]);
+  }, []);
   const { data: connections } = useSWR<{
     accounts: { provider: DiscoveryAccountProvider }[];
     mediaServer: { provider: NativeLibrarySource; connected: boolean } | null;
@@ -106,12 +111,13 @@ export default function LibraryPage() {
     items: PersonalLibraryItem[];
     libraries?: { id: string; name: string; type: 'show' | 'movie' }[];
     hasMore: boolean;
+    nextCursor?: number;
     allowWrites: boolean;
     missingMappings: number;
     truncated: boolean;
   }>(
     connected
-      ? `${base}/library/${provider}?shelf=${shelf}&page=${page}${nativeSource ? (libraryId ? `&libraryId=${encodeURIComponent(libraryId)}` : '') : type ? `&mediaType=${type}` : ''}`
+      ? `${base}/library/${provider}?shelf=${shelf}&page=${page}${nativeSource ? `&cursor=${nativeCursors[page - 1] ?? (page - 1) * 20}${libraryId ? `&libraryId=${encodeURIComponent(libraryId)}` : ''}` : type ? `&mediaType=${type}` : ''}`
       : null,
     { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
@@ -120,9 +126,9 @@ export default function LibraryPage() {
     if (!nativeSource || !libraries?.length) return;
     if (!libraries.some((library) => library.id === libraryId)) {
       setLibraryId(libraries[0].id);
-      setPage(1);
+      resetPage();
     }
-  }, [data?.libraries, libraryId, nativeSource]);
+  }, [data?.libraries, libraryId, nativeSource, resetPage]);
   const shelves: LibraryShelf[] = nativeSource
     ? ['all', 'watched', 'unwatched', 'in-progress']
     : provider === 'trakt'
@@ -168,7 +174,7 @@ export default function LibraryPage() {
               setShelf(source === 'trakt' ? 'watched' : 'all');
               setType(source === 'trakt' ? 'movie' : '');
               setLibraryId('');
-              setPage(1);
+              resetPage();
             }}
           >
             {connections?.mediaServer && (
@@ -191,7 +197,7 @@ export default function LibraryPage() {
             value={shelf}
             onChange={(event) => {
               setShelf(event.target.value as LibraryShelf);
-              setPage(1);
+              resetPage();
             }}
           >
             {shelves.map((value) => (
@@ -211,7 +217,7 @@ export default function LibraryPage() {
                 value={libraryId}
                 onChange={(event) => {
                   setLibraryId(event.target.value);
-                  setPage(1);
+                  resetPage();
                 }}
               >
                 {data.libraries.map((library) => (
@@ -231,7 +237,7 @@ export default function LibraryPage() {
               value={type}
               onChange={(event) => {
                 setType(event.target.value);
-                setPage(1);
+                resetPage();
               }}
             >
               {provider !== 'trakt' && (
@@ -351,7 +357,15 @@ export default function LibraryPage() {
           </span>
           <Button
             disabled={!data?.hasMore || isLoading}
-            onClick={() => setPage((value) => value + 1)}
+            onClick={() => {
+              if (nativeSource) {
+                setNativeCursors((current) => [
+                  ...current.slice(0, page),
+                  data?.nextCursor ?? current[page - 1] ?? (page - 1) * 20,
+                ]);
+              }
+              setPage((value) => value + 1);
+            }}
           >
             {intl.formatMessage(messages.next)}
           </Button>

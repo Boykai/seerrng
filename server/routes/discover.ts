@@ -102,7 +102,11 @@ import {
   type AlbumResult,
 } from '@server/models/Search';
 import { mapNetwork } from '@server/models/Tv';
-import { searchBookshelfNarrators } from '@server/utils/bookshelfCatalog';
+import {
+  getBookshelfAudiobookLibrary,
+  searchBookshelfCatalogs,
+  searchBookshelfNarrators,
+} from '@server/utils/bookshelfCatalog';
 import {
   mapWithConcurrency,
   settlePromisesWithin,
@@ -3568,10 +3572,19 @@ discoverRoutes.get('/books', async (req, res) => {
     : page;
   const providerLimit = providerWindow?.limit ?? itemsPerPage;
 
-  if (narratorQuery) {
+  if (parsedFormat.value === 'audiobook') {
     try {
       const books = (
-        await searchBookshelfNarrators(getSettings().readarr, narratorQuery)
+        narratorQuery
+          ? await searchBookshelfNarrators(getSettings().readarr, narratorQuery)
+          : hasSearchQuery || authorQuery
+            ? await searchBookshelfCatalogs(
+                getSettings().readarr,
+                searchQuery || authorQuery,
+                'audiobook',
+                { failOnAllUnavailable: true }
+              )
+            : await getBookshelfAudiobookLibrary(getSettings().readarr)
       )
         .filter(
           (book) =>
@@ -3582,6 +3595,8 @@ discoverRoutes.get('/books', async (req, res) => {
               )) &&
             (!authorQuery ||
               matchesAllSearchTerms([book.author], authorQuery)) &&
+            (!narratorQuery ||
+              matchesAllSearchTerms(book.narrators ?? [], narratorQuery)) &&
             (!subjectQuery ||
               matchesAllSearchTerms(book.subjects ?? [], subjectQuery)) &&
             (!language || book.languages?.includes(language)) &&
@@ -3617,7 +3632,7 @@ discoverRoutes.get('/books', async (req, res) => {
         results: books.slice(offset, offset + itemsPerPage),
       });
     } catch (error) {
-      logger.error('Failed to search audiobook narrators', {
+      logger.error('Failed to search audiobook catalog', {
         label: 'Discover Books',
         ...getErrorLogFields(error),
         discoveryContext: bookDiscoveryContext,

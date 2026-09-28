@@ -559,7 +559,7 @@ searchRoutes.get('/', async (req, res, next) => {
               offset: musicOffset,
             })
           : Promise.resolve({ results: [], totalResults: 0 }),
-        shouldSearchBooks && ebookEnabled
+        shouldSearchBooks && ebookEnabled && bookFormat !== 'audiobook'
           ? openLibrary.searchBooks({
               query: toFieldedBooleanAndQuery(queryString, ['title', 'author']),
               page,
@@ -570,7 +570,8 @@ searchRoutes.get('/', async (req, res, next) => {
           ? searchBookshelfCatalogs(
               getSettings().readarr,
               queryString,
-              bookFormatForProviderSearch
+              bookFormatForProviderSearch,
+              { failOnAllUnavailable: bookFormat === 'audiobook' }
             )
           : Promise.resolve([]),
         // Choosing a validated search type selects a provider; it does not
@@ -726,18 +727,27 @@ searchRoutes.get('/', async (req, res, next) => {
             'MusicBrainz, the service used for music searches, timed out or is unavailable. Please try again.',
         });
       }
+      const openLibraryBookSearchFailed =
+        !bookProviderResponse || bookProviderResponse.status === 'rejected';
+      const bookshelfBookSearchFailed =
+        !bookshelfProviderResponse ||
+        bookshelfProviderResponse.status === 'rejected';
+      const bookSearchFailed =
+        bookFormat === 'audiobook'
+          ? bookshelfBookSearchFailed
+          : openLibraryBookSearchFailed && bookshelfBookSearchFailed;
       if (
         typeFilter === 'book' &&
         shouldSearchBooks &&
         booksEnabled &&
-        (!bookProviderResponse || bookProviderResponse.status === 'rejected') &&
-        (!bookshelfProviderResponse ||
-          bookshelfProviderResponse.status === 'rejected')
+        bookSearchFailed
       ) {
         return next({
           status: 503,
           message:
-            'Open Library, the service used for book searches, timed out or is unavailable. Please try again.',
+            bookFormat === 'audiobook'
+              ? 'The configured audiobook catalog is unavailable. Please try again.'
+              : 'The book catalogs are unavailable. Please try again.',
         });
       }
       if (

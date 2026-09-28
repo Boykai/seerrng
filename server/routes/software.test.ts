@@ -415,6 +415,46 @@ describe('software request routes', () => {
     assert.strictEqual(oldCamelCasePath.status, 404);
   });
 
+  it('refreshes ROMarr systems while testing edited settings and reports the count', async () => {
+    const app = createOpenApiValidatedSettingsApp();
+    mock.method(ROMarrNGAPI.prototype, 'getHandshake', async () => ({
+      service: 'ROMarrNG',
+      version: 'test',
+      apiVersion: 1,
+    }));
+    let forceFresh: boolean | undefined;
+    mock.method(
+      ROMarrNGAPI.prototype,
+      'getPlatforms',
+      async (skipCache = false) => {
+        forceFresh = skipCache;
+        return [
+          {
+            slug: 'nes',
+            name: 'Nintendo Entertainment System',
+            media: 'rom',
+            extensions: ['.nes'],
+            max_size_mb: 512,
+          },
+        ];
+      }
+    );
+
+    const response = await request(app)
+      .post('/api/v1/settings/software-acquisition/test/romarr')
+      .send({
+        hostname: 'romarr-edited.test',
+        port: 6868,
+        useSsl: false,
+        baseUrl: '',
+        apiKey: 'edited-romarr-key',
+      });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(forceFresh, true);
+    assert.strictEqual(response.body.platformCount, 1);
+  });
+
   it('validates the ROMarr retry confirmation against the OpenAPI contract', async () => {
     const app = createOpenApiValidatedApp();
     const valid = await request(app)

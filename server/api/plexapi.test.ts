@@ -312,6 +312,26 @@ describe('Plex response normalization', () => {
     assert.deepStrictEqual(page.items[0].Guid, [{ id: 'tmdb://42' }]);
   });
 
+  it('filters watched and unwatched library pages on the Plex server', async () => {
+    const plex = new PlexAPI({ plexToken: 'linked-user-token' });
+    let requestOptions: {
+      params?: Record<string, number>;
+    } = {};
+    Object.defineProperty(plex, 'get', {
+      configurable: true,
+      value: async (_path: string, options: typeof requestOptions) => {
+        requestOptions = options;
+        return { MediaContainer: { totalSize: 0, Metadata: [] } };
+      },
+    });
+
+    await plex.getLibraryContents('7', { isWatched: true });
+    assert.strictEqual(requestOptions.params?.unwatched, 0);
+
+    await plex.getLibraryContents('7', { isWatched: false });
+    assert.strictEqual(requestOptions.params?.unwatched, 1);
+  });
+
   it('requests GUID details for recently added music albums', async () => {
     const plex = new PlexAPI({ plexToken: 'token' });
     let requestOptions: {

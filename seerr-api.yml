@@ -369,6 +369,11 @@ components:
           type: integer
           minimum: 1
           maximum: 500
+        nextCursor:
+          type: integer
+          minimum: 0
+          maximum: 100000
+          description: Resume a media-server in-progress shelf from this offset.
         total:
           type: integer
           minimum: 0
@@ -15709,6 +15714,7 @@ paths:
   /integrations/discovery/library/{provider}:
     get:
       summary: Browse a page of your personal provider or media server library
+      description: For Plex, Jellyfin, and Emby in-progress shelves, pass the previous response's nextCursor as cursor to continue a bounded scan. Other providers use page pagination.
       tags:
         - user
       parameters:
@@ -15739,6 +15745,13 @@ paths:
             minimum: 1
             maximum: 500
             default: 1
+        - name: cursor
+          in: query
+          description: Cursor returned by the prior media-server in-progress page.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
         - name: mediaType
           in: query
           schema:

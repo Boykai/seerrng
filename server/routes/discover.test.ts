@@ -3397,6 +3397,64 @@ describe('GET /discover/books', () => {
     }
   });
 
+  it('browses existing audiobook catalog titles without querying ebook sources', async () => {
+    getSettings().readarr = [
+      {
+        id: 0,
+        hostname: 'audiobookshelf.test',
+        port: 8787,
+        apiKey: 'audio-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'audiobook',
+      } as ReadarrSettings,
+      {
+        id: 1,
+        hostname: 'ebookshelf.test',
+        port: 8787,
+        apiKey: 'ebook-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'ebook',
+      } as ReadarrSettings,
+    ];
+    const searchOpenLibrary = mock.method(
+      OpenLibraryAPI.prototype,
+      'searchBooks'
+    );
+    const getBooks = mock.method(ReadarrAPI.prototype, 'getBooks', async () => [
+      {
+        id: 1,
+        title: 'Existing Audio Edition',
+        foreignBookId: 'hardcover:audio-work',
+        author: { authorName: 'Writer One' },
+        narrators: ['Reader One'],
+      },
+      {
+        id: 2,
+        title: 'Unidentified Audio Edition',
+        author: { authorName: 'Writer Two' },
+      },
+    ]);
+
+    try {
+      const agent = await login();
+      const result = await agent
+        .get('/discover/books')
+        .query({ format: 'audiobook' });
+
+      assert.strictEqual(result.status, 200);
+      assert.deepStrictEqual(
+        result.body.results.map((book: { title: string }) => book.title),
+        ['Existing Audio Edition']
+      );
+      assert.strictEqual(getBooks.mock.callCount(), 1);
+      assert.strictEqual(searchOpenLibrary.mock.callCount(), 0);
+    } finally {
+      getSettings().readarr = [];
+    }
+  });
+
   it('limits narrator search to audiobook format', async () => {
     const searchOpenLibrary = mock.method(
       OpenLibraryAPI.prototype,
@@ -4103,7 +4161,7 @@ describe('GET /discover/books', () => {
     const agent = await login();
     const res = await agent.get('/discover/books').query({
       page: 3,
-      format: 'audiobook',
+      format: 'ebook',
       query: 'space opera',
       sortBy: 'rating',
       subject: 'science_fiction',
@@ -4125,7 +4183,7 @@ describe('GET /discover/books', () => {
       label: 'Discover Books',
       errorMessage: 'provider unavailable',
       discoveryContext: {
-        format: 'audiobook',
+        format: 'book',
         keyword: 'space opera',
         page: 3,
         pageSize: 50,

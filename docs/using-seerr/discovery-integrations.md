@@ -41,8 +41,13 @@ Emby account. Media-server libraries are read-only in SeerrNG and use your own
 provider account, so libraries hidden from that account are not shown. Choose a
 server library and browse its all, watched, unwatched, or in-progress shelf.
 Only media-server libraries enabled in SeerrNG and visible to your linked
-account appear. Link the media-server account under **Profile → Settings**;
-tracking-account connections remain under **Linked Accounts**.
+account appear. Watched and unwatched filters use that account's playback state;
+in-progress includes partially played movies and series. Sparse in-progress
+results are filled from bounded provider batches. A status notice appears when a
+page reaches its scan limit; **Next** continues from the returned cursor while
+more results are available, up to SeerrNG's safety cap. Link the media-server
+account under **Profile → Settings**; tracking-account connections remain under
+**Linked Accounts**.
 
 Trakt shelves are paged separately for movies and series. AniList and Simkl
 show the linked user's native library and keep provider IDs when a confirmed

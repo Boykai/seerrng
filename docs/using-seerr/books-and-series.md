@@ -25,6 +25,10 @@ format. Both connections can use the same address and API key.
 4. Select a book to open its details. When the catalog supplies author or
    series information, the author and series names link to their own pages.
 
+The **Audiobooks** page browses titles from configured Bookshelf-compatible
+audiobook catalogs. Its narrator filter uses narrator metadata from those
+catalogs, and audiobook searches do not mix in ebook-only Open Library results.
+
 An author page lists books associated with that author. A book series page
 lists its catalog volumes in series order when positions are available. Each
 volume shows ebook and audiobook availability separately as **Available**,

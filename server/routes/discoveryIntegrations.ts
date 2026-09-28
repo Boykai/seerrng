@@ -22,6 +22,7 @@ import {
   type LibraryShelf,
 } from '@server/lib/discoveryIntegrations/library';
 import {
+  MAX_NATIVE_LIBRARY_CURSOR,
   getNativeLibraryConnection,
   personalMediaServerLibrary,
   type NativeLibrarySource,
@@ -405,12 +406,25 @@ router.get(
             : typeof rawPage === 'string' && /^[1-9]\d{0,2}$/.test(rawPage)
               ? Number(rawPage)
               : NaN;
+      const rawCursor = req.query.cursor;
+      const cursor =
+        rawCursor === undefined
+          ? undefined
+          : typeof rawCursor === 'number' && Number.isSafeInteger(rawCursor)
+            ? rawCursor
+            : typeof rawCursor === 'string' && /^\d{1,6}$/.test(rawCursor)
+              ? Number(rawCursor)
+              : NaN;
       const libraryId = req.query.libraryId;
       if (
         typeof shelf !== 'string' ||
         !['all', 'watched', 'unwatched', 'in-progress'].includes(shelf) ||
         !Number.isSafeInteger(page) ||
         page > 500 ||
+        (cursor !== undefined &&
+          (!Number.isSafeInteger(cursor) ||
+            cursor < 0 ||
+            cursor > MAX_NATIVE_LIBRARY_CURSOR)) ||
         (libraryId !== undefined && typeof libraryId !== 'string') ||
         req.query.mediaType !== undefined
       )
@@ -424,7 +438,8 @@ router.get(
           source as NativeLibrarySource,
           shelf as LibraryShelf,
           page,
-          libraryId as string | undefined
+          libraryId as string | undefined,
+          cursor
         )
       );
       return;

@@ -143,7 +143,15 @@ const Layout = ({ children }: LayoutProps) => {
       return;
     }
 
-    if (!isOptionalCatalogPathEnabled(router.pathname, currentSettings)) {
+    const audiobookOnlyBookAlias =
+      router.pathname === '/discover/books' &&
+      !isDiscoverMediaTypeEnabled('book', currentSettings) &&
+      isDiscoverMediaTypeEnabled('audiobook', currentSettings);
+
+    if (
+      !isOptionalCatalogPathEnabled(router.pathname, currentSettings) &&
+      !audiobookOnlyBookAlias
+    ) {
       void router.replace('/');
     }
   }, [currentSettings, router]);

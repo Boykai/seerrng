@@ -206,7 +206,7 @@ softwareAcquisitionRoutes.post(
             error: 'ROMarrNG returned an unsupported integration contract.',
           });
         }
-        const platforms = await api.getPlatforms();
+        const platforms = await api.getPlatforms(true);
         return res.status(200).json({
           success: true,
           service: handshake.service,

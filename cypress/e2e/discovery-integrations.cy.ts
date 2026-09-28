@@ -205,6 +205,12 @@ describe('Discovery provider integrations', () => {
         (request) => {
           const url = new URL(request.url);
           const libraryId = url.searchParams.get('libraryId');
+          const shelf = url.searchParams.get('shelf');
+          const cursor = Number(url.searchParams.get('cursor') ?? 0);
+          const nextInProgressPage =
+            shelf === 'in-progress' && libraryId === 'shows' && cursor === 41;
+          const hasNextInProgressPage =
+            shelf === 'in-progress' && libraryId === 'shows' && cursor === 0;
           const libraries = [
             { id: 'movies', name: 'Movies', type: 'movie' },
             { id: 'shows', name: 'Series', type: 'show' },
@@ -215,10 +221,12 @@ describe('Discovery provider integrations', () => {
                   {
                     id: `jellyfin:${libraryId}:item-1`,
                     source: 'jellyfin',
-                    sourceId: 'item-1',
+                    sourceId: nextInProgressPage ? 'item-2' : 'item-1',
                     title:
                       libraryId === 'shows'
-                        ? 'Native series title'
+                        ? nextInProgressPage
+                          ? 'Native series title page 2'
+                          : 'Native series title'
                         : 'Native movie title',
                     mediaType: libraryId === 'shows' ? 'tv' : 'movie',
                     year: 2025,
@@ -233,8 +241,9 @@ describe('Discovery provider integrations', () => {
               : [],
             libraries,
             page: Number(url.searchParams.get('page') ?? 1),
-            total: 1,
-            hasMore: false,
+            total: hasNextInProgressPage ? 2 : 1,
+            hasMore: hasNextInProgressPage,
+            nextCursor: hasNextInProgressPage ? 41 : undefined,
             allowWrites: false,
             missingMappings: 0,
             truncated: false,
@@ -256,6 +265,11 @@ describe('Discovery provider integrations', () => {
       cy.contains('Watching').should('be.visible');
       cy.contains('button', 'Mark watched').should('not.exist');
       cy.contains('button', 'Save rating').should('not.exist');
+      cy.contains('button', 'Next').click();
+      cy.wait('@nativeLibrary').then(({ request }) => {
+        expect(new URL(request.url).searchParams.get('cursor')).to.equal('41');
+      });
+      cy.contains('Native series title page 2').should('be.visible');
       cy.document().then((doc) =>
         expect(doc.documentElement.scrollWidth).to.be.at.most(width)
       );

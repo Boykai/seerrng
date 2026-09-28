@@ -594,23 +594,30 @@ const getApi = (server: ReadarrSettings) =>
 export const searchBookshelfCatalogs = async (
   servers: ReadarrSettings[],
   term: string,
-  serviceType?: 'ebook' | 'audiobook'
+  serviceType?: 'ebook' | 'audiobook',
+  options: { failOnAllUnavailable?: boolean } = {}
 ): Promise<BookResult[]> => {
   const matches = servers.filter(
     (server) => !serviceType || (server.serviceType ?? 'ebook') === serviceType
   );
-  const results = await Promise.all(
+  const responses = await Promise.allSettled(
     matches.map(async (server) => {
-      try {
-        const books = await getApi(server).lookupBook(term);
-        return books.map((book) => mapBookshelfBook(book, server.id, server));
-      } catch {
-        return [];
-      }
+      const books = await getApi(server).lookupBook(term);
+      return books.map((book) => mapBookshelfBook(book, server.id, server));
     })
   );
+  if (
+    options.failOnAllUnavailable &&
+    matches.length > 0 &&
+    responses.every((response) => response.status === 'rejected')
+  ) {
+    throw new Error('Configured Bookshelf catalogs are unavailable.');
+  }
+
   const deduped = new Map<string, BookResult>();
-  for (const result of results.flat()) {
+  for (const result of responses.flatMap((response) =>
+    response.status === 'fulfilled' ? response.value : []
+  )) {
     // Provider catalogs can return many editions of one work as separate
     // lookup rows. Keep one card per title and author; the detail page retains
     // the edition choices from the selected work.
@@ -625,6 +632,34 @@ export const searchBookshelfCatalogs = async (
     const author = normalize(result.author);
     const key = author ? `${title}:${author}` : `${title}:${result.id}`;
     if (!deduped.has(key)) deduped.set(key, result);
+  }
+  return [...deduped.values()];
+};
+
+export const getBookshelfAudiobookLibrary = async (
+  servers: ReadarrSettings[]
+): Promise<BookResult[]> => {
+  const audiobookServers = servers.filter(
+    (server) => server.serviceType === 'audiobook'
+  );
+  if (!audiobookServers.length) return [];
+
+  const responses = await Promise.allSettled(
+    audiobookServers.map(async (server) =>
+      (await getApi(server).getBooks())
+        .filter((book) => book.foreignBookId)
+        .map((book) => mapBookshelfBook(book, server.id, server))
+    )
+  );
+  if (responses.every((response) => response.status === 'rejected')) {
+    throw new Error('Configured audiobook catalogs are unavailable.');
+  }
+
+  const deduped = new Map<string, BookResult>();
+  for (const book of responses.flatMap((response) =>
+    response.status === 'fulfilled' ? response.value : []
+  )) {
+    deduped.set(book.id, book);
   }
   return [...deduped.values()];
 };

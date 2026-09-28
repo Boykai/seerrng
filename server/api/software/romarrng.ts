@@ -60,8 +60,8 @@ export class ROMarrNGAPI extends ExternalAPI {
     return this.get('/api/v1/integration/ping', {}, 0);
   }
 
-  public getPlatforms(): Promise<RomarrPlatform[]> {
-    return this.get('/api/platforms', {}, 300);
+  public getPlatforms(forceFresh = false): Promise<RomarrPlatform[]> {
+    return this.get('/api/platforms', {}, forceFresh ? 0 : 300);
   }
 
   public lookupLibrary(

@@ -132,6 +132,208 @@ it('limits Plex personal pages to enabled, user-visible libraries and keeps watc
   assert.strictEqual(page.allowWrites, false);
 });
 
+it('fills sparse Plex in-progress pages without leaving the match on the next raw page', async () => {
+  const user = await testUser();
+  await getRepository(User).update(user.id, { plexToken: 'linked-plex-token' });
+  settings.replaceSection('main', {
+    ...settings.main,
+    mediaServerType: MediaServerType.PLEX,
+  });
+  settings.replaceSection('plex', {
+    ...settings.plex,
+    ip: '127.0.0.1',
+    libraries: [{ id: 'shows', name: 'Series', enabled: true, type: 'show' }],
+  });
+  mock.method(PlexAPI.prototype, 'getLibraries', async () => [
+    { key: 'shows', title: 'Series', type: 'show', agent: 'plex' },
+  ]);
+  let requestedSize = 0;
+  mock.method(
+    PlexAPI.prototype,
+    'getLibraryContents',
+    async (
+      _id: string,
+      options?: {
+        offset?: number;
+        size?: number;
+        libraryType?: 'show' | 'movie' | 'music' | 'book';
+        isWatched?: boolean;
+      }
+    ) => {
+      requestedSize = options?.size ?? 0;
+      return {
+        totalSize: 25,
+        items: Array.from({ length: 25 }, (_, index) => ({
+          ratingKey: `show-${index}`,
+          title: `Series ${index}`,
+          guid: `plex://show/${index}`,
+          Guid: [{ id: `tmdb://${index + 1}` }],
+          addedAt: 0,
+          updatedAt: 0,
+          type: 'show' as const,
+          leafCount: 10,
+          viewedLeafCount: index === 22 ? 3 : 0,
+          Media: [],
+        })),
+      };
+    }
+  );
+
+  const page = await personalMediaServerLibrary(
+    user.id,
+    'plex',
+    'in-progress',
+    1,
+    'shows'
+  );
+
+  assert.strictEqual(requestedSize, 100);
+  assert.deepStrictEqual(
+    page.items.map((item) => [item.title, item.status, item.progress]),
+    [['Series 22', 'watching', 3]]
+  );
+  assert.strictEqual(page.hasMore, false);
+});
+
+it('continues sparse movie progress pages from the returned native cursor', async () => {
+  const user = await testUser();
+  await getRepository(User).update(user.id, { plexToken: 'linked-plex-token' });
+  settings.replaceSection('main', {
+    ...settings.main,
+    mediaServerType: MediaServerType.PLEX,
+  });
+  settings.replaceSection('plex', {
+    ...settings.plex,
+    ip: '127.0.0.1',
+    libraries: [{ id: 'movies', name: 'Films', enabled: true, type: 'movie' }],
+  });
+  mock.method(PlexAPI.prototype, 'getLibraries', async () => [
+    { key: 'movies', title: 'Films', type: 'movie', agent: 'plex' },
+  ]);
+  const requestedOffsets: number[] = [];
+  mock.method(
+    PlexAPI.prototype,
+    'getLibraryContents',
+    async (
+      _id: string,
+      options?: {
+        offset?: number;
+        size?: number;
+        libraryType?: 'show' | 'movie' | 'music' | 'book';
+      }
+    ) => {
+      const offset = options?.offset ?? 0;
+      requestedOffsets.push(offset);
+      const size = options?.size ?? 20;
+      return {
+        totalSize: 120,
+        items: Array.from({ length: Math.min(size, 120 - offset) }, (_, i) => {
+          const index = offset + i;
+          return {
+            ratingKey: `movie-${index}`,
+            title: `Movie ${index}`,
+            guid: `plex://movie/${index}`,
+            addedAt: 0,
+            updatedAt: 0,
+            type: 'movie' as const,
+            viewCount: 0,
+            viewOffset: index < 25 ? 60_000 : 0,
+            Media: [],
+          };
+        }),
+      };
+    }
+  );
+
+  const firstPage = await personalMediaServerLibrary(
+    user.id,
+    'plex',
+    'in-progress',
+    1,
+    'movies'
+  );
+  const secondPage = await personalMediaServerLibrary(
+    user.id,
+    'plex',
+    'in-progress',
+    2,
+    'movies',
+    firstPage.nextCursor
+  );
+
+  assert.strictEqual(firstPage.items.length, 20);
+  assert.strictEqual(firstPage.items[0].status, 'watching');
+  assert.strictEqual(firstPage.items[19].title, 'Movie 19');
+  assert.strictEqual(firstPage.hasMore, true);
+  assert.strictEqual(firstPage.nextCursor, 20);
+  assert.deepStrictEqual(
+    secondPage.items.map((item) => item.title),
+    ['Movie 20', 'Movie 21', 'Movie 22', 'Movie 23', 'Movie 24']
+  );
+  assert.strictEqual(secondPage.hasMore, false);
+  assert.deepStrictEqual(requestedOffsets, [0, 20]);
+});
+
+it('reports the hard native cursor limit without offering an empty next page', async () => {
+  const user = await testUser();
+  await getRepository(User).update(user.id, { plexToken: 'linked-plex-token' });
+  settings.replaceSection('main', {
+    ...settings.main,
+    mediaServerType: MediaServerType.PLEX,
+  });
+  settings.replaceSection('plex', {
+    ...settings.plex,
+    ip: '127.0.0.1',
+    libraries: [{ id: 'movies', name: 'Films', enabled: true, type: 'movie' }],
+  });
+  mock.method(PlexAPI.prototype, 'getLibraries', async () => [
+    { key: 'movies', title: 'Films', type: 'movie', agent: 'plex' },
+  ]);
+  let requestedOffset = -1;
+  mock.method(
+    PlexAPI.prototype,
+    'getLibraryContents',
+    async (
+      _id: string,
+      options?: {
+        offset?: number;
+        size?: number;
+        libraryType?: 'show' | 'movie' | 'music' | 'book';
+      }
+    ) => {
+      requestedOffset = options?.offset ?? -1;
+      return {
+        totalSize: 100_001,
+        items: Array.from({ length: options?.size ?? 0 }, (_, index) => ({
+          ratingKey: `movie-${requestedOffset + index}`,
+          title: `Movie ${requestedOffset + index}`,
+          guid: `plex://movie/${requestedOffset + index}`,
+          addedAt: 0,
+          updatedAt: 0,
+          type: 'movie' as const,
+          viewCount: 0,
+          viewOffset: 0,
+          Media: [],
+        })),
+      };
+    }
+  );
+
+  const page = await personalMediaServerLibrary(
+    user.id,
+    'plex',
+    'in-progress',
+    2,
+    'movies',
+    99_900
+  );
+
+  assert.strictEqual(requestedOffset, 99_900);
+  assert.strictEqual(page.nextCursor, 100_000);
+  assert.strictEqual(page.hasMore, false);
+  assert.strictEqual(page.truncated, true);
+});
+
 it('does not use an administrator Plex credential when the user has no linked token', async () => {
   const user = await testUser();
   await getRepository(User).update(user.id, { plexToken: null });
@@ -229,4 +431,80 @@ it('reads Jellyfin user views and watched data with the linked user identity', a
   assert.strictEqual(page.items[0].status, 'completed');
   assert.strictEqual(page.items[0].tmdbId, 84);
   assert.strictEqual(page.items[0].year, 2024);
+});
+
+it('scans past unplayed Jellyfin items to fill the personal in-progress shelf', async () => {
+  const user = await testUser();
+  const jellyfinUserId = 'a2ed2f1f-5a82-4c55-9a1c-1385e4e90ca1';
+  await getRepository(User).update(user.id, {
+    jellyfinUserId,
+    jellyfinAuthToken: 'linked-jellyfin-token',
+  });
+  settings.replaceSection('main', {
+    ...settings.main,
+    mediaServerType: MediaServerType.JELLYFIN,
+  });
+  settings.replaceSection('jellyfin', {
+    ...settings.jellyfin,
+    ip: '127.0.0.1',
+    libraries: [
+      { id: 'movies-id', name: 'Movies', enabled: true, type: 'movie' },
+    ],
+  });
+  mock.method(JellyfinAPI.prototype, 'getUserLibraries', async () => [
+    { key: 'movies-id', title: 'Movies', type: 'movie', agent: 'jellyfin' },
+  ]);
+  let requestedSize = 0;
+  mock.method(
+    JellyfinAPI.prototype,
+    'getUserLibraryContents',
+    async (
+      _id: string,
+      _type: 'show' | 'movie',
+      options?: { offset?: number; size?: number; isPlayed?: boolean }
+    ) => {
+      requestedSize = options?.size ?? 0;
+      return {
+        Items: Array.from({ length: 25 }, (_, index) => ({
+          Id: `movie-${index}`,
+          Name: `Movie ${index}`,
+          Type: 'Movie' as const,
+          HasSubtitles: false,
+          LocationType: 'FileSystem',
+          MediaType: 'Video',
+          ProviderIds: {
+            Tmdb: String(index + 1),
+            TheMovieDb: undefined,
+            Imdb: undefined,
+            Tvdb: undefined,
+            AniDB: undefined,
+            MusicBrainzAlbum: undefined,
+            MusicBrainzReleaseGroup: undefined,
+            MusicBrainzArtist: undefined,
+          },
+          UserData: {
+            Played: false,
+            PlaybackPositionTicks: index === 22 ? 30_000_000 : 0,
+          },
+        })),
+        TotalRecordCount: 25,
+        StartIndex: options?.offset ?? 0,
+      };
+    }
+  );
+
+  const page = await personalMediaServerLibrary(
+    user.id,
+    'jellyfin',
+    'in-progress',
+    1,
+    'movies-id'
+  );
+
+  assert.strictEqual(requestedSize, 100);
+  assert.deepStrictEqual(
+    page.items.map((item) => [item.title, item.status]),
+    [['Movie 22', 'watching']]
+  );
+  assert.strictEqual(page.hasMore, false);
 });

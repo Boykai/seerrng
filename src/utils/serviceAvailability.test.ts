@@ -107,7 +107,7 @@ describe('isOptionalCatalogPathEnabled', () => {
     );
     strictEqual(
       isOptionalCatalogPathEnabled('/discover/books', availability),
-      true
+      false
     );
     strictEqual(
       isOptionalCatalogPathEnabled('/discover/audiobooks', availability),

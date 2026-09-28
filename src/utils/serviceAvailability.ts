@@ -162,8 +162,7 @@ export const isOptionalCatalogPathEnabled = (
   if (path === '/discover/books') {
     return (
       availability.booksEnabled &&
-      (isConfiguredMediaCategoryEnabled('ebook', availability) ||
-        isConfiguredMediaCategoryEnabled('audiobook', availability))
+      isConfiguredMediaCategoryEnabled('ebook', availability)
     );
   }
 

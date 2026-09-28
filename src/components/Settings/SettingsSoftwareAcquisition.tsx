@@ -31,10 +31,16 @@ const messages = defineMessages('components.SettingsSoftwareAcquisition', {
   save: 'Save settings',
   saving: 'Saving…',
   connectionSuccess: '{service} is connected.',
+  romarrConnectionSuccess:
+    '{service} is connected. Found {platformCount} systems.',
   saved: 'Software acquisition settings saved.',
   systemGroups: 'Emulation system groups',
   systemGroupsDescription:
     'Assign each ROMarrNG system to Retro or Modern before users can request titles for it.',
+  systemGroupsSourceHint:
+    'This list uses saved ROMarrNG settings, not unsaved test values. Systems from a recent successful fetch can remain visible for up to five minutes.',
+  assignAllRetro: 'Assign all to Retro',
+  assignAllModern: 'Assign all to Modern',
   unassigned: 'Not available in requests',
   retro: 'Retro',
   modern: 'Modern',
@@ -138,22 +144,45 @@ const SettingsSoftwareAcquisition = () => {
     setter((current) => (current ? { ...current, ...update } : current));
   };
 
+  const assignAllSystems = (group: EmulationSystemGroup) => {
+    const systems = systemsData?.results ?? [];
+    if (systems.length === 0) return;
+
+    setSystemGroups((current) => {
+      const next = { ...current };
+      systems.forEach((system) => {
+        next[system.slug] = group;
+      });
+      return next;
+    });
+  };
+
   const testProvider = async (provider: 'romarr' | 'questarr') => {
     const current = provider === 'romarr' ? romarr : questarr;
     if (!current) return;
     setTesting(provider);
     setTestState(null);
     try {
-      const response = await axios.post<{ service: string }>(
+      const response = await axios.post<{
+        service: string;
+        platformCount?: number;
+      }>(
         `/api/v1/settings/software-acquisition/test/${provider}`,
         getProviderPayload(current)
       );
       setTestState({
         provider,
         success: true,
-        message: intl.formatMessage(messages.connectionSuccess, {
-          service: response.data.service,
-        }),
+        message:
+          provider === 'romarr' &&
+          typeof response.data.platformCount === 'number'
+            ? intl.formatMessage(messages.romarrConnectionSuccess, {
+                service: response.data.service,
+                platformCount: response.data.platformCount,
+              })
+            : intl.formatMessage(messages.connectionSuccess, {
+                service: response.data.service,
+              }),
       });
       if (provider === 'romarr') {
         await mutate('/api/v1/request/software/catalog/systems');
@@ -358,6 +387,11 @@ const SettingsSoftwareAcquisition = () => {
             <p className="mt-1 text-sm text-gray-300">
               {intl.formatMessage(messages.systemGroupsDescription)}
             </p>
+            {systemsData?.results.length ? (
+              <p className="mt-2 text-xs text-gray-400">
+                {intl.formatMessage(messages.systemGroupsSourceHint)}
+              </p>
+            ) : null}
           </div>
           {systemsLoading ? (
             <LoadingSpinner />
@@ -371,44 +405,64 @@ const SettingsSoftwareAcquisition = () => {
               )}
             />
           ) : systemsData?.results.length ? (
-            <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-              {systemsData.results.map((system) => (
-                <label
-                  key={system.slug}
-                  className="flex min-w-0 items-center justify-between gap-3 text-sm text-gray-200"
+            <>
+              <div className="mb-4 flex flex-wrap gap-2">
+                <Button
+                  buttonType="default"
+                  buttonSize="sm"
+                  disabled={saving}
+                  onClick={() => assignAllSystems('retro')}
                 >
-                  <span className="truncate" title={system.name}>
-                    {system.name}
-                  </span>
-                  <select
-                    className="input input-lite max-w-48 shrink-0"
-                    value={systemGroups[system.slug] ?? ''}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setSystemGroups((current) => {
-                        const next = { ...current };
-                        if (value === 'retro' || value === 'modern') {
-                          next[system.slug] = value;
-                        } else {
-                          delete next[system.slug];
-                        }
-                        return next;
-                      });
-                    }}
+                  {intl.formatMessage(messages.assignAllRetro)}
+                </Button>
+                <Button
+                  buttonType="default"
+                  buttonSize="sm"
+                  disabled={saving}
+                  onClick={() => assignAllSystems('modern')}
+                >
+                  {intl.formatMessage(messages.assignAllModern)}
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+                {systemsData.results.map((system) => (
+                  <label
+                    key={system.slug}
+                    className="flex min-w-0 items-center justify-between gap-3 text-sm text-gray-200"
                   >
-                    <option value="">
-                      {intl.formatMessage(messages.unassigned)}
-                    </option>
-                    <option value="retro">
-                      {intl.formatMessage(messages.retro)}
-                    </option>
-                    <option value="modern">
-                      {intl.formatMessage(messages.modern)}
-                    </option>
-                  </select>
-                </label>
-              ))}
-            </div>
+                    <span className="truncate" title={system.name}>
+                      {system.name}
+                    </span>
+                    <select
+                      className="input input-lite max-w-48 shrink-0"
+                      value={systemGroups[system.slug] ?? ''}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setSystemGroups((current) => {
+                          const next = { ...current };
+                          if (value === 'retro' || value === 'modern') {
+                            next[system.slug] = value;
+                          } else {
+                            delete next[system.slug];
+                          }
+                          return next;
+                        });
+                      }}
+                    >
+                      <option value="">
+                        {intl.formatMessage(messages.unassigned)}
+                      </option>
+                      <option value="retro">
+                        {intl.formatMessage(messages.retro)}
+                      </option>
+                      <option value="modern">
+                        {intl.formatMessage(messages.modern)}
+                      </option>
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </>
           ) : (
             <p className="text-sm text-gray-400">
               {intl.formatMessage(messages.configureRomarr)}

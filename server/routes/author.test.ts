@@ -15,7 +15,7 @@ import MediaIdentifier, {
 } from '@server/entity/MediaIdentifier';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
-import { getSettings } from '@server/lib/settings';
+import { getSettings, type ReadarrSettings } from '@server/lib/settings';
 import { checkUser } from '@server/middleware/auth';
 import { setupTestDb } from '@server/test/db';
 import { makeBookshelfAuthorId } from '@server/utils/bookshelfCatalog';
@@ -282,7 +282,7 @@ describe('GET /author/:id/works', () => {
         useSsl: false,
         baseUrl: '',
         serviceType: 'ebook',
-      },
+      } as ReadarrSettings,
     ];
     mock.method(ReadarrAPI.prototype, 'lookupAuthor', async () => [
       { foreignAuthorId: 'tolkien', authorName: 'J.R.R. Tolkien' },

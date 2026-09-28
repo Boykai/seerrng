@@ -58,6 +58,7 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
 - Admin-configured Prowlarr connection, category coverage, and manual indexer search across movies, TV, music, books, comics, magazines, ROMs, and PC games; approved requests still go through their configured acquisition providers.
 - Music discovery and metadata through MusicBrainz, ListenBrainz, Cover Art Archive, TheAudioDB, and archive-backed artwork sources.
 - Book discovery and identity matching through Open Library, ISBN-10/ISBN-13 normalization, foreign book IDs, and edition IDs.
+- Audiobook discovery from connected audiobook catalogs, with author and narrator filtering and no ebook-only search results.
 - Comic discovery through ComicVine and magazine discovery through Google Books or LazyLibrarian, with Mylar3/Kapowarr and LazyLibrarian handling acquisition.
 - Separate ebook and audiobook service routing so both formats can be requested, approved, scanned, retried, and removed independently.
 - One BookshelfNG instance can manage both formats on the same book record.

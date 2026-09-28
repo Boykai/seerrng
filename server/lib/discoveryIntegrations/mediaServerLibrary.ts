@@ -36,6 +36,9 @@ export interface NativeLibraryConnection {
 
 const PAGE_SIZE = 20;
 const MAX_PAGE = 500;
+const PROVIDER_SCAN_SIZE = 100;
+const MAX_SCAN_ITEMS_PER_REQUEST = 2_000;
+export const MAX_NATIVE_LIBRARY_CURSOR = 100_000;
 const cacheFlights = new Map<string, Promise<unknown>>();
 
 const sourceForConfiguredServer = (): NativeLibrarySource | undefined => {
@@ -99,9 +102,13 @@ const plexItem = (item: PlexLibraryItem): PersonalLibraryItem | undefined => {
   const progress = item.type === 'show' ? (item.viewedLeafCount ?? 0) : 0;
   const status: PersonalLibraryItem['status'] = watched
     ? 'completed'
-    : item.type === 'show' && progress > 0
-      ? 'watching'
-      : 'unwatched';
+    : item.type === 'movie'
+      ? (item.viewOffset ?? 0) > 0
+        ? 'watching'
+        : 'unwatched'
+      : progress > 0
+        ? 'watching'
+        : 'unwatched';
   return {
     id: `plex:${mediaType}:${item.ratingKey}`,
     source: 'plex',
@@ -194,18 +201,87 @@ const cachedPersonalRead = async <T>(
   }
 };
 
-const validateShelfAndPage = (shelf: LibraryShelf, page: number) => {
+const validateShelfAndPage = (
+  shelf: LibraryShelf,
+  page: number,
+  cursor?: number
+) => {
   if (
     !['all', 'watched', 'unwatched', 'in-progress'].includes(shelf) ||
     !Number.isSafeInteger(page) ||
     page < 1 ||
-    page > MAX_PAGE
+    page > MAX_PAGE ||
+    (cursor !== undefined &&
+      (!Number.isSafeInteger(cursor) ||
+        cursor < 0 ||
+        cursor > MAX_NATIVE_LIBRARY_CURSOR))
   ) {
     throw new DiscoveryIntegrationError(
       400,
       'Choose a valid media library shelf and page.'
     );
   }
+};
+
+const collectInProgressPage = async <T>(
+  startOffset: number,
+  fetchBatch: (
+    offset: number,
+    size: number
+  ) => Promise<{ items: T[]; total: number }>,
+  normalize: (item: T) => PersonalLibraryItem | undefined
+) => {
+  const items: PersonalLibraryItem[] = [];
+  const stopOffset = Math.min(
+    MAX_NATIVE_LIBRARY_CURSOR,
+    startOffset + MAX_SCAN_ITEMS_PER_REQUEST
+  );
+  let offset = startOffset;
+  let nextCursor = startOffset;
+  let total = MAX_NATIVE_LIBRARY_CURSOR;
+  let providerTotalExceedsCursor = false;
+  let foundLookahead = false;
+
+  while (offset < total && offset < stopOffset) {
+    const size = Math.min(PROVIDER_SCAN_SIZE, stopOffset - offset);
+    const batch = await fetchBatch(offset, size);
+    const providerTotal = Number.isSafeInteger(batch.total)
+      ? Math.max(0, batch.total)
+      : 0;
+    providerTotalExceedsCursor ||= providerTotal > MAX_NATIVE_LIBRARY_CURSOR;
+    total = Math.min(MAX_NATIVE_LIBRARY_CURSOR, providerTotal);
+    if (!batch.items.length) break;
+
+    const inspectedItems = batch.items.slice(0, size);
+    for (let index = 0; index < inspectedItems.length; index += 1) {
+      const item = normalize(inspectedItems[index]);
+      if (item?.status !== 'watching') continue;
+      if (items.length === PAGE_SIZE) {
+        foundLookahead = true;
+        break;
+      }
+      items.push(item);
+      nextCursor = offset + index + 1;
+    }
+    if (foundLookahead) break;
+    offset += inspectedItems.length;
+  }
+
+  const cursorLimitReached =
+    providerTotalExceedsCursor && offset >= MAX_NATIVE_LIBRARY_CURSOR;
+  const truncated =
+    (offset >= stopOffset && (offset < total || providerTotalExceedsCursor)) ||
+    cursorLimitReached;
+  return {
+    items,
+    total,
+    hasMore: foundLookahead || (truncated && !cursorLimitReached),
+    // If we stopped because the scan budget ran out, continue from the end
+    // of the inspected batch. Otherwise resume immediately after the final
+    // visible match so the lookahead item appears on the following page.
+    nextCursor: truncated ? offset : foundLookahead ? nextCursor : offset,
+    truncated,
+  };
 };
 
 export async function getNativeLibraryConnection(
@@ -244,9 +320,10 @@ export async function personalMediaServerLibrary(
   source: NativeLibrarySource,
   shelf: LibraryShelf,
   page: number,
-  requestedLibraryId?: string
+  requestedLibraryId?: string,
+  requestedCursor?: number
 ) {
-  validateShelfAndPage(shelf, page);
+  validateShelfAndPage(shelf, page, requestedCursor);
   if (
     requestedLibraryId !== undefined &&
     (typeof requestedLibraryId !== 'string' ||
@@ -317,12 +394,16 @@ export async function personalMediaServerLibrary(
     const credential =
       source === 'plex' ? user!.plexToken! : user!.jellyfinAuthToken!;
     const cacheScope = [source, userId, credential, host, configuredLibraries];
-    const cacheOperation = [requestedLibraryId ?? '', shelf, page];
+    const offset = requestedCursor ?? (page - 1) * PAGE_SIZE;
+    const cacheOperation = [requestedLibraryId ?? '', shelf, page, offset];
 
     return cachedPersonalRead(cacheScope, cacheOperation, async () => {
       let libraries: NativeLibraryOption[];
       let items: PersonalLibraryItem[] = [];
       let total = 0;
+      let hasMore = false;
+      let nextCursor = offset;
+      let truncated = false;
 
       if (source === 'plex') {
         const api = new PlexAPI({
@@ -345,16 +426,39 @@ export async function personalMediaServerLibrary(
           if (!library) {
             throw new DiscoveryIntegrationError(404, 'Library not found.');
           }
-          const result = await api.getLibraryContents(library.id, {
-            offset: (page - 1) * PAGE_SIZE,
-            size: PAGE_SIZE,
-            libraryType: library.type,
-          });
-          total = result.totalSize;
-          items = result.items.flatMap((entry) => {
-            const item = plexItem(entry);
-            return item && statusMatchesShelf(item, shelf) ? [item] : [];
-          });
+          if (shelf === 'in-progress') {
+            const result = await collectInProgressPage(
+              offset,
+              async (batchOffset, size) => {
+                const batch = await api.getLibraryContents(library.id, {
+                  offset: batchOffset,
+                  size,
+                  libraryType: library.type,
+                });
+                return { items: batch.items, total: batch.totalSize };
+              },
+              plexItem
+            );
+            ({ items, total, hasMore, nextCursor, truncated } = result);
+          } else {
+            const result = await api.getLibraryContents(library.id, {
+              offset,
+              size: PAGE_SIZE,
+              libraryType: library.type,
+              ...(shelf === 'watched'
+                ? { isWatched: true }
+                : shelf === 'unwatched'
+                  ? { isWatched: false }
+                  : {}),
+            });
+            total = result.totalSize;
+            items = result.items.flatMap((entry) => {
+              const item = plexItem(entry);
+              return item && statusMatchesShelf(item, shelf) ? [item] : [];
+            });
+            nextCursor = offset + PAGE_SIZE;
+            hasMore = nextCursor < total;
+          }
         }
       } else {
         const api = new JellyfinAPI(
@@ -378,37 +482,62 @@ export async function personalMediaServerLibrary(
           if (!library) {
             throw new DiscoveryIntegrationError(404, 'Library not found.');
           }
-          const result = await api.getUserLibraryContents(
-            library.id,
-            library.type,
-            {
-              offset: (page - 1) * PAGE_SIZE,
-              size: PAGE_SIZE,
-              ...(shelf === 'watched'
-                ? { isPlayed: true }
-                : shelf === 'unwatched'
-                  ? { isPlayed: false }
-                  : {}),
-            }
-          );
-          total = result.TotalRecordCount;
-          items = result.Items.flatMap((entry) => {
-            const item = jellyfinItem(entry, source);
-            return item && statusMatchesShelf(item, shelf) ? [item] : [];
-          });
+          if (shelf === 'in-progress') {
+            const result = await collectInProgressPage(
+              offset,
+              async (batchOffset, size) => {
+                const batch = await api.getUserLibraryContents(
+                  library.id,
+                  library.type,
+                  {
+                    offset: batchOffset,
+                    size,
+                    isPlayed: false,
+                  }
+                );
+                return {
+                  items: batch.Items,
+                  total: batch.TotalRecordCount,
+                };
+              },
+              (entry) => jellyfinItem(entry, source)
+            );
+            ({ items, total, hasMore, nextCursor, truncated } = result);
+          } else {
+            const result = await api.getUserLibraryContents(
+              library.id,
+              library.type,
+              {
+                offset,
+                size: PAGE_SIZE,
+                ...(shelf === 'watched'
+                  ? { isPlayed: true }
+                  : shelf === 'unwatched'
+                    ? { isPlayed: false }
+                    : {}),
+              }
+            );
+            total = result.TotalRecordCount;
+            items = result.Items.flatMap((entry) => {
+              const item = jellyfinItem(entry, source);
+              return item && statusMatchesShelf(item, shelf) ? [item] : [];
+            });
+            nextCursor = offset + PAGE_SIZE;
+            hasMore = nextCursor < total;
+          }
         }
       }
 
-      const hasMore = page * PAGE_SIZE < total;
       return {
         items,
         libraries,
         page,
         total,
         hasMore: hasMore && page < MAX_PAGE,
+        nextCursor,
         allowWrites: false,
         missingMappings: items.filter((item) => !item.tmdbId).length,
-        truncated: hasMore && page === MAX_PAGE,
+        truncated: truncated || (hasMore && page === MAX_PAGE),
       };
     });
   });
