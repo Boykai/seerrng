@@ -428,6 +428,133 @@ describe('software request routes', () => {
     assert.strictEqual(invalid.status, 400);
   });
 
+  it('keeps recent console generations distinct in the modern catalog', async () => {
+    const systems = [
+      { slug: 'ps4', name: 'PlayStation 4', aliases: [], id: 48 },
+      { slug: 'ps5', name: 'PlayStation 5', aliases: [], id: 167 },
+      { slug: 'xboxone', name: 'Xbox One', aliases: [], id: 49 },
+      {
+        slug: 'series-x-s',
+        name: 'Xbox Series X/S',
+        aliases: ['Xbox Series X|S'],
+        id: 169,
+      },
+    ];
+    for (const system of systems) {
+      getSettings().softwareAcquisition.emulationSystemGroups[system.slug] =
+        'modern';
+    }
+    mock.method(ROMarrNGAPI.prototype, 'getPlatforms', async () =>
+      systems.map((system) => ({
+        ...system,
+        media: 'package',
+        extensions: ['.pkg'],
+        max_size_mb: 524288,
+      }))
+    );
+    const platforms = systems.map((system) => ({
+      id: system.id,
+      name: system.aliases[0] ?? system.name,
+    }));
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      ...platforms,
+      { id: 9, name: 'PlayStation 3' },
+      { id: 12, name: 'Xbox 360' },
+      { id: 6, name: 'PC (Microsoft Windows)' },
+    ]);
+    const search = mock.method(
+      QuestarrNGAPI.prototype,
+      'searchCatalogPage',
+      async () => ({
+        results: systems.map((system, index) => ({
+          ...pcGame,
+          igdbId: 200 + index,
+          platforms: [platforms[index].name],
+          platformOptions: [platforms[index]],
+        })),
+        nextCursor: null,
+      })
+    );
+    const response = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'modern', q: 'Test Game' });
+    assert.strictEqual(response.status, 200);
+    assert.deepStrictEqual(
+      search.mock.calls[0].arguments[3],
+      systems.map((system) => system.id)
+    );
+    assert.deepStrictEqual(
+      response.body.results.map(
+        (game: { emulationSystems: { slug: string }[] }) =>
+          game.emulationSystems.map((system) => system.slug)
+      ),
+      systems.map((system) => [system.slug])
+    );
+  });
+
+  it('preserves each recent-console target through approval and dispatch', async () => {
+    const systems = [
+      { slug: 'ps4', name: 'PlayStation 4', id: 48 },
+      { slug: 'ps5', name: 'PlayStation 5', id: 167 },
+      { slug: 'xboxone', name: 'Xbox One', id: 49 },
+      { slug: 'series-x-s', name: 'Xbox Series X/S', id: 169 },
+    ];
+    for (const system of systems) {
+      getSettings().softwareAcquisition.emulationSystemGroups[system.slug] =
+        'modern';
+    }
+    mock.method(ROMarrNGAPI.prototype, 'getPlatforms', async () =>
+      systems.map((system) => ({
+        ...system,
+        media: 'package',
+        extensions: ['.pkg'],
+        max_size_mb: 524288,
+      }))
+    );
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogGame', async () => ({
+      ...pcGame,
+      platformOptions: systems.map(({ id, name }) => ({ id, name })),
+    }));
+    mock.method(ROMarrNGAPI.prototype, 'getRequest', async () => {
+      throw Object.assign(new Error('Request not found.'), {
+        response: { status: 404 },
+      });
+    });
+    const dispatched: { externalRequestId: string; platform: string }[] = [];
+    mock.method(
+      ROMarrNGAPI.prototype,
+      'createRequest',
+      async (externalRequestId: string, _title: string, platform: string) => {
+        dispatched.push({ externalRequestId, platform });
+        return acceptedRequest(externalRequestId);
+      }
+    );
+    for (const system of systems) {
+      const created = await request(createApp())
+        .post('/request/software')
+        .send({
+          category: 'modern',
+          catalogId: pcGame.igdbId,
+          platformSlug: system.slug,
+        });
+      assert.strictEqual(created.status, 201);
+      const saved = await getRepository(SoftwareRequest).findOneByOrFail({
+        id: created.body.request.id,
+      });
+      assert.strictEqual(saved.provider, 'romarr');
+      assert.strictEqual(saved.platformSlug, system.slug);
+      assert.strictEqual(saved.platformId, system.id);
+      const approved = await request(
+        createApp(1, Permission.MANAGE_REQUESTS)
+      ).post(`/request/software/status/${saved.id}/approve`);
+      assert.strictEqual(approved.status, 200);
+      assert.deepStrictEqual(dispatched.at(-1), {
+        externalRequestId: saved.externalRequestId,
+        platform: system.slug,
+      });
+    }
+  });
+
   it('maps ROMarr aliases into the assigned emulation catalog', async () => {
     mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
       { id: 130, name: 'Nintendo Entertainment System' },

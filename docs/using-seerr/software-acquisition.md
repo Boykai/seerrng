@@ -94,6 +94,27 @@ matching titles are available. Opening a preview takes you to the title's
 shareable detail view.
 
 Within Retro or Modern, select a supported emulation system to show its games.
+Updated ROMarrNG builds include PS4 (`ps4`), PS5 (`ps5`), PlayStation Vita
+(`psvita`), Xbox One (`xboxone`), and Xbox Series X/S (`series-x-s`). Assign
+these systems to Modern in administrator settings before browsing them. Their
+catalogs use the same paged discovery, artwork cache, requests and status
+tracking as other emulation systems.
+
+Acquisition depends on releases provided by your configured indexers. PS4/PS5
+accept console packages or complete folder dumps; Vita accepts VPK packages or
+complete dumps; recent Xbox systems accept XVC console packages. A PC MSIXVC
+package is not an Xbox console package. Recent-console releases must name the
+target console explicitly so shared package formats do not select another
+generation. This does not install emulators, decrypt packages, satisfy firmware
+requirements, or establish that a particular game can run.
+
+Folder dumps keep their complete directory tree. Request Status offers them as
+one streamed TAR download, including games with more than 100 files. Individual
+file downloads retain byte-range support; generated TAR bundles require a fresh
+download after interruption. ROMarrNG refuses to offer a truncated bundle when
+a game exceeds its 10,000-file or directory traversal limits. Library
+availability and downloadable-file availability remain separate in that case.
+
 Within PC Games, select Windows, Linux, or macOS to narrow the catalog. The PC
 platform choice is preselected when opening a request and can still be changed
 before submission.
