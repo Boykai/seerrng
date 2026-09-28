@@ -3,7 +3,6 @@ import MusicRatings from '@app/components/MediaDetails/MusicRatings';
 import OpenLibraryRating from '@app/components/MediaDetails/OpenLibraryRating';
 import { getCollectionMemberRatings } from '@app/utils/collectionRatings';
 import type { OpenLibraryWorkRatingResponse } from '@server/api/openlibrary';
-import type { RTRating } from '@server/api/rating/rottentomatoes';
 import type { RatingResponse } from '@server/api/ratings';
 import type { MusicRatingResponse } from '@server/models/Music';
 import { useCallback, useEffect, useState, type RefObject } from 'react';
@@ -69,8 +68,8 @@ export default function PosterRatingPopover({
       mediaType === 'movie' ? '/api/v1/movie/' + id + '/ratingscombined' : null,
       { revalidateOnFocus: false }
     );
-  const { data: tvRating, isValidating: tvLoading } = useSWR<RTRating>(
-    mediaType === 'tv' ? '/api/v1/tv/' + id + '/ratings' : null,
+  const { data: tvRatings, isValidating: tvLoading } = useSWR<RatingResponse>(
+    mediaType === 'tv' ? '/api/v1/tv/' + id + '/ratingscombined' : null,
     { revalidateOnFocus: false }
   );
   const { data: musicRatings, isValidating: musicLoading } =
@@ -98,7 +97,7 @@ export default function PosterRatingPopover({
             voteAverage: userScore ?? 0,
             voteCount: voteCount ?? 0,
           },
-          mediaType === 'movie' ? movieRatings : { rt: tvRating }
+          mediaType === 'movie' ? movieRatings : tvRatings
         )
           .map((rating) =>
             rating.source === 'tmdb' && mediaType === 'tv'

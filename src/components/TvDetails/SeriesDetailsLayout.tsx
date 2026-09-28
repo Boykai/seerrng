@@ -2,6 +2,7 @@ import RTAudFresh from '@app/assets/rt_aud_fresh.svg';
 import RTAudRotten from '@app/assets/rt_aud_rotten.svg';
 import RTFresh from '@app/assets/rt_fresh.svg';
 import RTRotten from '@app/assets/rt_rotten.svg';
+import ImdbLogo from '@app/assets/services/imdb.svg';
 import TmdbLogo from '@app/assets/tmdb_logo.svg';
 import CollectionNavigation from '@app/components/CollectionDetails/CollectionNavigation';
 import CachedImage from '@app/components/Common/CachedImage';
@@ -11,6 +12,7 @@ import WatchedBadge from '@app/components/Common/WatchedBadge';
 import AvailabilityValue from '@app/components/MediaDetails/AvailabilityValue';
 import DetailDisclosureButton from '@app/components/MediaDetails/DetailDisclosureButton';
 import ExpandableCreditList from '@app/components/MediaDetails/ExpandableCreditList';
+import MdblistRatingBadges from '@app/components/MediaDetails/MdblistRatingBadges';
 import MediaDetailArtwork from '@app/components/MediaDetails/MediaDetailArtwork';
 import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
 import SeriesSeasonEpisodeBrowser from '@app/components/MediaDetails/SeriesSeasonEpisodeBrowser';
@@ -24,7 +26,8 @@ import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
 import { resolveCanonicalPlaybackSelection } from '@app/utils/playbackSelection';
 import { getSafeHref } from '@app/utils/safeUrl';
-import type { RTRating } from '@server/api/rating/rottentomatoes';
+import { getEffectiveVideoRatings } from '@app/utils/videoRatings';
+import type { RatingResponse } from '@server/api/ratings';
 import { MediaStatus } from '@server/constants/media';
 import type { TvDetails } from '@server/models/Tv';
 import Link from 'next/link';
@@ -67,13 +70,15 @@ const messages = defineMessages('components.TvDetails.Layout', {
   similar: 'Similar Series',
   rtCriticsScore: 'Rotten Tomatoes Tomatometer',
   rtAudienceScore: 'Rotten Tomatoes Audience Score',
+  imdbUserScore: 'IMDb user score – votes: {formattedCount}',
+  imdbScore: 'IMDb user score',
   tmdbUserScore: 'TMDB User Score',
   quality: 'Quality',
 });
 
 interface SeriesDetailsLayoutProps {
   data: TvDetails;
-  ratingData?: RTRating;
+  ratingData?: RatingResponse;
   sortedCrew: TvDetails['credits']['crew'];
   show4kAvailability: boolean;
   visibleSeasons: TvDetails['seasons'];
@@ -119,6 +124,7 @@ const SeriesDetailsLayout = ({
 }: SeriesDetailsLayoutProps) => {
   const intl = useIntl();
   const { locale } = useLocale();
+  const effectiveRatings = getEffectiveVideoRatings(ratingData);
   const { data: watchedStatus } = useWatchStatus(
     'tv',
     data.id,
@@ -455,8 +461,11 @@ const SeriesDetailsLayout = ({
           />
 
           {(playbackActions ||
-            ratingData?.criticsScore !== undefined ||
-            ratingData?.audienceScore !== undefined ||
+            effectiveRatings.rtCriticsScore !== undefined ||
+            effectiveRatings.rtAudienceScore !== undefined ||
+            effectiveRatings.imdbScore !== undefined ||
+            ratingData?.mdblist?.metacriticRating !== undefined ||
+            ratingData?.mdblist?.traktRating !== undefined ||
             data.voteCount > 0) && (
             <div className="media-rating-row">
               <MediaQualitySelect
@@ -491,50 +500,81 @@ const SeriesDetailsLayout = ({
                   is4k={effectiveSelectedQuality === '4k'}
                 />
               )}
-              {ratingData?.criticsRating &&
-                typeof ratingData.criticsScore === 'number' && (
+              {effectiveRatings.rtCriticsRating !== undefined &&
+                effectiveRatings.rtCriticsScore !== undefined && (
                   <Tooltip
                     content={intl.formatMessage(messages.rtCriticsScore)}
                   >
                     <a
-                      href={getSafeHref(ratingData.url)}
+                      href={getSafeHref(effectiveRatings.rtUrl)}
                       target="_blank"
                       rel="noreferrer"
                       className="media-rating-link"
                     >
-                      {ratingData.criticsRating === 'Rotten' ? (
+                      {effectiveRatings.rtCriticsRating === 'Rotten' ? (
                         <RTRotten className="media-rating-icon" />
                       ) : (
                         <RTFresh className="media-rating-icon" />
                       )}
                       <span className="media-rating-value">
-                        {ratingData.criticsScore}%
+                        {effectiveRatings.rtCriticsScore}%
                       </span>
                     </a>
                   </Tooltip>
                 )}
-              {ratingData?.audienceRating &&
-                typeof ratingData.audienceScore === 'number' && (
+              {effectiveRatings.rtAudienceRating !== undefined &&
+                effectiveRatings.rtAudienceScore !== undefined && (
                   <Tooltip
                     content={intl.formatMessage(messages.rtAudienceScore)}
                   >
                     <a
-                      href={getSafeHref(ratingData.url)}
+                      href={getSafeHref(effectiveRatings.rtUrl)}
                       target="_blank"
                       rel="noreferrer"
                       className="media-rating-link"
                     >
-                      {ratingData.audienceRating === 'Spilled' ? (
+                      {effectiveRatings.rtAudienceRating === 'Spilled' ? (
                         <RTAudRotten className="media-rating-icon media-rating-icon-audience" />
                       ) : (
                         <RTAudFresh className="media-rating-icon media-rating-icon-audience" />
                       )}
                       <span className="media-rating-value">
-                        {ratingData.audienceScore}%
+                        {effectiveRatings.rtAudienceScore}%
                       </span>
                     </a>
                   </Tooltip>
                 )}
+              {effectiveRatings.imdbScore !== undefined && (
+                <Tooltip
+                  content={
+                    effectiveRatings.imdbVotes
+                      ? intl.formatMessage(messages.imdbUserScore, {
+                          formattedCount: intl.formatNumber(
+                            effectiveRatings.imdbVotes,
+                            {
+                              notation: 'compact',
+                              compactDisplay: 'short',
+                              maximumFractionDigits: 1,
+                            }
+                          ),
+                        })
+                      : intl.formatMessage(messages.imdbScore)
+                  }
+                >
+                  <a
+                    href={getSafeHref(effectiveRatings.imdbUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="media-rating-link"
+                  >
+                    <ImdbLogo className="media-rating-wordmark" />
+                    <span className="media-rating-value">
+                      {effectiveRatings.imdbScore.toFixed(1)}
+                    </span>
+                  </a>
+                </Tooltip>
+              )}
+              <MdblistRatingBadges ratings={ratingData?.mdblist} />
               {data.voteCount > 0 && (
                 <Tooltip content={intl.formatMessage(messages.tmdbUserScore)}>
                   <a

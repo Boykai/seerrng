@@ -25,7 +25,7 @@ export default function useAssociationRatings(node: AssociationNode) {
   }, [node.id, node.mediaType]);
   const videoKey =
     visible && node.mediaType === 'tv'
-      ? '/api/v1/tv/' + encodeURIComponent(String(node.id)) + '/ratings'
+      ? '/api/v1/tv/' + encodeURIComponent(String(node.id)) + '/ratingscombined'
       : null;
   const albumKey =
     visible && node.mediaType === 'album'

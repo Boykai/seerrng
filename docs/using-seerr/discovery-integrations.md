@@ -8,7 +8,11 @@ a tracker does not enable signing in to SeerrNG with that tracker.
 
 Open **Settings → Discovery Integrations** as an administrator. Configure the
 application Client ID and secret for Trakt or AniList, the application Client ID
-for Simkl, and an API key for MDBList. AniList uses its PIN authorization redirect:
+for Simkl, and an API key for MDBList. The MDBList key also enables optional
+aggregated ratings on movie and series details, poster rating popovers, and
+collection averages. SeerrNG uses MDBList values where direct Rotten Tomatoes or
+IMDb ratings are missing and adds Metacritic and Trakt scores; an MDBList outage
+does not hide ratings from other sources. AniList uses its PIN authorization redirect:
 `https://anilist.co/api/v2/oauth/pin`.
 
 Secrets are hidden after saving. Editing only one field retains the other saved

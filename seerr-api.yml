@@ -54,6 +54,99 @@ servers:
 
 components:
   schemas:
+    MediaRatings:
+      type: object
+      properties:
+        rt:
+          type: object
+          properties:
+            title:
+              type: string
+            year:
+              type: number
+            url:
+              type: string
+            criticsScore:
+              type: number
+            criticsRating:
+              type: string
+              enum: ['Rotten', 'Fresh', 'Certified Fresh']
+            audienceScore:
+              type: number
+            audienceRating:
+              type: string
+              enum: ['Spilled', 'Upright']
+        imdb:
+          type: object
+          properties:
+            title:
+              type: string
+            url:
+              type: string
+            criticsScore:
+              type: number
+            criticsScoreCount:
+              type: integer
+        mdblist:
+          type: object
+          properties:
+            imdbId:
+              type: string
+            imdbRating:
+              type: number
+            imdbVotes:
+              type: integer
+            rtRating:
+              type: number
+            rtUserRating:
+              type: number
+            metacriticRating:
+              type: number
+            traktRating:
+              type: number
+            traktVotes:
+              type: integer
+            tmdbRating:
+              type: number
+    MdblistRatingBatchRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - ids
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: integer
+            minimum: 1
+            maximum: 1000000000
+    MdblistRatings:
+      type: object
+      properties:
+        imdbId:
+          type: string
+        imdbRating:
+          type: number
+        imdbVotes:
+          type: integer
+        rtRating:
+          type: number
+        rtUserRating:
+          type: number
+        metacriticRating:
+          type: number
+        traktRating:
+          type: number
+        traktVotes:
+          type: integer
+        tmdbRating:
+          type: number
+    MdblistRatingsBatchResponse:
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/MdblistRatings'
     QueueIntervention:
       type: object
       additionalProperties: false
@@ -13206,10 +13299,33 @@ paths:
                   audienceRating:
                     type: string
                     enum: ['Spilled', 'Upright']
+  /movie/ratings/mdblist/batch:
+    post:
+      summary: Get MDBList movie ratings for a batch
+      description: Looks up MDBList ratings for up to 200 TMDB movie IDs and primes the shared title-rating cache.
+      tags:
+        - movies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MdblistRatingBatchRequest'
+      responses:
+        '200':
+          description: Available ratings keyed by TMDB movie ID. Titles without ratings are omitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MdblistRatingsBatchResponse'
+        '400':
+          description: The batch contains invalid TMDB IDs.
+        '502':
+          description: MDBList ratings are temporarily unavailable.
   /movie/{movieId}/ratingscombined:
     get:
-      summary: Get RT and IMDB movie ratings combined
-      description: Returns ratings from RottenTomatoes and IMDB based on the provided movieId in a JSON object.
+      summary: Get combined movie ratings
+      description: Returns available Rotten Tomatoes, IMDb, and MDBList ratings for the provided movieId. MDBList is optional and best-effort.
       tags:
         - movies
       parameters:
@@ -13225,44 +13341,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  rt:
-                    type: object
-                    properties:
-                      title:
-                        type: string
-                        example: Mulan
-                      year:
-                        type: number
-                        example: 2020
-                      url:
-                        type: string
-                        example: 'http://www.rottentomatoes.com/m/mulan_2020/'
-                      criticsScore:
-                        type: number
-                        example: 85
-                      criticsRating:
-                        type: string
-                        enum: ['Rotten', 'Fresh', 'Certified Fresh']
-                      audienceScore:
-                        type: number
-                        example: 65
-                      audienceRating:
-                        type: string
-                        enum: ['Spilled', 'Upright']
-                  imdb:
-                    type: object
-                    properties:
-                      title:
-                        type: string
-                        example: I am Legend
-                      url:
-                        type: string
-                        example: 'https://www.imdb.com/title/tt0480249'
-                      criticsScore:
-                        type: number
-                        example: 6.5
+                $ref: '#/components/schemas/MediaRatings'
   /tv/{tvId}:
     get:
       summary: Get TV details
@@ -13499,6 +13578,49 @@ paths:
                   criticsRating:
                     type: string
                     enum: ['Rotten', 'Fresh']
+  /tv/ratings/mdblist/batch:
+    post:
+      summary: Get MDBList TV ratings for a batch
+      description: Looks up MDBList ratings for up to 200 TMDB series IDs and primes the shared title-rating cache.
+      tags:
+        - tv
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MdblistRatingBatchRequest'
+      responses:
+        '200':
+          description: Available ratings keyed by TMDB series ID. Titles without ratings are omitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MdblistRatingsBatchResponse'
+        '400':
+          description: The batch contains invalid TMDB IDs.
+        '502':
+          description: MDBList ratings are temporarily unavailable.
+  /tv/{tvId}/ratingscombined:
+    get:
+      summary: Get combined TV ratings
+      description: Returns available Rotten Tomatoes and MDBList ratings for the provided tvId. MDBList is optional and best-effort.
+      tags:
+        - tv
+      parameters:
+        - in: path
+          name: tvId
+          required: true
+          schema:
+            type: number
+            example: 76479
+      responses:
+        '200':
+          description: Ratings returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaRatings'
   /person/{personId}:
     get:
       summary: Get person details

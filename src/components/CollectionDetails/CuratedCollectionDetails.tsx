@@ -396,15 +396,13 @@ export default function CuratedCollectionDetails({
         voteCount: part.voteCount ?? 0,
       },
       members?.find((member) => member.id === part.id)?.ratings
-    )
-      .filter((rating) => rating.source !== 'imdb')
-      .map((rating) =>
-        rating.source === 'tmdb'
-          ? { ...rating, href: `https://www.themoviedb.org/tv/${part.id}` }
-          : rating
-      );
+    ).map((rating) =>
+      rating.source === 'tmdb'
+        ? { ...rating, href: `https://www.themoviedb.org/tv/${part.id}` }
+        : rating
+    );
   const averages: CollectionRating[] = (
-    ['critics', 'audience', 'tmdb'] as const
+    ['critics', 'audience', 'imdb', 'metacritic', 'trakt', 'tmdb'] as const
   ).map((source) => {
     const values = parts.flatMap((part) =>
       memberRatings(part)

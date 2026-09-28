@@ -3,6 +3,7 @@ import RTAudRotten from '@app/assets/rt_aud_rotten.svg';
 import RTFresh from '@app/assets/rt_fresh.svg';
 import RTRotten from '@app/assets/rt_rotten.svg';
 import ImdbLogo from '@app/assets/services/imdb.svg';
+import TraktLogo from '@app/assets/services/trakt.svg';
 import TmdbLogo from '@app/assets/tmdb_logo.svg';
 import Tooltip from '@app/components/Common/Tooltip';
 import type { CollectionRating } from '@app/utils/collectionRatings';
@@ -14,6 +15,8 @@ const messages = defineMessages('components.CollectionRatings', {
   critics: 'Rotten Tomatoes critics',
   audience: 'Rotten Tomatoes audience',
   imdb: 'IMDb',
+  metacritic: 'Metacritic',
+  trakt: 'Trakt',
   tmdb: 'TMDB',
   average:
     '{source}: average of {count} rated titles out of {total}. Missing ratings are excluded.',
@@ -58,23 +61,38 @@ const CollectionRatings = ({
                 : RTAudFresh
               : rating.source === 'imdb'
                 ? ImdbLogo
-                : TmdbLogo;
+                : rating.source === 'trakt'
+                  ? TraktLogo
+                  : rating.source === 'tmdb'
+                    ? TmdbLogo
+                    : undefined;
         const content = (
           <>
-            <Icon
-              aria-hidden="true"
-              className={
-                rating.source === 'imdb' || rating.source === 'tmdb'
-                  ? 'media-rating-wordmark'
-                  : 'media-rating-icon'
-              }
-            />
+            {rating.source === 'metacritic' ? (
+              <span
+                className="media-rating-brand media-rating-brand-metacritic"
+                aria-hidden="true"
+              >
+                MC
+              </span>
+            ) : Icon ? (
+              <Icon
+                aria-hidden="true"
+                className={
+                  rating.source === 'imdb' ||
+                  rating.source === 'tmdb' ||
+                  rating.source === 'trakt'
+                    ? 'media-rating-wordmark'
+                    : 'media-rating-icon'
+                }
+              />
+            ) : null}
             <span className="media-rating-value">
               {loading
                 ? '…'
                 : value === undefined
                   ? '—'
-                  : rating.source === 'imdb'
+                  : rating.source === 'imdb' || rating.source === 'trakt'
                     ? value.toFixed(1)
                     : `${Math.round(value)}%`}
             </span>

@@ -8,6 +8,7 @@ import CollectionSummaryCard from '@app/components/CollectionDetails/CollectionS
 import Tooltip from '@app/components/Common/Tooltip';
 import DetailDisclosureButton from '@app/components/MediaDetails/DetailDisclosureButton';
 import ExpandableCreditList from '@app/components/MediaDetails/ExpandableCreditList';
+import MdblistRatingBadges from '@app/components/MediaDetails/MdblistRatingBadges';
 import MediaDetailArtwork from '@app/components/MediaDetails/MediaDetailArtwork';
 import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
 import MovieSummaryCard from '@app/components/MediaDetails/MovieSummaryCard';
@@ -18,6 +19,7 @@ import useLocale from '@app/hooks/useLocale';
 import useWatchStatus from '@app/hooks/useWatchStatus';
 import defineMessages from '@app/utils/defineMessages';
 import { getSafeHref } from '@app/utils/safeUrl';
+import { getEffectiveVideoRatings } from '@app/utils/videoRatings';
 import type { RatingResponse } from '@server/api/ratings';
 import { MediaStatus } from '@server/constants/media';
 import type { MovieDetails } from '@server/models/Movie';
@@ -61,6 +63,7 @@ const messages = defineMessages('components.MovieDetails.Layout', {
   rtCriticsScore: 'Rotten Tomatoes Tomatometer',
   rtAudienceScore: 'Rotten Tomatoes Audience Score',
   imdbUserScore: 'IMDB User Score – votes: {formattedCount}',
+  imdbScore: 'IMDb user score',
   tmdbUserScore: 'TMDB User Score',
   theatrical: 'Theatrical',
   digital: 'Digital',
@@ -99,6 +102,7 @@ const MovieDetailsLayout = ({
 }: MovieDetailsLayoutProps) => {
   const intl = useIntl();
   const { locale } = useLocale();
+  const effectiveRatings = getEffectiveVideoRatings(ratingData);
   const { data: watchedStatus } = useWatchStatus(
     'movie',
     data.id,
@@ -235,72 +239,77 @@ const MovieDetailsLayout = ({
               label={intl.formatMessage(messages.quality)}
             />
             {playbackActions?.(selectedQuality === '4k')}
-            {ratingData?.rt?.criticsRating &&
-              typeof ratingData.rt.criticsScore === 'number' && (
+            {effectiveRatings.rtCriticsRating !== undefined &&
+              effectiveRatings.rtCriticsScore !== undefined && (
                 <Tooltip content={intl.formatMessage(messages.rtCriticsScore)}>
                   <a
-                    href={getSafeHref(ratingData.rt.url)}
+                    href={getSafeHref(effectiveRatings.rtUrl)}
                     target="_blank"
                     rel="noreferrer"
                     className="media-rating-link"
                   >
-                    {ratingData.rt.criticsRating === 'Rotten' ? (
+                    {effectiveRatings.rtCriticsRating === 'Rotten' ? (
                       <RTRotten className="media-rating-icon" />
                     ) : (
                       <RTFresh className="media-rating-icon" />
                     )}
                     <span className="media-rating-value">
-                      {ratingData.rt.criticsScore}%
+                      {effectiveRatings.rtCriticsScore}%
                     </span>
                   </a>
                 </Tooltip>
               )}
-            {ratingData?.rt?.audienceRating &&
-              typeof ratingData.rt.audienceScore === 'number' && (
+            {effectiveRatings.rtAudienceRating !== undefined &&
+              effectiveRatings.rtAudienceScore !== undefined && (
                 <Tooltip content={intl.formatMessage(messages.rtAudienceScore)}>
                   <a
-                    href={getSafeHref(ratingData.rt.url)}
+                    href={getSafeHref(effectiveRatings.rtUrl)}
                     target="_blank"
                     rel="noreferrer"
                     className="media-rating-link"
                   >
-                    {ratingData.rt.audienceRating === 'Spilled' ? (
+                    {effectiveRatings.rtAudienceRating === 'Spilled' ? (
                       <RTAudRotten className="media-rating-icon media-rating-icon-audience" />
                     ) : (
                       <RTAudFresh className="media-rating-icon media-rating-icon-audience" />
                     )}
                     <span className="media-rating-value">
-                      {ratingData.rt.audienceScore}%
+                      {effectiveRatings.rtAudienceScore}%
                     </span>
                   </a>
                 </Tooltip>
               )}
-            {ratingData?.imdb?.criticsScore !== undefined && (
+            {effectiveRatings.imdbScore !== undefined && (
               <Tooltip
-                content={intl.formatMessage(messages.imdbUserScore, {
-                  formattedCount: intl.formatNumber(
-                    ratingData.imdb.criticsScoreCount,
-                    {
-                      notation: 'compact',
-                      compactDisplay: 'short',
-                      maximumFractionDigits: 1,
-                    }
-                  ),
-                })}
+                content={
+                  effectiveRatings.imdbVotes
+                    ? intl.formatMessage(messages.imdbUserScore, {
+                        formattedCount: intl.formatNumber(
+                          effectiveRatings.imdbVotes,
+                          {
+                            notation: 'compact',
+                            compactDisplay: 'short',
+                            maximumFractionDigits: 1,
+                          }
+                        ),
+                      })
+                    : intl.formatMessage(messages.imdbScore)
+                }
               >
                 <a
-                  href={getSafeHref(ratingData.imdb.url)}
+                  href={getSafeHref(effectiveRatings.imdbUrl)}
                   target="_blank"
                   rel="noreferrer"
                   className="media-rating-link"
                 >
                   <ImdbLogo className="media-rating-wordmark" />
                   <span className="media-rating-value">
-                    {ratingData.imdb.criticsScore}
+                    {effectiveRatings.imdbScore.toFixed(1)}
                   </span>
                 </a>
               </Tooltip>
             )}
+            <MdblistRatingBadges ratings={ratingData?.mdblist} />
             {data.voteCount > 0 && (
               <Tooltip content={intl.formatMessage(messages.tmdbUserScore)}>
                 <a

@@ -361,13 +361,15 @@ asks for the work to start.
 
 ## Series IMDb ratings integration
 
-- Status: Future feature, explicitly deferred by the user.
-- Sonarr's generic Series rating is not identified as IMDb and must not be
+- Status: Implemented as an optional MDBList-backed series rating source.
+- The parser maps only MDBList entries whose `source` is `imdb` into the
+  normalized IMDb score; Sonarr's generic Series rating is never used or
   labeled as IMDb.
-- Use only a trustworthy licensed or deliberately implemented bulk-dataset
-  source. Do not scrape IMDb pages.
-- Preserve the existing Rotten Tomatoes critic, Rotten Tomatoes audience, and
-  TMDB ratings until the separate IMDb integration is designed and verified.
+- MDBList access uses the administrator-configured official API key and its
+  documented media-info endpoint. Do not scrape IMDb pages or infer a rating
+  source from an unrelated field.
+- Preserve direct Rotten Tomatoes values and TMDB ratings; MDBList is a fallback
+  for missing IMDb/Rotten Tomatoes values and adds Metacritic and Trakt scores.
 
 ## Pinned Cast, Crew, Artists, and Tags disclosures
 

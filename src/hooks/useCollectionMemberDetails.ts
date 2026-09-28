@@ -10,8 +10,23 @@ const useCollectionMemberDetails = (parts: MovieResult[]) => {
   const ids = [...new Set(parts.map((part) => part.id))];
   return useSWR<CollectionMemberDetails[]>(
     ids.length ? ['collection-member-details', ids.join(',')] : null,
-    () =>
-      mapWithConcurrency(ids, 3, async (id) => {
+    async () => {
+      // MDBList supports up to 200 TMDB IDs per request. Prefill its shared
+      // server cache so the per-title combined rating requests below do not
+      // spend one provider call per collection member.
+      for (let offset = 0; offset < ids.length; offset += 200) {
+        try {
+          await axios.post('/api/v1/movie/ratings/mdblist/batch', {
+            ids: ids.slice(offset, offset + 200),
+          });
+        } catch {
+          // The individual rating route remains best-effort if batch lookup is
+          // unavailable or MDBList is not configured.
+          break;
+        }
+      }
+
+      return mapWithConcurrency(ids, 3, async (id) => {
         const [details, ratings] = await Promise.allSettled([
           axios.get<MovieDetails>(`/api/v1/movie/${id}`, { timeout: 20000 }),
           axios.get<RatingResponse>(`/api/v1/movie/${id}/ratingscombined`, {
@@ -32,7 +47,8 @@ const useCollectionMemberDetails = (parts: MovieResult[]) => {
             ratings.status === 'fulfilled' ? ratings.value.data : undefined,
           failed: details.status === 'rejected' || ratingFailed,
         };
-      }),
+      });
+    },
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   );
 };

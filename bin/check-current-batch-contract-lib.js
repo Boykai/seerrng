@@ -178,7 +178,7 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     ledger,
-    "Sonarr's generic Series rating is not identified as IMDb",
+    "Sonarr's generic Series rating is never used or",
     'must preserve the evidence-based Series IMDb decision'
   );
   requireText(
@@ -2588,10 +2588,25 @@ const validateCurrentBatchContract = (files) => {
   );
 
   const seriesLayout = 'src/components/TvDetails/SeriesDetailsLayout.tsx';
+  requireText(
+    'server/api/mdblist/parse.ts',
+    "score('imdb')",
+    'Series IMDb ratings must come from the explicitly identified MDBList IMDb source'
+  );
+  requireText(
+    'src/utils/videoRatings.ts',
+    'ratings?.mdblist?.imdbRating',
+    'Series IMDb fallback must use the normalized MDBList IMDb score'
+  );
+  requireText(
+    seriesLayout,
+    'getEffectiveVideoRatings(ratingData)',
+    'series ratings must use the source-aware shared rating adapter'
+  );
   rejectText(
     seriesLayout,
-    'ImdbLogo',
-    'must not mislabel an unidentified Series rating as IMDb'
+    'data.mediaInfo?.rating',
+    "must not label Sonarr's unidentified Series rating as IMDb"
   );
   requireText(
     seriesLayout,

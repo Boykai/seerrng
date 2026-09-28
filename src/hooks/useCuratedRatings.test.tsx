@@ -26,8 +26,16 @@ function environment() {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const root = createRoot(document.createElement('div'));
   let current: ReturnType<typeof useCuratedRatings>;
-  function Probe({ id, ids }: { id: string; ids: string[] }) {
-    current = useCuratedRatings('music', id, ids);
+  function Probe({
+    id,
+    ids,
+    kind = 'music',
+  }: {
+    id: string;
+    ids: string[];
+    kind?: 'tv' | 'music';
+  }) {
+    current = useCuratedRatings(kind, id, ids);
     return null;
   }
   return {
@@ -40,6 +48,59 @@ function environment() {
     },
   };
 }
+
+it('loads combined TV ratings for curated series collections', async () => {
+  const data = {
+    rt: {
+      title: 'Example',
+      year: 2026,
+      criticsRating: 'Fresh',
+      criticsScore: 82,
+      url: 'https://www.rottentomatoes.com/m/example',
+    },
+    mdblist: { metacriticRating: 76, traktRating: 8.1 },
+  };
+  const get = vi.spyOn(axios, 'get').mockResolvedValue({ data });
+
+  const result = await loadCuratedRating(
+    'tv',
+    '123',
+    new AbortController().signal
+  );
+
+  expect(get).toHaveBeenCalledWith(
+    '/api/v1/tv/123/ratingscombined',
+    expect.objectContaining({ timeout: 20000 })
+  );
+  expect(result).toEqual({ id: '123', ratings: data });
+});
+
+it('prefetches curated TV ratings in one bounded batch before member requests', async () => {
+  const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: {} });
+  const get = vi.spyOn(axios, 'get').mockResolvedValue({
+    data: { mdblist: { traktRating: 8.2 } },
+  });
+  const e = environment();
+  try {
+    await act(async () =>
+      e.root.render(<e.Probe id="collection" ids={['123', '456']} kind="tv" />)
+    );
+
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith(
+      '/api/v1/tv/ratings/mdblist/batch',
+      { ids: [123, 456] },
+      expect.objectContaining({ timeout: 20000 })
+    );
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(get).toHaveBeenCalledWith(
+      '/api/v1/tv/123/ratingscombined',
+      expect.objectContaining({ timeout: 20000 })
+    );
+  } finally {
+    await e.close();
+  }
+});
 
 it('keeps successful provider values during partial retries and stops once every source responds', async () => {
   const audio = {

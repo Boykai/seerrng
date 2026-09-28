@@ -10,7 +10,7 @@ export interface CollectionMemberDetails {
 }
 
 export interface CollectionRating {
-  source: 'critics' | 'audience' | 'imdb' | 'tmdb';
+  source: 'critics' | 'audience' | 'imdb' | 'metacritic' | 'trakt' | 'tmdb';
   value?: number;
   count: number;
   href?: string;
@@ -37,27 +37,51 @@ export const getCollectionMemberRatings = (
   },
   {
     source: 'critics',
-    value: valid(ratings?.rt?.criticsScore, 100)
-      ? ratings.rt.criticsScore
+    value: valid(ratings?.rt?.criticsScore ?? ratings?.mdblist?.rtRating, 100)
+      ? (ratings?.rt?.criticsScore ?? ratings?.mdblist?.rtRating)
       : undefined,
     count: 0,
     href: ratings?.rt?.url,
   },
   {
     source: 'audience',
-    value: valid(ratings?.rt?.audienceScore, 100)
-      ? ratings.rt.audienceScore
+    value: valid(
+      ratings?.rt?.audienceScore ?? ratings?.mdblist?.rtUserRating,
+      100
+    )
+      ? (ratings?.rt?.audienceScore ?? ratings?.mdblist?.rtUserRating)
       : undefined,
     count: 0,
     href: ratings?.rt?.url,
   },
   {
     source: 'imdb',
-    value: valid(ratings?.imdb?.criticsScore, 10)
-      ? ratings.imdb.criticsScore
+    value: valid(
+      ratings?.imdb?.criticsScore ?? ratings?.mdblist?.imdbRating,
+      10
+    )
+      ? (ratings?.imdb?.criticsScore ?? ratings?.mdblist?.imdbRating)
       : undefined,
     count: 0,
-    href: ratings?.imdb?.url,
+    href:
+      ratings?.imdb?.url ??
+      (ratings?.mdblist?.imdbId && /^tt\d{1,20}$/.test(ratings.mdblist.imdbId)
+        ? `https://www.imdb.com/title/${ratings.mdblist.imdbId}`
+        : undefined),
+  },
+  {
+    source: 'metacritic',
+    value: valid(ratings?.mdblist?.metacriticRating, 100)
+      ? ratings.mdblist.metacriticRating
+      : undefined,
+    count: 0,
+  },
+  {
+    source: 'trakt',
+    value: valid(ratings?.mdblist?.traktRating, 10)
+      ? ratings.mdblist.traktRating
+      : undefined,
+    count: 0,
   },
 ];
 
@@ -72,7 +96,9 @@ export const averageCollectionRatings = (
   const rows = uniqueParts.map((part) =>
     getCollectionMemberRatings(part, byId.get(part.id)?.ratings)
   );
-  return (['critics', 'audience', 'imdb', 'tmdb'] as const).map((source) => {
+  return (
+    ['critics', 'audience', 'imdb', 'metacritic', 'trakt', 'tmdb'] as const
+  ).map((source) => {
     const scores = rows.flatMap((row) =>
       row
         .filter(

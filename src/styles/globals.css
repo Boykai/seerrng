@@ -2832,6 +2832,11 @@
     color: #0d253f;
   }
 
+  .media-rating-brand-metacritic {
+    background-color: #ffcc33;
+    color: #171717;
+  }
+
   .button-lg {
     @apply px-6 py-3 text-base;
   }

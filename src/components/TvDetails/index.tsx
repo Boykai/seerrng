@@ -25,7 +25,7 @@ import {
   MinusCircleIcon,
   StarIcon,
 } from '@heroicons/react/24/outline';
-import type { RTRating } from '@server/api/rating/rottentomatoes';
+import type { RatingResponse } from '@server/api/ratings';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -106,8 +106,8 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
       15000
     ),
   });
-  const { data: ratingData } = useSWR<RTRating>(
-    tvId ? `/api/v1/tv/${tvId}/ratings` : null
+  const { data: ratingData } = useSWR<RatingResponse>(
+    tvId ? `/api/v1/tv/${tvId}/ratingscombined` : null
   );
   const sortedCrew = useMemo(
     () => sortCrewPriority(data?.credits.crew ?? []),

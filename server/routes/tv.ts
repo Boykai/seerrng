@@ -1,5 +1,11 @@
+import MdblistAPI from '@server/api/mdblist';
 import { getMetadataProvider } from '@server/api/metadata';
 import RottenTomatoes from '@server/api/rating/rottentomatoes';
+import {
+  hasMdblistRatingScores,
+  parseMdblistRatingBatchIds,
+  type RatingResponse,
+} from '@server/api/ratings';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
 import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
@@ -23,22 +29,76 @@ import {
   parseNonNegativeRouteId,
   parsePositiveRouteId,
 } from '@server/utils/routeId';
+import { getRateLimitKey } from '@server/utils/security';
 import {
   parseOptionalBoundedString,
   parseOptionalLanguage,
 } from '@server/utils/validation';
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 
 const tvRoutes = Router();
 const maxTmdbTvId = 1_000_000_000;
 const maxTvSeasonNumber = 10_000;
 const maxShuffleSeedLength = 128;
 
+const mdblistRatingBatchRateLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) =>
+    req.user?.id ? `user:${req.user.id}` : getRateLimitKey(req),
+  skip: () =>
+    process.env.NODE_ENV === 'test' || process.env.E2E_TESTS === 'true',
+});
+
 const parseTvRouteId = (id: unknown): number | undefined =>
   parsePositiveRouteId(id, maxTmdbTvId);
 
 const parseSeasonRouteNumber = (seasonNumber: unknown): number | undefined =>
   parseNonNegativeRouteId(seasonNumber, maxTvSeasonNumber);
+
+tvRoutes.post(
+  '/ratings/mdblist/batch',
+  mdblistRatingBatchRateLimit,
+  async (req, res) => {
+    const ids = parseMdblistRatingBatchIds(req.body?.ids);
+    if (!ids) {
+      return res.status(400).json({
+        status: 400,
+        message: 'Provide 1 to 200 valid TMDB series IDs.',
+      });
+    }
+
+    try {
+      const ratings = await MdblistAPI.getInstance().getBatchRatings(
+        'tv',
+        ids.map((tmdbId) => ({ tmdbId }))
+      );
+      return res
+        .status(200)
+        .json(
+          Object.fromEntries(
+            [...ratings].filter(([, rating]) => hasMdblistRatingScores(rating))
+          )
+        );
+    } catch (e) {
+      logger.debug(
+        'Something went wrong retrieving MDBList series rating batch',
+        {
+          label: 'API',
+          errorMessage: e instanceof Error ? e.message : String(e),
+          itemCount: ids.length,
+        }
+      );
+      return res.status(502).json({
+        status: 502,
+        message: 'MDBList ratings are temporarily unavailable.',
+      });
+    }
+  }
+);
 
 const getSeriesCoverService = (
   media?: Media,
@@ -451,6 +511,61 @@ tvRoutes.get('/:id/ratings', async (req, res, next) => {
     logger.debug('Something went wrong retrieving series ratings', {
       label: 'API',
       errorMessage: e.message,
+      tvId: req.params.id,
+    });
+    return next({
+      status: 500,
+      message: 'Unable to retrieve series ratings.',
+    });
+  }
+});
+
+tvRoutes.get('/:id/ratingscombined', async (req, res, next) => {
+  const tmdb = new TheMovieDb();
+  const rtapi = new RottenTomatoes();
+  const mdblistApi = MdblistAPI.getInstance();
+  const tvId = parseTvRouteId(req.params.id);
+  if (!tvId) {
+    return next({ status: 404, message: 'Series not found.' });
+  }
+
+  try {
+    const tv = await tmdb.getTvShow({ tvId });
+    const [rtResult, mdblistResult] = await Promise.allSettled([
+      rtapi.getTVRatings(
+        tv.name,
+        tv.first_air_date ? Number(tv.first_air_date.slice(0, 4)) : undefined
+      ),
+      mdblistApi.getRatings('tv', tvId),
+    ]);
+    const rtratings = rtResult.status === 'fulfilled' ? rtResult.value : null;
+    const mdblistRatings =
+      mdblistResult.status === 'fulfilled' &&
+      hasMdblistRatingScores(mdblistResult.value)
+        ? mdblistResult.value
+        : undefined;
+
+    if (!rtratings && !mdblistRatings) {
+      const providerFailed = [rtResult, mdblistResult].some(
+        (result) => result.status === 'rejected'
+      );
+      return next({
+        status: providerFailed ? 502 : 404,
+        message: providerFailed
+          ? 'Rating providers are temporarily unavailable.'
+          : 'No ratings found.',
+      });
+    }
+
+    const ratings: RatingResponse = {
+      ...(rtratings ? { rt: rtratings } : {}),
+      ...(mdblistRatings ? { mdblist: mdblistRatings } : {}),
+    };
+    return res.status(200).json(ratings);
+  } catch (e) {
+    logger.debug('Something went wrong retrieving combined series ratings', {
+      label: 'API',
+      errorMessage: e instanceof Error ? e.message : String(e),
       tvId: req.params.id,
     });
     return next({

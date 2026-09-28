@@ -1,5 +1,4 @@
 import { mapWithConcurrency } from '@app/utils/concurrency';
-import type { RTRating } from '@server/api/rating/rottentomatoes';
 import type { RatingResponse } from '@server/api/ratings';
 import type { MusicRatingResponse } from '@server/models/Music';
 import axios from 'axios';
@@ -23,11 +22,11 @@ export async function loadCuratedRating(
   try {
     const options = { timeout: kind === 'music' ? 35000 : 20000, signal };
     if (kind === 'tv') {
-      const { data } = await axios.get<RTRating>(
-        `/api/v1/tv/${encodeURIComponent(id)}/ratings`,
+      const { data } = await axios.get<RatingResponse>(
+        `/api/v1/tv/${encodeURIComponent(id)}/ratingscombined`,
         options
       );
-      return { id, ratings: { rt: data } };
+      return { id, ratings: data };
     }
     const { data } = await axios.get<MusicRatingResponse>(
       `/api/v1/music/${encodeURIComponent(id)}/rating`,
@@ -116,6 +115,22 @@ export default function useCuratedRatings(
         const batch = [...run.pending].slice(0, 50);
         batch.forEach((id) => run.pending.delete(id));
         batch.forEach((id) => run.inFlight.add(id));
+        if (run.kind === 'tv' && !run.controller.signal.aborted) {
+          const ids = batch
+            .map(Number)
+            .filter((id) => Number.isSafeInteger(id) && id > 0);
+          if (ids.length) {
+            try {
+              await axios.post(
+                '/api/v1/tv/ratings/mdblist/batch',
+                { ids },
+                { timeout: 20000, signal: run.controller.signal }
+              );
+            } catch {
+              // TV rating routes still provide per-title, best-effort results.
+            }
+          }
+        }
         await mapWithConcurrency(batch, 3, async (id) => {
           if (run.controller.signal.aborted) return;
           const member = await loadCuratedRating(
