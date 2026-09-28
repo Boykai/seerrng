@@ -228,6 +228,52 @@ describe('Prowlarr manual search routes', () => {
     );
   });
 
+  it('tests a saved connection without requiring the key again', async () => {
+    mock.method(ProwlarrAPI.prototype, 'getSystemStatus', async () => ({
+      version: '2.4.0',
+    }));
+    mock.method(ProwlarrAPI.prototype, 'getIndexers', async () => []);
+
+    const response = await request(createValidatedSettingsApp())
+      .post('/api/v1/settings/prowlarr/test')
+      .send({ hostname: 'prowlarr.local', port: 9696, useSsl: false });
+
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.equal(response.body.version, '2.4.0');
+    assert.equal(
+      JSON.stringify(response.body).includes('test-prowlarr-key'),
+      false
+    );
+  });
+
+  it('omits private indexer names from coverage summaries', async () => {
+    mock.method(ProwlarrAPI.prototype, 'getSystemStatus', async () => ({
+      version: '2.4.0',
+    }));
+    mock.method(ProwlarrAPI.prototype, 'getIndexers', async () => [
+      {
+        id: 1,
+        name: 'Private tracker name',
+        enable: true,
+        supportsSearch: true,
+        protocol: 'torrent',
+        capabilities: { categories: [{ id: 2000, name: 'Movies' }] },
+      },
+    ]);
+
+    const response = await request(createValidatedSettingsApp()).get(
+      '/api/v1/settings/prowlarr/coverage'
+    );
+
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.equal(response.body.totalIndexers, 1);
+    assert.equal('indexers' in response.body, false);
+    assert.equal(
+      JSON.stringify(response.body).includes('Private tracker name'),
+      false
+    );
+  });
+
   it('requires administrator permission to read Prowlarr settings', async () => {
     const response = await request(
       createValidatedSettingsApp(Permission.MANAGE_REQUESTS)

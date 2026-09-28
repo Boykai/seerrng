@@ -59,7 +59,7 @@ const parseCategoryMappings = (
   return { value: result };
 };
 
-const parseProwlarrSettings = (
+export const parseProwlarrSettings = (
   value: unknown,
   current: ProwlarrSettings
 ): { value: ProwlarrSettings } | { error: string } => {
