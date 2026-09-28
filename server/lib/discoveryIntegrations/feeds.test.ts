@@ -17,6 +17,18 @@ it('rejects invalid page bounds before requesting provider data', async () => {
     );
   assert.equal(fetch.mock.callCount(), 0);
 });
+it('rejects repeated or non-string MDBList list parameters', async () => {
+  await assert.rejects(
+    () => discoveryFeed(1, 'mdblist', 'list', 1, ['hdlists/horror']),
+    (error) =>
+      error instanceof DiscoveryIntegrationError && error.status === 400
+  );
+  await assert.rejects(
+    () => discoveryFeed(1, 'mdblist', 'list', 1, { value: 'hdlists/horror' }),
+    (error) =>
+      error instanceof DiscoveryIntegrationError && error.status === 400
+  );
+});
 it('retains native AniList identity without inventing a TMDB match', async () => {
   mock.method(AnilistAPI.prototype, 'getTrending', async () => ({
     pageInfo: { hasNextPage: true },

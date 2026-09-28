@@ -32,6 +32,42 @@ import { createHash } from 'node:crypto';
 
 const TRAKT_BASE_URL = 'https://api.trakt.tv';
 
+export const normalizeTraktApiPath = (endpoint: string): string => {
+  if (
+    typeof endpoint !== 'string' ||
+    !endpoint.startsWith('/') ||
+    endpoint.startsWith('//') ||
+    endpoint.length > 4096 ||
+    endpoint.includes('\\') ||
+    Array.from(endpoint).some((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 0x20 || code === 0x7f;
+    }) ||
+    endpoint.includes('?') ||
+    endpoint.includes('#')
+  ) {
+    throw new Error('Trakt request path is not allowed.');
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint, TRAKT_BASE_URL);
+  } catch {
+    throw new Error('Trakt request path is not allowed.');
+  }
+
+  if (
+    parsed.origin !== TRAKT_BASE_URL ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== endpoint
+  ) {
+    throw new Error('Trakt request path is not allowed.');
+  }
+
+  return parsed.pathname;
+};
+
 interface TraktPlaybackEpisode {
   id: number;
   progress?: number;
@@ -304,6 +340,8 @@ class TraktAPI extends ExternalAPI {
   }
 
   public async requestDeviceCode(): Promise<TraktDeviceCodeResponse> {
+    // Client credentials are intentionally sent to Trakt's fixed OAuth endpoint.
+    // codeql[js/file-access-to-http]
     const response = await this.rawAxios.post<TraktDeviceCodeResponse>(
       '/oauth/device/code',
       { client_id: this.clientId }
@@ -315,6 +353,8 @@ class TraktAPI extends ExternalAPI {
     deviceCode: string
   ): Promise<TraktDevicePollResult> {
     try {
+      // Device credentials are intentionally sent to Trakt's fixed OAuth endpoint.
+      // codeql[js/file-access-to-http]
       const response = await this.rawAxios.post<TraktTokenResponse>(
         '/oauth/device/token',
         {
@@ -411,6 +451,8 @@ class TraktAPI extends ExternalAPI {
       return tokens;
     }
 
+    // Refresh credentials are intentionally sent to Trakt's fixed OAuth endpoint.
+    // codeql[js/file-access-to-http]
     const response = await this.rawAxios.post<TraktTokenResponse>(
       '/oauth/token',
       {
@@ -1186,6 +1228,7 @@ class TraktAPI extends ExternalAPI {
     retryAuth = true,
     retryRateLimit = true
   ): Promise<T> {
+    endpoint = normalizeTraktApiPath(endpoint);
     if (method !== 'GET' || config?.skipCache) {
       return this.executeRequestWithRetry<T>(
         method,
@@ -1253,6 +1296,9 @@ class TraktAPI extends ExternalAPI {
     }
 
     try {
+      // This relative path is validated against the fixed Trakt API origin;
+      // account tokens are intentionally sent to that provider.
+      // codeql[js/file-access-to-http]
       const response = await this.rawAxios.request<T>({
         method,
         url: endpoint,

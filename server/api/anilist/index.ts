@@ -203,6 +203,9 @@ class AnilistAPI extends ExternalAPI {
     tokenClient.interceptors.request.use(proxyRequestInterceptor);
 
     try {
+      // The authorization code and client secret are intentionally sent to
+      // AniList's fixed OAuth token endpoint.
+      // codeql[js/file-access-to-http]
       const response = await tokenClient.post<AnilistTokenResponse>(
         ANILIST_OAUTH_TOKEN_URL,
         {

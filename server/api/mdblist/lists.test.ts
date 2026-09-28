@@ -35,6 +35,24 @@ describe('parseMdblistListRef', () => {
     );
   });
 
+  it('parses a bare MDBList host reference without accepting host lookalikes', () => {
+    assert.deepEqual(parseMdblistListRef('mdblist.com/lists/hdlists/horror'), {
+      kind: 'slug',
+      username: 'hdlists',
+      slug: 'horror',
+    });
+    for (const input of [
+      'https://evil.example/mdblist.com/lists/hdlists/horror',
+      'https://mdblist.com.evil.example/lists/hdlists/horror',
+      'https://mdblist.com@evil.example/lists/hdlists/horror',
+      'https://user@mdblist.com/lists/hdlists/horror',
+      'https://mdblist.com:8443/lists/hdlists/horror',
+      'javascript://mdblist.com/lists/hdlists/horror',
+    ]) {
+      assert.throws(() => parseMdblistListRef(input));
+    }
+  });
+
   it('parses shorthand username/slug references', () => {
     assert.deepEqual(parseMdblistListRef('hdlists/horror'), {
       kind: 'slug',

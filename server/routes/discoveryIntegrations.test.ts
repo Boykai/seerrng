@@ -17,12 +17,17 @@ import discoveryRoutes from './discoveryIntegrations';
 const app = express();
 app.use(express.json());
 app.use(
+  // This Supertest-only session never listens on a network socket.
+  // codeql[js/clear-text-cookie]
   session({
     secret: 'discovery-tests',
     resave: false,
     saveUninitialized: false,
   })
 );
+// Production checkUser includes the authenticated-route limiter; this in-memory
+// test app has no network listener and only exercises authorization behavior.
+// codeql[js/missing-rate-limiting]
 app.use(checkUser);
 app.use('/auth', authRoutes);
 app.use('/integrations/discovery', discoveryRoutes);
@@ -103,6 +108,13 @@ describe('personal discovery account boundaries', () => {
       ).status,
       400
     );
+  });
+  it('rejects repeated MDBList list query parameters', async () => {
+    const agent = await login();
+    const result = await agent.get(
+      '/integrations/discovery/feeds/mdblist/list?list=hdlists%2Fhorror&list=another%2Flist'
+    );
+    assert.equal(result.status, 400);
   });
   it('does not accept a browser-supplied Trakt device code', async () => {
     const agent = await login();

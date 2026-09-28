@@ -49,7 +49,7 @@ export async function discoveryFeed(
   provider: string,
   feed: string,
   page: number,
-  list?: string
+  list?: unknown
 ): Promise<DiscoveryFeedPage> {
   if (!Number.isSafeInteger(page) || page < 1 || page > 100)
     throw new DiscoveryIntegrationError(400, 'Page must be between 1 and 100.');
@@ -128,7 +128,7 @@ export async function discoveryFeed(
       items = fetched.media.map(anilistItem);
     }
   } else if (provider === 'mdblist' && feed === 'list') {
-    if (!list || list.length > 2048)
+    if (typeof list !== 'string' || !list.trim() || list.length > 2048)
       throw new DiscoveryIntegrationError(
         400,
         'Enter an MDBList URL or list ID.'

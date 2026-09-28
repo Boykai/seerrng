@@ -1,8 +1,26 @@
 // Adapted from selmant/foreseerr, copyright (c) 2026 Selman Trabzon. MIT licensed.
 // See NOTICE.md for attribution and license terms.
-import TraktAPI from '@server/api/trakt';
+import TraktAPI, { normalizeTraktApiPath } from '@server/api/trakt';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+
+describe('normalizeTraktApiPath', () => {
+  it('keeps requests on the fixed Trakt API origin', () => {
+    assert.equal(
+      normalizeTraktApiPath('/users/alice/lists/favorites'),
+      '/users/alice/lists/favorites'
+    );
+    for (const input of [
+      'https://evil.example/path',
+      '//evil.example/path',
+      '/\\evil.example/path',
+      '/../oauth/token',
+      '/users/alice?target=https://evil.example',
+    ]) {
+      assert.throws(() => normalizeTraktApiPath(input));
+    }
+  });
+});
 
 describe('TraktAPI.parseListUrl', () => {
   it('parses user list URLs', () => {

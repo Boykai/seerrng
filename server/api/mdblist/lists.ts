@@ -96,21 +96,43 @@ export const parseMdblistListRef = (value: string): MdblistListRef => {
     throw new Error('List URL or reference is required');
   }
 
+  if (text.length > 2048) {
+    throw new Error('MDBList list references must be 2048 characters or fewer');
+  }
+
   if (/^\d+$/.test(text)) {
     return { kind: 'id', listId: Number(text) };
   }
 
-  const asUrl = text.startsWith('http://') || text.startsWith('https://');
-  if (asUrl || text.includes('mdblist.com/')) {
+  const hasScheme = /^[a-z][a-z\d+.-]*:/i.test(text);
+  const isProtocolRelative = text.startsWith('//');
+  const isBareMdblistHost = /^(?:www\.)?mdblist\.com(?:[/:?#]|$)/i.test(text);
+  if (hasScheme || isProtocolRelative || isBareMdblistHost) {
     let parsed: URL;
     try {
-      parsed = new URL(asUrl ? text : `https://${text}`);
+      parsed = new URL(
+        isProtocolRelative
+          ? `https:${text}`
+          : hasScheme
+            ? text
+            : `https://${text}`
+      );
     } catch {
       throw new Error(`Invalid MDBList list URL: ${value}`);
     }
 
     const host = parsed.hostname.toLowerCase();
-    if (!MDBLIST_HOSTS.has(host)) {
+    const isDefaultPort =
+      !parsed.port ||
+      (parsed.protocol === 'https:' && parsed.port === '443') ||
+      (parsed.protocol === 'http:' && parsed.port === '80');
+    if (
+      !['http:', 'https:'].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password ||
+      !isDefaultPort ||
+      !MDBLIST_HOSTS.has(host)
+    ) {
       throw new Error(`Unsupported MDBList list URL: ${value}`);
     }
 
