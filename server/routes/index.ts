@@ -58,7 +58,6 @@ import authorRoutes from './author';
 import blocklistRoutes from './blocklist';
 import bookRoutes from './book';
 import calendarRoutes from './calendar';
-import queueInterventionRoutes from './queueInterventions';
 import collectionRoutes from './collection';
 import collectionCatalogRoutes from './collectionCatalog';
 import comicRoutes from './comic';
@@ -74,6 +73,7 @@ import musicRoutes from './music';
 import personRoutes from './person';
 import playbackRoutes from './playback';
 import playlistRoutes from './playlist';
+import queueInterventionRoutes from './queueInterventions';
 import requestRoutes from './request';
 import searchRoutes from './search';
 import seriesRoutes from './series';
@@ -436,7 +436,11 @@ router.use('/discover', isAuthenticated(), discoverRoutes);
 router.use('/request', isAuthenticated(), requestRoutes);
 router.use('/request/software', softwareRoutes);
 router.use('/calendar', isAuthenticated(), calendarRoutes);
-router.use('/downloads/interventions', isAuthenticated(), queueInterventionRoutes);
+router.use(
+  '/downloads/interventions',
+  isAuthenticated(),
+  queueInterventionRoutes
+);
 router.use(
   '/integrations/discovery',
   isAuthenticated(),
