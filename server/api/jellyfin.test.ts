@@ -291,6 +291,90 @@ describe('Jellyfin response normalization', () => {
   });
 });
 
+describe('Jellyfin personal library browsing', () => {
+  it('uses the linked user views and paged UserData item query', async () => {
+    const userId = 'a2ed2f1f-5a82-4c55-9a1c-1385e4e90ca1';
+    const normalizedUserId = userId.replaceAll('-', '');
+    const api = new JellyfinAPI('http://localhost:8096', 'linked-user-token');
+    api.setUserId(userId);
+    const requests: {
+      path: string;
+      params?: Record<string, unknown>;
+    }[] = [];
+    Object.defineProperty(api, 'get', {
+      configurable: true,
+      value: async (
+        path: string,
+        options?: { params?: Record<string, unknown> }
+      ) => {
+        requests.push({ path, params: options?.params });
+        if (path.endsWith('/Views')) {
+          return {
+            Items: [
+              {
+                Id: 'movies-library',
+                Name: 'Movies',
+                Type: 'CollectionFolder',
+                CollectionType: 'movies',
+              },
+            ],
+          };
+        }
+        return {
+          Items: [
+            {
+              Id: 'movie-1',
+              Name: 'Watched Movie',
+              Type: 'Movie',
+              LocationType: 'FileSystem',
+              MediaType: 'Video',
+              ProviderIds: { Tmdb: '42' },
+              ProductionYear: 2025,
+              UserData: { Played: true, PlayCount: 1 },
+            },
+          ],
+          TotalRecordCount: 1,
+        };
+      },
+    });
+
+    assert.deepStrictEqual(await api.getUserLibraries(), [
+      {
+        key: 'movies-library',
+        title: 'Movies',
+        type: 'movie',
+        agent: 'jellyfin',
+      },
+    ]);
+    const page = await api.getUserLibraryContents('movies-library', 'movie', {
+      offset: 20,
+      size: 20,
+      isPlayed: true,
+    });
+
+    assert.strictEqual(requests[0].path, `/Users/${normalizedUserId}/Views`);
+    assert.strictEqual(requests[1].path, '/Items');
+    assert.deepStrictEqual(requests[1].params, {
+      userId: normalizedUserId,
+      parentId: 'movies-library',
+      recursive: true,
+      includeItemTypes: 'Movie',
+      fields: 'ProviderIds,UserData',
+      enableUserData: true,
+      enableTotalRecordCount: true,
+      enableImages: false,
+      sortBy: 'SortName',
+      sortOrder: 'Ascending',
+      startIndex: 20,
+      limit: 20,
+      isPlayed: true,
+    });
+    assert.strictEqual(page.Items[0].UserData?.Played, true);
+    assert.strictEqual(page.Items[0].ProviderIds.Tmdb, '42');
+    assert.strictEqual(page.Items[0].ProductionYear, 2025);
+  });
+});
+
 describe('Jellyfin and Emby current-selection playlist replacement', () => {
   it('removes every exact-name remnant before creating one ordered replacement', async () => {
     const api = new JellyfinAPI('http://localhost', 'token', 'device');

@@ -246,13 +246,23 @@ components:
     DiscoveryAccounts:
       type: object
       additionalProperties: false
-      required:
-        - accounts
+      required: [accounts, mediaServer]
       properties:
         accounts:
           type: array
           items:
             $ref: '#/components/schemas/DiscoveryAccount'
+        mediaServer:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [provider, connected]
+          properties:
+            provider:
+              type: string
+              enum: [plex, jellyfin, emby]
+            connected:
+              type: boolean
     DiscoveryFeedItem:
       type: object
       additionalProperties: false
@@ -317,7 +327,7 @@ components:
           type: string
         source:
           type: string
-          enum: [trakt, anilist, simkl]
+          enum: [trakt, anilist, simkl, plex, jellyfin, emby]
         sourceId:
           type: string
         title:
@@ -334,7 +344,8 @@ components:
           type: integer
         status:
           type: string
-          enum: [planning, watching, watched, completed, paused, dropped]
+          enum:
+            [planning, watching, watched, completed, unwatched, paused, dropped]
         rating:
           type: number
           minimum: 0
@@ -370,6 +381,20 @@ components:
           minimum: 0
         truncated:
           type: boolean
+        libraries:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name, type]
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              type:
+                type: string
+                enum: [show, movie]
     DiscoveryTrackingRequest:
       type: object
       additionalProperties: false
@@ -15683,7 +15708,7 @@ paths:
 
   /integrations/discovery/library/{provider}:
     get:
-      summary: Browse a page of your linked provider library
+      summary: Browse a page of your personal provider or media server library
       tags:
         - user
       parameters:
@@ -15692,12 +15717,21 @@ paths:
           required: true
           schema:
             type: string
-            enum: [trakt, anilist, simkl]
+            enum: [trakt, anilist, simkl, plex, jellyfin, emby]
         - name: shelf
           in: query
           schema:
             type: string
-            enum: [all, watchlist, watched, in-progress, completed, rated]
+            enum:
+              [
+                all,
+                watchlist,
+                watched,
+                unwatched,
+                in-progress,
+                completed,
+                rated,
+              ]
         - name: page
           in: query
           schema:
@@ -15710,9 +15744,14 @@ paths:
           schema:
             type: string
             enum: [movie, tv]
+        - name: libraryId
+          in: query
+          schema:
+            type: string
+            maxLength: 128
       responses:
         '200':
-          description: A bounded page from the current user's provider library
+          description: A bounded page from the current user's personal library
           content:
             application/json:
               schema:

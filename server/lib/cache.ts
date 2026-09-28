@@ -29,6 +29,7 @@ export type AvailableCacheIds =
   | 'trakt'
   | 'anilist'
   | 'simkl'
+  | 'personallibrary'
   | 'mdblist';
 
 const DEFAULT_TTL = 300;
@@ -162,6 +163,11 @@ class CacheManager {
     simkl: new Cache('simkl', 'Simkl API', {
       maxKeys: 500,
       maxBytes: 8 * 1024 * 1024,
+    }),
+    personallibrary: new Cache('personallibrary', 'Personal media libraries', {
+      stdTtl: 30,
+      maxKeys: 1000,
+      maxBytes: 16 * 1024 * 1024,
     }),
     mdblist: new Cache('mdblist', 'MDBList API', {
       stdTtl: 172800,

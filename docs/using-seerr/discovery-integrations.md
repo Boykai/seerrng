@@ -35,7 +35,15 @@ a confirmed match retain their original provider identity and are marked
 
 ## Personal library and tracking
 
-Open **My Library** to browse your connected Trakt, AniList, or Simkl account.
+Open **My Library** to browse your connected Trakt, AniList, or Simkl account,
+or the movie and series libraries visible to your linked Plex, Jellyfin, or
+Emby account. Media-server libraries are read-only in SeerrNG and use your own
+provider account, so libraries hidden from that account are not shown. Choose a
+server library and browse its all, watched, unwatched, or in-progress shelf.
+Only media-server libraries enabled in SeerrNG and visible to your linked
+account appear. Link the media-server account under **Profile → Settings**;
+tracking-account connections remain under **Linked Accounts**.
+
 Trakt shelves are paged separately for movies and series. AniList and Simkl
 show the linked user's native library and keep provider IDs when a confirmed
 TMDB match is unavailable. Simkl anime entries stay unmapped until the identity

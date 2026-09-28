@@ -263,6 +263,55 @@ describe('Plex response normalization', () => {
     assert.ok(!('providerOnly' in metadata));
   });
 
+  it('keeps per-user watch counts and bounded pagination metadata', async () => {
+    const plex = new PlexAPI({ plexToken: 'linked-user-token' });
+    let requestOptions: {
+      params?: Record<string, number>;
+      headers?: Record<string, string>;
+    } = {};
+    Object.defineProperty(plex, 'get', {
+      configurable: true,
+      value: async (_path: string, options: typeof requestOptions) => {
+        requestOptions = options;
+        return {
+          MediaContainer: {
+            totalSize: 30,
+            Metadata: [
+              {
+                ratingKey: 'show-1',
+                type: 'show',
+                title: 'Partially watched show',
+                year: 2024,
+                leafCount: 10,
+                viewedLeafCount: 4,
+                viewCount: 0,
+                Guid: [{ id: 'tmdb://42' }],
+              },
+            ],
+          },
+        };
+      },
+    });
+
+    const page = await plex.getLibraryContents('7', {
+      offset: 20,
+      size: 10,
+      libraryType: 'show',
+    });
+
+    assert.strictEqual(
+      requestOptions.headers?.['X-Plex-Container-Start'],
+      '20'
+    );
+    assert.strictEqual(requestOptions.headers?.['X-Plex-Container-Size'], '10');
+    assert.strictEqual(requestOptions.params?.includeGuids, 1);
+    assert.strictEqual(page.totalSize, 30);
+    assert.strictEqual(page.items[0].year, 2024);
+    assert.strictEqual(page.items[0].viewedLeafCount, 4);
+    assert.strictEqual(page.items[0].leafCount, 10);
+    assert.deepStrictEqual(page.items[0].Guid, [{ id: 'tmdb://42' }]);
+  });
+
   it('requests GUID details for recently added music albums', async () => {
     const plex = new PlexAPI({ plexToken: 'token' });
     let requestOptions: {

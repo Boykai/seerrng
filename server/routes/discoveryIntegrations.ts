@@ -22,6 +22,11 @@ import {
   type LibraryShelf,
 } from '@server/lib/discoveryIntegrations/library';
 import {
+  getNativeLibraryConnection,
+  personalMediaServerLibrary,
+  type NativeLibrarySource,
+} from '@server/lib/discoveryIntegrations/mediaServerLibrary';
+import {
   applyTrackingIntent,
   parseTrackingIntent,
   prepareTrackingAccount,
@@ -126,6 +131,7 @@ router.get(
             getSettings().discoveryIntegrations[account.provider].clientId
         )
         .map(publicDiscoveryAccount),
+      mediaServer: await getNativeLibraryConnection(req.user!.id),
     });
   })
 );
@@ -387,6 +393,42 @@ router.get(
   '/library/:provider',
   handle(async (req, res) => {
     requireDiscoveryBrowserSession(req);
+    const source = String(req.params.provider);
+    if (source === 'plex' || source === 'jellyfin' || source === 'emby') {
+      const shelf = req.query.shelf ?? 'all';
+      const rawPage = req.query.page;
+      const page =
+        rawPage === undefined
+          ? 1
+          : typeof rawPage === 'number' && Number.isSafeInteger(rawPage)
+            ? rawPage
+            : typeof rawPage === 'string' && /^[1-9]\d{0,2}$/.test(rawPage)
+              ? Number(rawPage)
+              : NaN;
+      const libraryId = req.query.libraryId;
+      if (
+        typeof shelf !== 'string' ||
+        !['all', 'watched', 'unwatched', 'in-progress'].includes(shelf) ||
+        !Number.isSafeInteger(page) ||
+        page > 500 ||
+        (libraryId !== undefined && typeof libraryId !== 'string') ||
+        req.query.mediaType !== undefined
+      )
+        throw new DiscoveryIntegrationError(
+          400,
+          'Choose a valid media server library and shelf.'
+        );
+      res.json(
+        await personalMediaServerLibrary(
+          req.user!.id,
+          source as NativeLibrarySource,
+          shelf as LibraryShelf,
+          page,
+          libraryId as string | undefined
+        )
+      );
+      return;
+    }
     const provider = parseDiscoveryProvider(req.params.provider);
     const shelf = req.query.shelf ?? (provider === 'trakt' ? 'watched' : 'all');
     const rawPage = req.query.page;

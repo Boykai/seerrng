@@ -99,6 +99,30 @@ describe('discovery integration OpenAPI contracts', () => {
     );
     assert.equal(
       (
+        await request(app).get(
+          '/api/v1/integrations/discovery/library/plex?shelf=unwatched&page=2&libraryId=7'
+        )
+      ).status,
+      200
+    );
+    assert.equal(
+      (
+        await request(app).get(
+          '/api/v1/integrations/discovery/library/plex?shelf=unwatched&page=2&libraryId=3'
+        )
+      ).status,
+      200
+    );
+    assert.equal(
+      (
+        await request(app).get(
+          '/api/v1/integrations/discovery/library/jellyfin?shelf=watched&libraryId=movies-id'
+        )
+      ).status,
+      200
+    );
+    assert.equal(
+      (
         await request(app)
           .post('/api/v1/integrations/discovery/tracking/trakt')
           .send({

@@ -9,10 +9,11 @@ import {
   requireDiscoveryAccount,
 } from './accounts';
 import { cachedAccountRead } from './cache';
+import type { NativeLibrarySource } from './mediaServerLibrary';
 
 export interface PersonalLibraryItem {
   id: string;
-  source: DiscoveryAccountProvider;
+  source: DiscoveryAccountProvider | NativeLibrarySource;
   sourceId: string;
   title: string;
   mediaType?: 'movie' | 'tv';
@@ -20,13 +21,25 @@ export interface PersonalLibraryItem {
   imageUrl?: string;
   year?: number;
   status?:
-    'planning' | 'watching' | 'watched' | 'completed' | 'paused' | 'dropped';
+    | 'planning'
+    | 'watching'
+    | 'watched'
+    | 'completed'
+    | 'unwatched'
+    | 'paused'
+    | 'dropped';
   rating?: number;
   progress?: number;
   totalEpisodes?: number;
 }
 export type LibraryShelf =
-  'all' | 'watchlist' | 'watched' | 'in-progress' | 'completed' | 'rated';
+  | 'all'
+  | 'watchlist'
+  | 'watched'
+  | 'unwatched'
+  | 'in-progress'
+  | 'completed'
+  | 'rated';
 const positive = (value: unknown): number | undefined => {
   const number =
     typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;

@@ -8,6 +8,10 @@ import type {
   LibraryShelf,
   PersonalLibraryItem,
 } from '@server/lib/discoveryIntegrations/library';
+import type {
+  NativeLibrarySource,
+  PersonalLibrarySource,
+} from '@server/lib/discoveryIntegrations/mediaServerLibrary';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
@@ -17,7 +21,7 @@ import useSWR from 'swr';
 const messages = defineMessages('library', {
   title: 'My Library',
   description:
-    'Browse your connected tracking accounts and update your own watched status, progress, and ratings.',
+    'Browse your media server and connected tracking account libraries, then update tracking status, progress, and ratings.',
   accounts: 'Manage connected accounts',
   provider: 'Library source',
   shelf: 'Shelf',
@@ -28,11 +32,15 @@ const messages = defineMessages('library', {
   all: 'All titles',
   watchlist: 'Watchlist',
   watched: 'Watched',
+  unwatched: 'Unwatched',
   'in-progress': 'In progress',
   completed: 'Completed',
   rated: 'Rated',
   disconnected:
     'Connect a tracking account under Linked Accounts to browse its library.',
+  mediaServerDisconnected:
+    'Link your {provider} account in Profile Settings to browse your personal media server library.',
+  library: 'Media server library',
   loading: 'Loading your library…',
   empty: 'No titles match this shelf.',
   failed:
@@ -51,47 +59,73 @@ const messages = defineMessages('library', {
   planning: 'Planning to watch',
   watching: 'Watching',
   watchedState: 'Watched episodes',
+  unwatchedState: 'Unwatched',
   completedState: 'Completed',
   paused: 'Paused',
   dropped: 'Dropped',
 });
 const names = { trakt: 'Trakt', anilist: 'AniList', simkl: 'Simkl' };
+const nativeNames: Record<NativeLibrarySource, string> = {
+  plex: 'Plex',
+  jellyfin: 'Jellyfin',
+  emby: 'Emby',
+};
+const isNativeSource = (
+  source: PersonalLibrarySource
+): source is NativeLibrarySource =>
+  source === 'plex' || source === 'jellyfin' || source === 'emby';
 const base = '/api/v1/integrations/discovery';
 export default function LibraryPage() {
   const intl = useIntl();
-  const [provider, setProvider] = useState<DiscoveryAccountProvider>('trakt');
+  const [provider, setProvider] = useState<PersonalLibrarySource>('trakt');
   const [shelf, setShelf] = useState<LibraryShelf>('watched');
   const [type, setType] = useState('movie');
+  const [libraryId, setLibraryId] = useState('');
   const [page, setPage] = useState(1);
   const initializedProvider = useRef(false);
   const { data: connections } = useSWR<{
     accounts: { provider: DiscoveryAccountProvider }[];
+    mediaServer: { provider: NativeLibrarySource; connected: boolean } | null;
   }>(`${base}/accounts`);
   useEffect(() => {
-    if (initializedProvider.current || !connections?.accounts.length) return;
+    if (initializedProvider.current || !connections) return;
     initializedProvider.current = true;
-    const first = connections.accounts[0].provider;
+    const first = connections.mediaServer?.connected
+      ? connections.mediaServer.provider
+      : (connections.accounts[0]?.provider ?? 'trakt');
     setProvider(first);
     setShelf(first === 'trakt' ? 'watched' : 'all');
-    setType(first === 'trakt' ? 'movie' : '');
+    setType(isNativeSource(first) || first !== 'trakt' ? '' : 'movie');
   }, [connections]);
-  const connected = connections?.accounts.some(
-    (account) => account.provider === provider
-  );
+  const nativeSource = isNativeSource(provider);
+  const connected = nativeSource
+    ? connections?.mediaServer?.provider === provider &&
+      connections.mediaServer.connected
+    : connections?.accounts.some((account) => account.provider === provider);
   const { data, error, isLoading, mutate } = useSWR<{
     items: PersonalLibraryItem[];
+    libraries?: { id: string; name: string; type: 'show' | 'movie' }[];
     hasMore: boolean;
     allowWrites: boolean;
     missingMappings: number;
     truncated: boolean;
   }>(
     connected
-      ? `${base}/library/${provider}?shelf=${shelf}&page=${page}${type ? `&mediaType=${type}` : ''}`
+      ? `${base}/library/${provider}?shelf=${shelf}&page=${page}${nativeSource ? (libraryId ? `&libraryId=${encodeURIComponent(libraryId)}` : '') : type ? `&mediaType=${type}` : ''}`
       : null,
     { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
-  const shelves: LibraryShelf[] =
-    provider === 'trakt'
+  useEffect(() => {
+    const libraries = data?.libraries;
+    if (!nativeSource || !libraries?.length) return;
+    if (!libraries.some((library) => library.id === libraryId)) {
+      setLibraryId(libraries[0].id);
+      setPage(1);
+    }
+  }, [data?.libraries, libraryId, nativeSource]);
+  const shelves: LibraryShelf[] = nativeSource
+    ? ['all', 'watched', 'unwatched', 'in-progress']
+    : provider === 'trakt'
       ? ['watched', 'watchlist', 'rated']
       : ['all', 'watchlist', 'in-progress', 'completed', 'rated'];
   const statuses = {
@@ -99,6 +133,7 @@ export default function LibraryPage() {
     watching: messages.watching,
     watched: messages.watchedState,
     completed: messages.completedState,
+    unwatched: messages.unwatchedState,
     paused: messages.paused,
     dropped: messages.dropped,
   };
@@ -109,7 +144,11 @@ export default function LibraryPage() {
       <p className="description mb-6">
         {intl.formatMessage(messages.description)}{' '}
         <Link
-          href="/profile/settings/linked-accounts"
+          href={
+            nativeSource
+              ? '/profile/settings'
+              : '/profile/settings/linked-accounts'
+          }
           className="text-blue-300"
         >
           {intl.formatMessage(messages.accounts)}
@@ -124,13 +163,19 @@ export default function LibraryPage() {
             value={provider}
             onChange={(event) => {
               initializedProvider.current = true;
-              const source = event.target.value as DiscoveryAccountProvider;
+              const source = event.target.value as PersonalLibrarySource;
               setProvider(source);
               setShelf(source === 'trakt' ? 'watched' : 'all');
               setType(source === 'trakt' ? 'movie' : '');
+              setLibraryId('');
               setPage(1);
             }}
           >
+            {connections?.mediaServer && (
+              <option value={connections.mediaServer.provider}>
+                {nativeNames[connections.mediaServer.provider]}
+              </option>
+            )}
             {Object.entries(names).map(([key, name]) => (
               <option key={key} value={key}>
                 {name}
@@ -156,27 +201,60 @@ export default function LibraryPage() {
             ))}
           </select>
         </label>
-        <label className="block" htmlFor="library-type">
-          {intl.formatMessage(messages.mediaType)}
-          <select
-            id="library-type"
-            className="mt-2 block w-full"
-            value={type}
-            onChange={(event) => {
-              setType(event.target.value);
-              setPage(1);
-            }}
-          >
-            {provider !== 'trakt' && (
-              <option value="">{intl.formatMessage(messages.allTypes)}</option>
-            )}
-            <option value="movie">{intl.formatMessage(messages.movies)}</option>
-            <option value="tv">{intl.formatMessage(messages.series)}</option>
-          </select>
-        </label>
+        {nativeSource ? (
+          data?.libraries?.length ? (
+            <label className="block" htmlFor="library-server-library">
+              {intl.formatMessage(messages.library)}
+              <select
+                id="library-server-library"
+                className="mt-2 block w-full"
+                value={libraryId}
+                onChange={(event) => {
+                  setLibraryId(event.target.value);
+                  setPage(1);
+                }}
+              >
+                {data.libraries.map((library) => (
+                  <option key={library.id} value={library.id}>
+                    {library.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null
+        ) : (
+          <label className="block" htmlFor="library-type">
+            {intl.formatMessage(messages.mediaType)}
+            <select
+              id="library-type"
+              className="mt-2 block w-full"
+              value={type}
+              onChange={(event) => {
+                setType(event.target.value);
+                setPage(1);
+              }}
+            >
+              {provider !== 'trakt' && (
+                <option value="">
+                  {intl.formatMessage(messages.allTypes)}
+                </option>
+              )}
+              <option value="movie">
+                {intl.formatMessage(messages.movies)}
+              </option>
+              <option value="tv">{intl.formatMessage(messages.series)}</option>
+            </select>
+          </label>
+        )}
       </div>
       {connections && !connected && (
-        <p>{intl.formatMessage(messages.disconnected)}</p>
+        <p>
+          {nativeSource
+            ? intl.formatMessage(messages.mediaServerDisconnected, {
+                provider: nativeNames[provider],
+              })
+            : intl.formatMessage(messages.disconnected)}
+        </p>
       )}
       {isLoading && <p role="status">{intl.formatMessage(messages.loading)}</p>}
       {error && (
@@ -250,11 +328,13 @@ export default function LibraryPage() {
                 </p>
               )}
             </div>
-            <TrackingControls
-              item={item}
-              allowWrites={data.allowWrites}
-              onUpdated={() => mutate()}
-            />
+            {!nativeSource && (
+              <TrackingControls
+                item={item}
+                allowWrites={data.allowWrites}
+                onUpdated={() => mutate()}
+              />
+            )}
           </article>
         ))}
       </div>

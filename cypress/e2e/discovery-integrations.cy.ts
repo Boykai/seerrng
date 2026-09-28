@@ -192,4 +192,72 @@ describe('Discovery provider integrations', () => {
         capture: 'viewport',
       });
     });
+  for (const width of [390, 1280])
+    it(`browses the linked media server library at ${width}px`, () => {
+      cy.viewport(width, 900);
+      cy.intercept('GET', '/api/v1/integrations/discovery/accounts', {
+        accounts: [],
+        mediaServer: { provider: 'jellyfin', connected: true },
+      });
+      cy.intercept(
+        'GET',
+        '/api/v1/integrations/discovery/library/jellyfin*',
+        (request) => {
+          const url = new URL(request.url);
+          const libraryId = url.searchParams.get('libraryId');
+          const libraries = [
+            { id: 'movies', name: 'Movies', type: 'movie' },
+            { id: 'shows', name: 'Series', type: 'show' },
+          ];
+          request.reply({
+            items: libraryId
+              ? [
+                  {
+                    id: `jellyfin:${libraryId}:item-1`,
+                    source: 'jellyfin',
+                    sourceId: 'item-1',
+                    title:
+                      libraryId === 'shows'
+                        ? 'Native series title'
+                        : 'Native movie title',
+                    mediaType: libraryId === 'shows' ? 'tv' : 'movie',
+                    year: 2025,
+                    status:
+                      url.searchParams.get('shelf') === 'in-progress'
+                        ? 'watching'
+                        : 'unwatched',
+                    progress: libraryId === 'shows' ? 3 : undefined,
+                    totalEpisodes: libraryId === 'shows' ? 8 : undefined,
+                  },
+                ]
+              : [],
+            libraries,
+            page: Number(url.searchParams.get('page') ?? 1),
+            total: 1,
+            hasMore: false,
+            allowWrites: false,
+            missingMappings: 0,
+            truncated: false,
+          });
+        }
+      ).as('nativeLibrary');
+
+      cy.visit('/library');
+      cy.wait('@nativeLibrary');
+      cy.wait('@nativeLibrary');
+      cy.get('#library-source').should('have.value', 'jellyfin');
+      cy.get('#library-server-library').should('be.visible');
+      cy.contains('Native movie title').should('be.visible');
+      cy.get('#library-server-library').select('shows');
+      cy.wait('@nativeLibrary');
+      cy.contains('Native series title').should('be.visible');
+      cy.get('#library-shelf').select('in-progress');
+      cy.wait('@nativeLibrary');
+      cy.contains('Watching').should('be.visible');
+      cy.contains('button', 'Mark watched').should('not.exist');
+      cy.contains('button', 'Save rating').should('not.exist');
+      cy.document().then((doc) =>
+        expect(doc.documentElement.scrollWidth).to.be.at.most(width)
+      );
+    });
 });

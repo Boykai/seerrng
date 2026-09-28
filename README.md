@@ -53,7 +53,7 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
 ## What SeerrNG Does
 
 - Requests and approvals for movies, shows, music, ebooks, audiobooks, comics, magazines, emulation ROMs, and PC games.
-- Media-server integration with Plex, Jellyfin, and Emby.
+- Media-server integration with Plex, Jellyfin, and Emby, including watch-state-aware My Library views scoped to each linked account.
 - Automation service integration with Radarr, Sonarr, Lidarr, and Bookshelf/Readarr-compatible APIs.
 - Admin-configured Prowlarr connection, category coverage, and manual indexer search across movies, TV, music, books, comics, magazines, ROMs, and PC games; approved requests still go through their configured acquisition providers.
 - Music discovery and metadata through MusicBrainz, ListenBrainz, Cover Art Archive, TheAudioDB, and archive-backed artwork sources.

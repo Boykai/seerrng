@@ -22,6 +22,7 @@ export interface PlexLibraryItem {
   parentRatingKey?: string;
   grandparentRatingKey?: string;
   title: string;
+  year?: number;
   parentTitle?: string;
   guid: string;
   parentGuid?: string;
@@ -32,6 +33,9 @@ export interface PlexLibraryItem {
     id: string;
   }[];
   type: 'movie' | 'show' | 'season' | 'episode' | 'artist' | 'album' | 'track';
+  leafCount?: number;
+  viewedLeafCount?: number;
+  viewCount?: number;
   Media: Media[];
 }
 
@@ -280,6 +284,7 @@ export const sanitizePlexLibraryItem = (
     grandparentRatingKey:
       boundedPlexText(value.grandparentRatingKey, 128) || undefined,
     title: boundedPlexText(value.title, 512),
+    year: plexInteger(value.year) || undefined,
     parentTitle: boundedPlexText(value.parentTitle, 512) || undefined,
     guid: boundedPlexText(value.guid, 512),
     parentGuid: boundedPlexText(value.parentGuid, 512) || undefined,
@@ -288,6 +293,9 @@ export const sanitizePlexLibraryItem = (
     updatedAt: plexInteger(value.updatedAt),
     Guid: sanitizePlexGuids(value.Guid),
     type: value.type as PlexLibraryItem['type'],
+    leafCount: plexInteger(value.leafCount),
+    viewedLeafCount: plexInteger(value.viewedLeafCount),
+    viewCount: plexInteger(value.viewCount),
     Media: (Array.isArray(value.Media) ? value.Media : [])
       .slice(0, MAX_PLEX_MEDIA_VARIANTS)
       .flatMap((media) => {
