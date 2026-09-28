@@ -39,11 +39,17 @@ const messages = defineMessages('components.Discover.DiscoverMagazines', {
 const DiscoverMagazines = () => {
   const intl = useIntl();
   const router = useRouter();
-  const update = useBatchUpdateQueryParams(router.query);
+  const [isRouteReady, setIsRouteReady] = useState(false);
+  useEffect(() => {
+    if (router.isReady) {
+      setIsRouteReady(true);
+    }
+  }, [router.isReady]);
+  const routeQuery = isRouteReady ? router.query : {};
+  const update = useBatchUpdateQueryParams(routeQuery);
   const { hasPermission } = useUser();
-  const query =
-    typeof router.query.query === 'string' ? router.query.query : '';
-  const catalog = router.query.catalog === 'public' ? 'public' : 'tracked';
+  const query = typeof routeQuery.query === 'string' ? routeQuery.query : '';
+  const catalog = routeQuery.catalog === 'public' ? 'public' : 'tracked';
   const [search, debouncedSearch, setSearch] = useDebouncedState(query);
   const [requestTitle, setRequestTitle] = useState('');
   const routedSearchRef = useRef(query.trim());
@@ -58,7 +64,7 @@ const DiscoverMagazines = () => {
     '/api/v1/discover/magazines',
     { query, catalog },
     {
-      enabled: router.isReady,
+      enabled: isRouteReady,
       showErrorToast: false,
       hideErrorWithResults: false,
     }
