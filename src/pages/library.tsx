@@ -1,6 +1,7 @@
 import Button from '@app/components/Common/Button';
 import PageTitle from '@app/components/Common/PageTitle';
 import IdentityMappingControls from '@app/components/DiscoveryIntegrations/IdentityMappingControls';
+import IdentityMappingPackControls from '@app/components/DiscoveryIntegrations/IdentityMappingPackControls';
 import TrackingControls from '@app/components/DiscoveryIntegrations/TrackingControls';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import defineMessages from '@app/utils/defineMessages';
@@ -161,6 +162,7 @@ export default function LibraryPage() {
           {intl.formatMessage(messages.accounts)}
         </Link>
       </p>
+      <IdentityMappingPackControls onUpdated={() => mutate()} />
       <div className="mb-6 flex flex-wrap gap-4">
         <label className="block" htmlFor="library-source">
           {intl.formatMessage(messages.provider)}

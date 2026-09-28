@@ -25,6 +25,97 @@ export interface IdentityMappingCandidate {
   identityMapped?: boolean;
 }
 
+export interface PersonalIdentityMappingPackEntry {
+  identity: string;
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+}
+
+export interface PersonalIdentityMappingPack {
+  format: 'seerrng.personal-title-matches';
+  version: 1;
+  exportedAt: string;
+  entries: PersonalIdentityMappingPackEntry[];
+}
+
+export function parsePersonalIdentityMappingPack(
+  value: unknown
+): PersonalIdentityMappingPack {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).some(
+      (key) => !['format', 'version', 'exportedAt', 'entries'].includes(key)
+    )
+  )
+    throw new DiscoveryIntegrationError(
+      400,
+      'This title-match file is invalid.'
+    );
+
+  const pack = value as Record<string, unknown>;
+  if (
+    pack.format !== 'seerrng.personal-title-matches' ||
+    pack.version !== 1 ||
+    typeof pack.exportedAt !== 'string' ||
+    !Number.isFinite(Date.parse(pack.exportedAt)) ||
+    !Array.isArray(pack.entries) ||
+    pack.entries.length > MAX_PERSONAL_IDENTITY_MAPPINGS
+  )
+    throw new DiscoveryIntegrationError(
+      400,
+      'This title-match file is not a supported SeerrNG pack.'
+    );
+
+  const identities = new Set<string>();
+  const entries = pack.entries.map((raw): PersonalIdentityMappingPackEntry => {
+    if (
+      !raw ||
+      typeof raw !== 'object' ||
+      Array.isArray(raw) ||
+      Object.keys(raw).some(
+        (key) => !['identity', 'tmdbId', 'mediaType'].includes(key)
+      )
+    )
+      throw new DiscoveryIntegrationError(
+        400,
+        'This title-match file contains an invalid entry.'
+      );
+    const entry = raw as Record<string, unknown>;
+    if (
+      typeof entry.identity !== 'string' ||
+      !Number.isSafeInteger(entry.tmdbId) ||
+      Number(entry.tmdbId) < 1 ||
+      Number(entry.tmdbId) > 1_000_000_000 ||
+      (entry.mediaType !== 'movie' && entry.mediaType !== 'tv')
+    )
+      throw new DiscoveryIntegrationError(
+        400,
+        'This title-match file contains an invalid entry.'
+      );
+    parsePersonalIdentitySource(entry.identity);
+    if (identities.has(entry.identity))
+      throw new DiscoveryIntegrationError(
+        400,
+        'This title-match file repeats a provider identity.'
+      );
+    identities.add(entry.identity);
+    return {
+      identity: entry.identity,
+      tmdbId: Number(entry.tmdbId),
+      mediaType: entry.mediaType,
+    };
+  });
+
+  return {
+    format: 'seerrng.personal-title-matches',
+    version: 1,
+    exportedAt: pack.exportedAt,
+    entries,
+  };
+}
+
 export function parsePersonalIdentitySource(
   value: unknown
 ): PersonalIdentitySource {
@@ -124,4 +215,94 @@ export async function removePersonalIdentityMapping(
     identity,
   });
   return { removed: (result.affected ?? 0) > 0 };
+}
+
+export async function exportPersonalIdentityMappingPack(
+  userId: number
+): Promise<PersonalIdentityMappingPack> {
+  const rows = await getRepository(DiscoveryIdentityMapping).find({
+    where: { userId },
+    order: { identity: 'ASC' },
+  });
+  return {
+    format: 'seerrng.personal-title-matches',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    entries: rows.map(({ identity, tmdbId, mediaType }) => ({
+      identity,
+      tmdbId,
+      mediaType,
+    })),
+  };
+}
+
+export async function importPersonalIdentityMappingPack(
+  userId: number,
+  value: unknown
+) {
+  const pack = parsePersonalIdentityMappingPack(value);
+  const repository = getRepository(DiscoveryIdentityMapping);
+  return repository.manager.transaction(async (manager) => {
+    const transactionRepository = manager.getRepository(
+      DiscoveryIdentityMapping
+    );
+    const existing = new Map<string, DiscoveryIdentityMapping>();
+    for (
+      let offset = 0;
+      offset < pack.entries.length;
+      offset += LOOKUP_BATCH_SIZE
+    ) {
+      const rows = await transactionRepository.findBy({
+        userId,
+        identity: In(
+          pack.entries
+            .slice(offset, offset + LOOKUP_BATCH_SIZE)
+            .map((entry) => entry.identity)
+        ),
+      });
+      for (const row of rows) existing.set(row.identity, row);
+    }
+
+    const imported = pack.entries.filter(
+      (entry) => !existing.has(entry.identity)
+    ).length;
+    const currentTotal = await transactionRepository.countBy({ userId });
+    if (currentTotal + imported > MAX_PERSONAL_IDENTITY_MAPPINGS)
+      throw new DiscoveryIntegrationError(
+        409,
+        'This account has reached its saved title-match limit.'
+      );
+
+    let updated = 0;
+    let unchanged = 0;
+    const writes: PersonalIdentityMappingPackEntry[] = [];
+    for (const entry of pack.entries) {
+      const current = existing.get(entry.identity);
+      if (!current) writes.push(entry);
+      else if (
+        current.tmdbId !== entry.tmdbId ||
+        current.mediaType !== entry.mediaType
+      ) {
+        updated++;
+        writes.push(entry);
+      } else unchanged++;
+    }
+
+    for (let offset = 0; offset < writes.length; offset += 250)
+      await transactionRepository.upsert(
+        writes.slice(offset, offset + 250).map((entry) => ({
+          userId,
+          ...entry,
+          updatedAt: new Date(),
+        })),
+        ['userId', 'identity']
+      );
+
+    return {
+      imported,
+      updated,
+      unchanged,
+      total: pack.entries.length,
+    };
+  });
 }

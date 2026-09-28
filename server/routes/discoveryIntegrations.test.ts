@@ -127,6 +127,43 @@ describe('personal discovery account boundaries', () => {
     assert.equal(removed.body.removed, true);
   });
 
+  it('imports and exports private title matches without provider credentials', async () => {
+    const agent = await login();
+    const pack = {
+      format: 'seerrng.personal-title-matches',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      entries: [
+        {
+          identity: 'anilist:123',
+          tmdbId: 456,
+          mediaType: 'movie',
+        },
+      ],
+    };
+
+    const imported = await agent
+      .post('/integrations/discovery/mappings/pack')
+      .type('text')
+      .send(JSON.stringify(pack));
+    assert.equal(imported.status, 200);
+    assert.deepEqual(imported.body, {
+      imported: 1,
+      updated: 0,
+      unchanged: 0,
+      total: 1,
+    });
+
+    const exported = await agent.get('/integrations/discovery/mappings/pack');
+    assert.equal(exported.status, 200);
+    assert.equal(exported.body.format, 'seerrng.personal-title-matches');
+    assert.deepEqual(exported.body.entries, pack.entries);
+    assert.equal(
+      JSON.stringify(exported.body).includes('private-token'),
+      false
+    );
+  });
+
   it('omits stored tokens and client secrets from account and configuration responses', async () => {
     const agent = await login();
     const admin = await getRepository(User).findOneByOrFail({

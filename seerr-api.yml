@@ -595,6 +595,58 @@ components:
         updatedAt:
           type: string
           format: date-time
+    PersonalIdentityMappingPackEntry:
+      type: object
+      additionalProperties: false
+      required: [identity, tmdbId, mediaType]
+      properties:
+        identity:
+          type: string
+          minLength: 3
+          maxLength: 256
+        tmdbId:
+          type: integer
+          minimum: 1
+          maximum: 1000000000
+        mediaType:
+          type: string
+          enum: [movie, tv]
+    PersonalIdentityMappingPack:
+      type: object
+      additionalProperties: false
+      required: [format, version, exportedAt, entries]
+      properties:
+        format:
+          type: string
+          enum: [seerrng.personal-title-matches]
+        version:
+          type: integer
+          enum: [1]
+        exportedAt:
+          type: string
+          format: date-time
+        entries:
+          type: array
+          maxItems: 10000
+          items:
+            $ref: '#/components/schemas/PersonalIdentityMappingPackEntry'
+    PersonalIdentityMappingPackImportResult:
+      type: object
+      additionalProperties: false
+      required: [imported, updated, unchanged, total]
+      properties:
+        imported:
+          type: integer
+          minimum: 0
+        updated:
+          type: integer
+          minimum: 0
+        unchanged:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
     DiscoveryTrackingRequest:
       type: object
       additionalProperties: false
@@ -16139,6 +16191,49 @@ paths:
           description: Mapping update rate limit reached
         '502':
           description: TMDB could not confirm the selected title
+  /integrations/discovery/mappings/pack:
+    get:
+      summary: Export the current user's private title matches
+      tags:
+        - user
+      responses:
+        '200':
+          description: Versioned personal title-match pack without provider credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalIdentityMappingPack'
+        '403':
+          description: Browser session required
+    post:
+      summary: Import a versioned pack of private title matches
+      tags:
+        - user
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+              maxLength: 5242880
+              description: UTF-8 JSON text containing a PersonalIdentityMappingPack
+      responses:
+        '200':
+          description: Imported, updated, and unchanged mapping totals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalIdentityMappingPackImportResult'
+        '400':
+          description: Invalid or unsupported pack
+        '403':
+          description: Browser session required
+        '409':
+          description: Per-user saved title-match limit reached
+        '413':
+          description: Pack exceeds the 5 MiB upload limit
+        '429':
+          description: Pack import rate limit reached
   /integrations/discovery/mappings/{identity}:
     delete:
       summary: Remove a personal library title match

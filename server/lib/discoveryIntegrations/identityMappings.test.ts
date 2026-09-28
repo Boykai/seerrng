@@ -6,6 +6,9 @@ import assert from 'node:assert/strict';
 import { it } from 'node:test';
 import {
   applyPersonalIdentityMappings,
+  exportPersonalIdentityMappingPack,
+  importPersonalIdentityMappingPack,
+  parsePersonalIdentityMappingPack,
   parsePersonalIdentitySource,
   removePersonalIdentityMapping,
   savePersonalIdentityMapping,
@@ -69,5 +72,98 @@ it('validates the source-specific library identity before saving a match', async
     () =>
       savePersonalIdentityMapping(1, 'trakt:movie:12', 1_000_000_001, 'movie'),
     /valid catalog match/i
+  );
+});
+
+it('exports and imports a versioned personal mapping pack idempotently', async () => {
+  const owner = await getRepository(User).findOneByOrFail({
+    email: 'admin@seerr.dev',
+  });
+  await savePersonalIdentityMapping(owner.id, 'trakt:movie:123', 456, 'movie');
+  await savePersonalIdentityMapping(owner.id, 'anilist:101', 202, 'tv');
+
+  const exported = await exportPersonalIdentityMappingPack(owner.id);
+  assert.equal(exported.format, 'seerrng.personal-title-matches');
+  assert.equal(exported.version, 1);
+  assert.equal(exported.entries.length, 2);
+  assert.deepEqual(Object.keys(exported.entries[0]).sort(), [
+    'identity',
+    'mediaType',
+    'tmdbId',
+  ]);
+
+  const updated = await importPersonalIdentityMappingPack(owner.id, {
+    ...exported,
+    entries: [
+      { ...exported.entries[0], tmdbId: 789 },
+      exported.entries[1],
+      {
+        identity: 'mdblist:unknown:tt1234567',
+        tmdbId: 321,
+        mediaType: 'movie',
+      },
+    ],
+  });
+  assert.deepEqual(updated, {
+    imported: 1,
+    updated: 1,
+    unchanged: 1,
+    total: 3,
+  });
+
+  const repeated = await importPersonalIdentityMappingPack(owner.id, {
+    ...exported,
+    entries: [
+      { ...exported.entries[0], tmdbId: 789 },
+      exported.entries[1],
+      {
+        identity: 'mdblist:unknown:tt1234567',
+        tmdbId: 321,
+        mediaType: 'movie',
+      },
+    ],
+  });
+  assert.deepEqual(repeated, {
+    imported: 0,
+    updated: 0,
+    unchanged: 3,
+    total: 3,
+  });
+});
+
+it('rejects unsupported, duplicated, and malformed title-match pack entries', async () => {
+  const exportedAt = new Date().toISOString();
+  assert.throws(
+    () =>
+      parsePersonalIdentityMappingPack({
+        format: 'other-app',
+        version: 1,
+        exportedAt,
+        entries: [],
+      }),
+    /supported SeerrNG pack/
+  );
+  assert.throws(
+    () =>
+      parsePersonalIdentityMappingPack({
+        format: 'seerrng.personal-title-matches',
+        version: 1,
+        exportedAt,
+        entries: [
+          { identity: 'anilist:101', tmdbId: 202, mediaType: 'tv' },
+          { identity: 'anilist:101', tmdbId: 203, mediaType: 'tv' },
+        ],
+      }),
+    /repeats a provider identity/
+  );
+  assert.throws(
+    () =>
+      parsePersonalIdentityMappingPack({
+        format: 'seerrng.personal-title-matches',
+        version: 1,
+        exportedAt,
+        entries: [{ identity: 'untrusted:1', tmdbId: 202, mediaType: 'tv' }],
+      }),
+    /valid library title/
   );
 });

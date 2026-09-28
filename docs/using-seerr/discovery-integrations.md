@@ -90,6 +90,17 @@ When a provider does not confirm a write, SeerrNG records the outcome as
 uncertain and will not automatically repeat that action. Check the provider
 account before choosing the same change again.
 
+## Back up title matches
+
+The **Personal title matches** section at the top of **My Library** exports a
+versioned JSON pack of your saved provider-to-catalog matches. Choose that file
+to restore it on another SeerrNG install; the import preview reports how many
+matches it contains before you apply it. Existing matches for the same provider
+item are updated, and matches for other users are never changed. Packs contain
+provider item IDs and TMDB IDs only, not account tokens or application secrets.
+An import can be restored before you reconnect the provider accounts; the
+matches take effect when those items appear in a library or discovery feed.
+
 ## Release calendar
 
 **Calendar** displays movie releases and series episodes from configured Radarr

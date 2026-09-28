@@ -20,6 +20,9 @@ import {
   runPersonalDiscoveryMutation,
 } from '@server/lib/discoveryIntegrations/http';
 import {
+  exportPersonalIdentityMappingPack,
+  importPersonalIdentityMappingPack,
+  parsePersonalIdentityMappingPack,
   parsePersonalIdentitySource,
   removePersonalIdentityMapping,
   savePersonalIdentityMapping,
@@ -44,7 +47,7 @@ import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import { authorizedMutation } from '@server/middleware/authorizedMutation';
-import { Router } from 'express';
+import express, { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 
 const router = Router();
@@ -57,6 +60,15 @@ const personalMutation = runPersonalDiscoveryMutation;
 const identityMappingRateLimit = rateLimit({
   windowMs: 60_000,
   limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `user:${req.user?.id ?? 'anonymous'}`,
+  skip: () =>
+    process.env.NODE_ENV === 'test' || process.env.E2E_TESTS === 'true',
+});
+const identityMappingPackRateLimit = rateLimit({
+  windowMs: 5 * 60_000,
+  limit: 5,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => `user:${req.user?.id ?? 'anonymous'}`,
@@ -146,6 +158,41 @@ router.delete(
     res.json(
       await personalMutation(req, () =>
         removePersonalIdentityMapping(req.user!.id, identity)
+      )
+    );
+  })
+);
+router.get(
+  '/mappings/pack',
+  handle(async (req, res) => {
+    requireDiscoveryBrowserSession(req);
+    res.json(await exportPersonalIdentityMappingPack(req.user!.id));
+  })
+);
+router.post(
+  '/mappings/pack',
+  identityMappingPackRateLimit,
+  express.text({ type: 'text/plain', limit: '5mb' }),
+  handle(async (req, res) => {
+    requireDiscoveryBrowserSession(req);
+    if (typeof req.body !== 'string')
+      throw new DiscoveryIntegrationError(
+        400,
+        'Select a valid title-match file.'
+      );
+    let pack: unknown;
+    try {
+      pack = JSON.parse(req.body);
+    } catch {
+      throw new DiscoveryIntegrationError(
+        400,
+        'This title-match file is not valid JSON.'
+      );
+    }
+    const validatedPack = parsePersonalIdentityMappingPack(pack);
+    res.json(
+      await personalMutation(req, () =>
+        importPersonalIdentityMappingPack(req.user!.id, validatedPack)
       )
     );
   })

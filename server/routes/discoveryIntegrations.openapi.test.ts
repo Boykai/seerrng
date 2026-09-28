@@ -148,6 +148,20 @@ describe('discovery integration OpenAPI contracts', () => {
       200
     );
     assert.equal(
+      (await request(app).get('/api/v1/integrations/discovery/mappings/pack'))
+        .status,
+      200
+    );
+    assert.equal(
+      (
+        await request(app)
+          .post('/api/v1/integrations/discovery/mappings/pack')
+          .type('text')
+          .send('{"format":"seerrng.personal-title-matches","version":1}')
+      ).status,
+      200
+    );
+    assert.equal(
       (
         await request(app)
           .post('/api/v1/integrations/discovery/tracking/trakt')

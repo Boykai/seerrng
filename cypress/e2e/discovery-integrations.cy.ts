@@ -515,6 +515,92 @@ describe('Discovery provider integrations', () => {
     cy.contains('button', 'Match catalog title').should('be.visible');
   });
 
+  it('imports and exports private title-match packs from My Library', () => {
+    cy.viewport(1280, 900);
+    let matched = false;
+    const pack = {
+      format: 'seerrng.personal-title-matches',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      entries: [{ identity: 'anilist:123', tmdbId: 456, mediaType: 'movie' }],
+    };
+    cy.intercept('GET', '/api/v1/integrations/discovery/accounts', {
+      accounts: [
+        { provider: 'anilist', username: 'Reader', allowWrites: false },
+      ],
+    });
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/library/anilist*',
+      (request) =>
+        request.reply({
+          items: [
+            {
+              id: 'anilist:123',
+              source: 'anilist',
+              sourceId: '123',
+              title: 'Imported title match',
+              mediaType: 'movie',
+              ...(matched ? { tmdbId: 456, identityMapped: true } : {}),
+            },
+          ],
+          page: 1,
+          hasMore: false,
+          allowWrites: false,
+          missingMappings: matched ? 0 : 1,
+          truncated: false,
+        })
+    ).as('packPersonalLibrary');
+    cy.intercept('GET', '/api/v1/movie/456*', {
+      id: 456,
+      title: 'Imported catalog movie',
+      releaseDate: '2024-01-01',
+      genreIds: [],
+      posterPath: null,
+      backdropPath: null,
+      overview: '',
+    });
+    cy.intercept(
+      'POST',
+      '/api/v1/integrations/discovery/mappings/pack',
+      (request) => {
+        expect(request.headers['content-type']).to.include('text/plain');
+        expect(JSON.parse(request.body)).to.deep.equal(pack);
+        matched = true;
+        request.reply({ imported: 1, updated: 0, unchanged: 0, total: 1 });
+      }
+    ).as('importTitlePack');
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/mappings/pack',
+      (request) =>
+        request.reply({ ...pack, entries: matched ? pack.entries : [] })
+    ).as('exportTitlePack');
+
+    cy.visit('/library');
+    cy.wait('@packPersonalLibrary');
+    cy.get('#identity-mapping-pack').selectFile({
+      contents: Cypress.Buffer.from(JSON.stringify(pack)),
+      fileName: 'personal-title-matches.json',
+      mimeType: 'application/json',
+    });
+    cy.contains('personal-title-matches.json contains 1 title matches.').should(
+      'be.visible'
+    );
+    cy.contains('button', 'Import title matches').click();
+    cy.wait('@importTitlePack');
+    cy.wait('@packPersonalLibrary');
+    cy.contains('Imported 1, updated 0, and left 0 unchanged.').should(
+      'be.visible'
+    );
+    cy.contains('button', 'Change title match').should('be.visible');
+
+    cy.contains('button', 'Export title matches').click();
+    cy.wait('@exportTitlePack')
+      .its('response.body.entries')
+      .should('have.length', 1);
+  });
+
   for (const width of [390, 1280])
     it(`browses the linked media server library at ${width}px`, () => {
       cy.viewport(width, 900);
