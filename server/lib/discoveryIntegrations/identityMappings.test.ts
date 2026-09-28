@@ -49,6 +49,14 @@ it('keeps manual identity matches private to the owner and resettable', async ()
 it('validates the source-specific library identity before saving a match', async () => {
   assert.equal(parsePersonalIdentitySource('plex:movie:12'), 'plex');
   assert.equal(
+    parsePersonalIdentitySource('trakt:tv:the-expanse-season-1'),
+    'trakt'
+  );
+  assert.equal(
+    parsePersonalIdentitySource('mdblist:unknown:tt1234567'),
+    'mdblist'
+  );
+  assert.equal(
     parsePersonalIdentitySource(
       'jellyfin:tv:00112233-4455-6677-8899-aabbccddeeff'
     ),

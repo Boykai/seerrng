@@ -10,6 +10,7 @@ import {
   requireDiscoveryAccount,
 } from './accounts';
 import { cachedAccountRead } from './cache';
+import { applyPersonalIdentityMappings } from './identityMappings';
 
 export interface DiscoveryFeedItem {
   id: string;
@@ -20,6 +21,8 @@ export interface DiscoveryFeedItem {
   tmdbId?: number;
   year?: number;
   imageUrl?: string;
+  identityMapped?: boolean;
+  mappingAvailable?: boolean;
 }
 export interface DiscoveryFeedPage {
   page: number;
@@ -40,6 +43,7 @@ function anilistItem(item: AnilistMedia): DiscoveryFeedItem {
       String(item.id),
     mediaType: item.format === 'MOVIE' ? 'movie' : 'tv',
     year: item.seasonYear ?? undefined,
+    mappingAvailable: Number.isSafeInteger(item.id) && item.id > 0,
     imageUrl:
       image && /^https:\/\/s4\.anilist\.co\//.test(image) ? image : undefined,
   };
@@ -86,15 +90,23 @@ export async function discoveryFeed(
     if (!fetched)
       throw new DiscoveryIntegrationError(400, 'Unknown Trakt feed.');
     hasMore = fetched.hasMore;
-    items = fetched.items.map((item, index) => ({
-      id: `trakt:${item.mediaType}:${item.traktId ?? item.tmdbId ?? index}`,
-      source: 'trakt',
-      sourceId: String(item.traktId ?? item.traktSlug ?? ''),
-      title: item.title,
-      mediaType: item.mediaType,
-      tmdbId: item.tmdbId,
-      year: item.year,
-    }));
+    items = fetched.items.map((item, index) => {
+      const identity =
+        item.traktId ??
+        item.traktSlug ??
+        item.tmdbId ??
+        `unmapped-${page}-${index}`;
+      return {
+        id: `trakt:${item.mediaType}:${identity}`,
+        source: 'trakt',
+        sourceId: String(item.traktId ?? item.traktSlug ?? ''),
+        title: item.title,
+        mediaType: item.mediaType,
+        tmdbId: item.tmdbId,
+        year: item.year,
+        mappingAvailable: !!(item.traktId || item.traktSlug || item.tmdbId),
+      };
+    });
   } else if (provider === 'anilist') {
     const api = new AnilistAPI();
     if (feed === 'library') {
@@ -146,20 +158,26 @@ export async function discoveryFeed(
       offset: (page - 1) * 20,
     });
     hasMore = fetched.hasMore;
-    items = fetched.items.map((item, index) => ({
-      id: `mdblist:${item.mediaType ?? 'unknown'}:${item.tmdbId ?? item.imdbId ?? index}`,
-      source: 'mdblist',
-      sourceId: String(item.imdbId ?? item.tmdbId ?? ''),
-      title: item.title,
-      mediaType: item.mediaType,
-      tmdbId: item.tmdbId,
-    }));
+    items = fetched.items.map((item, index) => {
+      const identity =
+        item.tmdbId ?? item.imdbId ?? `unmapped-${page}-${index}`;
+      return {
+        id: `mdblist:${item.mediaType ?? 'unknown'}:${identity}`,
+        source: 'mdblist',
+        sourceId: String(item.imdbId ?? item.tmdbId ?? ''),
+        title: item.title,
+        mediaType: item.mediaType,
+        tmdbId: item.tmdbId,
+        mappingAvailable: !!(item.tmdbId || item.imdbId),
+      };
+    });
   } else
     throw new DiscoveryIntegrationError(
       400,
       'Unknown discovery provider or feed.'
     );
-  items = items.filter(
+  const mappedItems = await applyPersonalIdentityMappings(userId, items);
+  items = mappedItems.filter(
     (item) => !item.mediaType || isMediaCategoryEnabled(item.mediaType)
   );
   return {

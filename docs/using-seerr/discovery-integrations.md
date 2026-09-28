@@ -42,7 +42,13 @@ match.
 
 Titles with confirmed TMDB IDs use the normal movie/series cards. Titles without
 a confirmed match retain their original provider identity and are marked
-**Catalog match pending**. SeerrNG does not invent an ID from a matching title.
+**Catalog match pending**. Search the SeerrNG catalog and confirm a movie or
+series to attach a private match to a stable Trakt, AniList, or MDBList ID.
+Matched titles then use normal catalog cards, and the **Show unmatched titles**
+filter keeps the remaining repair queue visible on the current feed page. These
+matches are private to your account and are also used in My Library when the
+same provider item appears there. Provider IDs are preserved; SeerrNG does not
+infer a match from title text.
 Provider errors identify whether an account needs reconnecting, MDBList setup is
 missing, an MDBList list is unavailable, or the provider is temporarily down.
 When a provider reports a quota cooldown, Retry stays disabled until that window
@@ -66,8 +72,10 @@ account under **Profile → Settings**; tracking-account connections remain unde
 
 Trakt shelves are paged separately for movies and series. AniList and Simkl
 show the linked user's native library and keep provider IDs when a confirmed
-TMDB match is unavailable. Simkl anime entries stay unmapped until the identity
-and media type can be confirmed.
+TMDB match is unavailable. Use **Match catalog title** to choose a confirmed
+movie or series for an unmatched item; the saved match is private to your user
+and can be changed or reset later. Simkl anime entries stay unmapped until the
+identity and media type can be confirmed.
 
 Provider writes are off by default. To enable them, turn on the explicit
 watched-status, progress, and rating consent for each account under **Linked

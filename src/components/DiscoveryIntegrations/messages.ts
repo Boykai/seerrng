@@ -57,6 +57,10 @@ export default defineMessages('discovery', {
   'providers.unmapped':
     'Some titles do not have a confirmed catalog match yet. They are shown with their original provider information.',
   'providers.matchpending': 'Catalog match pending',
+  'providers.repairOnly': 'Show unmatched titles on this page ({count})',
+  'providers.noUnmatched': 'No unmatched titles remain on this page.',
+  'providers.noStableIdentity':
+    'This item has no stable provider ID, so its match cannot be saved.',
   'providers.previous': 'Previous',
   'providers.page': 'Page {page}',
   'providers.next': 'Next',

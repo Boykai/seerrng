@@ -435,6 +435,10 @@ components:
           type: integer
         imageUrl:
           type: string
+        identityMapped:
+          type: boolean
+        mappingAvailable:
+          type: boolean
     DiscoveryFeedPage:
       type: object
       additionalProperties: false

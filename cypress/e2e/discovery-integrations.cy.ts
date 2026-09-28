@@ -109,6 +109,93 @@ describe('Discovery provider integrations', () => {
       );
       cy.screenshot(`provider-discovery-${width}`);
     });
+  for (const width of [390, 1280])
+    it(`repairs unmatched discovery titles at ${width}px`, () => {
+      cy.viewport(width, 900);
+      let matched = false;
+      cy.intercept(
+        'GET',
+        '/api/v1/integrations/discovery/feeds/anilist/trending*',
+        (request) =>
+          request.reply({
+            page: 1,
+            hasMore: false,
+            missingMappings: matched ? 0 : 1,
+            items: [
+              {
+                id: 'anilist:22',
+                source: 'anilist',
+                sourceId: '22',
+                title: 'Unmatched discovery anime',
+                mediaType: 'tv',
+                mappingAvailable: true,
+                ...(matched ? { tmdbId: 456, identityMapped: true } : {}),
+              },
+            ],
+          })
+      ).as('discoveryFeed');
+      cy.intercept('GET', '/api/v1/search?*', {
+        page: 1,
+        totalPages: 1,
+        totalResults: 1,
+        results: [
+          {
+            id: 456,
+            mediaType: 'tv',
+            name: 'Matched discovery series',
+            firstAirDate: '2020-01-01',
+          },
+        ],
+      }).as('discoveryMappingSearch');
+      cy.intercept(
+        'PUT',
+        '/api/v1/integrations/discovery/mappings',
+        (request) => {
+          expect(request.body).to.deep.equal({
+            identity: 'anilist:22',
+            tmdbId: 456,
+            mediaType: 'tv',
+          });
+          matched = true;
+          request.reply({
+            identity: 'anilist:22',
+            tmdbId: 456,
+            mediaType: 'tv',
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      ).as('saveDiscoveryMapping');
+      cy.intercept(
+        'DELETE',
+        '/api/v1/integrations/discovery/mappings/*',
+        (request) => {
+          matched = false;
+          request.reply({ removed: true });
+        }
+      ).as('resetDiscoveryMapping');
+
+      cy.visit('/discover/providers');
+      cy.get('#provider-feed').select('anilist/trending');
+      cy.wait('@discoveryFeed');
+      cy.contains('Catalog match pending').should('be.visible');
+      cy.get('input[type="checkbox"]').check();
+      cy.contains('button', 'Match catalog title').click();
+      cy.get('input[aria-label="Search SeerrNG catalog"]').type('Matched');
+      cy.wait('@discoveryMappingSearch');
+      cy.contains('button', 'Use this match').click();
+      cy.wait('@saveDiscoveryMapping');
+      cy.contains('No unmatched titles remain on this page.').should(
+        'be.visible'
+      );
+      cy.get('input[type="checkbox"]').uncheck();
+      cy.contains('button', 'Reset title match').click();
+      cy.wait('@resetDiscoveryMapping');
+      cy.contains('Catalog match pending').should('be.visible');
+      cy.document().then((doc) =>
+        expect(doc.documentElement.scrollWidth).to.be.at.most(width)
+      );
+      cy.screenshot(`provider-discovery-repair-${width}`);
+    });
   it('shows personalized Discover rows only for connected provider accounts', () => {
     cy.intercept('GET', '/api/v1/integrations/discovery/accounts', {
       accounts: [

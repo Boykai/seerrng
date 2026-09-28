@@ -1,8 +1,15 @@
 import AnilistAPI from '@server/api/anilist';
+import { getRepository } from '@server/datasource';
+import { User } from '@server/entity/User';
+import { setupTestDb } from '@server/test/db';
 import assert from 'node:assert/strict';
 import { afterEach, it, mock } from 'node:test';
 import { DiscoveryIntegrationError } from './accounts';
 import { discoveryFeed } from './feeds';
+import { savePersonalIdentityMapping } from './identityMappings';
+
+setupTestDb();
+
 afterEach(() => mock.restoreAll());
 it('rejects invalid page bounds before requesting provider data', async () => {
   const fetch = mock.method(AnilistAPI.prototype, 'getTrending', async () => ({
@@ -48,6 +55,31 @@ it('retains native AniList identity without inventing a TMDB match', async () =>
   assert.equal(result.missingMappings, 1);
   assert.equal(result.items[0].id, 'anilist:22');
   assert.equal(result.items[0].tmdbId, undefined);
+});
+it('applies a private TMDB match to public AniList discovery feeds', async () => {
+  const user = await getRepository(User).findOneByOrFail({
+    email: 'admin@seerr.dev',
+  });
+  mock.method(AnilistAPI.prototype, 'getTrending', async () => ({
+    pageInfo: {},
+    media: [
+      {
+        id: 22,
+        format: 'TV',
+        title: { english: 'Native title' },
+      },
+    ],
+  }));
+  await savePersonalIdentityMapping(user.id, 'anilist:22', 422, 'tv');
+
+  const result = await discoveryFeed(user.id, 'anilist', 'trending', 1);
+
+  assert.equal(result.missingMappings, 0);
+  assert.equal(result.items[0].id, 'anilist:22');
+  assert.equal(result.items[0].tmdbId, 422);
+  assert.equal(result.items[0].mediaType, 'tv');
+  assert.equal(result.items[0].identityMapped, true);
+  assert.equal(result.items[0].mappingAvailable, true);
 });
 it('discards artwork URLs outside the fixed AniList artwork host', async () => {
   mock.method(AnilistAPI.prototype, 'getTrending', async () => ({

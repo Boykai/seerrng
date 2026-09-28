@@ -1,5 +1,6 @@
 import Button from '@app/components/Common/Button';
 import PageTitle from '@app/components/Common/PageTitle';
+import IdentityMappingControls from '@app/components/DiscoveryIntegrations/IdentityMappingControls';
 import discoveryMessages from '@app/components/DiscoveryIntegrations/messages';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import { getDiscoveryFeedFailure } from '@app/utils/discoveryFeedError';
@@ -39,6 +40,7 @@ export default function ProviderDiscoverPage() {
   const [page, setPage] = useState(1);
   const [draftList, setDraftList] = useState('');
   const [list, setList] = useState('');
+  const [unmatchedOnly, setUnmatchedOnly] = useState(false);
   const url =
     feed !== 'mdblist/list' || list
       ? `/api/v1/integrations/discovery/feeds/${feed}?page=${page}${feed === 'mdblist/list' ? `&list=${encodeURIComponent(list)}` : ''}`
@@ -78,6 +80,9 @@ export default function ProviderDiscoverPage() {
       : retryDeadline === undefined
         ? retryAfterSeconds
         : Math.max(0, Math.ceil((retryDeadline - now) / 1000));
+  const displayedItems = data?.items.filter(
+    (item) => !unmatchedOnly || !item.tmdbId || !item.mediaType
+  );
   return (
     <div className="text-gray-100">
       <PageTitle title="Provider Discovery" />
@@ -185,21 +190,48 @@ export default function ProviderDiscoverPage() {
           <FormattedMessage {...discoveryMessages['providers.empty']} />
         </p>
       )}
-      {!!data?.missingMappings && (
+      {!!data?.items.length && (
+        <div className="mb-4 space-y-2 text-sm text-gray-400">
+          {!!data.missingMappings && (
+            <p>
+              <FormattedMessage {...discoveryMessages['providers.unmapped']} />
+            </p>
+          )}
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={unmatchedOnly}
+              onChange={(event) => setUnmatchedOnly(event.target.checked)}
+            />
+            <FormattedMessage
+              {...discoveryMessages['providers.repairOnly']}
+              values={{ count: data.missingMappings }}
+            />
+          </label>
+        </div>
+      )}
+      {unmatchedOnly && data && displayedItems?.length === 0 && (
         <p className="mb-4 text-sm text-gray-400">
-          <FormattedMessage {...discoveryMessages['providers.unmapped']} />
+          <FormattedMessage {...discoveryMessages['providers.noUnmatched']} />
         </p>
       )}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-        {data?.items.map((item) =>
+        {displayedItems?.map((item) =>
           item.tmdbId && item.mediaType ? (
-            <TmdbTitleCard
-              key={item.id}
-              id={item.tmdbId}
-              tmdbId={item.tmdbId}
-              type={item.mediaType}
-              title={item.title}
-            />
+            <div key={item.id} className="space-y-2">
+              <TmdbTitleCard
+                id={item.tmdbId}
+                tmdbId={item.tmdbId}
+                type={item.mediaType}
+                title={item.title}
+              />
+              {item.identityMapped && (
+                <IdentityMappingControls
+                  item={item}
+                  onUpdated={() => mutate()}
+                />
+              )}
+            </div>
           ) : (
             <article
               key={item.id}
@@ -229,6 +261,18 @@ export default function ProviderDiscoverPage() {
                     {...discoveryMessages['providers.matchpending']}
                   />
                 </p>
+                {item.mappingAvailable ? (
+                  <IdentityMappingControls
+                    item={item}
+                    onUpdated={() => mutate()}
+                  />
+                ) : (
+                  <p className="mt-2 text-xs text-gray-400">
+                    <FormattedMessage
+                      {...discoveryMessages['providers.noStableIdentity']}
+                    />
+                  </p>
+                )}
               </div>
             </article>
           )

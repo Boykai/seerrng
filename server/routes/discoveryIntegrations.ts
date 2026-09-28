@@ -69,7 +69,10 @@ async function requireOwnedIdentity(
   identity: string
 ): Promise<void> {
   const source = parsePersonalIdentitySource(identity);
-  if (source === 'trakt' || source === 'anilist' || source === 'simkl') {
+  // AniList and MDBList catalogs are browsable without linking a personal
+  // account. Their repairs remain private to this user, like library matches.
+  if (source === 'anilist' || source === 'mdblist') return;
+  if (source === 'trakt' || source === 'simkl') {
     await requireDiscoveryAccount(userId, source);
     return;
   }

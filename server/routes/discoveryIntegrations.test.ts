@@ -99,6 +99,22 @@ describe('personal discovery account boundaries', () => {
     assert.equal(saved.body.mediaType, 'movie');
     assert.equal(catalogLookup.mock.callCount(), 1);
 
+    const publicCatalogMatch = await agent
+      .put('/integrations/discovery/mappings')
+      .send({ identity: 'anilist:123', tmdbId: 456, mediaType: 'movie' });
+    assert.equal(publicCatalogMatch.status, 200);
+    assert.equal(catalogLookup.mock.callCount(), 2);
+
+    const publicListMatch = await agent
+      .put('/integrations/discovery/mappings')
+      .send({
+        identity: 'mdblist:unknown:tt1234567',
+        tmdbId: 456,
+        mediaType: 'movie',
+      });
+    assert.equal(publicListMatch.status, 200);
+    assert.equal(catalogLookup.mock.callCount(), 3);
+
     const unlinked = await agent
       .put('/integrations/discovery/mappings')
       .send({ identity: 'simkl:movies:123', tmdbId: 456, mediaType: 'movie' });

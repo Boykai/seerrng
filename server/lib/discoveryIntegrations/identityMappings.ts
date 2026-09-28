@@ -1,21 +1,29 @@
 import { getRepository } from '@server/datasource';
 import DiscoveryIdentityMapping from '@server/entity/DiscoveryIdentityMapping';
-import type { PersonalLibraryItem } from '@server/lib/discoveryIntegrations/library';
 import { In } from 'typeorm';
 import { DiscoveryIntegrationError } from './accounts';
 
 export const MAX_PERSONAL_IDENTITY_MAPPINGS = 10_000;
 const LOOKUP_BATCH_SIZE = 500;
 const identityPatterns = {
-  trakt: /^trakt:(?:movie|tv):\d{1,20}$/,
+  trakt: /^trakt:(?:movie|tv):(?:\d{1,20}|[A-Za-z0-9_-]{1,128})$/,
   anilist: /^anilist:\d{1,10}$/,
   simkl: /^simkl:(?:movies|shows|anime):\d{1,20}$/,
+  mdblist: /^mdblist:(?:movie|tv|unknown):(?:tt\d{7,12}|\d{1,20})$/,
   plex: /^plex:(?:movie|tv):[A-Za-z0-9_-]{1,128}$/,
   jellyfin: /^jellyfin:(?:movie|tv):[0-9A-Fa-f-]{16,64}$/,
   emby: /^emby:(?:movie|tv):[0-9A-Fa-f-]{16,64}$/,
 } as const;
 
 export type PersonalIdentitySource = keyof typeof identityPatterns;
+
+export interface IdentityMappingCandidate {
+  id: string;
+  title: string;
+  tmdbId?: number;
+  mediaType?: 'movie' | 'tv';
+  identityMapped?: boolean;
+}
 
 export function parsePersonalIdentitySource(
   value: unknown
@@ -29,10 +37,9 @@ export function parsePersonalIdentitySource(
   return source;
 }
 
-export async function applyPersonalIdentityMappings(
-  userId: number,
-  items: PersonalLibraryItem[]
-): Promise<PersonalLibraryItem[]> {
+export async function applyPersonalIdentityMappings<
+  T extends IdentityMappingCandidate,
+>(userId: number, items: T[]): Promise<T[]> {
   const identities = [...new Set(items.map((item) => item.id))];
   if (!identities.length) return items;
   const repository = getRepository(DiscoveryIdentityMapping);

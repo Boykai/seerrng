@@ -1,6 +1,6 @@
 import Button from '@app/components/Common/Button';
 import defineMessages from '@app/utils/defineMessages';
-import type { PersonalLibraryItem } from '@server/lib/discoveryIntegrations/library';
+import type { IdentityMappingCandidate } from '@server/lib/discoveryIntegrations/identityMappings';
 import type { MovieResult, TvResult } from '@server/models/Search';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
@@ -37,7 +37,7 @@ export default function IdentityMappingControls({
   item,
   onUpdated,
 }: {
-  item: PersonalLibraryItem;
+  item: IdentityMappingCandidate;
   onUpdated: () => Promise<unknown>;
 }) {
   const intl = useIntl();
