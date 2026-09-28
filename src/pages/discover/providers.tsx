@@ -2,10 +2,11 @@ import Button from '@app/components/Common/Button';
 import PageTitle from '@app/components/Common/PageTitle';
 import discoveryMessages from '@app/components/DiscoveryIntegrations/messages';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
+import { getDiscoveryFeedFailure } from '@app/utils/discoveryFeedError';
 import type { DiscoveryFeedPage } from '@server/lib/discoveryIntegrations/feeds';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FormattedMessage } from 'react-intl';
 import useSWR from 'swr';
 
@@ -46,6 +47,37 @@ export default function ProviderDiscoverPage() {
     revalidateOnFocus: false,
     dedupingInterval: 30000,
   });
+  const failure = error ? getDiscoveryFeedFailure(error) : undefined;
+  const retryAfterSeconds =
+    failure?.kind === 'rate-limited'
+      ? (failure.retryAfterSeconds ?? 60)
+      : undefined;
+  const [retryDeadline, setRetryDeadline] = useState<number>();
+  const [now, setNow] = useState(0);
+
+  useEffect(() => {
+    if (retryAfterSeconds === undefined) {
+      setRetryDeadline(undefined);
+      return;
+    }
+
+    const deadline = Date.now() + retryAfterSeconds * 1000;
+    setRetryDeadline(deadline);
+    setNow(Date.now());
+    const timer = window.setInterval(() => {
+      const currentTime = Date.now();
+      setNow(currentTime);
+      if (currentTime >= deadline) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [error, retryAfterSeconds, url]);
+
+  const retryRemaining =
+    retryAfterSeconds === undefined
+      ? 0
+      : retryDeadline === undefined
+        ? retryAfterSeconds
+        : Math.max(0, Math.ceil((retryDeadline - now) / 1000));
   return (
     <div className="text-gray-100">
       <PageTitle title="Provider Discovery" />
@@ -103,12 +135,44 @@ export default function ProviderDiscoverPage() {
           </Button>
         </form>
       )}
-      {error && (
+      {error && failure && (
         <div role="alert" className="mb-6 rounded-lg border border-red-500 p-4">
-          <FormattedMessage {...discoveryMessages['providers.failed']} />{' '}
-          <Button onClick={() => void mutate()}>
-            <FormattedMessage {...discoveryMessages['providers.retry']} />
-          </Button>
+          <p>
+            <FormattedMessage
+              {...discoveryMessages[
+                failure.kind === 'rate-limited'
+                  ? 'providers.rateLimited'
+                  : failure.kind === 'reconnect'
+                    ? 'providers.reconnectRequired'
+                    : failure.kind === 'setup-required'
+                      ? 'providers.setupRequired'
+                      : failure.kind === 'list-not-found'
+                        ? 'providers.listNotFound'
+                        : 'providers.failed'
+              ]}
+              values={{ seconds: retryRemaining }}
+            />
+          </p>
+          {failure.kind === 'reconnect' && (
+            <Link
+              href="/profile/settings/linked-accounts"
+              className="mt-3 inline-block text-blue-300 underline"
+            >
+              <FormattedMessage
+                {...discoveryMessages['providers.reconnectAction']}
+              />
+            </Link>
+          )}
+          {failure.kind !== 'list-not-found' && (
+            <div className="mt-3">
+              <Button
+                disabled={isLoading || retryRemaining > 0}
+                onClick={() => void mutate()}
+              >
+                <FormattedMessage {...discoveryMessages['providers.retry']} />
+              </Button>
+            </div>
+          )}
         </div>
       )}
       {isLoading && (

@@ -85,9 +85,20 @@ const app = () => {
 
 describe('combined movie and TV ratings', () => {
   beforeEach(() => {
-    movieRtLookup = async () => null;
-    tvRtLookup = async () => null;
-    imdbLookup = async () => null;
+    movieRtLookup = async (_title, _year) => {
+      void _title;
+      void _year;
+      return null;
+    };
+    tvRtLookup = async (_title, _year) => {
+      void _title;
+      void _year;
+      return null;
+    };
+    imdbLookup = async (_imdbId) => {
+      void _imdbId;
+      return null;
+    };
     mdblistLookup = async () => mdblistRatings;
     mdblistBatchLookup = async () =>
       new Map([
@@ -141,7 +152,11 @@ describe('combined movie and TV ratings', () => {
   });
 
   it('returns TV ratings through a combined endpoint without changing the legacy RT route', async () => {
-    tvRtLookup = async () => rtRatings;
+    tvRtLookup = async (_title, _year) => {
+      void _title;
+      void _year;
+      return rtRatings;
+    };
     const response = await request(app()).get('/api/v1/tv/456/ratingscombined');
 
     assert.equal(response.status, 200, JSON.stringify(response.body));
@@ -149,10 +164,13 @@ describe('combined movie and TV ratings', () => {
   });
 
   it('returns 502 when every configured provider fails instead of reporting a confirmed no-rating result', async () => {
-    movieRtLookup = async () => {
+    movieRtLookup = async (_title, _year) => {
+      void _title;
+      void _year;
       throw new Error('Rotten Tomatoes unavailable');
     };
-    imdbLookup = async () => {
+    imdbLookup = async (_imdbId) => {
+      void _imdbId;
       throw new Error('IMDb unavailable');
     };
     mdblistLookup = async () => null;

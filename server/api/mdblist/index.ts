@@ -7,6 +7,7 @@ import logger from '@server/logger';
 import {
   MdblistListNotFoundError,
   MdblistNotConfiguredError,
+  MdblistQuotaExceededError,
   MdblistUnavailableError,
   collectMdblistListItems,
   mapMdblistListItems,
@@ -26,6 +27,7 @@ import type { MdblistMediaPayload, ParsedMdblistRatings } from './types';
 export {
   MdblistListNotFoundError,
   MdblistNotConfiguredError,
+  MdblistQuotaExceededError,
   MdblistUnavailableError,
   formatMdblistListReference,
   mapMdblistListItems,
@@ -96,6 +98,7 @@ const getRetryAfterMs = (error: unknown): number | undefined => {
 };
 
 type CircuitState = 'closed' | 'open' | 'half-open';
+type CircuitOpenReason = 'rate-limit' | 'unavailable';
 
 const CIRCUIT_FAILURE_THRESHOLD = 1;
 const CIRCUIT_OPEN_TIMEOUT_MS = 60_000;
@@ -159,6 +162,7 @@ class MdblistAPI extends ExternalAPI {
   private circuitFailures = 0;
   private circuitOpenedAt = 0;
   private circuitOpenTimeoutMs = CIRCUIT_OPEN_TIMEOUT_MS;
+  private circuitOpenReason: CircuitOpenReason = 'unavailable';
   private halfOpenProbeInFlight = false;
   private requestQueue: Promise<void> = Promise.resolve();
 
@@ -195,7 +199,7 @@ class MdblistAPI extends ExternalAPI {
         getHeaderValue(response.headers, 'x-ratelimit-remaining')
       );
       if (Number.isFinite(remaining) && remaining <= 0) {
-        this.openCircuit(getResetAfterMs(response.headers));
+        this.openCircuit(getResetAfterMs(response.headers), 'rate-limit');
       }
       return response;
     });
@@ -264,23 +268,38 @@ class MdblistAPI extends ExternalAPI {
     this.circuitFailures = 0;
     this.circuitOpenedAt = 0;
     this.circuitOpenTimeoutMs = CIRCUIT_OPEN_TIMEOUT_MS;
+    this.circuitOpenReason = 'unavailable';
     this.halfOpenProbeInFlight = false;
   }
 
-  private openCircuit(cooldownMs = CIRCUIT_OPEN_TIMEOUT_MS): void {
+  private openCircuit(
+    cooldownMs = CIRCUIT_OPEN_TIMEOUT_MS,
+    reason: CircuitOpenReason = 'unavailable'
+  ): void {
     this.circuitFailures += 1;
     if (this.circuitFailures < CIRCUIT_FAILURE_THRESHOLD) return;
 
     this.circuitState = 'open';
     this.circuitOpenedAt = Date.now();
     this.circuitOpenTimeoutMs = cooldownMs;
+    this.circuitOpenReason = reason;
     this.halfOpenProbeInFlight = false;
-    recordMdblistMetric('rateLimits');
-    logger.warn('MDBList circuit opened after rate limit', {
+    if (reason === 'rate-limit') recordMdblistMetric('rateLimits');
+    logger.warn('MDBList circuit opened', {
       label: 'MDBList',
+      reason,
       cooldownMs,
       nextProbeAt: new Date(this.circuitOpenedAt + cooldownMs).toISOString(),
     });
+  }
+
+  private getCircuitRetryAfterSeconds(): number {
+    return Math.max(
+      1,
+      Math.ceil(
+        (this.circuitOpenedAt + this.circuitOpenTimeoutMs - Date.now()) / 1000
+      )
+    );
   }
 
   /**
@@ -365,7 +384,8 @@ class MdblistAPI extends ExternalAPI {
         return parseMdblistRatings(data);
       } catch (e) {
         if (isQuotaExceeded(e)) {
-          this.openCircuit(getRetryAfterMs(e));
+          const retryAfterMs = getRetryAfterMs(e) ?? CIRCUIT_OPEN_TIMEOUT_MS;
+          this.openCircuit(retryAfterMs, 'rate-limit');
           return null;
         }
 
@@ -490,7 +510,10 @@ class MdblistAPI extends ExternalAPI {
       }
     } catch (e) {
       if (isQuotaExceeded(e)) {
-        this.openCircuit(getRetryAfterMs(e));
+        this.openCircuit(
+          getRetryAfterMs(e) ?? CIRCUIT_OPEN_TIMEOUT_MS,
+          'rate-limit'
+        );
       } else {
         this.openCircuit();
         recordMdblistMetric('failures');
@@ -606,7 +629,10 @@ class MdblistAPI extends ExternalAPI {
       );
       return normalizeMdblistListMetadata(payload);
     } catch (e) {
-      if (e instanceof MdblistListNotFoundError) {
+      if (
+        e instanceof MdblistListNotFoundError ||
+        e instanceof MdblistQuotaExceededError
+      ) {
         throw e;
       }
       logger.debug('MDBList list metadata unavailable', {
@@ -639,6 +665,12 @@ class MdblistAPI extends ExternalAPI {
   ): Promise<T> {
     const circuitSlot = this.acquireCircuitSlot();
     if (circuitSlot === 'blocked') {
+      if (
+        this.circuitState === 'open' &&
+        this.circuitOpenReason === 'rate-limit'
+      ) {
+        throw new MdblistQuotaExceededError(this.getCircuitRetryAfterSeconds());
+      }
       throw new MdblistUnavailableError();
     }
 
@@ -659,8 +691,11 @@ class MdblistAPI extends ExternalAPI {
         ?.status;
 
       if (isQuotaExceeded(e)) {
-        this.openCircuit(getRetryAfterMs(e));
-        throw new MdblistUnavailableError('MDBList daily quota exceeded');
+        const retryAfterMs = getRetryAfterMs(e) ?? CIRCUIT_OPEN_TIMEOUT_MS;
+        this.openCircuit(retryAfterMs, 'rate-limit');
+        throw new MdblistQuotaExceededError(
+          Math.max(1, Math.ceil(retryAfterMs / 1000))
+        );
       }
 
       if (circuitSlot === 'probe') {

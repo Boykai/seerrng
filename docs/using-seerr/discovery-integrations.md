@@ -36,6 +36,10 @@ and your linked anime library. MDBList accepts public list URLs or list IDs.
 Titles with confirmed TMDB IDs use the normal movie/series cards. Titles without
 a confirmed match retain their original provider identity and are marked
 **Catalog match pending**. SeerrNG does not invent an ID from a matching title.
+Provider errors identify whether an account needs reconnecting, MDBList setup is
+missing, an MDBList list is unavailable, or the provider is temporarily down.
+When a provider reports a quota cooldown, Retry stays disabled until that window
+ends.
 
 ## Personal library and tracking
 

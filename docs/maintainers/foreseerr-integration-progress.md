@@ -19,11 +19,13 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   rejection options, fresh movie/TV import previews, backend identity checks,
   command/history outcome verification and bounded action history.
 - Matching OpenAPI paths, SQLite/PostgreSQL migrations and regression coverage.
+- Provider discovery recovery distinguishes account reconnection, missing
+  MDBList setup, unavailable public lists, quota cooldowns and temporary outages.
 
 ## Remaining work
 
-- Complete provider feeds, personalized dashboard rows, ratings integration and
-  credential/quota failure recovery; verify with live provider accounts.
+- Complete personalized dashboard rows and verify provider feeds, credentials,
+  and quota recovery with live provider accounts.
 - Extend manual matching/import controls to unmatched files and additional backends;
   verify acquisition actions against live services.
 - Calendar date-change history and additional media sources.

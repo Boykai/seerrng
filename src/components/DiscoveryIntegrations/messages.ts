@@ -41,7 +41,16 @@ export default defineMessages('discovery', {
   'providers.list': 'MDBList URL or list ID',
   'providers.browse': 'Browse list',
   'providers.failed':
-    'This feed could not be loaded. Check your connected account or provider configuration.',
+    'This feed could not be loaded because the provider is temporarily unavailable.',
+  'providers.rateLimited':
+    'The provider request limit was reached. You can retry in {seconds} seconds.',
+  'providers.reconnectRequired':
+    'Your provider account needs to be reconnected before this feed can load.',
+  'providers.setupRequired':
+    'MDBList is not configured. Ask an administrator to add its API key in Settings → Discovery Integrations.',
+  'providers.listNotFound':
+    'MDBList could not find that list. Check the URL or ID and make sure the list is public.',
+  'providers.reconnectAction': 'Manage linked accounts',
   'providers.retry': 'Retry',
   'providers.loading': 'Loading discovery feed…',
   'providers.empty': 'No titles on this page.',

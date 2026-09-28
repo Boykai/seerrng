@@ -17,6 +17,13 @@ export class MdblistUnavailableError extends Error {
   }
 }
 
+export class MdblistQuotaExceededError extends Error {
+  constructor(public readonly retryAfterSeconds = 60) {
+    super('MDBList daily quota exceeded');
+    this.name = 'MdblistQuotaExceededError';
+  }
+}
+
 export class MdblistListNotFoundError extends Error {
   constructor(message = 'MDBList list not found') {
     super(message);

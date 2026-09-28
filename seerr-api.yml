@@ -411,6 +411,23 @@ components:
         missingMappings:
           type: integer
           minimum: 0
+    DiscoveryProviderError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          enum:
+            - PROVIDER_RATE_LIMITED
+            - RECONNECT_REQUIRED
+            - PROVIDER_SETUP_REQUIRED
+            - PROVIDER_LIST_NOT_FOUND
+            - PROVIDER_TEMPORARILY_UNAVAILABLE
+        message:
+          type: string
     PersonalLibraryItem:
       type: object
       additionalProperties: false
@@ -15826,12 +15843,37 @@ paths:
                 $ref: '#/components/schemas/DiscoveryFeedPage'
         '400':
           description: Invalid feed
+        '404':
+          description: The requested public MDBList list could not be found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryProviderError'
         '409':
-          description: Account connection required
+          description: Reconnect the account or configure MDBList
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryProviderError'
         '429':
-          description: Provider quota reached; retry later
+          description: Provider quota reached; wait for Retry-After before retrying
+          headers:
+            Retry-After:
+              description: Minimum number of seconds before retrying, capped at one hour
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryProviderError'
         '502':
           description: Provider unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryProviderError'
 
   /integrations/discovery/library/{provider}:
     get:

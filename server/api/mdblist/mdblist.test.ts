@@ -4,6 +4,7 @@ import type { AxiosInstance, AxiosResponse } from 'axios';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import MdblistAPI, {
+  MdblistQuotaExceededError,
   getMdblistMetrics,
   parseMdblistRatings,
   resetMdblistMetrics,
@@ -127,6 +128,14 @@ describe('MdblistAPI batch ratings', () => {
     assert.equal(
       (api as unknown as { circuitOpenTimeoutMs: number }).circuitOpenTimeoutMs,
       120_000
+    );
+    await assert.rejects(
+      api.getListItems('9800001', { limit: 20, offset: 0 }),
+      (error: unknown) => {
+        assert.ok(error instanceof MdblistQuotaExceededError);
+        assert.ok(error.retryAfterSeconds > 0);
+        return true;
+      }
     );
   });
 

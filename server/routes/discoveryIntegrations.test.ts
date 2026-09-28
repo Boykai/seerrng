@@ -1,4 +1,8 @@
 import AnilistAPI from '@server/api/anilist';
+import MdblistAPI, {
+  MdblistListNotFoundError,
+  MdblistQuotaExceededError,
+} from '@server/api/mdblist';
 import TraktAPI from '@server/api/trakt';
 import { getRepository } from '@server/datasource';
 import DiscoveryAccount from '@server/entity/DiscoveryAccount';
@@ -115,6 +119,33 @@ describe('personal discovery account boundaries', () => {
       '/integrations/discovery/feeds/mdblist/list?list=hdlists%2Fhorror&list=another%2Flist'
     );
     assert.equal(result.status, 400);
+  });
+  it('returns a bounded Retry-After when MDBList quota is exhausted', async () => {
+    const agent = await login();
+    mock.method(MdblistAPI.prototype, 'getListItems', async () => {
+      throw new MdblistQuotaExceededError(120);
+    });
+
+    const result = await agent.get(
+      '/integrations/discovery/feeds/mdblist/list?list=123'
+    );
+
+    assert.equal(result.status, 429);
+    assert.equal(result.headers['retry-after'], '120');
+    assert.equal(result.body.code, 'PROVIDER_RATE_LIMITED');
+  });
+  it('reports a missing MDBList list as a not-found result', async () => {
+    const agent = await login();
+    mock.method(MdblistAPI.prototype, 'getListItems', async () => {
+      throw new MdblistListNotFoundError();
+    });
+
+    const result = await agent.get(
+      '/integrations/discovery/feeds/mdblist/list?list=123'
+    );
+
+    assert.equal(result.status, 404);
+    assert.equal(result.body.code, 'PROVIDER_LIST_NOT_FOUND');
   });
   it('does not accept a browser-supplied Trakt device code', async () => {
     const agent = await login();
