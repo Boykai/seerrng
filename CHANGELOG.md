@@ -114,6 +114,50 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.35.0](https://github.com/snapetech/seerrng/compare/v3.34.0..v3.35.0) - 2026-09-28
+
+### User-facing changes
+
+#### Added
+
+- **Discovery:** Connect personal Trakt, AniList, and Simkl accounts, browse Trakt recommendations and watchlists, explore AniList catalogs, and open MDBList public lists. Provider credentials remain hidden, and unmatched titles retain their original catalog information.
+  - **Action required:** Configure provider applications in Discovery Integrations, then connect personal accounts under Linked Accounts.
+- **Discovery:** The discovery integration guide explains application setup, personal account authorization, unmatched catalog titles, and release calendar scopes and time zones.
+- **Downloads:** Review acquisition warnings in the Download Inbox, preview movie and series files for manual import, and reject or blocklist downloads with explicit client-removal options. Actions verify the current backend and download identity, retain history, and report uncertain outcomes for review.
+  - **Action required:** Grant Manage Downloads to staff who need queue access.
+- **Calendar:** Browse movie release dates and upcoming series episodes in the Release Calendar. Your requests are shown by default; shared calendars follow request-view permissions. Cached acquisition-service reads are bounded, and unavailable sources are identified without hiding successful results.
+
+#### Fixed
+
+- **Documentation:** Bookshelf setup and migration links now open SeerrNG's maintained guides. README links point to available source documents so users can reach shared-instance and migration instructions directly.
+- **Discovery:** Simkl library reads now reuse a bounded cache scoped to the linked account, reducing repeated provider requests without mixing results between people.
+- **Image Cache:** Visible media artwork can now be queued for background image-cache warming, helping pages reuse artwork more reliably when users return to them.
+- **Magazines:** Direct links to magazine discovery now render consistently before SeerrNG checks provider availability, avoiding a client-side rendering error when the catalog is disabled.
+
+#### Security
+
+- **Integrations:** Discovery integrations now reject malformed MDBList links and repeated list parameters before contacting providers, reducing the risk of confusing or unintended requests. Existing valid list URLs continue to work.
+
+### 🚀 Features
+- *(calendar)* Add scoped release agenda with cached backend reads - ([353d1a6](https://github.com/snapetech/seerrng/commit/353d1a65add3c40f92aedd5963e35db35f8225b9))
+- *(discovery)* Add personal provider connections and catalog browsing - ([297e5de](https://github.com/snapetech/seerrng/commit/297e5de056167069ce01361c3b52a9255503688e))
+- *(downloads)* Add durable intervention inbox and verified queue actions - ([ba8024b](https://github.com/snapetech/seerrng/commit/ba8024be7f1f377bda0f1b3c452a294a55685863))
+
+### 🐛 Bug Fixes
+- *(api)* Expose image cache warming endpoint - ([fc75057](https://github.com/snapetech/seerrng/commit/fc75057554b84cc30d3c34d7e217ade2ac05a712))
+- *(docs)* Repair SeerrNG guide links - ([83dfa0b](https://github.com/snapetech/seerrng/commit/83dfa0b3cca6bc69a6b0887c8e4e553d5395ed91))
+- *(magazines)* Stabilize direct-link hydration - ([42d77f7](https://github.com/snapetech/seerrng/commit/42d77f74a9f8681c3bedb0103f53146d49676b66))
+- *(security)* Validate discovery provider inputs - ([291dd34](https://github.com/snapetech/seerrng/commit/291dd3486f673a0cf0d4505c645c2040d6ae2ec9))
+- *(simkl)* Cache account reads safely - ([bb568e3](https://github.com/snapetech/seerrng/commit/bb568e3c856ff76c472b2d4821db4f24a4a9f6df))
+
+### 🎨 Styling
+- *(routes)* Format download inbox mount - ([20f45a8](https://github.com/snapetech/seerrng/commit/20f45a83d308eaa62f4db8e31e03f6b042b78afd))
+
+### 🧪 Testing
+- *(security)* Use secure cookie in validated harness - ([0ff4edf](https://github.com/snapetech/seerrng/commit/0ff4edfa4ce8eadcd503f6b89cc100ff6c72fa0f))
+
 ## [3.34.0](https://github.com/snapetech/seerrng/compare/v3.33.0..v3.34.0) - 2026-09-28
 
 ### User-facing changes
