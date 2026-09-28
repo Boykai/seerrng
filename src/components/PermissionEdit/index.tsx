@@ -14,6 +14,9 @@ export const messages = defineMessages('components.PermissionEdit', {
   users: 'Manage Users',
   usersDescription:
     'Grant permission to manage users. Users with this permission cannot modify users with or grant the Admin privilege.',
+  managedownloads: 'Manage Downloads',
+  managedownloadsDescription:
+    'View download warnings and history, manually import files, and reject or blocklist downloads in configured acquisition services.',
   managerequests: 'Manage Requests',
   managerequestsDescription:
     'Grant permission to manage media requests. All requests made by a user with this permission will be automatically approved.',
@@ -145,6 +148,12 @@ export const PermissionEdit = ({
       name: intl.formatMessage(messages.users),
       description: intl.formatMessage(messages.usersDescription),
       permission: Permission.MANAGE_USERS,
+    },
+    {
+      id: 'managedownloads',
+      name: intl.formatMessage(messages.managedownloads),
+      description: intl.formatMessage(messages.managedownloadsDescription),
+      permission: Permission.MANAGE_DOWNLOADS,
     },
     {
       id: 'managerequest',

@@ -690,6 +690,87 @@ class ServarrBase<QueueItemAppendT> extends ExternalAPI {
     await this.runCommand('RefreshMonitoredDownloads', {});
   }
 
+  /** Complete bounded queue snapshot. Never infer disappearance from a partial page. */
+  public async getInterventionQueue(): Promise<
+    (QueueItem & QueueItemAppendT)[]
+  > {
+    const records: (QueueItem & QueueItemAppendT)[] = [];
+    const pageSize = 250;
+    const seen = new Set<number>();
+    for (let page = 1; page <= 20; page++) {
+      const response = await this.request<QueueResponse<QueueItemAppendT>>(
+        'GET',
+        '/queue',
+        undefined,
+        this.getRequestConfig({ includeEpisode: true, page, pageSize })
+      );
+      const total = response.data?.totalRecords;
+      if (
+        !Number.isSafeInteger(total) ||
+        total < 0 ||
+        total > 5000 ||
+        !Array.isArray(response.data?.records)
+      ) {
+        throw new Error(
+          'Queue snapshot exceeds supported limits or is invalid.'
+        );
+      }
+      const items = sanitizeServarrQueue<QueueItem & QueueItemAppendT>(
+        response.data.records
+      );
+      if (
+        items.length !== response.data.records.length ||
+        items.some(
+          (item) =>
+            !Number.isSafeInteger(item.id) || item.id <= 0 || seen.has(item.id)
+        )
+      ) {
+        throw new Error('Queue snapshot contains invalid or repeated records.');
+      }
+      items.forEach((item) => {
+        if (seen.has(item.id))
+          throw new Error('Queue snapshot contains repeated records.');
+        seen.add(item.id);
+      });
+      records.push(...items);
+      if (page * pageSize >= total) {
+        if (records.length !== total)
+          throw new Error('Queue changed while reading its pages.');
+        return records;
+      }
+      if (items.length === 0) throw new Error('Queue snapshot is incomplete.');
+    }
+    throw new Error('Queue snapshot is incomplete.');
+  }
+
+  public async getManualImportCandidates(params: {
+    folder: string;
+    downloadId?: string;
+    movieId?: number;
+    seriesId?: number;
+  }): Promise<Record<string, unknown>[]> {
+    const response = await this.request<unknown>(
+      'GET',
+      '/manualimport',
+      undefined,
+      this.getRequestConfig(params)
+    );
+    if (!Array.isArray(response.data) || response.data.length > 5000) {
+      throw new Error('Invalid manual import response.');
+    }
+    return response.data.filter(
+      (item): item is Record<string, unknown> =>
+        !!item && typeof item === 'object' && !Array.isArray(item)
+    );
+  }
+
+  public async importManualFiles(
+    files: Record<string, unknown>[],
+    importMode: 'copy' | 'move'
+  ): Promise<ServarrCommand> {
+    return this.runCommand('ManualImport', { files, importMode });
+  }
+
   public async getCommand(commandId: number): Promise<ServarrCommand> {
     try {
       const response = await this.request<unknown>(

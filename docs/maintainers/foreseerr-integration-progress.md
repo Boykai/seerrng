@@ -15,13 +15,17 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   existing lazy title-card hydration. Unmatched candidates are displayed as such.
 - Movie/series release calendar with personal/shared scopes, bounded cached
   backend reads, episode hydration and partial-source reporting.
+- Dedicated-permission download intervention inbox with durable warnings, explicit
+  rejection options, fresh movie/TV import previews, backend identity checks,
+  command/history outcome verification and bounded action history.
 - Matching OpenAPI paths, SQLite/PostgreSQL migrations and regression coverage.
 
 ## Remaining work
 
 - Complete provider feeds, personalized dashboard rows, ratings integration and
   credential/quota failure recovery; verify with live provider accounts.
-- Permission-controlled queue intervention inbox, manual import and rejection.
+- Extend manual matching/import controls to unmatched files and additional backends;
+  verify acquisition actions against live services.
 - Calendar date-change history and additional media sources.
 - Personalized library shelves and explicit watched/rating writes.
 - Provenance-aware identity and episode mappings, mapping packs and gap repair.

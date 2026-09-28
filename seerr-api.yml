@@ -52,6 +52,116 @@ servers:
 
 components:
   schemas:
+    QueueIntervention:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - serviceType
+        - serviceId
+        - serviceName
+        - title
+        - warnings
+        - state
+        - resolution
+        - actorId
+        - manualImportCapable
+        - createdAt
+        - lastSeenAt
+        - actionAt
+        - resolvedAt
+        - actions
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        serviceType:
+          type: string
+          enum:
+            - radarr
+            - sonarr
+            - lidarr
+            - readarr
+        serviceId:
+          type: integer
+        serviceName:
+          type: string
+        title:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        state:
+          type: string
+          enum:
+            - active
+            - failed
+            - importing
+            - rejecting
+            - resolved
+        resolution:
+          type: string
+          nullable: true
+        actorId:
+          type: integer
+          nullable: true
+        manualImportCapable:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        actionAt:
+          type: string
+          format: date-time
+          nullable: true
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        actions:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - at
+              - actorId
+              - action
+              - state
+              - options
+            properties:
+              at:
+                type: string
+                format: date-time
+              actorId:
+                type: integer
+              action:
+                type: string
+                enum:
+                  - import
+                  - reject
+              state:
+                type: string
+              options:
+                type: object
+                additionalProperties: false
+                properties:
+                  importMode:
+                    type: string
+                    enum:
+                      - copy
+                      - move
+                  fileCount:
+                    type: integer
+                  blocklist:
+                    type: boolean
+                  removeFromClient:
+                    type: boolean
     DiscoveryAccount:
       type: object
       additionalProperties: false
@@ -15185,6 +15295,240 @@ paths:
           description: Calendar scope not permitted
         '502':
           description: Calendar unavailable
+
+  /downloads/interventions:
+    get:
+      tags:
+        - Downloads
+      summary: List download warnings or action history
+      description:
+        Requires Manage Downloads permission. Admins have this permission
+        automatically.
+      parameters:
+        - in: query
+          name: scope
+          schema:
+            type: string
+            enum:
+              - active
+              - history
+            default: active
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 1
+      responses:
+        '200':
+          description: Download intervention result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - results
+                  - total
+                  - page
+                  - partialSources
+                  - truncated
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QueueIntervention'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                    minimum: 1
+                  partialSources:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        serviceType:
+                          type: string
+                        serviceId:
+                          type: integer
+                  truncated:
+                    type: boolean
+        '400':
+          description: Invalid input
+        '403':
+          description: Download management permission required
+        '409':
+          description: Download or backend changed; refresh before retrying
+        '502':
+          description: Backend unavailable
+  /downloads/interventions/{id}/preview:
+    get:
+      tags:
+        - Downloads
+      summary: Preview files with confirmed movie or series targets
+      description:
+        Requires Manage Downloads permission. Admins have this permission
+        automatically.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Download intervention result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - candidates
+                  - fingerprint
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required:
+                        - id
+                        - name
+                        - size
+                        - rejections
+                        - eligible
+                      properties:
+                        id:
+                          type: integer
+                          minimum: 1
+                        name:
+                          type: string
+                        size:
+                          type: number
+                        rejections:
+                          type: array
+                          items:
+                            type: string
+                        eligible:
+                          type: boolean
+                  fingerprint:
+                    type: string
+                    pattern: ^[a-f0-9]{64}$
+        '400':
+          description: Invalid input
+        '403':
+          description: Download management permission required
+        '409':
+          description: Download or backend changed; refresh before retrying
+        '502':
+          description: Backend unavailable
+  /downloads/interventions/{id}/reject:
+    post:
+      tags:
+        - Downloads
+      summary: Reject a download with explicit client removal and blocklist choices
+      description:
+        Requires Manage Downloads permission. Admins have this permission
+        automatically.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Download intervention result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueIntervention'
+        '400':
+          description: Invalid input
+        '403':
+          description: Download management permission required
+        '409':
+          description: Download or backend changed; refresh before retrying
+        '502':
+          description: Backend unavailable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - blocklist
+                - removeFromClient
+              properties:
+                blocklist:
+                  type: boolean
+                removeFromClient:
+                  type: boolean
+  /downloads/interventions/{id}/import:
+    post:
+      tags:
+        - Downloads
+      summary: Submit selected files for import and track backend confirmation
+      description:
+        Requires Manage Downloads permission. Admins have this permission
+        automatically.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Download intervention result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueIntervention'
+        '400':
+          description: Invalid input
+        '403':
+          description: Download management permission required
+        '409':
+          description: Download or backend changed; refresh before retrying
+        '502':
+          description: Backend unavailable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - candidateIds
+                - importMode
+                - fingerprint
+              properties:
+                candidateIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  items:
+                    type: integer
+                    minimum: 1
+                fingerprint:
+                  type: string
+                  pattern: ^[a-f0-9]{64}$
+                importMode:
+                  type: string
+                  enum:
+                    - copy
+                    - move
 
 security:
   - cookieAuth: []

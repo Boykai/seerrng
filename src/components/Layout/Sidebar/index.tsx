@@ -33,6 +33,7 @@ import { useIntl } from 'react-intl';
 export const menuMessages = defineMessages('components.Layout.Sidebar', {
   discover: 'Discover',
   calendar: 'Calendar',
+  downloads: 'Download Inbox',
   browsemovies: 'Movies',
   browsemusic: 'Music',
   browsebooks: 'Books',
@@ -74,6 +75,13 @@ const SidebarLinks: SidebarLinkProps[] = [
     messagesKey: 'discover',
     svgIcon: <SparklesIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/(discover\/?)?$/,
+  },
+  {
+    href: '/downloads',
+    messagesKey: 'downloads',
+    svgIcon: <ClockIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/downloads$/,
+    requiredPermission: Permission.MANAGE_DOWNLOADS,
   },
   {
     href: '/calendar',

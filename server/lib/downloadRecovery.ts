@@ -7,6 +7,7 @@ import { getRepository } from '@server/datasource';
 import DownloadRecoveryState, {
   type DownloadRecoveryServiceType,
 } from '@server/entity/DownloadRecoveryState';
+import { observeInterventionQueue } from '@server/lib/queueInterventions';
 import {
   getSettings,
   type DVRSettings,
@@ -286,6 +287,15 @@ class DownloadRecovery {
       const queueItems = await service.api.getQueue();
       const uniqueQueueItems = deduplicateRecoveryQueue(queueItems);
       const activeDownloadIds = uniqueQueueItems.map((item) => item.downloadId);
+      await observeInterventionQueue(
+        service.serviceType,
+        service.server,
+        uniqueQueueItems
+      ).catch(() => {
+        logger.debug('Unable to update download intervention inbox.', {
+          label: 'Download Recovery',
+        });
+      });
 
       await processRecoveryQueueByMedia(
         uniqueQueueItems,
