@@ -8,6 +8,7 @@ import PlayButton, {
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
+import { createBrowserActionId } from '@app/utils/browserActionId';
 import defineMessages from '@app/utils/defineMessages';
 import { getSafeHref } from '@app/utils/safeUrl';
 import type { PlaybackPlaylistResponse } from '@server/models/Playback';
@@ -93,7 +94,7 @@ const MediaServerPlayButton = ({
     isOpeningRef.current = true;
     // Keep a synchronous popup handle so the eventual playlist navigation is
     // not blocked after the API request, while avoiding a reusable target.
-    const popup = window.open('', `seerr-playback-${crypto.randomUUID()}`);
+    const popup = window.open('', `seerr-playback-${createBrowserActionId()}`);
     if (popup) {
       popup.opener = null;
     }
