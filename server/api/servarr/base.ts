@@ -458,6 +458,23 @@ class ServarrBase<QueueItemAppendT> extends ExternalAPI {
     }
   }
 
+  public async getReleaseCalendar(
+    start: string,
+    end: string,
+    includeUnmonitored = false
+  ): Promise<unknown[]> {
+    const results = await this.get<unknown>(
+      '/calendar',
+      {
+        params: { start, end, unmonitored: includeUnmonitored },
+      },
+      300
+    );
+    if (!Array.isArray(results) || results.length > 5000)
+      throw new Error('Invalid release calendar response.');
+    return results;
+  }
+
   protected getRequestConfig(
     params?: Record<string, unknown>
   ): AxiosRequestConfig | undefined {

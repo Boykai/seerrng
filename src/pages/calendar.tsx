@@ -1,0 +1,249 @@
+import Button from '@app/components/Common/Button';
+import PageTitle from '@app/components/Common/PageTitle';
+import { Permission, useUser } from '@app/hooks/useUser';
+import defineMessages from '@app/utils/defineMessages';
+import type { ReleaseCalendarItem } from '@server/lib/releaseCalendar/normalize';
+import Link from 'next/link';
+import { useState } from 'react';
+import { FormattedMessage, useIntl } from 'react-intl';
+import useSWR from 'swr';
+const messages = defineMessages('calendar', {
+  title: 'Release Calendar',
+  description:
+    'Upcoming movie releases and series episodes from your acquisition services.',
+  month: 'Month',
+  scope: 'Calendar scope',
+  mine: 'My requests',
+  all: 'All monitored titles',
+  mediaType: 'Media type',
+  allTypes: 'Movies and series',
+  movies: 'Movies',
+  series: 'Series',
+  unmonitored: 'Include unmonitored titles',
+  loading: 'Loading releases…',
+  empty: 'No releases match this month and scope.',
+  failed: 'The calendar could not be loaded.',
+  retry: 'Retry',
+  partial:
+    'Some acquisition services could not be reached. Their releases may be missing.',
+  truncated:
+    'This calendar reached its result limit. Narrow the media filter to see more releases.',
+  available: 'Available',
+  upcoming: 'Upcoming',
+  air: 'Episode release',
+  digital: 'Digital release',
+  physical: 'Physical release',
+  theatrical: 'Theatrical release',
+  episode: 'Season {season}, episode {episode}',
+  previous: 'Previous month',
+  next: 'Next month',
+  more: 'Show more releases',
+});
+const dateMonth = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+export default function CalendarPage() {
+  const intl = useIntl();
+  const { hasPermission } = useUser();
+  const [month, setMonth] = useState(() => dateMonth(new Date()));
+  const [scope, setScope] = useState('mine');
+  const [type, setType] = useState('');
+  const [unmonitored, setUnmonitored] = useState(false);
+  const [limit, setLimit] = useState(25);
+  const [year, number] = month.split('-').map(Number);
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const start = `${month}-01`;
+  const end = `${dateMonth(new Date(year, number, 1))}-01`;
+  const { data, error, isLoading, mutate } = useSWR<{
+    results: ReleaseCalendarItem[];
+    partialSources: { source: string }[];
+    truncated: boolean;
+  }>(
+    /^\d{4}-\d{2}$/.test(month)
+      ? `/api/v1/calendar?start=${start}&end=${end}&scope=${scope}&timeZone=${encodeURIComponent(timeZone)}&includeUnmonitored=${unmonitored}${type ? `&mediaType=${type}` : ''}`
+      : null,
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
+  );
+  const move = (offset: number) => {
+    setMonth(dateMonth(new Date(year, number - 1 + offset, 1)));
+    setLimit(25);
+  };
+  return (
+    <div className="text-gray-100">
+      <PageTitle title={intl.formatMessage(messages.title)} />
+      <h1 className="heading">{intl.formatMessage(messages.title)}</h1>
+      <p className="description mb-6">
+        {intl.formatMessage(messages.description)}
+      </p>
+      <div className="mb-6 flex flex-wrap items-end gap-4">
+        <label htmlFor="calendar-month">
+          {intl.formatMessage(messages.month)}
+          <input
+            className="mt-2 block rounded-md border border-gray-600 bg-gray-800 px-3 py-2 text-gray-100 [color-scheme:dark]"
+            id="calendar-month"
+            type="month"
+            value={month}
+            onChange={(event) => {
+              setMonth(event.target.value);
+              setLimit(25);
+            }}
+          />
+        </label>
+        <label htmlFor="calendar-scope">
+          {intl.formatMessage(messages.scope)}
+          <select
+            id="calendar-scope"
+            className="mt-2 block"
+            value={scope}
+            onChange={(event) => {
+              setScope(event.target.value);
+              setLimit(25);
+            }}
+          >
+            <option value="mine">{intl.formatMessage(messages.mine)}</option>
+            {hasPermission(
+              [
+                Permission.ADMIN,
+                Permission.MANAGE_REQUESTS,
+                Permission.REQUEST_VIEW,
+              ],
+              { type: 'or' }
+            ) && (
+              <option value="all">{intl.formatMessage(messages.all)}</option>
+            )}
+          </select>
+        </label>
+        <label htmlFor="calendar-media-type">
+          {intl.formatMessage(messages.mediaType)}
+          <select
+            id="calendar-media-type"
+            className="mt-2 block"
+            value={type}
+            onChange={(event) => {
+              setType(event.target.value);
+              setLimit(25);
+            }}
+          >
+            <option value="">{intl.formatMessage(messages.allTypes)}</option>
+            <option value="movie">{intl.formatMessage(messages.movies)}</option>
+            <option value="tv">{intl.formatMessage(messages.series)}</option>
+          </select>
+        </label>
+        {hasPermission(Permission.ADMIN) && (
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={unmonitored}
+              onChange={(event) => setUnmonitored(event.target.checked)}
+            />
+            {intl.formatMessage(messages.unmonitored)}
+          </label>
+        )}
+      </div>
+      <nav
+        className="mb-6 flex justify-between gap-4"
+        aria-label={intl.formatMessage(messages.month)}
+      >
+        <Button onClick={() => move(-1)}>
+          {intl.formatMessage(messages.previous)}
+        </Button>
+        <Button onClick={() => move(1)}>
+          {intl.formatMessage(messages.next)}
+        </Button>
+      </nav>
+      {isLoading && <p role="status">{intl.formatMessage(messages.loading)}</p>}
+      {error && (
+        <p role="alert">
+          {intl.formatMessage(messages.failed)}{' '}
+          <Button onClick={() => void mutate()}>
+            {intl.formatMessage(messages.retry)}
+          </Button>
+        </p>
+      )}
+      {!!data?.partialSources.length && (
+        <p
+          role="status"
+          className="mb-4 rounded-lg border border-yellow-500 p-4"
+        >
+          {intl.formatMessage(messages.partial)}
+        </p>
+      )}
+      {data?.truncated && (
+        <p role="status" className="mb-4 text-yellow-400">
+          {intl.formatMessage(messages.truncated)}
+        </p>
+      )}
+      {data && !data.results.length && (
+        <p>{intl.formatMessage(messages.empty)}</p>
+      )}
+      <ol className="space-y-3">
+        {data?.results.slice(0, limit).map((item) => (
+          <li
+            key={item.id}
+            className="grid gap-2 rounded-lg border border-gray-700 bg-gray-800 p-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto]"
+          >
+            <div className="min-w-32 text-sm">
+              <time dateTime={item.startsAt}>
+                {intl.formatDate(item.startsAt, {
+                  dateStyle: 'medium',
+                  ...(item.allDay ? { timeZone: 'UTC' } : {}),
+                })}
+                {!item.allDay && (
+                  <>
+                    {' '}
+                    · {intl.formatTime(item.startsAt, { timeStyle: 'short' })}
+                  </>
+                )}
+              </time>
+              <p className="mt-1 text-gray-400">
+                {intl.formatMessage(messages[item.dateType])}
+              </p>
+            </div>
+            <div className="min-w-0 flex-1 break-words">
+              <h2 className="font-semibold text-gray-100">
+                {item.tmdbId ? (
+                  <Link
+                    href={`/${item.mediaType}/${item.tmdbId}`}
+                    className="text-blue-300 hover:text-blue-200"
+                  >
+                    {item.title}
+                  </Link>
+                ) : (
+                  item.title
+                )}
+              </h2>
+              {item.seasonNumber !== undefined &&
+                item.episodeNumber !== undefined && (
+                  <p className="mt-1 text-sm text-gray-400">
+                    <FormattedMessage
+                      {...messages.episode}
+                      values={{
+                        season: item.seasonNumber,
+                        episode: item.episodeNumber,
+                      }}
+                    />
+                    {item.episodeTitle ? ` · ${item.episodeTitle}` : ''}
+                  </p>
+                )}
+            </div>
+            <span
+              className={`text-sm ${item.available ? 'text-green-400' : 'text-gray-400'}`}
+            >
+              {intl.formatMessage(
+                item.available ? messages.available : messages.upcoming
+              )}
+              {item.is4k ? ' · 4K' : ''}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {data && data.results.length > limit && (
+        <Button
+          className="my-6"
+          onClick={() => setLimit((current) => current + 25)}
+        >
+          {intl.formatMessage(messages.more)}
+        </Button>
+      )}
+    </div>
+  );
+}

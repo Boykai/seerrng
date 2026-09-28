@@ -9,6 +9,7 @@ lcov.info
 
 # next.js
 /.next/
+/.next-webpack-dev/
 /out/
 /next-env.d.ts
 

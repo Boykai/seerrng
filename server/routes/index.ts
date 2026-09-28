@@ -57,6 +57,7 @@ import authRoutes from './auth';
 import authorRoutes from './author';
 import blocklistRoutes from './blocklist';
 import bookRoutes from './book';
+import calendarRoutes from './calendar';
 import collectionRoutes from './collection';
 import collectionCatalogRoutes from './collectionCatalog';
 import comicRoutes from './comic';
@@ -433,6 +434,7 @@ router.use('/search', isAuthenticated(), searchRoutes);
 router.use('/discover', isAuthenticated(), discoverRoutes);
 router.use('/request', isAuthenticated(), requestRoutes);
 router.use('/request/software', softwareRoutes);
+router.use('/calendar', isAuthenticated(), calendarRoutes);
 router.use(
   '/integrations/discovery',
   isAuthenticated(),

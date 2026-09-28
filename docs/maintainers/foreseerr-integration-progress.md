@@ -13,13 +13,16 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   account disconnect and explicit write-consent storage.
 - Provider discovery pages for Trakt, AniList and MDBList; known TMDB IDs use
   existing lazy title-card hydration. Unmatched candidates are displayed as such.
+- Movie/series release calendar with personal/shared scopes, bounded cached
+  backend reads, episode hydration and partial-source reporting.
 - Matching OpenAPI paths, SQLite/PostgreSQL migrations and regression coverage.
 
 ## Remaining work
 
 - Complete provider feeds, personalized dashboard rows, ratings integration and
   credential/quota failure recovery; verify with live provider accounts.
-- Release calendar and permission-controlled queue intervention inbox.
+- Permission-controlled queue intervention inbox, manual import and rejection.
+- Calendar date-change history and additional media sources.
 - Personalized library shelves and explicit watched/rating writes.
 - Provenance-aware identity and episode mappings, mapping packs and gap repair.
 - Opt-in rolling watch-ahead, durable scheduling and episode progress handling.
