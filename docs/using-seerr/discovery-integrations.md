@@ -33,6 +33,27 @@ Titles with confirmed TMDB IDs use the normal movie/series cards. Titles without
 a confirmed match retain their original provider identity and are marked
 **Catalog match pending**. SeerrNG does not invent an ID from a matching title.
 
+## Personal library and tracking
+
+Open **My Library** to browse your connected Trakt, AniList, or Simkl account.
+Trakt shelves are paged separately for movies and series. AniList and Simkl
+show the linked user's native library and keep provider IDs when a confirmed
+TMDB match is unavailable. Simkl anime entries stay unmapped until the identity
+and media type can be confirmed.
+
+Provider writes are off by default. To enable them, turn on the explicit
+watched-status, progress, and rating consent for each account under **Linked
+Accounts**. SeerrNG only sends a change after you choose an action on a title.
+AniList ratings retain its tenth-point scale and anime episode progress is
+bounded by the provider's current episode count. Trakt and Simkl ratings use
+whole-number 1–10 values; choose **Remove rating** to clear one. Changing a
+series watched state applies to the whole series, and SeerrNG asks you to
+confirm. Removing a movie's watched state also asks for confirmation.
+
+When a provider does not confirm a write, SeerrNG records the outcome as
+uncertain and will not automatically repeat that action. Check the provider
+account before choosing the same change again.
+
 ## Release calendar
 
 **Calendar** displays movie releases and series episodes from configured Radarr

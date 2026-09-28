@@ -306,6 +306,130 @@ components:
         missingMappings:
           type: integer
           minimum: 0
+    PersonalLibraryItem:
+      type: object
+      additionalProperties: false
+      required: [id, source, sourceId, title]
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+          enum: [trakt, anilist, simkl]
+        sourceId:
+          type: string
+        title:
+          type: string
+        mediaType:
+          type: string
+          enum: [movie, tv]
+        tmdbId:
+          type: integer
+          minimum: 1
+        imageUrl:
+          type: string
+        year:
+          type: integer
+        status:
+          type: string
+          enum: [planning, watching, watched, completed, paused, dropped]
+        rating:
+          type: number
+          minimum: 0
+          maximum: 10
+        progress:
+          type: integer
+          minimum: 0
+        totalEpisodes:
+          type: integer
+          minimum: 0
+    PersonalLibraryPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, hasMore, allowWrites, missingMappings, truncated]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonalLibraryItem'
+        page:
+          type: integer
+          minimum: 1
+          maximum: 500
+        total:
+          type: integer
+          minimum: 0
+        hasMore:
+          type: boolean
+        allowWrites:
+          type: boolean
+        missingMappings:
+          type: integer
+          minimum: 0
+        truncated:
+          type: boolean
+    DiscoveryTrackingRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, action, value]
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [watched, rating, progress]
+        value:
+          anyOf:
+            - type: boolean
+            - type: number
+              minimum: 0
+              maximum: 100000
+        mediaType:
+          type: string
+          enum: [movie, tv]
+        tmdbId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        anilistId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        episode:
+          type: object
+          additionalProperties: false
+          required: [season, episode]
+          properties:
+            season:
+              type: integer
+              minimum: 0
+              maximum: 10000
+            episode:
+              type: integer
+              minimum: 1
+              maximum: 2147483647
+    DiscoveryTrackingAction:
+      type: object
+      additionalProperties: false
+      required: [requestId, provider, state, createdAt]
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [trakt, anilist, simkl]
+        state:
+          type: string
+          enum: [pending, succeeded, unknown]
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
 
     MusicSourceRating:
       type: object
@@ -15164,6 +15288,111 @@ paths:
           description: Provider quota reached; retry later
         '502':
           description: Provider unavailable
+
+  /integrations/discovery/library/{provider}:
+    get:
+      summary: Browse a page of your linked provider library
+      tags:
+        - user
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [trakt, anilist, simkl]
+        - name: shelf
+          in: query
+          schema:
+            type: string
+            enum: [all, watchlist, watched, in-progress, completed, rated]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 1
+        - name: mediaType
+          in: query
+          schema:
+            type: string
+            enum: [movie, tv]
+      responses:
+        '200':
+          description: A bounded page from the current user's provider library
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalLibraryPage'
+        '400':
+          description: Invalid library shelf or page
+        '403':
+          description: Browser session or media permission required
+        '409':
+          description: Provider account needs to be connected
+        '429':
+          description: Provider quota reached; retry later
+        '502':
+          description: Provider unavailable
+  /integrations/discovery/tracking/{provider}:
+    post:
+      summary: Update watched status, progress, or rating in your linked account
+      tags:
+        - user
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [trakt, anilist, simkl]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscoveryTrackingRequest'
+      responses:
+        '200':
+          description: Provider confirmed the tracking action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryTrackingAction'
+        '400':
+          description: Invalid title or tracking value
+        '403':
+          description: Browser session, permission, or explicit write consent required
+        '409':
+          description: Account changed or a previous action has an uncertain outcome
+        '429':
+          description: Provider quota reached; retry later
+        '502':
+          description: Provider did not confirm the action
+  /integrations/discovery/tracking/actions/{requestId}:
+    get:
+      summary: Check the outcome of one of your tracking actions
+      tags:
+        - user
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Current user's tracking action state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryTrackingAction'
+        '403':
+          description: Browser session required
+        '404':
+          description: Tracking action not found
 
   /calendar:
     get:

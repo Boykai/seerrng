@@ -106,7 +106,7 @@ const MEDIA_LIST_COLLECTION_QUERY = `
 
 const MEDIA_QUERY = `
   query Media($id: Int) {
-    Media(id: $id) { ${MEDIA_FIELDS} }
+    Media(id: $id, type: ANIME) { ${MEDIA_FIELDS} }
   }
 `;
 

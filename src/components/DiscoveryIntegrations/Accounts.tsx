@@ -7,7 +7,7 @@ import useSWR from 'swr';
 import { providerNames, type ProviderConfiguration } from './Configuration';
 
 type Provider = 'trakt' | 'anilist' | 'simkl';
-type Account = { provider: Provider; username: string };
+type Account = { provider: Provider; username: string; allowWrites: boolean };
 type Pending = {
   provider: Provider;
   userCode?: string;
@@ -133,6 +133,36 @@ export default function DiscoveryAccounts() {
                     />
                   )}
                 </p>
+                {account && (
+                  <label className="mt-3 flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={account.allowWrites}
+                      disabled={busy}
+                      onChange={(event) => {
+                        const allowWrites = event.target.checked;
+                        void act(async () => {
+                          await axios.put(
+                            `${base}/accounts/${provider}/preferences`,
+                            { allowWrites }
+                          );
+                          await mutate();
+                        });
+                      }}
+                    />
+                    <span>
+                      <FormattedMessage
+                        {...discoveryMessages['accounts.allowwrites']}
+                        values={{ provider: providerNames[provider] }}
+                      />
+                      <span className="mt-1 block text-xs text-gray-400">
+                        <FormattedMessage
+                          {...discoveryMessages['accounts.writesdescription']}
+                        />
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
               {account ? (
                 <Button

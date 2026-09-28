@@ -89,6 +89,36 @@ describe('discovery integration OpenAPI contracts', () => {
       ).status,
       200
     );
+    assert.equal(
+      (
+        await request(app).get(
+          '/api/v1/integrations/discovery/library/trakt?shelf=watched&page=2&mediaType=tv'
+        )
+      ).status,
+      200
+    );
+    assert.equal(
+      (
+        await request(app)
+          .post('/api/v1/integrations/discovery/tracking/trakt')
+          .send({
+            requestId: '00000000-0000-4000-8000-000000000001',
+            action: 'watched',
+            value: true,
+            mediaType: 'movie',
+            tmdbId: 55,
+          })
+      ).status,
+      200
+    );
+    assert.equal(
+      (
+        await request(app).get(
+          '/api/v1/integrations/discovery/tracking/actions/00000000-0000-4000-8000-000000000001'
+        )
+      ).status,
+      200
+    );
   });
   it('rejects arbitrary credentials and unknown providers', async () => {
     const app = createApp();
@@ -113,6 +143,29 @@ describe('discovery integration OpenAPI contracts', () => {
         await request(app)
           .post('/api/v1/integrations/discovery/accounts/trakt/complete')
           .send({ deviceCode: 'injected' })
+      ).status,
+      400
+    );
+    assert.equal(
+      (
+        await request(app).get(
+          '/api/v1/integrations/discovery/library/trakt?page=not-a-page'
+        )
+      ).status,
+      400
+    );
+    assert.equal(
+      (
+        await request(app)
+          .post('/api/v1/integrations/discovery/tracking/trakt')
+          .send({
+            requestId: '00000000-0000-4000-8000-000000000001',
+            action: 'watched',
+            value: true,
+            mediaType: 'movie',
+            tmdbId: 55,
+            accessToken: 'must-not-pass',
+          })
       ).status,
       400
     );

@@ -722,6 +722,38 @@ class TraktAPI extends ExternalAPI {
     );
   }
 
+  public async getSyncLibraryPage(
+    mediaType: 'movie' | 'tv',
+    collection: 'watched' | 'ratings',
+    page: number,
+    limit = 20
+  ): Promise<TraktListEntry[]> {
+    if (
+      !Number.isSafeInteger(page) ||
+      page < 1 ||
+      page > 500 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 250
+    )
+      throw new Error('Invalid Trakt library page.');
+    const rows = await this.getAuthenticated<TraktListEntry[]>(
+      `/sync/${collection}/${mediaType === 'movie' ? 'movies' : 'shows'}`,
+      {
+        params: {
+          page,
+          limit,
+          ...(collection === 'watched' && mediaType === 'tv'
+            ? { extended: 'progress' }
+            : {}),
+        },
+      }
+    );
+    if (!Array.isArray(rows) || rows.length > limit)
+      throw new Error('Trakt returned an invalid library page.');
+    return rows;
+  }
+
   public async getSyncWatched(
     mediaType: 'movie' | 'tv'
   ): Promise<TraktListEntry[]> {
@@ -751,8 +783,10 @@ class TraktAPI extends ExternalAPI {
     const limit =
       Number(params.limit) > 0 ? Number(params.limit) : TRAKT_SYNC_PAGE_SIZE;
     let page = 1;
+    const seen = new Set<string>();
+    let bytes = 0;
 
-    while (true) {
+    while (page <= 101) {
       const batch = await this.getAuthenticated<TraktListEntry[]>(path, {
         params: {
           ...params,
@@ -763,12 +797,26 @@ class TraktAPI extends ExternalAPI {
       if (!batch || batch.length === 0) {
         return items;
       }
+      if (
+        !Array.isArray(batch) ||
+        batch.length > limit ||
+        items.length + batch.length > 10000
+      )
+        throw new Error('Trakt sync exceeded its supported result limit.');
+      const encoded = JSON.stringify(batch);
+      bytes += Buffer.byteLength(encoded);
+      if (bytes > 8 * 1024 * 1024)
+        throw new Error('Trakt sync exceeded its supported metadata size.');
+      const fingerprint = createHash('sha256').update(encoded).digest('hex');
+      if (seen.has(fingerprint)) throw new Error('Trakt repeated a sync page.');
+      seen.add(fingerprint);
       items.push(...batch);
       if (batch.length < limit) {
         return items;
       }
       page += 1;
     }
+    throw new Error('Trakt sync exceeded its supported page limit.');
   }
 
   public static payloadContainsTmdb(
@@ -1112,6 +1160,10 @@ class TraktAPI extends ExternalAPI {
     (this as unknown as { axios: AxiosInstance }).axios.defaults.headers.common[
       'Authorization'
     ] = `Bearer ${this.accessToken}`;
+  }
+
+  public async prepareAccessToken(): Promise<void> {
+    await this.ensureFreshToken();
   }
 
   private async ensureFreshToken(): Promise<void> {

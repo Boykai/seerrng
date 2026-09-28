@@ -10,6 +10,10 @@ export default defineMessages('discovery', {
   'accounts.disconnected': 'Not connected',
   'accounts.unconfigured': 'Administrator setup required',
   'accounts.disconnect': 'Disconnect',
+  'accounts.allowwrites':
+    'Allow SeerrNG to make tracking changes to my {provider} account',
+  'accounts.writesdescription':
+    'Only changes you choose in My Library are sent. Turn this off to keep this connection read-only.',
   'accounts.connect': 'Connect',
   'accounts.authorize': 'Authorize SeerrNG on {provider}.',
   'accounts.open': 'Open authorization page',

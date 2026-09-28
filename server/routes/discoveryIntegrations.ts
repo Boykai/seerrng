@@ -1,20 +1,9 @@
 import AnilistAPI from '@server/api/anilist';
-import {
-  AnilistAuthError,
-  AnilistRateLimitedError,
-} from '@server/api/anilist/failures';
-import { MdblistNotConfiguredError } from '@server/api/mdblist/lists';
-import SimklAPI, {
-  SimklRateLimitedError,
-  SimklUnauthorizedError,
-} from '@server/api/simkl';
-import TraktAPI, {
-  TraktRateLimitedError,
-  TraktReconnectRequiredError,
-  TraktRefreshRejectedError,
-} from '@server/api/trakt';
+import SimklAPI from '@server/api/simkl';
+import TraktAPI from '@server/api/trakt';
 import { getRepository } from '@server/datasource';
 import DiscoveryAccount from '@server/entity/DiscoveryAccount';
+import ProviderTrackingAction from '@server/entity/ProviderTrackingAction';
 import { runWithConfigurationAdmission } from '@server/lib/configurationAdmission';
 import {
   DiscoveryIntegrationError,
@@ -23,94 +12,33 @@ import {
   saveDiscoveryAccount,
 } from '@server/lib/discoveryIntegrations/accounts';
 import { discoveryFeed } from '@server/lib/discoveryIntegrations/feeds';
+import {
+  handleDiscoveryIntegration,
+  requireDiscoveryBrowserSession,
+  runPersonalDiscoveryMutation,
+} from '@server/lib/discoveryIntegrations/http';
+import {
+  personalProviderLibrary,
+  type LibraryShelf,
+} from '@server/lib/discoveryIntegrations/library';
+import {
+  applyTrackingIntent,
+  parseTrackingIntent,
+  prepareTrackingAccount,
+  publicTrackingAction,
+} from '@server/lib/discoveryIntegrations/tracking';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
-import {
-  UserMutationActorUnauthorizedError,
-  runUserSecurityMutationWithActor,
-} from '@server/lib/userSecurityMutation';
 import { authorizedMutation } from '@server/middleware/authorizedMutation';
-import { Router, type Request, type RequestHandler } from 'express';
+import { Router } from 'express';
 
 const router = Router();
 router.use((_req, res, next) => {
   res.set('Cache-Control', 'private, no-store');
   next();
 });
-const handle =
-  (callback: RequestHandler): RequestHandler =>
-  async (req, res, next) => {
-    try {
-      await callback(req, res, next);
-    } catch (error) {
-      if (
-        error instanceof TraktRateLimitedError ||
-        error instanceof SimklRateLimitedError ||
-        error instanceof AnilistRateLimitedError
-      ) {
-        res.set(
-          'Retry-After',
-          String(Math.max(1, Math.min(3600, error.retryAfterSeconds || 60)))
-        );
-        return res.status(429).json({
-          message: 'The provider request limit was reached. Try again later.',
-        });
-      }
-      if (
-        error instanceof TraktReconnectRequiredError ||
-        error instanceof TraktRefreshRejectedError ||
-        error instanceof SimklUnauthorizedError ||
-        error instanceof AnilistAuthError
-      )
-        return res.status(409).json({
-          message: 'Reconnect your provider account under Linked Accounts.',
-        });
-      if (error instanceof MdblistNotConfiguredError)
-        return res.status(409).json({
-          message:
-            'Ask your administrator to configure MDBList in Discovery Integrations.',
-        });
-      if (error instanceof UserMutationActorUnauthorizedError)
-        return res
-          .status(403)
-          .json({ message: 'Sign in again before managing accounts.' });
-      if (error instanceof DiscoveryIntegrationError)
-        return res.status(error.status).json({ message: error.message });
-      return res.status(502).json({
-        message:
-          'The account provider could not complete this operation. Try again shortly.',
-      });
-    }
-  };
-
-// Linking and account changes require the user's browser session, never an app API key.
-function browserMutation(req: Request) {
-  if (!req.user || req.session.userId !== req.user.id)
-    throw new DiscoveryIntegrationError(
-      403,
-      'Sign in to manage personal accounts.'
-    );
-  const origin = req.get('origin');
-  const site = req.get('sec-fetch-site');
-  if (
-    site === 'cross-site' ||
-    (origin && new URL(origin).host !== req.get('host'))
-  ) {
-    throw new DiscoveryIntegrationError(
-      403,
-      'Account changes must originate from SeerrNG.'
-    );
-  }
-}
-function personalMutation<T>(req: Request, callback: () => Promise<T>) {
-  browserMutation(req);
-  return runUserSecurityMutationWithActor(
-    req.user!.id,
-    req.user!.id,
-    Permission.ADMIN,
-    callback
-  );
-}
+const handle = handleDiscoveryIntegration;
+const personalMutation = runPersonalDiscoveryMutation;
 function publicConfiguration() {
   const config = getSettings().discoveryIntegrations;
   return {
@@ -453,6 +381,77 @@ router.get(
         req.query.list as string | undefined
       )
     );
+  })
+);
+router.get(
+  '/library/:provider',
+  handle(async (req, res) => {
+    requireDiscoveryBrowserSession(req);
+    const provider = parseDiscoveryProvider(req.params.provider);
+    const shelf = req.query.shelf ?? (provider === 'trakt' ? 'watched' : 'all');
+    const rawPage = req.query.page;
+    const page =
+      rawPage === undefined
+        ? 1
+        : typeof rawPage === 'number' && Number.isSafeInteger(rawPage)
+          ? rawPage
+          : typeof rawPage === 'string' && /^[1-9]\d{0,2}$/.test(rawPage)
+            ? Number(rawPage)
+            : NaN;
+    const mediaType = req.query.mediaType;
+    if (
+      typeof shelf !== 'string' ||
+      ![
+        'all',
+        'watchlist',
+        'watched',
+        'in-progress',
+        'completed',
+        'rated',
+      ].includes(shelf) ||
+      !Number.isSafeInteger(page) ||
+      page > 500 ||
+      (mediaType !== undefined && mediaType !== 'movie' && mediaType !== 'tv')
+    )
+      throw new DiscoveryIntegrationError(
+        400,
+        'Choose a valid library shelf and media type.'
+      );
+    res.json(
+      await personalProviderLibrary(
+        req.user!.id,
+        provider,
+        shelf as LibraryShelf,
+        page,
+        mediaType as 'movie' | 'tv' | undefined
+      )
+    );
+  })
+);
+router.post(
+  '/tracking/:provider',
+  handle(async (req, res) => {
+    requireDiscoveryBrowserSession(req);
+    const provider = parseDiscoveryProvider(req.params.provider);
+    const intent = parseTrackingIntent(provider, req.body);
+    const prepared = await prepareTrackingAccount(req.user!.id, provider);
+    const result = await personalMutation(req, () =>
+      applyTrackingIntent(req.user!.id, provider, intent, prepared.accessToken)
+    );
+    res.json(result);
+  })
+);
+router.get(
+  '/tracking/actions/:requestId',
+  handle(async (req, res) => {
+    requireDiscoveryBrowserSession(req);
+    const action = await getRepository(ProviderTrackingAction).findOneBy({
+      userId: req.user!.id,
+      requestId: String(req.params.requestId),
+    });
+    if (!action)
+      throw new DiscoveryIntegrationError(404, 'Tracking action not found.');
+    res.json(publicTrackingAction(action));
   })
 );
 export default router;

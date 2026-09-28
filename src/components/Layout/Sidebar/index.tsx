@@ -34,6 +34,7 @@ export const menuMessages = defineMessages('components.Layout.Sidebar', {
   discover: 'Discover',
   calendar: 'Calendar',
   downloads: 'Download Inbox',
+  library: 'My Library',
   browsemovies: 'Movies',
   browsemusic: 'Music',
   browsebooks: 'Books',
@@ -75,6 +76,12 @@ const SidebarLinks: SidebarLinkProps[] = [
     messagesKey: 'discover',
     svgIcon: <SparklesIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/(discover\/?)?$/,
+  },
+  {
+    href: '/library',
+    messagesKey: 'library',
+    svgIcon: <BookOpenIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/library$/,
   },
   {
     href: '/downloads',
