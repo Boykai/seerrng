@@ -681,6 +681,7 @@
   "components.ExternalMediaManageSlideOver.openarr": "Open in {arr}",
   "components.ExternalMediaManageSlideOver.openarrFormat": "Open {format} in {arr}",
   "components.IdentityMappingControls.change": "Change title match",
+  "components.IdentityMappingControls.externalMatch": "This match came from an exact IMDb or TVDB ID. Choose another title to save a private override.",
   "components.IdentityMappingControls.match": "Match catalog title",
   "components.IdentityMappingControls.movie": "Movie",
   "components.IdentityMappingControls.noResults": "No matching titles were found.",

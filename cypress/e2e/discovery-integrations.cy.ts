@@ -196,6 +196,81 @@ describe('Discovery provider integrations', () => {
       );
       cy.screenshot(`provider-discovery-repair-${width}`);
     });
+  it('labels exact external-ID matches and allows a private override', () => {
+    let overridden = false;
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/feeds/trakt/watchlist*',
+      (request) =>
+        request.reply({
+          page: 1,
+          hasMore: false,
+          missingMappings: 0,
+          items: [
+            {
+              id: 'trakt:tv:101',
+              source: 'trakt',
+              sourceId: '101',
+              title: 'Exact ID series',
+              mediaType: 'tv',
+              tmdbId: 456,
+              identityResolution: overridden ? 'personal' : 'external-id',
+              identityMapped: overridden,
+              mappingAvailable: true,
+            },
+          ],
+        })
+    ).as('resolvedFeed');
+    cy.intercept('GET', '/api/v1/tv/456*', {
+      id: 456,
+      name: 'Exact ID series',
+      posterPath: null,
+      mediaType: 'tv',
+    });
+    cy.intercept('GET', '/api/v1/search?*', {
+      page: 1,
+      totalPages: 1,
+      totalResults: 1,
+      results: [
+        {
+          id: 789,
+          mediaType: 'tv',
+          name: 'Override series',
+          firstAirDate: '2021-01-01',
+        },
+      ],
+    });
+    cy.intercept(
+      'PUT',
+      '/api/v1/integrations/discovery/mappings',
+      (request) => {
+        expect(request.body).to.deep.equal({
+          identity: 'trakt:tv:101',
+          tmdbId: 789,
+          mediaType: 'tv',
+        });
+        overridden = true;
+        request.reply({
+          identity: 'trakt:tv:101',
+          tmdbId: 789,
+          mediaType: 'tv',
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    ).as('savePrivateOverride');
+
+    cy.visit('/discover/providers');
+    cy.get('#provider-feed').select('trakt/watchlist');
+    cy.wait('@resolvedFeed');
+    cy.contains('Exact ID series').should('be.visible');
+    cy.contains('exact IMDb or TVDB ID').should('be.visible');
+    cy.contains('button', 'Change title match').click();
+    cy.get('input[aria-label="Search SeerrNG catalog"]').type('Override');
+    cy.contains('button', 'Use this match').click();
+    cy.wait('@savePrivateOverride');
+    cy.contains('Reset title match').should('be.visible');
+    cy.contains('private override').should('not.exist');
+  });
   it('shows personalized Discover rows only for connected provider accounts', () => {
     cy.intercept('GET', '/api/v1/integrations/discovery/accounts', {
       accounts: [

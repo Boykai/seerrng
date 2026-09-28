@@ -19,6 +19,10 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
 - Trakt, AniList, and MDBList discovery feeds let users confirm unmatched titles
   against TMDB, filter to the unmatched items on the current page, and change or
   reset private mappings without rewriting provider IDs.
+- Exact IMDb and TVDB identifiers from Trakt, MDBList and supported personal
+  libraries are resolved through TMDB when the result is unique and type-safe.
+  Stale, ambiguous and unavailable matches stay in the manual repair flow; users
+  can save a private override for an automatic result.
 - Users can export and import a versioned personal mapping pack without provider
   credentials. Import is bounded, transactional, idempotent, and private to the
   importing account; it can be restored before provider reconnection.
@@ -45,8 +49,8 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
 - Verify manual-import payloads and acquisition actions against live services,
   including the supported Readarr-compatible backend variants.
 - Calendar date-change history and additional media sources.
-- Curated shared mapping packs and automated live resolvers, plus bulk gap repair
-  across sources beyond per-title, current-page, and pack import.
+- Curated shared mapping packs, additional provider-specific live resolvers, and
+  bulk gap repair across sources beyond per-title, current-page, and pack import.
 - Episode-level cross-provider identity.
 - Opt-in rolling watch-ahead, durable scheduling and episode progress handling.
 - Optional Jellyfin plugin using the independently deployed SeerrNG server,

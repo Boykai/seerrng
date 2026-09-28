@@ -31,7 +31,13 @@ it('keeps manual identity matches private to the owner and resettable', async ()
   await savePersonalIdentityMapping(owner.id, item.id, 456, 'tv');
 
   assert.deepEqual(await applyPersonalIdentityMappings(owner.id, [item]), [
-    { ...item, tmdbId: 456, mediaType: 'tv', identityMapped: true },
+    {
+      ...item,
+      tmdbId: 456,
+      mediaType: 'tv',
+      identityMapped: true,
+      identityResolution: 'personal',
+    },
   ]);
   assert.deepEqual(
     await applyPersonalIdentityMappings(owner.id + 10_000, [item]),

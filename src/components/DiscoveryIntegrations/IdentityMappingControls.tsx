@@ -23,6 +23,8 @@ const messages = defineMessages('components.IdentityMappingControls', {
   saveFailed: 'The match could not be saved. Try again.',
   resetSaved: 'Title match reset.',
   resetFailed: 'The match could not be reset. Try again.',
+  externalMatch:
+    'This match came from an exact IMDb or TVDB ID. Choose another title to save a private override.',
 });
 
 type MappingSearchResult =
@@ -77,7 +79,7 @@ export default function IdentityMappingControls({
       });
       setNotice(intl.formatMessage(messages.saved));
       setOpen(false);
-      await onUpdated();
+      await onUpdated().catch(() => undefined);
     } catch {
       setNotice(intl.formatMessage(messages.saveFailed));
     } finally {
@@ -94,7 +96,7 @@ export default function IdentityMappingControls({
         `/api/v1/integrations/discovery/mappings/${encodeURIComponent(item.id)}`
       );
       setNotice(intl.formatMessage(messages.resetSaved));
-      await onUpdated();
+      await onUpdated().catch(() => undefined);
     } catch {
       setNotice(intl.formatMessage(messages.resetFailed));
     } finally {
@@ -111,7 +113,9 @@ export default function IdentityMappingControls({
       <div className="flex flex-wrap gap-2">
         <Button disabled={busy} onClick={() => setOpen((value) => !value)}>
           {intl.formatMessage(
-            item.identityMapped ? messages.change : messages.match
+            item.identityMapped || item.tmdbId
+              ? messages.change
+              : messages.match
           )}
         </Button>
         {item.identityMapped && (
@@ -120,6 +124,11 @@ export default function IdentityMappingControls({
           </Button>
         )}
       </div>
+      {item.identityResolution === 'external-id' && !item.identityMapped && (
+        <p className="text-xs text-gray-400">
+          {intl.formatMessage(messages.externalMatch)}
+        </p>
+      )}
       {open && (
         <div className="space-y-2 rounded-md border border-gray-700 p-3">
           <label className="block text-xs" htmlFor={`mapping-type-${item.id}`}>

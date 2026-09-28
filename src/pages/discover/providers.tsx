@@ -225,7 +225,8 @@ export default function ProviderDiscoverPage() {
                 type={item.mediaType}
                 title={item.title}
               />
-              {item.identityMapped && (
+              {(item.identityMapped ||
+                item.identityResolution === 'external-id') && (
                 <IdentityMappingControls
                   item={item}
                   onUpdated={() => mutate()}

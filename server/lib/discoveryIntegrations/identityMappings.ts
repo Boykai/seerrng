@@ -23,6 +23,7 @@ export interface IdentityMappingCandidate {
   tmdbId?: number;
   mediaType?: 'movie' | 'tv';
   identityMapped?: boolean;
+  identityResolution?: 'personal' | 'external-id';
 }
 
 export interface PersonalIdentityMappingPackEntry {
@@ -154,6 +155,7 @@ export async function applyPersonalIdentityMappings<
           tmdbId: mapping.tmdbId,
           mediaType: mapping.mediaType,
           identityMapped: true,
+          identityResolution: 'personal',
         }
       : item;
   });

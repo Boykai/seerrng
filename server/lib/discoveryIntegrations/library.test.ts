@@ -1,5 +1,6 @@
 import AnilistAPI from '@server/api/anilist';
 import SimklAPI from '@server/api/simkl';
+import TheMovieDb from '@server/api/themoviedb';
 import TraktAPI from '@server/api/trakt';
 import { getRepository } from '@server/datasource';
 import DiscoveryAccount from '@server/entity/DiscoveryAccount';
@@ -165,6 +166,59 @@ it('does not infer TMDB identity or media type for Simkl anime entries', async (
   assert.equal(repaired.items[0].mediaType, 'tv');
   assert.equal(repaired.items[0].identityMapped, true);
   assert.equal(repaired.missingMappings, 0);
+});
+it('resolves only the visible personal-library page and hides external IDs', async () => {
+  const userId = await connect('simkl');
+  mock.method(SimklAPI.prototype, 'getAllItems', async () => ({
+    movies: Array.from({ length: 45 }, (_, index) => {
+      const id = index + 1;
+      return {
+        movie: {
+          title: `Movie ${String(id).padStart(2, '0')}`,
+          year: 2024,
+          ids: {
+            simkl: id,
+            imdb: `tt${String(id).padStart(7, '0')}`,
+          },
+        },
+        status: 'completed',
+      };
+    }),
+  }));
+  const externalLookups: string[] = [];
+  mock.method(
+    TheMovieDb.prototype,
+    'getByExternalId',
+    async ({ externalId }: { externalId: string | number }) => {
+      externalLookups.push(String(externalId));
+      return {
+        movie_results: [],
+        tv_results: [],
+        person_results: [],
+      } as never;
+    }
+  );
+
+  const result = await personalProviderLibrary(
+    userId,
+    'simkl',
+    'completed',
+    2,
+    'movie'
+  );
+
+  assert.equal(result.total, 45);
+  assert.equal(result.items.length, 20);
+  assert.equal(Object.hasOwn(result.items[0], 'imdbId'), false);
+  assert.equal(Object.hasOwn(result.items[0], 'tvdbId'), false);
+  assert.equal(result.missingMappings, 45);
+  assert.deepEqual(
+    externalLookups.sort(),
+    Array.from(
+      { length: 20 },
+      (_, index) => `tt${String(index + 21).padStart(7, '0')}`
+    )
+  );
 });
 it('rejects unsupported pages before looking up a provider account', async () => {
   await assert.rejects(

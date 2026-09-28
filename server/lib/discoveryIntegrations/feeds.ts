@@ -10,6 +10,10 @@ import {
   requireDiscoveryAccount,
 } from './accounts';
 import { cachedAccountRead } from './cache';
+import {
+  resolveExternalIdentityMatches,
+  toPublicIdentityCandidate,
+} from './externalIdentityResolver';
 import { applyPersonalIdentityMappings } from './identityMappings';
 
 export interface DiscoveryFeedItem {
@@ -22,7 +26,12 @@ export interface DiscoveryFeedItem {
   year?: number;
   imageUrl?: string;
   identityMapped?: boolean;
+  identityResolution?: 'personal' | 'external-id';
   mappingAvailable?: boolean;
+}
+interface DiscoveryFeedResolverCandidate extends DiscoveryFeedItem {
+  imdbId?: string;
+  tvdbId?: number;
 }
 export interface DiscoveryFeedPage {
   page: number;
@@ -57,7 +66,7 @@ export async function discoveryFeed(
 ): Promise<DiscoveryFeedPage> {
   if (!Number.isSafeInteger(page) || page < 1 || page > 100)
     throw new DiscoveryIntegrationError(400, 'Page must be between 1 and 100.');
-  let items: DiscoveryFeedItem[];
+  let items: DiscoveryFeedResolverCandidate[];
   let hasMore: boolean;
   if (provider === 'trakt') {
     if (
@@ -104,7 +113,15 @@ export async function discoveryFeed(
         mediaType: item.mediaType,
         tmdbId: item.tmdbId,
         year: item.year,
-        mappingAvailable: !!(item.traktId || item.traktSlug || item.tmdbId),
+        mappingAvailable: !!(
+          item.traktId ||
+          item.traktSlug ||
+          item.tmdbId ||
+          item.imdbId ||
+          item.tvdbId
+        ),
+        ...(item.imdbId ? { imdbId: item.imdbId } : {}),
+        ...(item.tvdbId ? { tvdbId: item.tvdbId } : {}),
       };
     });
   } else if (provider === 'anilist') {
@@ -168,7 +185,9 @@ export async function discoveryFeed(
         title: item.title,
         mediaType: item.mediaType,
         tmdbId: item.tmdbId,
-        mappingAvailable: !!(item.tmdbId || item.imdbId),
+        mappingAvailable: !!(item.tmdbId || item.imdbId || item.tvdbId),
+        ...(item.imdbId ? { imdbId: item.imdbId } : {}),
+        ...(item.tvdbId ? { tvdbId: item.tvdbId } : {}),
       };
     });
   } else
@@ -176,15 +195,21 @@ export async function discoveryFeed(
       400,
       'Unknown discovery provider or feed.'
     );
-  const mappedItems = await applyPersonalIdentityMappings(userId, items);
-  items = mappedItems.filter(
+  const manuallyMappedItems = await applyPersonalIdentityMappings(
+    userId,
+    items
+  );
+  const resolvedItems =
+    await resolveExternalIdentityMatches(manuallyMappedItems);
+  const visibleItems = resolvedItems.filter(
     (item) => !item.mediaType || isMediaCategoryEnabled(item.mediaType)
   );
   return {
     page,
     hasMore,
-    items,
-    missingMappings: items.filter((item) => !item.tmdbId || !item.mediaType)
-      .length,
+    items: visibleItems.map(toPublicIdentityCandidate),
+    missingMappings: visibleItems.filter(
+      (item) => !item.tmdbId || !item.mediaType
+    ).length,
   };
 }

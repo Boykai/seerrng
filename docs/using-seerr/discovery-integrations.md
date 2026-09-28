@@ -44,11 +44,15 @@ Titles with confirmed TMDB IDs use the normal movie/series cards. Titles without
 a confirmed match retain their original provider identity and are marked
 **Catalog match pending**. Search the SeerrNG catalog and confirm a movie or
 series to attach a private match to a stable Trakt, AniList, or MDBList ID.
-Matched titles then use normal catalog cards, and the **Show unmatched titles**
-filter keeps the remaining repair queue visible on the current feed page. These
-matches are private to your account and are also used in My Library when the
-same provider item appears there. Provider IDs are preserved; SeerrNG does not
-infer a match from title text.
+When a source also supplies an IMDb or TVDB ID, SeerrNG can resolve that exact
+ID through TMDB and use the result only when it is unique, has the expected
+movie or series type, and still exists in the catalog. Ambiguous or unavailable
+results remain available for manual repair. An exact-ID result is shown as
+automatic; choose **Change title match** to save a private override. The
+**Show unmatched titles** filter keeps the remaining repair queue visible on the
+current feed page. Private matches are also used in My Library when the same
+provider item appears there. Provider IDs are preserved; SeerrNG does not infer
+a match from title text.
 Provider errors identify whether an account needs reconnecting, MDBList setup is
 missing, an MDBList list is unavailable, or the provider is temporarily down.
 When a provider reports a quota cooldown, Retry stays disabled until that window

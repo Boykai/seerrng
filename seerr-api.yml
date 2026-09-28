@@ -437,6 +437,9 @@ components:
           type: string
         identityMapped:
           type: boolean
+        identityResolution:
+          type: string
+          enum: [personal, external-id]
         mappingAvailable:
           type: boolean
     DiscoveryFeedPage:
@@ -500,6 +503,9 @@ components:
           minimum: 1
         identityMapped:
           type: boolean
+        identityResolution:
+          type: string
+          enum: [personal, external-id]
         imageUrl:
           type: string
         year:

@@ -9,6 +9,10 @@ import {
   requireDiscoveryAccount,
 } from './accounts';
 import { cachedAccountRead } from './cache';
+import {
+  resolveExternalIdentityMatches,
+  toPublicIdentityCandidate,
+} from './externalIdentityResolver';
 import { applyPersonalIdentityMappings } from './identityMappings';
 import type { NativeLibrarySource } from './mediaServerLibrary';
 
@@ -33,6 +37,10 @@ export interface PersonalLibraryItem {
   progress?: number;
   totalEpisodes?: number;
   identityMapped?: boolean;
+  identityResolution?: 'personal' | 'external-id';
+  /** Internal resolver inputs; removed before the API response is serialized. */
+  imdbId?: string;
+  tvdbId?: number;
 }
 export type LibraryShelf =
   | 'all'
@@ -80,6 +88,10 @@ function traktItem(
     mediaType,
     title: metadata.title.slice(0, 1000),
     tmdbId: positive(metadata.ids?.tmdb),
+    ...(metadata.ids?.imdb ? { imdbId: metadata.ids.imdb } : {}),
+    ...(positive(metadata.ids?.tvdb)
+      ? { tvdbId: positive(metadata.ids?.tvdb) }
+      : {}),
     year: positive(metadata.year),
   };
 }
@@ -114,6 +126,8 @@ async function traktLibrary(
             title: row.title.slice(0, 1000),
             mediaType: row.mediaType,
             tmdbId: positive(row.tmdbId),
+            ...(row.imdbId ? { imdbId: row.imdbId } : {}),
+            ...(positive(row.tvdbId) ? { tvdbId: positive(row.tvdbId) } : {}),
             year: positive(row.year),
             status: 'planning',
           })),
@@ -237,6 +251,10 @@ async function simklLibrary(userId: number): Promise<PersonalLibraryItem[]> {
           title: metadata.title.slice(0, 1000),
           mediaType,
           tmdbId: mediaType ? positive(ids.tmdb) : undefined,
+          ...(typeof ids.imdb === 'string' && /^tt\d{1,20}$/.test(ids.imdb)
+            ? { imdbId: ids.imdb }
+            : {}),
+          ...(positive(ids.tvdb) ? { tvdbId: positive(ids.tvdb) } : {}),
           year: positive(metadata.year),
           status: statuses[String(row.status)],
           rating: score(row.user_rating),
@@ -294,10 +312,14 @@ export async function personalProviderLibrary(
       mediaType ?? 'movie'
     );
     const current = await requireDiscoveryAccount(userId, provider);
-    const items = await applyPersonalIdentityMappings(userId, result.items);
+    const personalItems = await applyPersonalIdentityMappings(
+      userId,
+      result.items
+    );
+    const items = await resolveExternalIdentityMatches(personalItems);
     return {
       ...result,
-      items,
+      items: items.map(toPublicIdentityCandidate),
       hasMore: result.hasMore && page < 500,
       truncated: result.hasMore && page === 500,
       page,
@@ -310,8 +332,11 @@ export async function personalProviderLibrary(
     provider === 'anilist'
       ? await anilistLibrary(userId)
       : await simklLibrary(userId);
-  const mappedSnapshot = await applyPersonalIdentityMappings(userId, snapshot);
-  const items = mappedSnapshot
+  const manuallyMappedSnapshot = await applyPersonalIdentityMappings(
+    userId,
+    snapshot
+  );
+  const items = manuallyMappedSnapshot
     .filter(
       (item) =>
         (item.mediaType
@@ -327,14 +352,27 @@ export async function personalProviderLibrary(
           (shelf === 'rated' && item.rating !== undefined))
     )
     .sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+  const pageItems = items.slice((page - 1) * 20, page * 20);
+  const resolvedPageItems = await resolveExternalIdentityMatches(pageItems);
+  const visiblePageItems = resolvedPageItems.filter((item) =>
+    item.mediaType
+      ? isMediaCategoryEnabled(item.mediaType)
+      : isMediaCategoryEnabled('movie') || isMediaCategoryEnabled('tv')
+  );
+  const unresolvedBeforePage = pageItems.filter(
+    (item) => !item.tmdbId || !item.mediaType
+  ).length;
+  const missingMappings =
+    items.filter((item) => !item.tmdbId || !item.mediaType).length -
+    unresolvedBeforePage +
+    visiblePageItems.filter((item) => !item.tmdbId || !item.mediaType).length;
   return {
-    items: items.slice((page - 1) * 20, page * 20),
+    items: visiblePageItems.map(toPublicIdentityCandidate),
     page,
     total: items.length,
     truncated: false,
     hasMore: page * 20 < items.length,
     allowWrites: (await requireDiscoveryAccount(userId, provider)).allowWrites,
-    missingMappings: items.filter((item) => !item.tmdbId || !item.mediaType)
-      .length,
+    missingMappings,
   };
 }

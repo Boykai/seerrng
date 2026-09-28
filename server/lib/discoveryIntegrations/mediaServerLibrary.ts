@@ -17,6 +17,10 @@ import { getSettings } from '@server/lib/settings';
 import { getHostname } from '@server/utils/getHostname';
 import { normalizeJellyfinGuid } from '@server/utils/jellyfin';
 import { createHash } from 'node:crypto';
+import {
+  resolveExternalIdentityMatches,
+  toPublicIdentityCandidate,
+} from './externalIdentityResolver';
 import { applyPersonalIdentityMappings } from './identityMappings';
 import type { LibraryShelf, PersonalLibraryItem } from './library';
 
@@ -90,6 +94,19 @@ const plexTmdbId = (item: PlexLibraryItem): number | undefined => {
 const jellyfinTmdbId = (item: JellyfinLibraryItemExtended) =>
   boundedPositive(item.ProviderIds.Tmdb ?? item.ProviderIds.TheMovieDb);
 
+const plexExternalIds = (
+  item: PlexLibraryItem
+): { imdbId?: string; tvdbId?: number } => {
+  for (const guid of item.Guid ?? []) {
+    const imdbId = /^imdb:\/\/(tt\d{1,20})(?:[/?#]|$)/.exec(guid.id)?.[1];
+    if (imdbId) return { imdbId };
+    const tvdbId = /^tvdb:\/\/(\d{1,10})(?:[/?#]|$)/.exec(guid.id)?.[1];
+    const parsedTvdbId = boundedPositive(tvdbId);
+    if (parsedTvdbId) return { tvdbId: parsedTvdbId };
+  }
+  return {};
+};
+
 const plexItem = (item: PlexLibraryItem): PersonalLibraryItem | undefined => {
   if (item.type !== 'movie' && item.type !== 'show') return undefined;
   const mediaType = item.type === 'movie' ? 'movie' : 'tv';
@@ -117,6 +134,7 @@ const plexItem = (item: PlexLibraryItem): PersonalLibraryItem | undefined => {
     title: item.title,
     mediaType,
     tmdbId: plexTmdbId(item),
+    ...plexExternalIds(item),
     year: item.year,
     status,
     ...(item.type === 'show' ? { progress, totalEpisodes: total } : {}),
@@ -142,6 +160,12 @@ const jellyfinItem = (
     title: item.Name,
     mediaType,
     tmdbId: jellyfinTmdbId(item),
+    ...(item.ProviderIds.Imdb && /^tt\d{1,20}$/.test(item.ProviderIds.Imdb)
+      ? { imdbId: item.ProviderIds.Imdb }
+      : {}),
+    ...(boundedPositive(item.ProviderIds.Tvdb)
+      ? { tvdbId: boundedPositive(item.ProviderIds.Tvdb) }
+      : {}),
     year: item.ProductionYear,
     status: userData?.Played
       ? 'completed'
@@ -529,9 +553,10 @@ export async function personalMediaServerLibrary(
         }
       }
 
-      const mappedItems = await applyPersonalIdentityMappings(userId, items);
+      const personalItems = await applyPersonalIdentityMappings(userId, items);
+      const mappedItems = await resolveExternalIdentityMatches(personalItems);
       return {
-        items: mappedItems,
+        items: mappedItems.map(toPublicIdentityCandidate),
         libraries,
         page,
         total,
