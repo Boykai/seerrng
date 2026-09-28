@@ -17,6 +17,7 @@ import { getSettings } from '@server/lib/settings';
 import { getHostname } from '@server/utils/getHostname';
 import { normalizeJellyfinGuid } from '@server/utils/jellyfin';
 import { createHash } from 'node:crypto';
+import { applyPersonalIdentityMappings } from './identityMappings';
 import type { LibraryShelf, PersonalLibraryItem } from './library';
 
 export type NativeLibrarySource = 'plex' | 'jellyfin' | 'emby';
@@ -528,15 +529,16 @@ export async function personalMediaServerLibrary(
         }
       }
 
+      const mappedItems = await applyPersonalIdentityMappings(userId, items);
       return {
-        items,
+        items: mappedItems,
         libraries,
         page,
         total,
         hasMore: hasMore && page < MAX_PAGE,
         nextCursor,
         allowWrites: false,
-        missingMappings: items.filter((item) => !item.tmdbId).length,
+        missingMappings: mappedItems.filter((item) => !item.tmdbId).length,
         truncated: truncated || (hasMore && page === MAX_PAGE),
       };
     });

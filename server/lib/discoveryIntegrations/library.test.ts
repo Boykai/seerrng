@@ -8,6 +8,7 @@ import { getSettings } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
 import assert from 'node:assert/strict';
 import { afterEach, it, mock } from 'node:test';
+import { savePersonalIdentityMapping } from './identityMappings';
 import { personalProviderLibrary } from './library';
 setupTestDb();
 afterEach(() => mock.restoreAll());
@@ -150,6 +151,20 @@ it('does not infer TMDB identity or media type for Simkl anime entries', async (
   assert.equal(result.items[0].tmdbId, undefined);
   assert.equal(result.items[0].progress, 3);
   assert.equal(result.missingMappings, 1);
+
+  await savePersonalIdentityMapping(userId, 'simkl:anime:77', 888, 'tv');
+  const repaired = await personalProviderLibrary(
+    userId,
+    'simkl',
+    'in-progress',
+    1,
+    'tv'
+  );
+  assert.equal(repaired.items.length, 1);
+  assert.equal(repaired.items[0].tmdbId, 888);
+  assert.equal(repaired.items[0].mediaType, 'tv');
+  assert.equal(repaired.items[0].identityMapped, true);
+  assert.equal(repaired.missingMappings, 0);
 });
 it('rejects unsupported pages before looking up a provider account', async () => {
   await assert.rejects(

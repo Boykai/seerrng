@@ -9,6 +9,7 @@ import {
   requireDiscoveryAccount,
 } from './accounts';
 import { cachedAccountRead } from './cache';
+import { applyPersonalIdentityMappings } from './identityMappings';
 import type { NativeLibrarySource } from './mediaServerLibrary';
 
 export interface PersonalLibraryItem {
@@ -31,6 +32,7 @@ export interface PersonalLibraryItem {
   rating?: number;
   progress?: number;
   totalEpisodes?: number;
+  identityMapped?: boolean;
 }
 export type LibraryShelf =
   | 'all'
@@ -292,20 +294,24 @@ export async function personalProviderLibrary(
       mediaType ?? 'movie'
     );
     const current = await requireDiscoveryAccount(userId, provider);
+    const items = await applyPersonalIdentityMappings(userId, result.items);
     return {
       ...result,
+      items,
       hasMore: result.hasMore && page < 500,
       truncated: result.hasMore && page === 500,
       page,
       allowWrites: current.allowWrites,
-      missingMappings: result.items.filter((item) => !item.tmdbId).length,
+      missingMappings: items.filter((item) => !item.tmdbId || !item.mediaType)
+        .length,
     };
   }
   const snapshot =
     provider === 'anilist'
       ? await anilistLibrary(userId)
       : await simklLibrary(userId);
-  const items = snapshot
+  const mappedSnapshot = await applyPersonalIdentityMappings(userId, snapshot);
+  const items = mappedSnapshot
     .filter(
       (item) =>
         (item.mediaType

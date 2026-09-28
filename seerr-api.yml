@@ -494,6 +494,8 @@ components:
         tmdbId:
           type: integer
           minimum: 1
+        identityMapped:
+          type: boolean
         imageUrl:
           type: string
         year:
@@ -556,6 +558,39 @@ components:
               type:
                 type: string
                 enum: [show, movie]
+    DiscoveryIdentityMappingRequest:
+      type: object
+      additionalProperties: false
+      required: [identity, tmdbId, mediaType]
+      properties:
+        identity:
+          type: string
+          minLength: 3
+          maxLength: 256
+        tmdbId:
+          type: integer
+          minimum: 1
+          maximum: 1000000000
+        mediaType:
+          type: string
+          enum: [movie, tv]
+    DiscoveryIdentityMapping:
+      type: object
+      additionalProperties: false
+      required: [identity, tmdbId, mediaType, updatedAt]
+      properties:
+        identity:
+          type: string
+          maxLength: 256
+        tmdbId:
+          type: integer
+          minimum: 1
+        mediaType:
+          type: string
+          enum: [movie, tv]
+        updatedAt:
+          type: string
+          format: date-time
     DiscoveryTrackingRequest:
       type: object
       additionalProperties: false
@@ -16072,6 +16107,67 @@ paths:
           description: Provider quota reached; retry later
         '502':
           description: Provider unavailable
+  /integrations/discovery/mappings:
+    put:
+      summary: Match a personal library item to a TMDB title
+      tags:
+        - user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscoveryIdentityMappingRequest'
+      responses:
+        '200':
+          description: Personal title match saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryIdentityMapping'
+        '400':
+          description: Invalid library identity or TMDB match
+        '403':
+          description: Browser session or enabled media category required
+        '409':
+          description: Source account is disconnected or the mapping limit was reached
+        '429':
+          description: Mapping update rate limit reached
+        '502':
+          description: TMDB could not confirm the selected title
+  /integrations/discovery/mappings/{identity}:
+    delete:
+      summary: Remove a personal library title match
+      tags:
+        - user
+      parameters:
+        - name: identity
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 256
+      responses:
+        '200':
+          description: Mapping removed, if present
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [removed]
+                properties:
+                  removed:
+                    type: boolean
+        '400':
+          description: Invalid library identity
+        '403':
+          description: Browser session required
+        '409':
+          description: Source account is disconnected
+        '429':
+          description: Mapping update rate limit reached
   /integrations/discovery/tracking/{provider}:
     post:
       summary: Update watched status, progress, or rating in your linked account

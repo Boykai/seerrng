@@ -131,6 +131,24 @@ describe('discovery integration OpenAPI contracts', () => {
     );
     assert.equal(
       (
+        await request(app).put('/api/v1/integrations/discovery/mappings').send({
+          identity: 'trakt:movie:123',
+          tmdbId: 456,
+          mediaType: 'movie',
+        })
+      ).status,
+      200
+    );
+    assert.equal(
+      (
+        await request(app).delete(
+          '/api/v1/integrations/discovery/mappings/trakt:movie:123'
+        )
+      ).status,
+      200
+    );
+    assert.equal(
+      (
         await request(app)
           .post('/api/v1/integrations/discovery/tracking/trakt')
           .send({
@@ -159,6 +177,17 @@ describe('discovery integration OpenAPI contracts', () => {
         await request(app)
           .put('/api/v1/integrations/discovery/configuration')
           .send({ trakt: { accessToken: 'secret' } })
+      ).status,
+      400
+    );
+    assert.equal(
+      (
+        await request(app).put('/api/v1/integrations/discovery/mappings').send({
+          identity: 'trakt:movie:123',
+          tmdbId: 456,
+          mediaType: 'movie',
+          userId: 1,
+        })
       ).status,
       400
     );

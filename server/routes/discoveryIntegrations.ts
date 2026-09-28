@@ -1,5 +1,6 @@
 import AnilistAPI from '@server/api/anilist';
 import SimklAPI from '@server/api/simkl';
+import TheMovieDb from '@server/api/themoviedb';
 import TraktAPI from '@server/api/trakt';
 import { getRepository } from '@server/datasource';
 import DiscoveryAccount from '@server/entity/DiscoveryAccount';
@@ -9,6 +10,7 @@ import {
   DiscoveryIntegrationError,
   parseDiscoveryProvider,
   publicDiscoveryAccount,
+  requireDiscoveryAccount,
   saveDiscoveryAccount,
 } from '@server/lib/discoveryIntegrations/accounts';
 import { discoveryFeed } from '@server/lib/discoveryIntegrations/feeds';
@@ -17,6 +19,11 @@ import {
   requireDiscoveryBrowserSession,
   runPersonalDiscoveryMutation,
 } from '@server/lib/discoveryIntegrations/http';
+import {
+  parsePersonalIdentitySource,
+  removePersonalIdentityMapping,
+  savePersonalIdentityMapping,
+} from '@server/lib/discoveryIntegrations/identityMappings';
 import {
   personalProviderLibrary,
   type LibraryShelf,
@@ -33,10 +40,12 @@ import {
   prepareTrackingAccount,
   publicTrackingAction,
 } from '@server/lib/discoveryIntegrations/tracking';
+import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import { authorizedMutation } from '@server/middleware/authorizedMutation';
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 
 const router = Router();
 router.use((_req, res, next) => {
@@ -45,6 +54,99 @@ router.use((_req, res, next) => {
 });
 const handle = handleDiscoveryIntegration;
 const personalMutation = runPersonalDiscoveryMutation;
+const identityMappingRateLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `user:${req.user?.id ?? 'anonymous'}`,
+  skip: () =>
+    process.env.NODE_ENV === 'test' || process.env.E2E_TESTS === 'true',
+});
+
+async function requireOwnedIdentity(
+  userId: number,
+  identity: string
+): Promise<void> {
+  const source = parsePersonalIdentitySource(identity);
+  if (source === 'trakt' || source === 'anilist' || source === 'simkl') {
+    await requireDiscoveryAccount(userId, source);
+    return;
+  }
+  const connection = await getNativeLibraryConnection(userId);
+  if (!connection?.connected || connection.provider !== source)
+    throw new DiscoveryIntegrationError(
+      409,
+      'Connect this media server before matching its library titles.'
+    );
+}
+
+router.put(
+  '/mappings',
+  identityMappingRateLimit,
+  handle(async (req, res) => {
+    requireDiscoveryBrowserSession(req);
+    const body = req.body;
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      Array.isArray(body) ||
+      Object.keys(body).some(
+        (key) => !['identity', 'tmdbId', 'mediaType'].includes(key)
+      ) ||
+      typeof body.identity !== 'string' ||
+      !Number.isSafeInteger(body.tmdbId) ||
+      (body.mediaType !== 'movie' && body.mediaType !== 'tv')
+    )
+      throw new DiscoveryIntegrationError(400, 'Choose a valid catalog match.');
+
+    await requireOwnedIdentity(req.user!.id, body.identity);
+    if (!isMediaCategoryEnabled(body.mediaType))
+      throw new DiscoveryIntegrationError(
+        403,
+        'This media category is disabled.'
+      );
+    try {
+      const tmdb = new TheMovieDb();
+      const target =
+        body.mediaType === 'movie'
+          ? await tmdb.getMovie({ movieId: body.tmdbId })
+          : await tmdb.getTvShow({ tvId: body.tmdbId });
+      if (target.id !== body.tmdbId)
+        throw new Error('TMDB returned a different title.');
+    } catch {
+      throw new DiscoveryIntegrationError(
+        502,
+        'The catalog could not confirm this match. Search again or try later.'
+      );
+    }
+
+    res.json(
+      await personalMutation(req, () =>
+        savePersonalIdentityMapping(
+          req.user!.id,
+          body.identity,
+          body.tmdbId,
+          body.mediaType
+        )
+      )
+    );
+  })
+);
+router.delete(
+  '/mappings/:identity',
+  identityMappingRateLimit,
+  handle(async (req, res) => {
+    requireDiscoveryBrowserSession(req);
+    const identity = String(req.params.identity);
+    await requireOwnedIdentity(req.user!.id, identity);
+    res.json(
+      await personalMutation(req, () =>
+        removePersonalIdentityMapping(req.user!.id, identity)
+      )
+    );
+  })
+);
 function publicConfiguration() {
   const config = getSettings().discoveryIntegrations;
   return {

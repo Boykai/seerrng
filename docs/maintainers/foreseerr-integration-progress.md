@@ -16,6 +16,9 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
 - Discover now adds signed-in-user rows for Trakt recommendations and watchlists,
   AniList planning/in-progress shelves, and Simkl planning/in-progress shelves.
   Rows are limited to that user's connected providers and keep unmapped titles.
+- My Library browses Trakt, AniList, Simkl, Plex, Jellyfin, and Emby shelves;
+  explicit watched, rating, and AniList progress writes are confirmed and
+  idempotent. Manual TMDB matches are private to the current user's library.
 - Movie/series release calendar with personal/shared scopes, bounded cached
   backend reads, episode hydration and partial-source reporting.
 - Dedicated-permission download intervention inbox with durable warnings, explicit
@@ -36,8 +39,8 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
 - Verify manual-import payloads and acquisition actions against live services,
   including the supported Readarr-compatible backend variants.
 - Calendar date-change history and additional media sources.
-- Personalized library shelves and explicit watched/rating writes.
-- Provenance-aware identity and episode mappings, mapping packs and gap repair.
+- Exportable/importable mapping packs, episode-level cross-provider identity,
+  and bulk gap repair beyond per-title manual TMDB matches.
 - Opt-in rolling watch-ahead, durable scheduling and episode progress handling.
 - Optional Jellyfin plugin using the independently deployed SeerrNG server,
   server-validated sessions and revocation, preserving existing media servers.

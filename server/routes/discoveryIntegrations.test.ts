@@ -1,4 +1,5 @@
 import AnilistAPI from '@server/api/anilist';
+import ExternalAPI from '@server/api/externalapi';
 import MdblistAPI, {
   MdblistListNotFoundError,
   MdblistQuotaExceededError,
@@ -62,6 +63,54 @@ async function login() {
 }
 
 describe('personal discovery account boundaries', () => {
+  it('saves and removes a TMDB-confirmed match for a linked personal library', async () => {
+    const agent = await login();
+    const admin = await getRepository(User).findOneByOrFail({
+      email: 'admin@seerr.dev',
+    });
+    getSettings().discoveryIntegrations.trakt.clientId = 'test-trakt-app';
+    await getRepository(DiscoveryAccount).save({
+      userId: admin.id,
+      provider: 'trakt',
+      clientId: 'test-trakt-app',
+      accessToken: 'private-token',
+      refreshToken: null,
+      expiresAt: null,
+      username: 'viewer',
+      providerUserId: 'viewer-id',
+      allowWrites: false,
+    });
+    const catalogLookup = mock.method(
+      ExternalAPI.prototype as unknown as {
+        get: (endpoint: string, ...args: unknown[]) => Promise<unknown>;
+      },
+      'get',
+      async (endpoint: string) => ({
+        id: endpoint === '/movie/456' ? 456 : 0,
+        title: 'Confirmed title',
+      })
+    );
+
+    const saved = await agent
+      .put('/integrations/discovery/mappings')
+      .send({ identity: 'trakt:movie:123', tmdbId: 456, mediaType: 'movie' });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.tmdbId, 456);
+    assert.equal(saved.body.mediaType, 'movie');
+    assert.equal(catalogLookup.mock.callCount(), 1);
+
+    const unlinked = await agent
+      .put('/integrations/discovery/mappings')
+      .send({ identity: 'simkl:movies:123', tmdbId: 456, mediaType: 'movie' });
+    assert.equal(unlinked.status, 409);
+
+    const removed = await agent.delete(
+      `/integrations/discovery/mappings/${encodeURIComponent('trakt:movie:123')}`
+    );
+    assert.equal(removed.status, 200);
+    assert.equal(removed.body.removed, true);
+  });
+
   it('omits stored tokens and client secrets from account and configuration responses', async () => {
     const agent = await login();
     const admin = await getRepository(User).findOneByOrFail({

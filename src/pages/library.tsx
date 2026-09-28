@@ -1,5 +1,6 @@
 import Button from '@app/components/Common/Button';
 import PageTitle from '@app/components/Common/PageTitle';
+import IdentityMappingControls from '@app/components/DiscoveryIntegrations/IdentityMappingControls';
 import TrackingControls from '@app/components/DiscoveryIntegrations/TrackingControls';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import defineMessages from '@app/utils/defineMessages';
@@ -334,6 +335,7 @@ export default function LibraryPage() {
                 </p>
               )}
             </div>
+            <IdentityMappingControls item={item} onUpdated={() => mutate()} />
             {!nativeSource && (
               <TrackingControls
                 item={item}

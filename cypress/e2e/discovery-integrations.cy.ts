@@ -335,6 +335,99 @@ describe('Discovery provider integrations', () => {
         capture: 'viewport',
       });
     });
+
+  it('repairs and resets an unmatched personal library title', () => {
+    cy.viewport(1280, 900);
+    let matched = false;
+    cy.intercept('GET', '/api/v1/integrations/discovery/accounts', {
+      accounts: [
+        { provider: 'anilist', username: 'Reader', allowWrites: false },
+      ],
+    });
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/library/anilist*',
+      (request) =>
+        request.reply({
+          items: [
+            {
+              id: 'anilist:101',
+              source: 'anilist',
+              sourceId: '101',
+              title: 'Unmatched personal anime',
+              mediaType: 'tv',
+              ...(matched ? { tmdbId: 456, identityMapped: true } : {}),
+            },
+          ],
+          page: 1,
+          hasMore: false,
+          allowWrites: false,
+          missingMappings: matched ? 0 : 1,
+          truncated: false,
+        })
+    ).as('personalLibrary');
+    cy.intercept('GET', '/api/v1/search?*', (request) => {
+      expect(request.query.type).to.equal('tv');
+      request.reply({
+        page: 1,
+        totalPages: 1,
+        totalResults: 1,
+        results: [
+          {
+            id: 456,
+            mediaType: 'tv',
+            name: 'Confirmed catalog series',
+            firstAirDate: '2020-01-01',
+          },
+        ],
+      });
+    }).as('mappingSearch');
+    cy.intercept(
+      'PUT',
+      '/api/v1/integrations/discovery/mappings',
+      (request) => {
+        expect(request.body).to.deep.equal({
+          identity: 'anilist:101',
+          tmdbId: 456,
+          mediaType: 'tv',
+        });
+        matched = true;
+        request.reply({
+          identity: 'anilist:101',
+          tmdbId: 456,
+          mediaType: 'tv',
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    ).as('saveIdentityMapping');
+    cy.intercept(
+      'DELETE',
+      '/api/v1/integrations/discovery/mappings/*',
+      (request) => {
+        matched = false;
+        request.reply({ removed: true });
+      }
+    ).as('resetIdentityMapping');
+    cy.intercept('GET', '/api/v1/tv/456', {
+      id: 456,
+      name: 'Confirmed catalog series',
+      firstAirDate: '2020-01-01',
+      genreIds: [],
+    });
+
+    cy.visit('/library');
+    cy.contains('Unmatched personal anime').should('be.visible');
+    cy.contains('button', 'Match catalog title').click();
+    cy.wait('@mappingSearch');
+    cy.contains('button', 'Use this match').click();
+    cy.wait('@saveIdentityMapping');
+    cy.wait('@personalLibrary');
+    cy.contains('button', 'Reset title match').should('be.visible').click();
+    cy.wait('@resetIdentityMapping');
+    cy.wait('@personalLibrary');
+    cy.contains('button', 'Match catalog title').should('be.visible');
+  });
+
   for (const width of [390, 1280])
     it(`browses the linked media server library at ${width}px`, () => {
       cy.viewport(width, 900);
