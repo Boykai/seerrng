@@ -514,12 +514,13 @@ export interface DiscoveryIntegrationsSettings {
   mdblist: { apiKey: string };
 }
 
-export const defaultDiscoveryIntegrations = (): DiscoveryIntegrationsSettings => ({
-  trakt: { clientId: '', clientSecret: '' },
-  anilist: { clientId: '', clientSecret: '' },
-  simkl: { clientId: '' },
-  mdblist: { apiKey: '' },
-});
+export const defaultDiscoveryIntegrations =
+  (): DiscoveryIntegrationsSettings => ({
+    trakt: { clientId: '', clientSecret: '' },
+    anilist: { clientId: '', clientSecret: '' },
+    simkl: { clientId: '' },
+    mdblist: { apiKey: '' },
+  });
 
 export interface AllSettings {
   clientId: string;

@@ -60,8 +60,8 @@ import bookRoutes from './book';
 import collectionRoutes from './collection';
 import collectionCatalogRoutes from './collectionCatalog';
 import comicRoutes from './comic';
-import discoveryIntegrationRoutes from './discoveryIntegrations';
 import discoverRoutes, { createTmdbWithRegionLanguage } from './discover';
+import discoveryIntegrationRoutes from './discoveryIntegrations';
 import { imageCacheWarmRateLimit, warmImageCache } from './imageproxy';
 import issueRoutes from './issue';
 import issueCommentRoutes from './issueComment';
@@ -433,7 +433,11 @@ router.use('/search', isAuthenticated(), searchRoutes);
 router.use('/discover', isAuthenticated(), discoverRoutes);
 router.use('/request', isAuthenticated(), requestRoutes);
 router.use('/request/software', softwareRoutes);
-router.use('/integrations/discovery', isAuthenticated(), discoveryIntegrationRoutes);
+router.use(
+  '/integrations/discovery',
+  isAuthenticated(),
+  discoveryIntegrationRoutes
+);
 router.use('/playlist', isAuthenticated(), playlistRoutes);
 router.use('/playback', isAuthenticated(), playbackRoutes);
 router.use('/watchlist', isAuthenticated(), watchlistRoutes);

@@ -84,8 +84,8 @@ export default class SimklAPI extends ExternalAPI {
       headers.Authorization = `Bearer ${options.accessToken}`;
     super(
       SIMKL_BASE_URL,
-      { nodeCache: cacheManager.getCache('trakt').data },
-      { headers }
+      {},
+      { headers, nodeCache: cacheManager.getCache('simkl').data }
     );
     this.clientId = clientId;
     this.onUnauthorized = options.onUnauthorized;

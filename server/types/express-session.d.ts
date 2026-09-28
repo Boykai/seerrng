@@ -6,10 +6,19 @@ declare module 'express-session' {
   interface SessionData {
     userId: number;
     credentialVersion?: number;
-    discoveryAuth?: Partial<Record<'trakt' | 'simkl', {
-      code: string; userCode: string; clientId: string; expiresAt: number;
-      interval: number; nextPollAt: number;
-    }>>;
+    discoveryAuth?: Partial<
+      Record<
+        'trakt' | 'simkl',
+        {
+          code: string;
+          userCode: string;
+          clientId: string;
+          expiresAt: number;
+          interval: number;
+          nextPollAt: number;
+        }
+      >
+    >;
     spotifyOAuthState?: string;
     spotifyOAuthStateCreatedAt?: number;
   }
