@@ -66,13 +66,14 @@ function createApp() {
 function createOpenApiValidatedApp() {
   const app = express();
   app.use(express.json());
+  app.set('trust proxy', 1);
   app.use(
-    // Test-only session middleware has no network listener or real secret.
-    // codeql[js/clear-text-cookie]
+    // The in-memory test app uses the same Secure cookie policy as HTTPS.
     session({
       secret: 'test-secret',
       resave: false,
       saveUninitialized: false,
+      cookie: { secure: true },
     })
   );
   app.use(
@@ -460,14 +461,22 @@ describe('Top-level API route validation', () => {
   });
 
   it('keeps cache warming reachable through the OpenAPI request validator', async () => {
-    const agent = request.agent(createOpenApiValidatedApp());
-    const loginResponse = await agent
+    const validatedApp = createOpenApiValidatedApp();
+    const loginResponse = await request(validatedApp)
       .post('/api/v1/auth/local')
+      .set('X-Forwarded-Proto', 'https')
       .send({ email: 'admin@seerr.dev', password: 'test1234' });
     assert.strictEqual(loginResponse.status, 200);
+    const sessionCookie = loginResponse
+      .get('set-cookie')?.[0]
+      ?.split(';', 1)[0];
+    assert.ok(sessionCookie);
+    assert.match(loginResponse.get('set-cookie')?.[0] ?? '', /; Secure(?:;|$)/);
 
-    const response = await agent
+    const response = await request(validatedApp)
       .post('/api/v1/imageproxy/warm')
+      .set('X-Forwarded-Proto', 'https')
+      .set('Cookie', sessionCookie)
       .send({ urls: [] });
 
     assert.strictEqual(response.status, 202, JSON.stringify(response.body));
