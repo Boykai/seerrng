@@ -116,6 +116,80 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.36.0](https://github.com/snapetech/seerrng/compare/v3.35.0..v3.36.0) - 2026-09-28
+
+### User-facing changes
+
+#### Added
+
+- **Discovery Integrations:** Provider discovery now explains when an account needs reconnecting, MDBList setup is missing, a list cannot be found, or a quota cooldown is active, so you can take the right recovery step.
+- **Downloads:** The Download Inbox can match unmatched files to an existing movie, series, album, or book in Radarr, Sonarr, Lidarr, or Readarr before import. SeerrNG rechecks the selected target and file list before submitting the import.
+- **Discovery Integrations:** Movie and series details, poster rating popovers, and collection averages now include available MDBList IMDb, Rotten Tomatoes, Metacritic, and Trakt scores. Existing rating sources remain visible when MDBList is unconfigured or unavailable.
+- **Discovery:** Discover now shows personal Trakt recommendations and watchlists, plus AniList and Simkl planning and in-progress shelves for each connected account.
+- **Personal Library:** My Library can save a private match from a Trakt, AniList, Simkl, Plex, Jellyfin, or Emby item to a movie or series in the SeerrNG catalog. Change or reset a match at any time; provider IDs and tracking actions remain tied to the original account item.
+- **Prowlarr:** Administrators can test each enabled searchable Prowlarr indexer and see feed-specific failures and cooldown history alongside category coverage. The checks contact providers but never grab or download releases.
+- **Media Requests:** Administrators can connect Prowlarr and inspect indexer coverage by medium. Users with Manage Requests can search movies, TV, music, ebooks, audiobooks, comics, magazines, ROMs, and PC games; approved requests still use their configured provider.
+- **Software Acquisition:** Administrators can choose ROMarrNG for the emulation IGDB catalog only when its handshake advertises SeerrNG catalog support; QuestarrNG remains the default catalog and PC-game provider, and ROMarrNG continues to acquire ROMs. Software request status also reflects retry and cancel restrictions when a provider reports them, while existing v1 provider routes remain compatible.
+- **Discovery:** Browse your linked Trakt, AniList, and Simkl libraries in My Library. You can update watched status and ratings, plus AniList episode progress, after enabling write consent for that account. SeerrNG does not automatically repeat an uncertain provider update.
+- **Personal Library:** My Library now browses each user's enabled Plex, Jellyfin, or Emby libraries with personal watched state and paged results. Only libraries accessible to that user and enabled in SeerrNG appear.
+
+#### Changed
+
+- **Books:** Audiobook discovery and search now use the configured audiobook catalog, including keyword searches and narrator filters, without mixing in ebook-only results. The Books link is hidden when ebook discovery is disabled.
+- **Bookshelf:** BookshelfNG deployment guidance now distinguishes the shared catalog configuration used by one instance from per-process catalog choices in the optional split setup, including its default Library of Congress and Gutendex sources.
+- **Discovery Integrations:** Provider quota alerts now show a concise countdown while Retry is paused, making it clear when another request can be sent.
+- **Discovery:** Discover now waits to request each connected provider's personal feed until its row nears the screen, reducing unnecessary provider traffic and keeping the initial page load lighter.
+- **Media Requests:** Prowlarr's default searches now reach broader audio and PC indexer categories, separate console generations from PC games, and expose more standard category filters. Administrators can tune each medium to the categories their indexers advertise.
+- **Indexer Search:** Prowlarr category suggestions now recognize more retro console aliases and newer systems such as Switch 2, helping administrators map custom ROM categories to the right media search.
+- **Indexer Search:** Prowlarr settings can now suggest custom indexer categories from their advertised names for each medium. Administrators can review and save clear matches while leaving ambiguous categories under manual control.
+- **Prowlarr:** Prowlarr searches now use media-specific search modes where supported, and media detail pages can open a prefilled search for that title. Search results remain informational and do not send releases to download clients.
+- **Software Acquisition:** ROMarrNG connection checks now verify live system access instead of relying on cached platform data. The systems list explains its saved or cached source, and administrators can assign all systems to Retro or Modern at once.
+
+#### Fixed
+
+- **Personal Library:** Plex, Jellyfin, and Emby watched and in-progress shelves now filter and paginate against each user's own playback state, so sparse matches no longer disappear between pages.
+- **Indexers:** Prowlarr coverage summaries now expose category counts without returning configured indexer names. Connection guidance also correctly describes approved requests handled by media and software providers.
+- **Indexer Search:** Prowlarr category suggestions now refresh when you edit the connection, so custom IDs from a previous instance are not carried into the new mapping.
+- **Database:** SeerrNG can now start cleanly while upgrading an existing database, even when newer per-user settings columns have not been added yet.
+- **Playback:** Named media-server playback windows now open on explicitly enabled HTTP deployments in browsers that do not provide crypto.randomUUID outside secure contexts.
+
+### 🚀 Features
+- *(discovery)* Add personalized provider rows - ([4072b8f](https://github.com/snapetech/seerrng/commit/4072b8f19ec0793b1203a59a6b44592d58408846))
+- *(discovery)* Surface provider feed recovery states - ([4065659](https://github.com/snapetech/seerrng/commit/40656591473c5ce72d15cae9fa3c8495c103fe1c))
+- *(discovery)* Complete cross-media discovery workflows - ([912376f](https://github.com/snapetech/seerrng/commit/912376f51e9b4186062b1b77e470f3925cf3da13))
+- *(discovery)* Browse personal media server libraries - ([3b3978d](https://github.com/snapetech/seerrng/commit/3b3978dfca49754f4412a3b30f79d8670f698876))
+- *(discovery)* Add personal provider library and write controls - ([7e49b2b](https://github.com/snapetech/seerrng/commit/7e49b2b5cca6e1bbf9eb215fcc46652306117212))
+- *(indexer-search)* Detect additional console aliases - ([9b727f8](https://github.com/snapetech/seerrng/commit/9b727f84528f85aafb27a4fdfe08e2443dd3013a))
+- *(indexer-search)* Suggest detected category mappings - ([e1eb874](https://github.com/snapetech/seerrng/commit/e1eb8741ae85323bfc82932a4342d32cee13f89e))
+- *(indexer-search)* Improve cross-media category defaults - ([7a368b6](https://github.com/snapetech/seerrng/commit/7a368b69ca90213feb1ecb1f1c05dc1b2007df61))
+- *(indexer-search)* Add Prowlarr manual search - ([7305417](https://github.com/snapetech/seerrng/commit/7305417a1fcf008aa7c1c6db4b62c0b7a112d43e))
+- *(ratings)* Add MDBList scores to video and collection ratings - ([b91ae31](https://github.com/snapetech/seerrng/commit/b91ae3101fccf87e25fecbef432c1f8762a1b460))
+- Add personal library identity matching - ([68d0d2c](https://github.com/snapetech/seerrng/commit/68d0d2cc1d75e9862fd9631132b6476e2a38bef8))
+- Close download inbox, Prowlarr and game catalog gaps - ([6e2957f](https://github.com/snapetech/seerrng/commit/6e2957ff6e19934e799893ab5ebcbd6b7dcc8f4e))
+
+### 🐛 Bug Fixes
+- *(db)* Keep settings upgrades compatible with old schemas - ([d520cf0](https://github.com/snapetech/seerrng/commit/d520cf08de53e8177e97c5accf08dd6a3d18bf81))
+- *(discovery)* Clarify provider quota recovery - ([420713c](https://github.com/snapetech/seerrng/commit/420713ced7fb6feeba07243880433929a71bdb59))
+- *(indexer-search)* Refresh detected categories on connection edits - ([864433b](https://github.com/snapetech/seerrng/commit/864433bc37708bfaf28bec3a97dc507ca0bb8b51))
+- *(indexer-search)* Reduce Prowlarr coverage data - ([6563775](https://github.com/snapetech/seerrng/commit/6563775a1b7ea53a493227e2662ac4bac9f9d09b))
+- *(playback)* Support popup IDs over HTTP - ([3d2599f](https://github.com/snapetech/seerrng/commit/3d2599fd932ae93c43a0c5737321ed7684688b8e))
+- *(test)* Exclude Vitest suites from node runner - ([532da5a](https://github.com/snapetech/seerrng/commit/532da5a5ae508134803c71e0ca41c99a71a5b46b))
+
+### 📖 Documentation
+- *(release)* Note lazy personal discovery feeds - ([4b6dc0d](https://github.com/snapetech/seerrng/commit/4b6dc0d318bb95afd8e4b9e2742aeb1cbfbcd045))
+
+### ⚡ Performance
+- *(discovery)* Defer personal feeds until visible - ([5560b29](https://github.com/snapetech/seerrng/commit/5560b29839b72eea4991a2408161c0375f55671a))
+
+### 🧪 Testing
+- *(indexer-search)* Remove database-bound route test - ([b966257](https://github.com/snapetech/seerrng/commit/b9662570a7858bb3f17315278f509b0f4abdb916))
+- *(security)* Rate limit Prowlarr OpenAPI harness - ([669eda5](https://github.com/snapetech/seerrng/commit/669eda5dce4bba1e279efeb2b76ec82e31b8eaf1))
+
+### ⚙️ Miscellaneous Tasks
+- *(perf)* Refresh bundle baseline for feature release - ([f2ae9da](https://github.com/snapetech/seerrng/commit/f2ae9da01a0474e2a4f2558f5e31bfb3736913ed))
+
 ## [3.35.0](https://github.com/snapetech/seerrng/compare/v3.34.0..v3.35.0) - 2026-09-28
 
 ### User-facing changes
