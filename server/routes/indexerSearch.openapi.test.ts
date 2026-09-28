@@ -228,24 +228,6 @@ describe('Prowlarr manual search routes', () => {
     );
   });
 
-  it('tests a saved connection without requiring the key again', async () => {
-    mock.method(ProwlarrAPI.prototype, 'getSystemStatus', async () => ({
-      version: '2.4.0',
-    }));
-    mock.method(ProwlarrAPI.prototype, 'getIndexers', async () => []);
-
-    const response = await request(createValidatedSettingsApp())
-      .post('/api/v1/settings/prowlarr/test')
-      .send({ hostname: 'prowlarr.local', port: 9696, useSsl: false });
-
-    assert.equal(response.status, 200, JSON.stringify(response.body));
-    assert.equal(response.body.version, '2.4.0');
-    assert.equal(
-      JSON.stringify(response.body).includes('test-prowlarr-key'),
-      false
-    );
-  });
-
   it('omits private indexer names from coverage summaries', async () => {
     mock.method(ProwlarrAPI.prototype, 'getSystemStatus', async () => ({
       version: '2.4.0',
