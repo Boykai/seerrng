@@ -2,6 +2,10 @@ import {
   DEFAULT_ENABLED_MEDIA_CATEGORIES,
   type EnabledMediaCategories,
 } from '@server/constants/mediaCategories';
+import {
+  defaultProwlarrCategoryMappings,
+  type ProwlarrCategoryMappings,
+} from '@server/constants/prowlarr';
 import { MediaServerType } from '@server/constants/server';
 import { assertNoSymlinkDirectoryComponents } from '@server/lib/pathSecurity';
 import { Permission } from '@server/lib/permissions';
@@ -118,6 +122,10 @@ export interface SoftwareAcquisitionSettings {
   romarr: SoftwareProviderSettings;
   questarr: SoftwareProviderSettings;
   emulationSystemGroups: Record<string, EmulationSystemGroup>;
+}
+
+export interface ProwlarrSettings extends SoftwareProviderSettings {
+  categoryMappings: ProwlarrCategoryMappings;
 }
 
 export interface DVRSettings {
@@ -540,6 +548,7 @@ export interface AllSettings {
   kapowarr: KapowarrSettings[];
   lazylibrarian: LazyLibrarianSettings[];
   softwareAcquisition: SoftwareAcquisitionSettings;
+  prowlarr: ProwlarrSettings;
   discoveryIntegrations: DiscoveryIntegrationsSettings;
   public: PublicSettings;
   notifications: NotificationSettings;
@@ -667,6 +676,14 @@ class Settings {
           apiKey: '',
         },
         emulationSystemGroups: {},
+      },
+      prowlarr: {
+        hostname: '',
+        port: 9696,
+        useSsl: false,
+        baseUrl: '',
+        apiKey: '',
+        categoryMappings: defaultProwlarrCategoryMappings(),
       },
       public: {
         initialized: false,
@@ -1151,6 +1168,14 @@ class Settings {
     );
   }
 
+  get prowlarr(): ProwlarrSettings {
+    return this.data.prowlarr;
+  }
+
+  set prowlarr(data: ProwlarrSettings) {
+    this.data.prowlarr = mergeSettings(this.data.prowlarr, data);
+  }
+
   get public(): PublicSettings {
     return this.data.public;
   }
@@ -1495,6 +1520,14 @@ class Settings {
           apiKey: '',
         },
         emulationSystemGroups: {},
+      },
+      prowlarr: {
+        hostname: '',
+        port: 9696,
+        useSsl: false,
+        baseUrl: '',
+        apiKey: '',
+        categoryMappings: defaultProwlarrCategoryMappings(),
       },
       public: {
         initialized: false,

@@ -56,10 +56,13 @@ The magazine details page shows issue dates and whether each issue has a file.
 Magazine cards and details show the latest LazyLibrarian cover when one is
 available.
 
-LazyLibrarian performs magazine acquisition searches. Prowlarr has a
-LazyLibrarian app adapter that can sync indexers, but compatibility depends on
-the LazyLibrarian build. After syncing, confirm the providers appear in
-LazyLibrarian and run a search there. SeerrNG does not query Prowlarr directly.
+SeerrNG's **Indexer Search** page can query Prowlarr's configured magazine
+categories for manual inspection by users with **Manage Requests**. The page
+does not grab or track results; LazyLibrarian still performs acquisition for
+approved magazine requests. Prowlarr may also sync indexers to LazyLibrarian,
+but compatibility depends on its build. After syncing, confirm the providers
+appear in LazyLibrarian and run a search there. See [Indexer searches by media
+category](./indexer-searches.md).
 
 Users can add magazines to a SeerrNG watchlist from magazine cards or details.
 With **Auto-Request** and **Auto-Request Magazines** permission, enable

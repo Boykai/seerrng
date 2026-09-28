@@ -62,8 +62,10 @@ service setup and
 [Bookshelf Metadata Sources](./bookshelf-metadata-sources.md) for catalog
 behavior and provider-specific requirements.
 
-Prowlarr can sync book indexers through its Readarr app adapter when the
-configured Bookshelf-compatible service accepts that indexer configuration.
-The exact support depends on the provider build. SeerrNG searches book
-metadata catalogs and does not send acquisition searches to Prowlarr; see
-[Indexer searches by media category](./indexer-searches.md).
+SeerrNG also provides a permission-gated **Indexer Search** page that can
+query Prowlarr's configured ebook and audiobook categories. Those results are
+for inspection only. Approved requests still use the configured
+Bookshelf-compatible service for acquisition and tracking. Prowlarr may also
+sync indexers to a compatible book service; confirm that service accepts and
+uses the synced indexers. See [Indexer searches by media
+category](./indexer-searches.md).

@@ -15,10 +15,10 @@ const messages = defineMessages('components.SettingsSoftwareAcquisition', {
     'Connect the ROM and PC-game acquisition services used by SeerrNG requests.',
   questarrTitle: 'QuestarrNG',
   questarrDescription:
-    'Provides the IGDB catalog and acquires approved Windows, Linux, and macOS game requests. QuestarrNG can use indexers synced from Prowlarr; the IGDB catalog is separate.',
+    'Provides the IGDB catalog and acquires approved Windows, Linux, and macOS game requests. QuestarrNG can use indexers synced from Prowlarr; SeerrNG also provides a separate manual Prowlarr search across media categories.',
   romarrTitle: 'ROMarrNG',
   romarrDescription:
-    'Provides supported emulation systems and acquires approved ROM requests. ROMarrNG can search Prowlarr, direct Torznab/Newznab sources, and plugins.',
+    'Provides supported emulation systems and acquires approved ROM requests. ROMarrNG can search Prowlarr, direct Torznab/Newznab sources, and plugins; SeerrNG’s manual Prowlarr search does not grab results.',
   hostname: 'Hostname',
   port: 'Port',
   basePath: 'Base path',

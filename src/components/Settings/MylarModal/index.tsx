@@ -51,7 +51,7 @@ const messages = defineMessages('components.Settings.MylarModal', {
   syncEnabledHelp:
     'Scan Mylar for existing comics so users cannot request content already available.',
   enableSearchHelp:
-    'Automatically trigger a search in Mylar when a request is approved. Prowlarr can sync indexers to Mylar; check Mylar’s provider settings after syncing to confirm they are enabled.',
+    'Automatically trigger a search in Mylar when a request is approved. Prowlarr can sync indexers to Mylar; check Mylar’s provider settings after syncing to confirm they are enabled. SeerrNG also offers a separate manual Prowlarr search for users with Manage Requests.',
 });
 
 interface TestResponse {

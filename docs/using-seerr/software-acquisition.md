@@ -11,10 +11,12 @@ follow provider-confirmed acquisition in **Requests > Request Status**. The
 connected providers perform the acquisition and expose imported files back to
 SeerrNG for download.
 
-Indexer searches happen in the provider. QuestarrNG supports Prowlarr-synced
-indexers for PC games; ROMarrNG can use Prowlarr, direct Torznab/Newznab, and
-plugin sources. SeerrNG does not search Prowlarr directly, and IGDB remains the
-catalog for game discovery. See [Indexer searches by media
+SeerrNG's **Indexer Search** page can query Prowlarr's configured PC-game and
+console categories for manual inspection by users with **Manage Requests**.
+The page does not grab or track results. Approved requests still go through
+QuestarrNG or ROMarrNG, which own acquisition and progress tracking. Those
+providers may also use Prowlarr-synced or direct Torznab/Newznab indexers. IGDB
+remains the catalog for game discovery. See [Indexer searches by media
 category](./indexer-searches.md) for the full routing map.
 
 This feature covers **Retro**, **Modern**, and **PC Games**. General desktop

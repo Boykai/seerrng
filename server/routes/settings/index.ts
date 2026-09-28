@@ -117,6 +117,7 @@ import lidarrRoutes from './lidarr';
 import metadataRoutes from './metadata';
 import mylarRoutes from './mylar';
 import notificationRoutes from './notifications';
+import prowlarrRoutes from './prowlarr';
 import radarrRoutes from './radarr';
 import readarrRoutes from './readarr';
 import softwareAcquisitionRoutes from './softwareAcquisition';
@@ -1414,6 +1415,7 @@ settingsRoutes.use('/lazylibrarian', lazyLibrarianRoutes);
 settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 settingsRoutes.use('/software-acquisition', softwareAcquisitionRoutes);
+settingsRoutes.use('/prowlarr', prowlarrRoutes);
 
 export const filteredMainSettings = (
   user: User,

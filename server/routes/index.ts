@@ -64,6 +64,7 @@ import comicRoutes from './comic';
 import discoverRoutes, { createTmdbWithRegionLanguage } from './discover';
 import discoveryIntegrationRoutes from './discoveryIntegrations';
 import { imageCacheWarmRateLimit, warmImageCache } from './imageproxy';
+import indexerSearchRoutes from './indexerSearch';
 import issueRoutes from './issue';
 import issueCommentRoutes from './issueComment';
 import magazineRoutes from './magazine';
@@ -431,6 +432,11 @@ router.get(
   }
 );
 router.use('/settings', isAuthenticated(Permission.ADMIN), settingsRoutes);
+router.use(
+  '/indexer-search',
+  isAuthenticated(Permission.MANAGE_REQUESTS),
+  indexerSearchRoutes
+);
 router.use('/search', isAuthenticated(), searchRoutes);
 router.use('/discover', isAuthenticated(), discoverRoutes);
 router.use('/request', isAuthenticated(), requestRoutes);

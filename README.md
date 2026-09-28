@@ -55,6 +55,7 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
 - Requests and approvals for movies, shows, music, ebooks, audiobooks, comics, magazines, emulation ROMs, and PC games.
 - Media-server integration with Plex, Jellyfin, and Emby.
 - Automation service integration with Radarr, Sonarr, Lidarr, and Bookshelf/Readarr-compatible APIs.
+- Admin-configured Prowlarr connection, category coverage, and manual indexer search across movies, TV, music, books, comics, magazines, ROMs, and PC games; approved requests still go through their configured acquisition providers.
 - Music discovery and metadata through MusicBrainz, ListenBrainz, Cover Art Archive, TheAudioDB, and archive-backed artwork sources.
 - Book discovery and identity matching through Open Library, ISBN-10/ISBN-13 normalization, foreign book IDs, and edition IDs.
 - Comic discovery through ComicVine and magazine discovery through Google Books or LazyLibrarian, with Mylar3/Kapowarr and LazyLibrarian handling acquisition.

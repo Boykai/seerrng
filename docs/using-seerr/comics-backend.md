@@ -69,10 +69,13 @@ issues can be acquired when the selected backend is configured to search for
 them; SeerrNG does not override those backend settings. Enable **Sync** to
 show the backend's tracked issue availability in SeerrNG.
 
-Prowlarr can sync indexers to Mylar3. SeerrNG itself does not query Prowlarr;
-Mylar3 runs the search after request approval. After syncing, confirm the
-providers are enabled in Mylar3's search settings. Prowlarr does not add
-indexers to Kapowarr, which uses its direct-download sources.
+SeerrNG's **Indexer Search** page can query Prowlarr's configured comic
+categories for manual inspection by users with **Manage Requests**. These
+results are not grabbed or tracked; Mylar3 or Kapowarr still handles approved
+requests. Prowlarr can sync indexers to Mylar3, so confirm the providers are
+enabled in Mylar3's search settings. Prowlarr does not add indexers to
+Kapowarr, which uses its direct-download sources. See [Indexer searches by
+media category](./indexer-searches.md).
 
 Both backends need their own, separately configured ComicVine API key for
 their own internal search — this is unrelated to the SeerrNG-level key above,

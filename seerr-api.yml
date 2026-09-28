@@ -44,6 +44,8 @@ tags:
     description: Cross-medium related media graph endpoints.
   - name: playlist
     description: Endpoints for importing Spotify and YouTube playlists as music requests.
+  - name: indexer search
+    description: Direct manual searches through an administrator-configured Prowlarr instance.
 servers:
   - url: '{server}/api/v1'
     variables:
@@ -1529,6 +1531,174 @@ components:
         restricted:
           type: boolean
           example: false
+    ProwlarrSearchResult:
+      type: object
+      required:
+        [
+          title,
+          indexer,
+          indexerId,
+          size,
+          seeders,
+          leechers,
+          grabs,
+          protocol,
+          publishDate,
+          infoUrl,
+          categories,
+        ]
+      properties:
+        title:
+          type: string
+        indexer:
+          type: string
+        indexerId:
+          type: integer
+          nullable: true
+        size:
+          type: number
+          nullable: true
+        seeders:
+          type: number
+          nullable: true
+        leechers:
+          type: number
+          nullable: true
+        grabs:
+          type: number
+          nullable: true
+        protocol:
+          type: string
+        publishDate:
+          type: string
+          format: date-time
+          nullable: true
+        infoUrl:
+          type: string
+          format: uri
+          nullable: true
+        categories:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+    ProwlarrCategoryIds:
+      type: array
+      minItems: 1
+      maxItems: 32
+      items:
+        type: integer
+        minimum: 1
+        maximum: 1000000
+    ProwlarrCategoryMappings:
+      type: object
+      required:
+        [
+          movie,
+          tv,
+          music,
+          ebook,
+          audiobook,
+          comic,
+          magazine,
+          retro,
+          modern,
+          game,
+        ]
+      properties:
+        movie:
+          $ref: '#/components/schemas/ProwlarrCategoryIds'
+        tv:
+          $ref: '#/components/schemas/ProwlarrCategoryIds'
+        music:
+          $ref: '#/components/schemas/ProwlarrCategoryIds'
+        ebook:
+          $ref: '#/components/schemas/ProwlarrCategoryIds'
+        audiobook:
+          $ref: '#/components/schemas/ProwlarrCategoryIds'
+        comic:
+          $ref: '#/components/schemas/ProwlarrCategoryIds'
+        magazine:
+          $ref: '#/components/schemas/ProwlarrCategoryIds'
+        retro:
+          $ref: '#/components/schemas/ProwlarrCategoryIds'
+        modern:
+          $ref: '#/components/schemas/ProwlarrCategoryIds'
+        game:
+          $ref: '#/components/schemas/ProwlarrCategoryIds'
+    ProwlarrIndexerCategorySummary:
+      type: object
+      required: [id, name, indexerCount]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        indexerCount:
+          type: integer
+    ProwlarrInventory:
+      type: object
+      required:
+        [
+          success,
+          totalIndexers,
+          enabledSearchableIndexers,
+          categories,
+          categoryCatalog,
+        ]
+      properties:
+        success:
+          type: boolean
+        version:
+          type: string
+        totalIndexers:
+          type: integer
+        enabledSearchableIndexers:
+          type: integer
+        categories:
+          type: object
+          additionalProperties:
+            type: integer
+        categoryCatalog:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProwlarrIndexerCategorySummary'
+    ProwlarrSearchResultsResponse:
+      type: object
+      required: [category, query, offset, limit, results, hasMore]
+      properties:
+        category:
+          type: string
+          enum:
+            [
+              movie,
+              tv,
+              music,
+              ebook,
+              audiobook,
+              comic,
+              magazine,
+              retro,
+              modern,
+              game,
+            ]
+        query:
+          type: string
+        offset:
+          type: integer
+        limit:
+          type: integer
+        hasMore:
+          type: boolean
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProwlarrSearchResult'
     SoftwareRequest:
       type: object
       required:
@@ -5761,6 +5931,228 @@ paths:
           description: Invalid provider settings
         '502':
           description: Provider did not return a supported integration contract
+  /settings/prowlarr:
+    get:
+      summary: Get Prowlarr connection settings
+      description: Returns the Prowlarr connection and category mapping. The API key is always redacted.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Prowlarr settings returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hostname:
+                    type: string
+                  port:
+                    type: integer
+                  useSsl:
+                    type: boolean
+                  baseUrl:
+                    type: string
+                  apiKey:
+                    type: string
+                    description: Redacted when a key is saved.
+                  apiKeyConfigured:
+                    type: boolean
+                  categoryMappings:
+                    $ref: '#/components/schemas/ProwlarrCategoryMappings'
+    put:
+      summary: Update Prowlarr connection settings
+      description: Saves the Prowlarr address, API key, and per-medium category filters. The API key remains server-side.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hostname, port, useSsl, baseUrl, categoryMappings]
+              properties:
+                hostname:
+                  type: string
+                port:
+                  type: integer
+                  minimum: 1
+                  maximum: 65535
+                useSsl:
+                  type: boolean
+                baseUrl:
+                  type: string
+                apiKey:
+                  type: string
+                clearApiKey:
+                  type: boolean
+                categoryMappings:
+                  $ref: '#/components/schemas/ProwlarrCategoryMappings'
+      responses:
+        '200':
+          description: Prowlarr settings updated
+        '400':
+          description: Invalid Prowlarr settings
+  /settings/prowlarr/test:
+    post:
+      summary: Test a Prowlarr connection
+      description: Checks Prowlarr connectivity and returns indexer coverage without saving the submitted connection settings. Omit apiKey to use the saved key.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hostname, port, useSsl]
+              properties:
+                hostname:
+                  type: string
+                port:
+                  type: integer
+                useSsl:
+                  type: boolean
+                baseUrl:
+                  type: string
+                apiKey:
+                  type: string
+                categoryMappings:
+                  $ref: '#/components/schemas/ProwlarrCategoryMappings'
+      responses:
+        '200':
+          description: Prowlarr connection and indexer coverage verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProwlarrInventory'
+        '400':
+          description: Invalid Prowlarr settings
+        '502':
+          description: Prowlarr connection failed
+  /settings/prowlarr/coverage:
+    get:
+      summary: Get Prowlarr indexer coverage
+      description: Returns enabled searchable indexers and the categories they advertise. This does not confirm grabs or imports.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Prowlarr coverage returned, or not configured
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [configured]
+                    properties:
+                      configured:
+                        type: boolean
+                        enum: [false]
+                  - allOf:
+                      - type: object
+                        required: [configured]
+                        properties:
+                          configured:
+                            type: boolean
+                            enum: [true]
+                      - $ref: '#/components/schemas/ProwlarrInventory'
+        '502':
+          description: Prowlarr inventory unavailable
+  /indexer-search/configuration:
+    get:
+      summary: Get direct indexer search availability
+      description: Returns whether Prowlarr is configured and the selected category IDs. Requires Manage Requests permission.
+      tags:
+        - indexer search
+      responses:
+        '200':
+          description: Prowlarr search configuration returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, categories]
+                properties:
+                  configured:
+                    type: boolean
+                  categories:
+                    type: array
+                    items:
+                      type: object
+                      required: [category, categoryIds]
+                      properties:
+                        category:
+                          type: string
+                          enum:
+                            [
+                              movie,
+                              tv,
+                              music,
+                              ebook,
+                              audiobook,
+                              comic,
+                              magazine,
+                              retro,
+                              modern,
+                              game,
+                            ]
+                        categoryIds:
+                          $ref: '#/components/schemas/ProwlarrCategoryIds'
+  /indexer-search/search:
+    post:
+      summary: Search Prowlarr indexers
+      description: Runs a bounded manual release search in Prowlarr for a SeerrNG medium. Results are informational and are not grabbed or imported.
+      tags:
+        - indexer search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, query]
+              properties:
+                category:
+                  type: string
+                  enum:
+                    [
+                      movie,
+                      tv,
+                      music,
+                      ebook,
+                      audiobook,
+                      comic,
+                      magazine,
+                      retro,
+                      modern,
+                      game,
+                    ]
+                query:
+                  type: string
+                  minLength: 2
+                  maxLength: 256
+                offset:
+                  type: integer
+                  minimum: 0
+                  maximum: 2000
+                  multipleOf: 50
+      responses:
+        '200':
+          description: Prowlarr results returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProwlarrSearchResultsResponse'
+        '400':
+          description: Invalid search input
+        '409':
+          description: Prowlarr is not configured for this category
+        '429':
+          description: Search rate limit reached
+        '502':
+          description: Prowlarr search failed
   /settings/initialize:
     post:
       summary: Initialize application

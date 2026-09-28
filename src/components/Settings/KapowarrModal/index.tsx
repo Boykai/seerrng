@@ -56,7 +56,7 @@ const messages = defineMessages('components.Settings.KapowarrModal', {
   syncEnabledHelp:
     'Scan Kapowarr for existing comics so users cannot request content already available.',
   enableSearchHelp:
-    'Automatically check Kapowarr’s GetComics and mirror sources after a request is approved. Kapowarr does not search Prowlarr indexers.',
+    'Automatically check Kapowarr’s GetComics and mirror sources after a request is approved. Kapowarr does not use Prowlarr indexers; SeerrNG has a separate manual Prowlarr search for users with Manage Requests.',
 });
 
 interface TestResponse {
