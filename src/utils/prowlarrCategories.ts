@@ -22,9 +22,9 @@ const categoryMatchers: Record<MediaCategoryKey, RegExp> = {
   comic: /^(?:comics?|manga|graphic novels?)$/,
   magazine: /^(?:mags?|magazines?|periodicals?|journals?)$/,
   retro:
-    /^(?:nes|snes|nintendo ds|nds|game boy|gamecube|psp|ps vita|playstation 3|ps3|wii|wiiware|wii u|xbox 360)(?: roms?)?$/,
+    /^(?:nes|nintendo entertainment system|snes|super nintendo|nintendo ds|nds|nintendo 3ds|3ds|game boy(?: color| advance)?|gameboy(?: color| advance)?|gba|gamecube|game cube|nintendo 64|n64|psp|ps vita|playstation vita|playstation 3|ps3|playstation 2|ps2|playstation 1|ps1|wii|wiiware|wii u|xbox 360|sega genesis|mega drive|sega saturn|saturn|sega dreamcast|dreamcast|sega master system|master system|atari (?:2600|5200|7800|lynx|jaguar)|commodore 64)(?: roms?)?$/,
   modern:
-    /^(?:nintendo switch|switch|playstation 4|playstation 5|ps4|ps5|xbox one|xbox series(?: x| s)?)(?: roms?)?$/,
+    /^(?:nintendo switch(?: 2)?|switch(?: 2)?|playstation 4|playstation 5|ps4|ps5|xbox one|xbox series(?: x| s)?)(?: roms?)?$/,
   game: /^(?:pc|computer) games?$/,
 };
 

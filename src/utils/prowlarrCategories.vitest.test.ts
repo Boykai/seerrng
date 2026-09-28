@@ -16,6 +16,11 @@ describe('detectProwlarrCategoryMatches', () => {
     { id: 100_016, name: 'PC Games' },
     { id: 100_017, name: 'PS5 ROMs' },
     { id: 100_018, name: 'Nintendo DS' },
+    { id: 100_020, name: 'Nintendo 3DS' },
+    { id: 100_021, name: 'Game Boy Advance' },
+    { id: 100_022, name: 'Sega Genesis' },
+    { id: 100_023, name: 'Atari 2600' },
+    { id: 100_024, name: 'Nintendo Switch 2 ROMs' },
     { id: 3000, name: 'Audio' },
   ];
 
@@ -52,10 +57,10 @@ describe('detectProwlarrCategoryMatches', () => {
 
   it('detects console generations from explicit system names', () => {
     expect(detectProwlarrCategoryMatches('retro', categories)).toEqual([
-      100_018,
+      100_018, 100_020, 100_021, 100_022, 100_023,
     ]);
     expect(detectProwlarrCategoryMatches('modern', categories)).toEqual([
-      100_015, 100_017,
+      100_015, 100_017, 100_024,
     ]);
   });
 

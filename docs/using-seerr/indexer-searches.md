@@ -50,10 +50,10 @@ software provider, which owns acquisition, import, and progress tracking.
 The **Retro ROMs**, **Modern ROMs**, and **PC games** filters start with
 generation-specific standard console categories and the broad PC category.
 Prowlarr's standard console list ends at PS4 and Xbox One; newer
-systems such as PS5 and Xbox Series may use custom categories. After testing
-the connection, add the matching categories shown by Prowlarr to the relevant
-SeerrNG filter. SeerrNG does not infer a console generation from a game's
-title.
+systems such as PS5, Switch 2, and Xbox Series may use custom categories.
+After testing the connection, add the matching categories shown by Prowlarr to
+the relevant SeerrNG filter. SeerrNG does not infer a console generation from
+a game's title.
 
 Coverage counts are an estimate based on the categories each enabled indexer
 advertises. A nonzero count does not guarantee that an indexer returns results
