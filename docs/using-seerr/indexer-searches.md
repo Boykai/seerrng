@@ -42,7 +42,10 @@ software provider, which owns acquisition, import, and progress tracking.
    you want to keep those results separate. The broad PC category can also
    include non-game software; select PC/Games for a narrower search. Your
    Prowlarr indexers can report custom category IDs, which appear after a
-   successful connection test; select the IDs that fit your indexer setup.
+   successful connection test. Use **Add detected matches** to select custom
+   categories whose advertised names clearly match a medium, then review and
+   save the mappings. Ambiguous category names are left for you to map
+   manually.
 
 The **Retro ROMs**, **Modern ROMs**, and **PC games** filters start with
 generation-specific standard console categories and the broad PC category.

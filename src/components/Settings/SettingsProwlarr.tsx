@@ -1,5 +1,6 @@
 import SelectionCircle from '@app/components/Common/SelectionCircle';
 import defineMessages from '@app/utils/defineMessages';
+import { detectProwlarrCategoryMatches } from '@app/utils/prowlarrCategories';
 import {
   DEFAULT_PROWLARR_CATEGORY_LABELS,
   type ProwlarrCategoryMappings,
@@ -39,7 +40,10 @@ const messages = defineMessages('components.SettingsProwlarr', {
   totalIndexers: '{enabled} searchable and enabled of {total} configured',
   categoryMappingTitle: 'Category filters',
   categoryMappingDescription:
-    'Choose the Prowlarr categories sent with each search. Defaults use standard Newznab/Torznab categories; custom categories from configured indexers are listed after a connection test.',
+    'Choose the Prowlarr categories sent with each search. Defaults use standard Newznab/Torznab categories; test the connection to see custom categories advertised by enabled indexers.',
+  detectedMatchesHelp:
+    'Suggested custom categories are matched by their advertised names. Review them before saving; this does not change Prowlarr or send downloads.',
+  addDetectedMatches: 'Add detected matches ({count})',
   selectedCategories: '{count} categories selected',
   categoryMappingEmpty: 'Select at least one category.',
   movie: 'Movies',
@@ -361,9 +365,16 @@ const SettingsProwlarr = () => {
         <p className="mt-1 text-sm text-gray-300">
           {intl.formatMessage(messages.categoryMappingDescription)}
         </p>
+        <p className="mt-1 text-xs text-gray-400">
+          {intl.formatMessage(messages.detectedMatchesHelp)}
+        </p>
         <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
           {categoryKeys.map((category) => {
             const selectedIds = form.categoryMappings[category] ?? [];
+            const detectedMatches = detectProwlarrCategoryMatches(
+              category,
+              inventory?.categoryCatalog ?? savedCoverage?.categoryCatalog ?? []
+            ).filter((id) => !selectedIds.includes(id));
             return (
               <details
                 key={category}
@@ -404,6 +415,22 @@ const SettingsProwlarr = () => {
                     </option>
                   ))}
                 </select>
+                {detectedMatches.length > 0 && (
+                  <button
+                    type="button"
+                    className="mt-2 rounded border border-indigo-400/60 px-3 py-1.5 text-sm text-indigo-200 hover:bg-indigo-950/40"
+                    onClick={() =>
+                      updateCategories(category, [
+                        ...selectedIds.map(String),
+                        ...detectedMatches.map(String),
+                      ])
+                    }
+                  >
+                    {intl.formatMessage(messages.addDetectedMatches, {
+                      count: detectedMatches.length,
+                    })}
+                  </button>
+                )}
                 {selectedIds.length === 0 && (
                   <p className="mt-1 text-sm text-red-300" role="alert">
                     {intl.formatMessage(messages.categoryMappingEmpty)}
