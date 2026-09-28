@@ -157,14 +157,27 @@ const SettingsProwlarr = () => {
     if (data) setForm(toForm(data));
   }, [data]);
 
+  const usingSavedConnection = Boolean(
+    data &&
+    form &&
+    form.hostname === data.hostname &&
+    form.port === data.port &&
+    form.useSsl === data.useSsl &&
+    form.baseUrl === data.baseUrl &&
+    !form.apiKey &&
+    !form.clearApiKey
+  );
+  const availableCategoryCatalog =
+    inventory?.categoryCatalog ??
+    (usingSavedConnection ? savedCoverage?.categoryCatalog : undefined) ??
+    [];
+
   const categoryOptions = useMemo(() => {
     const options = new Map<number, { name: string; indexerCount: number }>();
     for (const [id, name] of Object.entries(DEFAULT_PROWLARR_CATEGORY_LABELS)) {
       options.set(Number(id), { name, indexerCount: 0 });
     }
-    for (const item of inventory?.categoryCatalog ??
-      savedCoverage?.categoryCatalog ??
-      []) {
+    for (const item of availableCategoryCatalog) {
       options.set(item.id, {
         name: item.name,
         indexerCount: item.indexerCount,
@@ -183,14 +196,19 @@ const SettingsProwlarr = () => {
     return [...options.entries()]
       .map(([id, value]) => ({ id, ...value }))
       .sort((left, right) => left.id - right.id);
-  }, [
-    form?.categoryMappings,
-    inventory?.categoryCatalog,
-    savedCoverage?.categoryCatalog,
-  ]);
+  }, [form?.categoryMappings, availableCategoryCatalog]);
 
-  const updateForm = (update: Partial<ProwlarrForm>) =>
+  const updateForm = (update: Partial<ProwlarrForm>) => {
+    if (
+      ['hostname', 'port', 'useSsl', 'baseUrl', 'apiKey', 'clearApiKey'].some(
+        (key) => key in update
+      )
+    ) {
+      setInventory(null);
+      setConnectionMessage('');
+    }
     setForm((current) => (current ? { ...current, ...update } : current));
+  };
 
   const updateCategories = (category: MediaCategoryKey, value: string[]) => {
     if (!form) return;
@@ -373,7 +391,7 @@ const SettingsProwlarr = () => {
             const selectedIds = form.categoryMappings[category] ?? [];
             const detectedMatches = detectProwlarrCategoryMatches(
               category,
-              inventory?.categoryCatalog ?? savedCoverage?.categoryCatalog ?? []
+              availableCategoryCatalog
             ).filter((id) => !selectedIds.includes(id));
             return (
               <details
