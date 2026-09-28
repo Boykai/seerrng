@@ -25,7 +25,10 @@ export type AvailableCacheIds =
   | 'googlebooks'
   | 'wikidata'
   | 'tadb'
-  | 'associations';
+  | 'associations'
+  | 'trakt'
+  | 'anilist'
+  | 'mdblist';
 
 const DEFAULT_TTL = 300;
 const DEFAULT_CHECK_PERIOD = 120;
@@ -147,6 +150,9 @@ export class Cache {
 
 class CacheManager {
   private availableCaches: Record<AvailableCacheIds, Cache> = {
+    trakt: new Cache('trakt', 'Trakt API', { maxKeys: 500, maxBytes: 8 * 1024 * 1024 }),
+    anilist: new Cache('anilist', 'AniList API', { maxKeys: 500, maxBytes: 8 * 1024 * 1024 }),
+    mdblist: new Cache('mdblist', 'MDBList API', { stdTtl: 172800, maxKeys: 500, maxBytes: 8 * 1024 * 1024 }),
     tmdb: new Cache('tmdb', 'The Movie Database API', {
       stdTtl: 21600,
       maxKeys: TMDB_MAX_KEYS,

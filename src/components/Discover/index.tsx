@@ -4,6 +4,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
 import { sliderTitles } from '@app/components/Discover/constants';
+import discoveryMessages from '@app/components/DiscoveryIntegrations/messages';
 import MediaSlider from '@app/components/MediaSlider';
 import { encodeURIExtraParams } from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
@@ -24,8 +25,9 @@ import { DiscoverSliderType } from '@server/constants/discover';
 import type DiscoverSlider from '@server/entity/DiscoverSlider';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { useIntl } from 'react-intl';
+import { FormattedMessage, useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 const CreateSlider = dynamic(
@@ -214,6 +216,12 @@ const Discover = ({ initialSliders }: DiscoverProps) => {
   return (
     <div className="discover-home">
       <PageTitle title={intl.formatMessage(messages.discover)} />
+      <Link
+        href="/discover/providers"
+        className="mb-4 inline-flex text-sm text-blue-400 hover:text-blue-300"
+      >
+        <FormattedMessage {...discoveryMessages['providers.explore']} />
+      </Link>
       {hasPermission(Permission.ADMIN) && (
         <>
           {isEditing && (

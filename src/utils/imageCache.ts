@@ -102,6 +102,10 @@ const PROXIED_IMAGE_PREFIXES = {
     source: /^https:\/\/comicvine1\.cbsistatic\.com\//,
     target: '/imageproxy/comicvinestatic1/',
   },
+  anilist: {
+    source: /^https:\/\/s4\.anilist\.co\//,
+    target: '/imageproxy/anilist/',
+  },
   igdb: {
     source: /^https:\/\/images\.igdb\.com\//,
     target: '/imageproxy/igdb/',

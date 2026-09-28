@@ -507,6 +507,20 @@ export type JobId =
   | 'availability-sync'
   | 'process-blocklisted-tags';
 
+export interface DiscoveryIntegrationsSettings {
+  trakt: { clientId: string; clientSecret: string };
+  anilist: { clientId: string; clientSecret: string };
+  simkl: { clientId: string };
+  mdblist: { apiKey: string };
+}
+
+export const defaultDiscoveryIntegrations = (): DiscoveryIntegrationsSettings => ({
+  trakt: { clientId: '', clientSecret: '' },
+  anilist: { clientId: '', clientSecret: '' },
+  simkl: { clientId: '' },
+  mdblist: { apiKey: '' },
+});
+
 export interface AllSettings {
   clientId: string;
   sessionSecret?: string;
@@ -525,6 +539,7 @@ export interface AllSettings {
   kapowarr: KapowarrSettings[];
   lazylibrarian: LazyLibrarianSettings[];
   softwareAcquisition: SoftwareAcquisitionSettings;
+  discoveryIntegrations: DiscoveryIntegrationsSettings;
   public: PublicSettings;
   notifications: NotificationSettings;
   jobs: Record<JobId, JobSettings>;
@@ -634,6 +649,7 @@ class Settings {
       mylar: [],
       kapowarr: [],
       lazylibrarian: [],
+      discoveryIntegrations: defaultDiscoveryIntegrations(),
       softwareAcquisition: {
         romarr: {
           hostname: '',
@@ -1119,6 +1135,10 @@ class Settings {
     this.data.lazylibrarian = data;
   }
 
+  get discoveryIntegrations(): DiscoveryIntegrationsSettings {
+    return this.data.discoveryIntegrations ?? defaultDiscoveryIntegrations();
+  }
+
   get softwareAcquisition(): SoftwareAcquisitionSettings {
     return this.data.softwareAcquisition;
   }
@@ -1457,6 +1477,7 @@ class Settings {
       mylar: [],
       kapowarr: [],
       lazylibrarian: [],
+      discoveryIntegrations: defaultDiscoveryIntegrations(),
       softwareAcquisition: {
         romarr: {
           hostname: '',

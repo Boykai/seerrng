@@ -5,6 +5,7 @@ import Alert from '@app/components/Common/Alert';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
 import Dropdown from '@app/components/Common/Dropdown';
 import PageTitle from '@app/components/Common/PageTitle';
+import DiscoveryAccounts from '@app/components/DiscoveryIntegrations/Accounts';
 import LinkJellyfinQuickConnectModal from '@app/components/UserProfile/UserSettings/UserLinkedAccountsSettings/LinkJellyfinQuickConnectModal';
 import useSettings from '@app/hooks/useSettings';
 import { getPositiveQueryParamNumber } from '@app/hooks/useUpdateQueryParams';
@@ -414,6 +415,8 @@ const UserLinkedAccountsSettings = () => {
           setShowJellyfinQuickConnectModal(true);
         }}
       />
+
+      {currentUser?.id === user?.id && <DiscoveryAccounts />}
 
       <LinkJellyfinQuickConnectModal
         show={showJellyfinQuickConnectModal}

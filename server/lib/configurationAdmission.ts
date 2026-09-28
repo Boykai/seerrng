@@ -4,7 +4,7 @@ import AsyncLock from '@server/utils/asyncLock';
 import { createHash } from 'node:crypto';
 
 export type ConfigurationAdmissionSection =
-  'jellyfin' | 'oidc' | 'plex' | 'tautulli';
+  'jellyfin' | 'oidc' | 'plex' | 'tautulli' | 'discoveryIntegrations';
 
 const configurationAdmissionLock = new AsyncLock();
 
@@ -18,7 +18,8 @@ const configurationAuthorityValue = (
   settings: Pick<
     AllSettings,
     'main' | 'plex' | 'jellyfin' | 'oidc' | 'tautulli'
-  >
+  > &
+    Partial<Pick<AllSettings, 'discoveryIntegrations'>>
 ): unknown => {
   if (section === 'plex') {
     return {
@@ -54,7 +55,8 @@ export const getConfigurationAuthorityKey = (
   settings: Pick<
     AllSettings,
     'main' | 'plex' | 'jellyfin' | 'oidc' | 'tautulli'
-  > = getSettings()
+  > &
+    Partial<Pick<AllSettings, 'discoveryIntegrations'>> = getSettings()
 ): string =>
   createHash('sha256')
     .update(JSON.stringify(configurationAuthorityValue(section, settings)))
@@ -65,7 +67,8 @@ export const captureConfigurationAuthority = (
   settings: Pick<
     AllSettings,
     'main' | 'plex' | 'jellyfin' | 'oidc' | 'tautulli'
-  > = getSettings()
+  > &
+    Partial<Pick<AllSettings, 'discoveryIntegrations'>> = getSettings()
 ): ConfigurationAuthoritySnapshot => ({
   section,
   authorityKey: getConfigurationAuthorityKey(section, settings),

@@ -7,6 +7,7 @@ type ImageWarmableRecord = {
   artistThumb?: unknown;
   artistBackdrop?: unknown;
   coverUrl?: unknown;
+  imageUrl?: unknown;
 };
 
 const TMDB_POSTER_TYPES = new Set(['movie', 'tv', 'person', 'collection']);
@@ -53,6 +54,7 @@ const getWarmableImageUrls = (item: ImageWarmableRecord): string[] => {
 
   urls.push(normalizeExternalImageUrl(item.remotePoster));
   urls.push(normalizeExternalImageUrl(item.coverUrl));
+  urls.push(normalizeExternalImageUrl(item.imageUrl));
 
   if (
     typeof item.backdropPath === 'string' &&

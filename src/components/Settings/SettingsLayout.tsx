@@ -36,6 +36,7 @@ const messages = defineMessages('components.Settings', {
   menuJobs: 'Jobs & Cache',
   menuAbout: 'About',
   menuMetadataProviders: 'Metadata Providers',
+  menuDiscoveryIntegrations: 'Discovery Integrations',
   searchSettings: 'Search Settings',
   save: 'Save',
   discard: 'Discard',
@@ -68,7 +69,7 @@ export const useSettingsPageAction = (action: SettingsPageAction | null) => {
 };
 
 const editableSettingsRoute = (path: string) =>
-  !/^\/settings\/(?:services|logs|jobs|about)(?:\/|$)/.test(path);
+  !/^\/settings\/(?:services|logs|jobs|about|discovery)(?:\/|$)/.test(path);
 
 const SettingsLayout = ({ children }: SettingsLayoutProps) => {
   const intl = useIntl();
@@ -117,6 +118,11 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
       text: intl.formatMessage(messages.menuServices),
       route: '/settings/services',
       regex: /^\/settings\/services/,
+    },
+    {
+      text: intl.formatMessage(messages.menuDiscoveryIntegrations),
+      route: '/settings/discovery',
+      regex: /^\/settings\/discovery/,
     },
     {
       text: intl.formatMessage(messages.menuNetwork),

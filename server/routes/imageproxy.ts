@@ -169,8 +169,15 @@ let comicVineImageProxy: ImageProxy;
 let comicVineStaticImageProxy: ImageProxy;
 let comicVineStatic1ImageProxy: ImageProxy;
 let igdbImageProxy: ImageProxy;
+let anilistImageProxy: ImageProxy;
 const getImageProxy = (type: string): ImageProxy | null => {
   switch (type) {
+    case 'anilist':
+      return (anilistImageProxy ??= new ImageProxy(
+        'anilist',
+        'https://s4.anilist.co',
+        { rateLimitOptions: { maxRequests: 5, maxRPS: 5 } }
+      ));
     case 'tmdb':
       return initTmdbImageProxy();
     case 'tvdb':

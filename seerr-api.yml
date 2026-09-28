@@ -52,6 +52,151 @@ servers:
 
 components:
   schemas:
+    DiscoveryAccount:
+      type: object
+      additionalProperties: false
+      required:
+        - provider
+        - username
+        - providerUserId
+        - allowWrites
+        - linkedAt
+        - expiresAt
+      properties:
+        provider:
+          type: string
+          enum:
+            - trakt
+            - anilist
+            - simkl
+        username:
+          type: string
+        providerUserId:
+          type: string
+        allowWrites:
+          type: boolean
+        linkedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: integer
+          nullable: true
+    DiscoveryConfiguration:
+      type: object
+      additionalProperties: false
+      required:
+        - trakt
+        - anilist
+        - simkl
+        - mdblist
+      properties:
+        trakt:
+          type: object
+          additionalProperties: false
+          required:
+            - configured
+            - clientId
+          properties:
+            configured:
+              type: boolean
+            clientId:
+              type: string
+        anilist:
+          type: object
+          additionalProperties: false
+          required:
+            - configured
+            - clientId
+          properties:
+            configured:
+              type: boolean
+            clientId:
+              type: string
+        simkl:
+          type: object
+          additionalProperties: false
+          required:
+            - configured
+            - clientId
+          properties:
+            configured:
+              type: boolean
+            clientId:
+              type: string
+        mdblist:
+          type: object
+          additionalProperties: false
+          required:
+            - configured
+          properties:
+            configured:
+              type: boolean
+    DiscoveryAccounts:
+      type: object
+      additionalProperties: false
+      required:
+        - accounts
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryAccount'
+    DiscoveryFeedItem:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - source
+        - sourceId
+        - title
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+          enum:
+            - trakt
+            - anilist
+            - mdblist
+        sourceId:
+          type: string
+        title:
+          type: string
+        mediaType:
+          type: string
+          enum:
+            - movie
+            - tv
+        tmdbId:
+          type: integer
+          minimum: 1
+        year:
+          type: integer
+        imageUrl:
+          type: string
+    DiscoveryFeedPage:
+      type: object
+      additionalProperties: false
+      required:
+        - page
+        - hasMore
+        - items
+        - missingMappings
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          maximum: 100
+        hasMore:
+          type: boolean
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryFeedItem'
+        missingMappings:
+          type: integer
+          minimum: 0
+
     MusicSourceRating:
       type: object
       required: [score, votes, url, source]
@@ -14580,6 +14725,336 @@ paths:
           description: No media server is configured.
         '502':
           description: The media-server playlist could not be replaced.
+  /integrations/discovery/configuration:
+    get:
+      summary: Get discovery integration availability
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Integration response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryConfiguration'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+        '409':
+          description: Integration configuration or account state changed
+        '429':
+          description: Provider quota reached; retry later
+        '502':
+          description: Provider unavailable
+    put:
+      summary: Configure discovery integrations
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                trakt:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    clientId:
+                      type: string
+                      maxLength: 4096
+                    clientSecret:
+                      type: string
+                      maxLength: 4096
+                anilist:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    clientId:
+                      type: string
+                      maxLength: 4096
+                    clientSecret:
+                      type: string
+                      maxLength: 4096
+                simkl:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    clientId:
+                      type: string
+                      maxLength: 4096
+                mdblist:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    apiKey:
+                      type: string
+                      maxLength: 4096
+      responses:
+        '200':
+          description: Integration response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryConfiguration'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+        '409':
+          description: Integration configuration or account state changed
+        '429':
+          description: Provider quota reached; retry later
+        '502':
+          description: Provider unavailable
+  /integrations/discovery/accounts:
+    get:
+      summary: Get your connected discovery accounts
+      tags:
+        - user
+      responses:
+        '200':
+          description: Integration response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryAccounts'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+        '409':
+          description: Integration configuration or account state changed
+        '429':
+          description: Provider quota reached; retry later
+        '502':
+          description: Provider unavailable
+  /integrations/discovery/accounts/{provider}:
+    parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - trakt
+            - anilist
+            - simkl
+    delete:
+      summary: Disconnect your discovery account
+      tags:
+        - user
+      responses:
+        '204':
+          description: Operation completed
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+        '409':
+          description: Integration configuration or account state changed
+        '429':
+          description: Provider quota reached; retry later
+        '502':
+          description: Provider unavailable
+  /integrations/discovery/accounts/{provider}/preferences:
+    parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - trakt
+            - anilist
+            - simkl
+    put:
+      summary: Set personal tracking write consent
+      tags:
+        - user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - allowWrites
+              properties:
+                allowWrites:
+                  type: boolean
+      responses:
+        '204':
+          description: Operation completed
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+        '409':
+          description: Integration configuration or account state changed
+        '429':
+          description: Provider quota reached; retry later
+        '502':
+          description: Provider unavailable
+  /integrations/discovery/accounts/{provider}/connect:
+    parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - trakt
+            - anilist
+            - simkl
+    post:
+      summary: Begin connecting your discovery account
+      tags:
+        - user
+      responses:
+        '200':
+          description: Integration response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+        '409':
+          description: Integration configuration or account state changed
+        '429':
+          description: Provider quota reached; retry later
+        '502':
+          description: Provider unavailable
+  /integrations/discovery/accounts/{provider}/complete:
+    parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - trakt
+            - anilist
+            - simkl
+    post:
+      summary: Complete your discovery account connection
+      tags:
+        - user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                code:
+                  type: string
+                  maxLength: 4096
+      responses:
+        '200':
+          description: Integration response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '202':
+          description: Authorization pending or rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Permission denied
+        '409':
+          description: Integration configuration or account state changed
+        '429':
+          description: Provider quota reached; retry later
+        '502':
+          description: Provider unavailable
+  /integrations/discovery/feeds/{provider}/{feed}:
+    get:
+      summary: Browse provider discovery feeds
+      tags:
+        - discover
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - trakt
+              - anilist
+              - mdblist
+        - name: feed
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - watchlist
+              - history
+              - recommendations-movie
+              - recommendations-tv
+              - library
+              - trending
+              - popular
+              - top
+              - next-season
+              - list
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: list
+          in: query
+          schema:
+            type: string
+            maxLength: 2048
+      responses:
+        '200':
+          description: A bounded provider feed page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryFeedPage'
+        '400':
+          description: Invalid feed
+        '409':
+          description: Account connection required
+        '429':
+          description: Provider quota reached; retry later
+        '502':
+          description: Provider unavailable
+
 security:
   - cookieAuth: []
   - apiKey: []

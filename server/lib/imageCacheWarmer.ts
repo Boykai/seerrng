@@ -83,8 +83,14 @@ const igdbImageProxy = new ImageProxy('igdb', 'https://images.igdb.com', {
   rateLimitOptions: { maxRequests: 10, maxRPS: 10 },
 });
 
+const anilistImageProxy = new ImageProxy('anilist', 'https://s4.anilist.co', {
+  rateLimitOptions: { maxRequests: 5, maxRPS: 5 },
+});
+
 export const getImageCacheWarmProvider = (url: URL): string | null => {
   switch (url.origin) {
+    case 'https://s4.anilist.co':
+      return 'anilist';
     case 'https://image.tmdb.org':
       return 'tmdb';
     case 'https://artworks.thetvdb.com':
@@ -156,6 +162,8 @@ const getProxyForUrl = (url: URL): ImageProxy | null => {
       return comicVineStatic1ImageProxy;
     case 'igdb':
       return igdbImageProxy;
+    case 'anilist':
+      return anilistImageProxy;
     default:
       return null;
   }

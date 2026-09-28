@@ -310,6 +310,43 @@ class ExternalAPI {
   private backgroundCacheRefreshEnabled: boolean;
   private onRequestFailure?: ExternalAPIOptions['onRequestFailure'];
   private static pendingRequests = new Map<string | symbol, Promise<unknown>>();
+  private static explicitCacheKeys = new WeakMap<CacheStore, Map<string, { endpoint: string; scope: string }>>();
+
+  protected getCached<T>(endpoint: string, config?: AxiosRequestConfig): T | undefined {
+    return this.cache?.get<T>(this.serializeCacheKey(endpoint, {
+      params: config?.params, headers: config?.headers, baseURL: config?.baseURL,
+    }));
+  }
+
+  protected setCached<T>(endpoint: string, value: T, ttl: number = DEFAULT_TTL, config?: AxiosRequestConfig): void {
+    if (!this.cache || ttl <= 0) return;
+    const key = this.serializeCacheKey(endpoint, {
+      params: config?.params, headers: config?.headers, baseURL: config?.baseURL,
+    });
+    if (!this.cache.set(key, value, ttl)) return;
+    let keys = ExternalAPI.explicitCacheKeys.get(this.cache);
+    if (!keys) {
+      keys = new Map();
+      ExternalAPI.explicitCacheKeys.set(this.cache, keys);
+    }
+    // Provider stores contain at most 500 entries; bound the shared index too.
+    if (keys.size >= 1024) {
+      for (const existing of keys.keys()) if (this.cache.getTtl(existing) == null) keys.delete(existing);
+      if (keys.size >= 1024) keys.delete(keys.keys().next().value!);
+    }
+    keys.set(key, { endpoint, scope: this.cacheScope });
+  }
+
+  protected removeCacheByEndpointPrefix(prefix: string): void {
+    if (!this.cache) return;
+    const keys = ExternalAPI.explicitCacheKeys.get(this.cache);
+    for (const [key, item] of keys ?? []) {
+      if (item.scope === this.cacheScope && item.endpoint.startsWith(prefix)) {
+        this.cache.del(key);
+        keys?.delete(key);
+      }
+    }
+  }
 
   constructor(
     baseUrl: string,

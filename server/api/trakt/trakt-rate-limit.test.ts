@@ -1,0 +1,260 @@
+// Adapted from selmant/foreseerr, copyright (c) 2026 Selman Trabzon. MIT licensed.
+// See NOTICE.md for attribution and license terms.
+import TraktAPI, {
+  TraktRateLimitedError,
+  resetTraktRateLimitState,
+} from '@server/api/trakt';
+import cacheManager from '@server/lib/cache';
+import type { AxiosInstance, AxiosResponse } from 'axios';
+import assert from 'node:assert/strict';
+import { afterEach, describe, it } from 'node:test';
+
+const makeApi = (accessToken = 'user-token-aaaaaaaa') =>
+  new TraktAPI({
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+    accessToken,
+    refreshToken: 'refresh-token',
+    expiresAt: Math.floor(Date.now() / 1000) + 3600,
+  });
+
+const rawClient = (api: TraktAPI): AxiosInstance =>
+  (api as unknown as { rawAxios: AxiosInstance }).rawAxios;
+
+const jsonResponse = <T>(
+  config: AxiosResponse['config'],
+  status: number,
+  data: T,
+  headers: Record<string, string> = {}
+): AxiosResponse<T> =>
+  ({
+    data,
+    status,
+    statusText: String(status),
+    headers,
+    config,
+  }) as AxiosResponse<T>;
+
+afterEach(() => {
+  resetTraktRateLimitState();
+  cacheManager.getCache('trakt').flush();
+});
+
+describe('TraktAPI rate limit gating', () => {
+  it('opens a per-client circuit on 429 without blocking other tokens', async () => {
+    const api = makeApi();
+    const client = rawClient(api);
+    let calls = 0;
+    client.defaults.adapter = async (config) => {
+      calls += 1;
+      return jsonResponse(config, 429, {}, { 'retry-after': '120' });
+    };
+
+    await assert.rejects(
+      () =>
+        (
+          api as unknown as {
+            getAuthenticated: (path: string) => Promise<unknown>;
+          }
+        ).getAuthenticated('/users/me/lists/test'),
+      (error: unknown) => {
+        assert.ok(error instanceof TraktRateLimitedError);
+        assert.equal(error.retryAfterSeconds, 120);
+        return true;
+      }
+    );
+
+    const second = makeApi('user-token-bbbbbbbb');
+    let secondCalls = 0;
+    rawClient(second).defaults.adapter = async (config) => {
+      secondCalls += 1;
+      return jsonResponse(config, 200, [{ type: 'show' }]);
+    };
+
+    const otherUser = await (
+      second as unknown as {
+        getAuthenticated: (path: string) => Promise<unknown>;
+      }
+    ).getAuthenticated('/users/me/lists/other');
+    assert.deepEqual(otherUser, [{ type: 'show' }]);
+    assert.equal(calls, 1);
+    assert.equal(secondCalls, 1);
+
+    await assert.rejects(
+      () =>
+        (
+          api as unknown as {
+            getAuthenticated: (path: string) => Promise<unknown>;
+          }
+        ).getAuthenticated('/users/me/lists/retry'),
+      TraktRateLimitedError
+    );
+    assert.equal(calls, 1);
+  });
+
+  it('caches authenticated GETs so repeats skip the network', async () => {
+    const api = makeApi();
+    const client = rawClient(api);
+    let calls = 0;
+    client.defaults.adapter = async (config) => {
+      calls += 1;
+      return jsonResponse(config, 200, [{ type: 'movie' }]);
+    };
+
+    const getAuthenticated = (
+      api as unknown as {
+        getAuthenticated: (path: string) => Promise<unknown>;
+      }
+    ).getAuthenticated.bind(api);
+
+    const first = await getAuthenticated('/users/me/lists/test/items/movies');
+    const second = await getAuthenticated('/users/me/lists/test/items/movies');
+
+    assert.deepEqual(first, [{ type: 'movie' }]);
+    assert.deepEqual(second, [{ type: 'movie' }]);
+    assert.equal(calls, 1);
+  });
+
+  it('does not fall back to public requests after a rate limit', async () => {
+    const api = makeApi();
+    const client = rawClient(api);
+    let authCalls = 0;
+    client.defaults.adapter = async (config) => {
+      authCalls += 1;
+      return jsonResponse(config, 429, {}, { 'retry-after': '90' });
+    };
+
+    const axiosClient = (api as unknown as { axios: AxiosInstance }).axios;
+    let publicCalls = 0;
+    axiosClient.defaults.adapter = async () => {
+      publicCalls += 1;
+      throw new Error('public fallback should not run on 429');
+    };
+
+    await assert.rejects(
+      () =>
+        (
+          api as unknown as {
+            getAuthenticatedOrPublic: (path: string) => Promise<unknown>;
+          }
+        ).getAuthenticatedOrPublic('/users/alice/lists/favorites'),
+      TraktRateLimitedError
+    );
+    assert.equal(authCalls, 1);
+    assert.equal(publicCalls, 0);
+  });
+
+  it('flushes watched GET cache after episode history writes', async () => {
+    const api = makeApi();
+    const client = rawClient(api);
+    const calls: string[] = [];
+    client.defaults.adapter = async (config) => {
+      calls.push(`${String(config.method).toLowerCase()}:${config.url}`);
+      if (String(config.method).toLowerCase() === 'post') {
+        return jsonResponse(config, 200, { added: { episodes: 1 } });
+      }
+      return jsonResponse(config, 200, [{ show: { ids: { tmdb: 1399 } } }]);
+    };
+
+    await api.getSyncWatched('tv');
+    await api.getSyncWatched('tv');
+    assert.equal(calls.filter((call) => call.startsWith('get:')).length, 1);
+
+    await api.addEpisodeToHistory(1399, 1, 1);
+
+    await api.getSyncWatched('tv');
+    assert.equal(
+      calls.filter((call) => call.startsWith('get:/sync/watched')).length,
+      2
+    );
+  });
+
+  it('removes matching Trakt playback progress after adding episode history', async () => {
+    const api = makeApi();
+    const client = rawClient(api);
+    const calls: string[] = [];
+    client.defaults.adapter = async (config) => {
+      const method = String(config.method).toLowerCase();
+      const url = String(config.url);
+      calls.push(`${method}:${url}`);
+      if (method === 'post') {
+        return jsonResponse(config, 200, { added: { episodes: 1 } });
+      }
+      if (method === 'get' && url.includes('/sync/playback/episodes')) {
+        return jsonResponse(config, 200, [
+          {
+            id: 44,
+            show: { ids: { tmdb: 1399 } },
+            episode: { season: 1, number: 1 },
+          },
+          {
+            id: 45,
+            show: { ids: { tmdb: 1399 } },
+            episode: { season: 1, number: 2 },
+          },
+        ]);
+      }
+      if (method === 'delete') {
+        return jsonResponse(config, 204, {});
+      }
+      return jsonResponse(config, 200, []);
+    };
+
+    await api.addEpisodeToHistory(1399, 1, 1);
+    assert.ok(calls.includes('post:/sync/history'));
+    assert.ok(
+      calls.some((call) => call.startsWith('get:/sync/playback/episodes'))
+    );
+    assert.ok(calls.includes('delete:/sync/playback/44'));
+    assert.equal(calls.includes('delete:/sync/playback/45'), false);
+  });
+});
+
+it('coalesces simultaneous private reads across client instances', async () => {
+  const first = makeApi('shared-flight-token');
+  const second = makeApi('shared-flight-token');
+  let calls = 0;
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  for (const api of [first, second])
+    rawClient(api).defaults.adapter = async (config) => {
+      calls++;
+      await barrier;
+      return jsonResponse(config, 200, { private: true });
+    };
+  const read = (api: TraktAPI) =>
+    (
+      api as unknown as {
+        getAuthenticated: (endpoint: string) => Promise<unknown>;
+      }
+    ).getAuthenticated('/users/me/private-flight');
+  const a = read(first),
+    b = read(second);
+  await new Promise((resolve) => setImmediate(resolve));
+  release();
+  assert.deepEqual(await Promise.all([a, b]), [
+    { private: true },
+    { private: true },
+  ]);
+  assert.equal(calls, 1);
+});
+
+it('isolates private caches even when two tokens share the same suffix', async () => {
+  const suffix = '0123456789abcdef';
+  const a = makeApi(`first-${suffix}`),
+    b = makeApi(`second-${suffix}`);
+  rawClient(a).defaults.adapter = async (config) =>
+    jsonResponse(config, 200, { user: 'first' });
+  rawClient(b).defaults.adapter = async (config) =>
+    jsonResponse(config, 200, { user: 'second' });
+  const read = (api: TraktAPI) =>
+    (
+      api as unknown as {
+        getAuthenticated: (endpoint: string) => Promise<unknown>;
+      }
+    ).getAuthenticated('/users/me/isolation');
+  assert.deepEqual(await read(a), { user: 'first' });
+  assert.deepEqual(await read(b), { user: 'second' });
+});
