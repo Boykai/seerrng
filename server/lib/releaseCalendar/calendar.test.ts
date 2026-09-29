@@ -13,6 +13,10 @@ import {
 import { setupTestDb } from '@server/test/db';
 import assert from 'node:assert/strict';
 import { afterEach, it, mock } from 'node:test';
+import {
+  annotateReleaseCalendarHistory,
+  recordReleaseCalendarSnapshots,
+} from './historyStore';
 import { getReleaseCalendar } from './index';
 import { normalizeCalendarRow } from './normalize';
 import { CalendarQueryError, parseCalendarQuery } from './query';
@@ -82,6 +86,108 @@ it('uses a physical release inside the range when a preferred digital release is
   );
   assert.equal(result?.dateType, 'physical');
   assert.equal(result?.allDay, true);
+});
+it('keeps one stable event identity when a Radarr release moves between date fields', () => {
+  const digital = normalizeCalendarRow(
+    'radarr',
+    1,
+    false,
+    { id: 1, title: 'Movie', digitalRelease: '2026-09-12' },
+    new Date('2026-09-01'),
+    new Date('2026-10-01')
+  );
+  const physical = normalizeCalendarRow(
+    'radarr',
+    1,
+    false,
+    { id: 1, title: 'Movie', physicalRelease: '2026-09-15' },
+    new Date('2026-09-01'),
+    new Date('2026-10-01')
+  );
+  assert.equal(digital?.id, physical?.id);
+});
+it('records and displays date changes for a stable calendar event', async () => {
+  const observed = new Date('2026-09-01T04:00:00.000Z');
+  const before = {
+    id: 'radarr:1:1',
+    source: 'radarr' as const,
+    mediaType: 'movie' as const,
+    title: 'Movie',
+    startsAt: '2026-09-12T00:00:00.000Z',
+    dateType: 'digital' as const,
+    allDay: true,
+    available: false,
+    is4k: false,
+  };
+  const after = {
+    ...before,
+    startsAt: '2026-09-15T00:00:00.000Z',
+  };
+  assert.deepEqual(await recordReleaseCalendarSnapshots([before], observed), {
+    observed: 1,
+    changed: 0,
+    expired: 0,
+  });
+  const changedAt = new Date(observed.getTime() + 24 * 60 * 60 * 1000);
+  assert.deepEqual(await recordReleaseCalendarSnapshots([after], changedAt), {
+    observed: 1,
+    changed: 1,
+    expired: 0,
+  });
+  const [annotated] = await annotateReleaseCalendarHistory([after], changedAt);
+  assert.deepEqual(annotated.dateChanges, [
+    {
+      previousStartsAt: before.startsAt,
+      startsAt: after.startsAt,
+      changedAt: changedAt.toISOString(),
+      previousAllDay: true,
+      allDay: true,
+    },
+  ]);
+});
+it('records all-day versus timed changes even at the same UTC instant', async () => {
+  const observed = new Date('2026-09-01T04:00:00.000Z');
+  const item = {
+    id: 'sonarr:1:11',
+    source: 'sonarr' as const,
+    mediaType: 'tv' as const,
+    title: 'Series',
+    startsAt: '2026-09-12T00:00:00.000Z',
+    dateType: 'air' as const,
+    allDay: true,
+    available: false,
+    is4k: false,
+  };
+  await recordReleaseCalendarSnapshots([item], observed);
+  assert.deepEqual(
+    await recordReleaseCalendarSnapshots(
+      [{ ...item, allDay: false }],
+      new Date(observed.getTime() + 24 * 60 * 60 * 1000)
+    ),
+    { observed: 1, changed: 1, expired: 0 }
+  );
+});
+it('does not infer date changes after the daily observation window was missed', async () => {
+  const observed = new Date('2026-09-01T04:00:00.000Z');
+  const item = {
+    id: 'radarr:1:2',
+    source: 'radarr' as const,
+    mediaType: 'movie' as const,
+    title: 'Movie',
+    startsAt: '2026-09-12T00:00:00.000Z',
+    dateType: 'digital' as const,
+    allDay: true,
+    available: false,
+    is4k: false,
+  };
+  await recordReleaseCalendarSnapshots([item], observed);
+  assert.deepEqual(
+    await recordReleaseCalendarSnapshots(
+      [{ ...item, startsAt: '2026-09-15T00:00:00.000Z' }],
+      new Date(observed.getTime() + 48 * 60 * 60 * 1000)
+    ),
+    { observed: 1, changed: 0, expired: 0 }
+  );
 });
 it('retains Sonarr episode identity and air time while rejecting malformed episodes', () => {
   const episode = {
