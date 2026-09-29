@@ -11381,8 +11381,8 @@ paths:
           description: Client response-contract version used to retire incompatible browser cache entries.
           schema:
             type: integer
-            enum: [2]
-            default: 2
+            enum: [2, 3]
+            default: 3
       responses:
         '200':
           description: Book discovery results

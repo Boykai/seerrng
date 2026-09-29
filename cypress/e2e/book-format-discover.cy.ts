@@ -6,6 +6,7 @@ describe('Book discovery formats', () => {
 
   it('separates Books and Audiobooks while preserving discovery filters', () => {
     cy.intercept('GET', '/api/v1/discover/books*', (request) => {
+      expect(request.query.responseVersion).to.eq('3');
       request.alias =
         request.query.format === 'audiobook'
           ? 'discoverAudiobooks'

@@ -4762,6 +4762,16 @@ const validateCurrentBatchContract = (files) => {
     'name: responseVersion',
     'the documented Book discovery API must accept the response contract version'
   );
+  requireText(
+    'seerr-api.yml',
+    'enum: [2, 3]',
+    'book discovery must retain v2 compatibility while accepting the current v3 response contract'
+  );
+  requireText(
+    'seerr-api.yml',
+    'default: 3',
+    'book discovery must default new clients to the current v3 response contract'
+  );
   rejectText(
     'server/middleware/apiResponseCache.ts',
     "return 'private, no-cache, stale-if-error=3600';",
