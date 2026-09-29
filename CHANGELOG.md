@@ -120,6 +120,51 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.38.0](https://github.com/snapetech/seerrng/compare/v3.37.0..v3.38.0) - 2026-09-29
+
+### User-facing changes
+
+#### Added
+
+- **Calendar:** Game entries in the Release Calendar link to the matching software catalog title and show the requested PC operating system or emulation system.
+- **Calendar:** Requested PC games and emulation titles now appear in the Release Calendar when their IGDB catalog release date is available. My Requests stays private to you, while shared results follow the calendar’s existing permissions.
+- **Calendar:** The Release Calendar now shows comic and magazine issues when Mylar3, Kapowarr, or LazyLibrarian reports an exact issue date. Personal calendars stay limited to the signed-in user's requests, and issue lookups are bounded and briefly cached.
+
+#### Changed
+
+- **Calendar:** The Release Calendar guide now explains which game catalog supplies release dates, how PC or emulation targets appear, and which events include date-change history.
+
+#### Fixed
+
+- **Release Calendar:** Game releases in the calendar now use the date IGDB records for the requested PC operating system or emulation platform. Titles without a complete date for that target are left off the calendar instead of showing another platform's launch date.
+  - **Action required:** Update QuestarrNG and ROMarrNG to builds that return platform-specific release dates.
+- **Calendar:** Personal calendars now omit internal server identifiers from provider status details. Issue processing also stops when its event limit is reached, keeping large comic and magazine provider responses from consuming unnecessary memory.
+
+### 🚀 Features
+- *(calendar)* Add comic and magazine issue releases - ([04c5490](https://github.com/snapetech/seerrng/commit/04c5490107f84f956c9f2cd96594ebbe351a09e4))
+- *(calendar)* Use exact target platform release dates - ([8588b11](https://github.com/snapetech/seerrng/commit/8588b110be4e21a7445201c9c62532af5f507fd5))
+- *(calendar)* Add PC and emulation game releases - ([dbbd1cb](https://github.com/snapetech/seerrng/commit/dbbd1cb3ab994f177d6aac9f9a16bdc53a991d3c))
+
+### 🐛 Bug Fixes
+- *(calendar)* Preserve issue order under event bounds - ([c6c7a9a](https://github.com/snapetech/seerrng/commit/c6c7a9ac9b105574a92da04178469d4cd544329b))
+- *(calendar)* Bound issue event collection - ([c241a03](https://github.com/snapetech/seerrng/commit/c241a034c96538cb081f3866b5aa3cfac67d7d33))
+- *(release)* Read Jellyfin plugin metadata from JSON - ([a84bb71](https://github.com/snapetech/seerrng/commit/a84bb715d4a4adab125209478d85ec90d2206c6a))
+
+### 📖 Documentation
+- *(calendar)* Note game links and target labels - ([ad237ca](https://github.com/snapetech/seerrng/commit/ad237ca52655ea528b0077a525b98f76eeb3a3f8))
+- *(maintainers)* Clarify library repair coverage - ([6764121](https://github.com/snapetech/seerrng/commit/67641213cdbce073c774cf6b83f9434ee2e94237))
+
+### 🧪 Testing
+- *(calendar)* Cover exact platform date edge cases - ([0555365](https://github.com/snapetech/seerrng/commit/0555365c11b9cff412b457145aea4fbeeda93583))
+- *(calendar)* Cover software event cards and filters - ([b0b339f](https://github.com/snapetech/seerrng/commit/b0b339f4641268684e3047640f8b4e0c98ac7588))
+- *(calendar)* Cover software release events - ([c482182](https://github.com/snapetech/seerrng/commit/c48218215f5569a4399a8b4d73c0f38a67a4b1f1))
+- *(jellyfin)* Smoke test bridge in disposable server - ([0e5cbff](https://github.com/snapetech/seerrng/commit/0e5cbffb153d90e0d323a75683dc1bc66997ee45))
+
+### ⚙️ Miscellaneous Tasks
+- *(calendar)* Explain software scope filtering - ([8388f3b](https://github.com/snapetech/seerrng/commit/8388f3ba023262f495df38644c10f39780462662))
+
 ## [3.37.0](https://github.com/snapetech/seerrng/compare/v3.36.0..v3.37.0) - 2026-09-29
 
 ### User-facing changes
