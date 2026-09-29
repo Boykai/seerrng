@@ -197,9 +197,9 @@ const DiscoverBooks = ({
       minRating,
       sortBy,
       format: activeFormat === 'all' ? undefined : activeFormat,
-      // One-time response contract bump prevents browsers from substituting
-      // the old stale-on-error empty response after this behavior changed.
-      responseVersion: 2,
+      // Bump the cached contract because all-format discovery now returns
+      // format-tagged results from both Open Library and Bookshelf catalogs.
+      responseVersion: 3,
     },
     {
       enabled: isRouteReady && hasEnabledBookFormat,

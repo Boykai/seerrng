@@ -397,6 +397,7 @@ export const mapBookshelfBook = (
     provider: 'bookshelf',
     metadataSource: getBookshelfMetadataSource(result.foreignBookId),
     mediaType: 'book',
+    bookFormat: server?.serviceType ?? 'ebook',
     title: result.title,
     author: result.author?.authorName,
     authorId: result.author?.foreignAuthorId
@@ -630,7 +631,9 @@ export const searchBookshelfCatalogs = async (
         .trim();
     const title = normalize(result.title);
     const author = normalize(result.author);
-    const key = author ? `${title}:${author}` : `${title}:${result.id}`;
+    const key = `${result.bookFormat ?? 'ebook'}:${
+      author ? `${title}:${author}` : `${title}:${result.id}`
+    }`;
     if (!deduped.has(key)) deduped.set(key, result);
   }
   return [...deduped.values()];

@@ -290,8 +290,8 @@ const ListView = ({
                 canRequestAdditionalFormat={canRequestMissingBookFormat(title)}
                 canExpand
                 showText={visibility.book === 'always'}
-                preferredBookFormat={preferredBookFormat}
-                showAllBookFormats={showAllBookFormats}
+                preferredBookFormat={title.bookFormat ?? preferredBookFormat}
+                showAllBookFormats={showAllBookFormats && !title.bookFormat}
               />
             );
             break;

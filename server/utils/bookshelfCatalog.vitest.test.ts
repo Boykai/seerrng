@@ -76,6 +76,44 @@ describe('Bookshelf catalog identities', () => {
     expect(mapped.isbn13).toBe('9780306406157');
   });
 
+  it('keeps matching titles from ebook and audiobook catalogs as distinct results', async () => {
+    const servers = [
+      {
+        id: 51,
+        hostname: 'ebookshelf.test',
+        port: 8787,
+        apiKey: 'ebook-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'ebook',
+      },
+      {
+        id: 52,
+        hostname: 'audiobookshelf.test',
+        port: 8787,
+        apiKey: 'audiobook-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'audiobook',
+      },
+    ] as ReadarrSettings[];
+    vi.spyOn(ReadarrAPI.prototype, 'lookupBook').mockResolvedValue([
+      {
+        title: 'Shared Work',
+        foreignBookId: 'hardcover:shared-work',
+        author: { authorName: 'A. Writer' },
+      },
+    ]);
+
+    const results = await searchBookshelfCatalogs(servers, 'Shared Work');
+
+    expect(results.map((result) => result.bookFormat)).toEqual([
+      'ebook',
+      'audiobook',
+    ]);
+    expect(new Set(results.map((result) => result.id)).size).toBe(2);
+  });
+
   it('keeps Europeana IDs opaque when wrapping them for Seerr details and authors', () => {
     const result: ReadarrBookLookupResult = {
       title: 'Escrita criativa da ideia ao texto',

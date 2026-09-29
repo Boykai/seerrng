@@ -86,7 +86,7 @@ import {
 import { filterVideoSearchResults } from '@server/lib/videoSearchFilters';
 import { getCombinedWatchlist } from '@server/lib/watchlist';
 import logger from '@server/logger';
-import { mapOpenLibrarySearchDoc } from '@server/models/Book';
+import { mapOpenLibrarySearchDoc, type BookResult } from '@server/models/Book';
 import { mapComicVineVolumeResult } from '@server/models/Comic';
 import {
   mapGoogleBooksMagazine,
@@ -208,8 +208,16 @@ discoverRoutes.use((req, res, next) => {
 
   if (route === '/books') {
     const format = req.query.format;
-    const category = format === 'audiobook' ? 'audiobook' : 'ebook';
-    if (!isMediaCategoryEnabled(category)) {
+    const ebookEnabled = isMediaCategoryEnabled('ebook');
+    const audiobookEnabled = isMediaCategoryEnabled('audiobook');
+    if (
+      (format === 'audiobook' && !audiobookEnabled) ||
+      (format === 'ebook' && !ebookEnabled) ||
+      (format !== 'audiobook' &&
+        format !== 'ebook' &&
+        !ebookEnabled &&
+        !audiobookEnabled)
+    ) {
       return res.status(404).json({ status: 404, message: 'Not found.' });
     }
   }
@@ -3515,6 +3523,11 @@ discoverRoutes.get('/books', async (req, res) => {
   }
   const shuffleSeed = parsedShuffleSeed.value;
   const hasSearchQuery = !!searchQuery;
+  const ebookEnabled =
+    parsedFormat.value !== 'audiobook' && isMediaCategoryEnabled('ebook');
+  const audiobookEnabled =
+    parsedFormat.value !== 'ebook' && isMediaCategoryEnabled('audiobook');
+  const pageSizePerFormat = itemsPerPage;
   const sortByValue = requestedSortBy ?? (hasSearchQuery ? 'newest' : 'ranked');
   const sortAscending = sortByValue.endsWith('.asc');
   const sortByBase = sortByValue.replace(/\.(?:asc|desc)$/, '');
@@ -3528,7 +3541,7 @@ discoverRoutes.get('/books', async (req, res) => {
     keyword: searchQuery || undefined,
     ...(narratorQuery ? { narrator: narratorQuery } : {}),
     page,
-    pageSize: itemsPerPage,
+    pageSize: pageSizePerFormat,
     sort: sortByValue,
     genre: subjectQuery || undefined,
     firstPublishYear: firstPublishYear || undefined,
@@ -3564,66 +3577,76 @@ discoverRoutes.get('/books', async (req, res) => {
     hasSearchQuery ||
     parsedRatingNumber !== undefined ||
     firstPublishYear === 'before-1970';
+  const filterAndSortAudiobooks = (books: BookResult[]) =>
+    books
+      .filter(
+        (book) =>
+          (!searchQuery ||
+            matchesAllSearchTerms(
+              [book.title, book.author, ...(book.subjects ?? [])],
+              searchQuery
+            )) &&
+          (!authorQuery || matchesAllSearchTerms([book.author], authorQuery)) &&
+          (!narratorQuery ||
+            matchesAllSearchTerms(book.narrators ?? [], narratorQuery)) &&
+          (!subjectQuery ||
+            matchesAllSearchTerms(book.subjects ?? [], subjectQuery)) &&
+          (!language || book.languages?.includes(language)) &&
+          (parsedRatingNumber === undefined ||
+            (book.ratingsAverage ?? 0) >= parsedRatingNumber) &&
+          (!firstPublishYear ||
+            (firstPublishYear === 'before-1970'
+              ? (book.firstPublishYear ?? Number.POSITIVE_INFINITY) < 1970
+              : book.firstPublishYear === Number(firstPublishYear)))
+      )
+      .sort((left, right) => {
+        const comparison =
+          sortByBase === 'rating'
+            ? (right.ratingsAverage ?? -1) - (left.ratingsAverage ?? -1)
+            : sortByBase === 'editions'
+              ? (right.isbnCandidates?.length ?? 0) -
+                (left.isbnCandidates?.length ?? 0)
+              : sortByValue === 'newest' || sortByValue === 'oldest'
+                ? (right.firstPublishYear ?? -1) - (left.firstPublishYear ?? -1)
+                : 0;
+        return (
+          (sortAscending || sortByValue === 'oldest'
+            ? -comparison
+            : comparison) || left.title.localeCompare(right.title)
+        );
+      });
+  const searchAudiobookResults = async (): Promise<BookResult[]> => {
+    const books = narratorQuery
+      ? await searchBookshelfNarrators(getSettings().readarr, narratorQuery)
+      : hasSearchQuery || authorQuery
+        ? await searchBookshelfCatalogs(
+            getSettings().readarr,
+            searchQuery || authorQuery,
+            'audiobook',
+            { failOnAllUnavailable: true }
+          )
+        : await getBookshelfAudiobookLibrary(getSettings().readarr);
+    return filterAndSortAudiobooks(books);
+  };
+  const audiobookSearchOutcome = audiobookEnabled
+    ? searchAudiobookResults().then(
+        (books) => ({ books }),
+        (error: unknown) => ({ books: [], error })
+      )
+    : Promise.resolve({ books: [] as BookResult[] });
   const providerWindow = needsLocalFiltering
-    ? getProviderWindow(page, itemsPerPage, itemsPerPage)
+    ? getProviderWindow(page, pageSizePerFormat, pageSizePerFormat)
     : undefined;
   const providerPage = providerWindow
     ? Math.floor(providerWindow.offset / providerWindow.limit) + 1
     : page;
   const providerLimit = providerWindow?.limit ?? itemsPerPage;
 
-  if (parsedFormat.value === 'audiobook') {
+  if (!ebookEnabled) {
     try {
-      const books = (
-        narratorQuery
-          ? await searchBookshelfNarrators(getSettings().readarr, narratorQuery)
-          : hasSearchQuery || authorQuery
-            ? await searchBookshelfCatalogs(
-                getSettings().readarr,
-                searchQuery || authorQuery,
-                'audiobook',
-                { failOnAllUnavailable: true }
-              )
-            : await getBookshelfAudiobookLibrary(getSettings().readarr)
-      )
-        .filter(
-          (book) =>
-            (!searchQuery ||
-              matchesAllSearchTerms(
-                [book.title, book.author, ...(book.subjects ?? [])],
-                searchQuery
-              )) &&
-            (!authorQuery ||
-              matchesAllSearchTerms([book.author], authorQuery)) &&
-            (!narratorQuery ||
-              matchesAllSearchTerms(book.narrators ?? [], narratorQuery)) &&
-            (!subjectQuery ||
-              matchesAllSearchTerms(book.subjects ?? [], subjectQuery)) &&
-            (!language || book.languages?.includes(language)) &&
-            (parsedRatingNumber === undefined ||
-              (book.ratingsAverage ?? 0) >= parsedRatingNumber) &&
-            (!firstPublishYear ||
-              (firstPublishYear === 'before-1970'
-                ? (book.firstPublishYear ?? Number.POSITIVE_INFINITY) < 1970
-                : book.firstPublishYear === Number(firstPublishYear)))
-        )
-        .sort((left, right) => {
-          const comparison =
-            sortByBase === 'rating'
-              ? (right.ratingsAverage ?? -1) - (left.ratingsAverage ?? -1)
-              : sortByBase === 'editions'
-                ? (right.isbnCandidates?.length ?? 0) -
-                  (left.isbnCandidates?.length ?? 0)
-                : sortByValue === 'newest' || sortByValue === 'oldest'
-                  ? (right.firstPublishYear ?? -1) -
-                    (left.firstPublishYear ?? -1)
-                  : 0;
-          return (
-            (sortAscending || sortByValue === 'oldest'
-              ? -comparison
-              : comparison) || left.title.localeCompare(right.title)
-          );
-        });
+      const outcome = await audiobookSearchOutcome;
+      if ('error' in outcome) throw outcome.error;
+      const books = outcome.books;
       const offset = (page - 1) * itemsPerPage;
       return res.status(200).json({
         page,
@@ -3758,31 +3781,91 @@ discoverRoutes.get('/books', async (req, res) => {
       ids,
       req.user
     );
+    const audiobookOutcome = await audiobookSearchOutcome;
+    if ('error' in audiobookOutcome) {
+      logger.warn(
+        'Audiobook catalog search failed during combined discovery.',
+        {
+          label: 'Discover Books',
+          ...getErrorLogFields(audiobookOutcome.error),
+          discoveryContext: bookDiscoveryContext,
+        }
+      );
+    }
+    const audiobookOffset = (page - 1) * itemsPerPage;
+    const audiobookResults = audiobookOutcome.books.slice(
+      audiobookOffset,
+      audiobookOffset + itemsPerPage
+    );
+    const ebookResults = pagedDocs.map((doc) => ({
+      ...mapOpenLibrarySearchDoc(
+        doc,
+        mediaByOpenLibraryId.get(normalizeOpenLibraryWorkId(doc.key))
+      ),
+      score:
+        sortByBase === 'trending'
+          ? (doc.trending_score_hourly_sum ?? scoreBookDoc(doc))
+          : scoreBookDoc(doc),
+    }));
+    const results: BookResult[] = [];
+    for (
+      let index = 0;
+      results.length < itemsPerPage &&
+      (index < audiobookResults.length || index < ebookResults.length);
+      index += 1
+    ) {
+      const audiobook = audiobookResults[index];
+      const ebook = ebookResults[index];
+      if (audiobook) results.push(audiobook);
+      if (results.length < itemsPerPage && ebook) results.push(ebook);
+    }
+    const ebookTotalPages = needsLocalFiltering
+      ? providerHasMore
+        ? page + 1
+        : page
+      : Math.max(Math.ceil(books.numFound / itemsPerPage), 1);
+    const ebookTotalResults = needsLocalFiltering
+      ? providerHasMore
+        ? page * itemsPerPage + 1
+        : (page - 1) * itemsPerPage + pagedDocs.length
+      : books.numFound;
 
     return res.status(200).json({
       page,
-      totalPages: needsLocalFiltering
-        ? providerHasMore
-          ? page + 1
-          : page
-        : Math.max(Math.ceil(books.numFound / itemsPerPage), 1),
-      totalResults: needsLocalFiltering
-        ? providerHasMore
-          ? page * itemsPerPage + 1
-          : (page - 1) * itemsPerPage + pagedDocs.length
-        : books.numFound,
-      results: pagedDocs.map((doc) => ({
-        ...mapOpenLibrarySearchDoc(
-          doc,
-          mediaByOpenLibraryId.get(normalizeOpenLibraryWorkId(doc.key))
-        ),
-        score:
-          sortByBase === 'trending'
-            ? (doc.trending_score_hourly_sum ?? scoreBookDoc(doc))
-            : scoreBookDoc(doc),
-      })),
+      totalPages: Math.max(
+        ebookTotalPages,
+        Math.ceil(audiobookOutcome.books.length / itemsPerPage),
+        1
+      ),
+      totalResults: ebookTotalResults + audiobookOutcome.books.length,
+      results,
     });
   } catch (e) {
+    const audiobookOutcome = await audiobookSearchOutcome;
+    if (audiobookOutcome.books.length > 0) {
+      const offset = (page - 1) * itemsPerPage;
+      const results = audiobookOutcome.books.slice(
+        offset,
+        offset + itemsPerPage
+      );
+      logger.warn(
+        'Open Library failed during combined discovery; returning audiobook results.',
+        {
+          label: 'Discover Books',
+          ...getErrorLogFields(e),
+          discoveryContext: bookDiscoveryContext,
+        }
+      );
+      return res.status(200).json({
+        page,
+        totalPages: Math.max(
+          Math.ceil(audiobookOutcome.books.length / itemsPerPage),
+          1
+        ),
+        totalResults: audiobookOutcome.books.length,
+        results,
+      });
+    }
     logger.error('Failed to fetch book discovery results', {
       label: 'Discover Books',
       ...getErrorLogFields(e),
@@ -3790,8 +3873,11 @@ discoverRoutes.get('/books', async (req, res) => {
     });
     return res.status(503).json({
       status: 503,
-      message:
-        'Open Library, the service used for book searches, timed out or is unavailable. Please try again.',
+      message: getSettings().readarr.some(
+        (server) => audiobookEnabled && server.serviceType === 'audiobook'
+      )
+        ? 'Book discovery catalogs are unavailable right now. Please try again.'
+        : 'Open Library, the service used for book searches, timed out or is unavailable. Please try again.',
     });
   }
 });

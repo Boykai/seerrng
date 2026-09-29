@@ -15,6 +15,7 @@ export interface BookResult {
   id: string;
   provider?: 'openlibrary' | 'bookshelf';
   mediaType: 'book';
+  bookFormat?: 'ebook' | 'audiobook';
   title: string;
   author?: string;
   authorId?: string;
@@ -166,6 +167,7 @@ export const mapOpenLibrarySearchDoc = (
     id: workId,
     provider: 'openlibrary',
     mediaType: 'book',
+    bookFormat: 'ebook',
     title: doc.title,
     author: doc.author_name?.[0],
     authorId: doc.author_key?.[0],

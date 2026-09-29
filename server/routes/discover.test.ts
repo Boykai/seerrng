@@ -3515,6 +3515,141 @@ describe('GET /discover/books', () => {
     }
   });
 
+  it('returns ebook and audiobook results together for all-format discovery', async () => {
+    const settings = getSettings();
+    const originalCategories = { ...settings.main.enabledMediaCategories };
+    const originalReadarr = settings.readarr;
+    settings.main.enabledMediaCategories = {
+      ...originalCategories,
+      ebook: true,
+      audiobook: true,
+    };
+    settings.readarr = [
+      {
+        id: 31,
+        hostname: 'audiobookshelf.test',
+        port: 8787,
+        apiKey: 'audio-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'audiobook',
+      } as ReadarrSettings,
+    ];
+    const searchOpenLibrary = mock.method(
+      OpenLibraryAPI.prototype,
+      'searchBooks',
+      async () => ({
+        numFound: 1,
+        start: 0,
+        docs: [
+          {
+            key: '/works/OL-da-vinci-code',
+            title: 'The Da Vinci Code',
+            author_name: ['Dan Brown'],
+          },
+        ],
+      })
+    );
+    const searchBookshelf = mock.method(
+      ReadarrAPI.prototype,
+      'lookupBook',
+      async () => [
+        {
+          title: 'The Da Vinci Code',
+          foreignBookId: 'hardcover:da-vinci-code-audiobook',
+          author: { authorName: 'Dan Brown' },
+          narrators: ['Paul Michael'],
+        },
+      ]
+    );
+
+    try {
+      const agent = await login();
+      const result = await agent
+        .get('/discover/books')
+        .query({ query: 'The Da Vinci Code' });
+
+      assert.strictEqual(result.status, 200);
+      assert.deepStrictEqual(
+        result.body.results.map(
+          (book: { title: string; bookFormat: string }) => [
+            book.title,
+            book.bookFormat,
+          ]
+        ),
+        [
+          ['The Da Vinci Code', 'audiobook'],
+          ['The Da Vinci Code', 'ebook'],
+        ]
+      );
+      assert.strictEqual(searchOpenLibrary.mock.callCount(), 1);
+      assert.strictEqual(searchBookshelf.mock.callCount(), 1);
+    } finally {
+      settings.main.enabledMediaCategories = originalCategories;
+      settings.readarr = originalReadarr;
+    }
+  });
+
+  it('searches only audiobook catalogs when ebook discovery is disabled', async () => {
+    const settings = getSettings();
+    const originalCategories = { ...settings.main.enabledMediaCategories };
+    const originalReadarr = settings.readarr;
+    settings.main.enabledMediaCategories = {
+      ...originalCategories,
+      ebook: false,
+      audiobook: true,
+    };
+    settings.readarr = [
+      {
+        id: 32,
+        hostname: 'audiobookshelf.test',
+        port: 8787,
+        apiKey: 'audio-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'audiobook',
+      } as ReadarrSettings,
+    ];
+    const searchOpenLibrary = mock.method(
+      OpenLibraryAPI.prototype,
+      'searchBooks'
+    );
+    const searchBookshelf = mock.method(
+      ReadarrAPI.prototype,
+      'lookupBook',
+      async () => [
+        {
+          title: 'The Da Vinci Code Audiobook',
+          foreignBookId: 'hardcover:da-vinci-code-audiobook',
+          author: { authorName: 'Dan Brown' },
+        },
+      ]
+    );
+
+    try {
+      const agent = await login();
+      const result = await agent
+        .get('/discover/books')
+        .query({ query: 'The Da Vinci Code' });
+
+      assert.strictEqual(result.status, 200);
+      assert.deepStrictEqual(
+        result.body.results.map(
+          (book: { title: string; bookFormat: string }) => [
+            book.title,
+            book.bookFormat,
+          ]
+        ),
+        [['The Da Vinci Code Audiobook', 'audiobook']]
+      );
+      assert.strictEqual(searchOpenLibrary.mock.callCount(), 0);
+      assert.strictEqual(searchBookshelf.mock.callCount(), 1);
+    } finally {
+      settings.main.enabledMediaCategories = originalCategories;
+      settings.readarr = originalReadarr;
+    }
+  });
+
   it('limits narrator search to audiobook format', async () => {
     const searchOpenLibrary = mock.method(
       OpenLibraryAPI.prototype,
