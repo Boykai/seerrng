@@ -803,6 +803,31 @@ components:
           type: string
           format: date-time
           nullable: true
+    ProviderEpisodeWatchState:
+      type: object
+      additionalProperties: false
+      required: [available, season, episodes]
+      properties:
+        available:
+          type: boolean
+        season:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        episodes:
+          type: array
+          maxItems: 10000
+          items:
+            type: object
+            additionalProperties: false
+            required: [episode, watched]
+            properties:
+              episode:
+                type: integer
+                minimum: 1
+                maximum: 2147483647
+              watched:
+                type: boolean
 
     MusicSourceRating:
       type: object
@@ -16960,6 +16985,55 @@ paths:
           description: Provider quota reached; retry later
         '502':
           description: Provider did not confirm the action
+  /integrations/discovery/tracking/{provider}/episodes:
+    get:
+      summary: Read watched status for one show's episodes in your linked account
+      tags:
+        - user
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [trakt, simkl]
+        - name: sourceId
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[1-9][0-9]{0,9}$'
+        - name: tmdbId
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+        - name: season
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 10000
+      responses:
+        '200':
+          description: Provider watch state for the selected series season
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderEpisodeWatchState'
+        '400':
+          description: Invalid provider title or season
+        '403':
+          description: Browser session or enabled series category required
+        '409':
+          description: Provider account needs reconnection or the catalog identity changed
+        '429':
+          description: Episode watch-state lookup rate limit reached
+        '502':
+          description: Provider or catalog unavailable
   /integrations/discovery/tracking/actions/{requestId}:
     get:
       summary: Check the outcome of one of your tracking actions

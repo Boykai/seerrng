@@ -100,6 +100,14 @@ describe('discovery integration OpenAPI contracts', () => {
     assert.equal(
       (
         await request(app).get(
+          '/api/v1/integrations/discovery/tracking/trakt/episodes?sourceId=123&tmdbId=456&season=1'
+        )
+      ).status,
+      200
+    );
+    assert.equal(
+      (
+        await request(app).get(
           '/api/v1/integrations/discovery/library/plex?shelf=unwatched&page=2&libraryId=7'
         )
       ).status,

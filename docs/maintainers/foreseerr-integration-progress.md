@@ -35,8 +35,10 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   explicit watched, rating, and AniList progress writes are confirmed and
   idempotent. Trakt and Simkl also support explicit per-episode watched changes
   from the configured season list, with matched TMDB/TVDB IDs and Simkl's
-  current anime-season mapping contract. Manual TMDB matches are private to the
-  current user's library.
+  current anime-season mapping contract. Trakt and Simkl now show provider
+  watched state beside each episode; Trakt's active rewatch reset is respected,
+  and Simkl status reads are limited to the selected show and season. Manual
+  TMDB matches are private to the current user's library.
 - TV request owners can opt into Jellyfin watch-ahead when their linked Jellyfin
   user, TV-request permission, and matching Sonarr destination are available.
   The worker checks active playback every 30 seconds, requires Jellyfin to mark
@@ -73,8 +75,9 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   Readarr-compatible Bookshelf services.
 - Additional provider-specific live resolvers and bulk gap repair across sources
   beyond per-title, current-page, and pack import.
-- Richer episode-level identity reconciliation and watched-state display across
-  provider-specific catalog groupings.
+- AniList exposes sequential episode progress rather than individual watched
+  episode identities, so its library remains count-based while Trakt and Simkl
+  use provider-confirmed episode states.
 - Optional Jellyfin plugin using the independently deployed SeerrNG server,
   server-validated sessions and revocation, preserving existing media servers.
 - Optional desktop playback with browser fallback.

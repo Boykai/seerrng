@@ -282,6 +282,24 @@ describe('personal discovery account boundaries', () => {
     );
     assert.equal(result.status, 400);
   });
+  it('requires a browser session and validates episode watch-state queries', async () => {
+    const url =
+      '/integrations/discovery/tracking/trakt/episodes?sourceId=123&tmdbId=456&season=1';
+    const apiKeyRead = await request(app)
+      .get(url)
+      .set('X-API-Key', getSettings().main.apiKey);
+    assert.equal(apiKeyRead.status, 403);
+
+    const agent = await login();
+    const invalidSource = await agent.get(
+      '/integrations/discovery/tracking/trakt/episodes?sourceId=bad&tmdbId=456&season=1'
+    );
+    assert.equal(invalidSource.status, 400);
+    const invalidTmdbId = await agent.get(
+      '/integrations/discovery/tracking/trakt/episodes?sourceId=123&tmdbId=2147483648&season=1'
+    );
+    assert.equal(invalidTmdbId.status, 400);
+  });
   it('returns a bounded Retry-After when MDBList quota is exhausted', async () => {
     const agent = await login();
     mock.method(MdblistAPI.prototype, 'getListItems', async () => {

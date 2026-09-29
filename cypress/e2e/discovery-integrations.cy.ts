@@ -11,6 +11,77 @@ describe('Discovery provider integrations', () => {
       accounts: [],
     });
   });
+  it('shows Trakt watched state beside episodes and chooses the matching action', () => {
+    cy.intercept('GET', '/api/v1/integrations/discovery/accounts', {
+      accounts: [{ provider: 'trakt' }],
+    });
+    cy.intercept('GET', '/api/v1/integrations/discovery/library/trakt*', {
+      items: [
+        {
+          id: 'trakt:tv:42',
+          source: 'trakt',
+          sourceId: '42',
+          title: 'Tracked series',
+          mediaType: 'tv',
+          tmdbId: 420,
+          status: 'watched',
+        },
+      ],
+      page: 1,
+      hasMore: false,
+      allowWrites: true,
+      missingMappings: 0,
+      truncated: false,
+    }).as('traktLibrary');
+    cy.intercept('GET', '/api/v1/tv/420', {
+      id: 420,
+      name: 'Tracked series',
+      seasons: [{ id: 1, name: 'Season 1', seasonNumber: 1, episodeCount: 2 }],
+    }).as('seriesDetails');
+    cy.intercept('GET', '/api/v1/tv/420/season/1', {
+      id: 1,
+      seasonNumber: 1,
+      episodes: [
+        { id: 101, episodeNumber: 1, name: 'Pilot', seasonNumber: 1 },
+        { id: 102, episodeNumber: 2, name: 'Follow-up', seasonNumber: 1 },
+      ],
+    }).as('seasonDetails');
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/tracking/trakt/episodes*',
+      {
+        available: true,
+        season: 1,
+        episodes: [
+          { episode: 1, watched: true },
+          { episode: 2, watched: false },
+        ],
+      }
+    ).as('traktEpisodeWatchState');
+
+    cy.visit('/library');
+    cy.wait('@traktLibrary');
+    cy.get('#library-type').select('tv');
+    cy.wait('@traktLibrary');
+    cy.contains('button', 'Episode-level tracking').click();
+    cy.wait('@seriesDetails');
+    cy.wait('@seasonDetails');
+    cy.wait('@traktEpisodeWatchState');
+
+    cy.get('select[aria-label="Choose an episode"]').should(($select) => {
+      expect($select.find('option').eq(0).text()).to.contain('(Watched)');
+      expect($select.find('option').eq(1).text()).to.contain('(Not watched)');
+    });
+    cy.contains('This episode is marked watched on Trakt.').should(
+      'be.visible'
+    );
+    cy.contains('button', 'Mark episode unwatched').should('be.visible');
+    cy.get('select[aria-label="Choose an episode"]').select('2');
+    cy.contains('This episode is not marked watched on Trakt.').should(
+      'be.visible'
+    );
+    cy.contains('button', 'Mark episode watched').should('be.visible');
+  });
   it('shows application credentials without exposing saved secrets', () => {
     cy.visit('/settings/discovery');
     cy.get('#trakt-clientId').should('have.value', 'application-id');

@@ -61,6 +61,12 @@ type SimklEpisodeIds = {
   anidb?: number;
 };
 
+export type SimklWatchedEpisodeLookup = {
+  simkl?: number;
+  tmdb?: number;
+  tvdb?: number;
+};
+
 type SimklOptions = {
   clientId?: string;
   accessToken?: string;
@@ -129,7 +135,8 @@ export default class SimklAPI extends ExternalAPI {
   private async simklRequest<T>(
     method: 'get' | 'post',
     path: string,
-    body?: unknown
+    body?: unknown,
+    retrySafe = false
   ): Promise<T> {
     const cacheable = method === 'get' && !path.startsWith('/oauth/');
     if (cacheable) {
@@ -170,9 +177,13 @@ export default class SimklAPI extends ExternalAPI {
             Number(error.response?.headers['retry-after']) || 1;
           throw new SimklRateLimitedError(Math.max(1, retryAfter));
         }
-        // GET requests may safely retry once after a network or temporary
-        // upstream failure. Mutating requests are deliberately never retried.
-        if (method === 'get' && attempt === 0 && (!status || status >= 500)) {
+        // Reads may safely retry once after a network or temporary upstream
+        // failure. Mutating requests are deliberately never retried.
+        if (
+          (method === 'get' || retrySafe) &&
+          attempt === 0 &&
+          (!status || status >= 500)
+        ) {
           await new Promise((resolve) => setTimeout(resolve, 500));
           continue;
         }
@@ -305,8 +316,33 @@ export default class SimklAPI extends ExternalAPI {
     }
   }
 
-  public async getWatchedEpisodes(): Promise<Record<string, unknown>> {
-    return this.simklRequest('get', '/sync/watched?extended=episodes');
+  public async getWatchedEpisodes(
+    items: SimklWatchedEpisodeLookup[]
+  ): Promise<unknown> {
+    if (
+      !Array.isArray(items) ||
+      items.length < 1 ||
+      items.length > 100 ||
+      items.some((item) => {
+        if (!item || typeof item !== 'object') return true;
+        const identifiers = ['simkl', 'tmdb', 'tvdb'].some(
+          (key) =>
+            Number.isSafeInteger(
+              item[key as keyof SimklWatchedEpisodeLookup]
+            ) &&
+            Number(item[key as keyof SimklWatchedEpisodeLookup]) > 0 &&
+            Number(item[key as keyof SimklWatchedEpisodeLookup]) <= 2147483647
+        );
+        return !identifiers;
+      })
+    )
+      throw new Error('Invalid Simkl watched episode lookup.');
+    return this.simklRequest(
+      'post',
+      '/sync/watched?extended=episodes,specials,counters',
+      items,
+      true
+    );
   }
 
   /**

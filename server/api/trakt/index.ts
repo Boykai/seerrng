@@ -770,6 +770,18 @@ class TraktAPI extends ExternalAPI {
     return rows;
   }
 
+  /** Read watched progress for one show, including episode identity and rewatch reset state. */
+  public async getShowWatchedProgress(
+    traktId: number
+  ): Promise<Record<string, unknown>> {
+    if (!Number.isSafeInteger(traktId) || traktId <= 0)
+      throw new Error('Invalid Trakt show ID.');
+    return this.getAuthenticated<Record<string, unknown>>(
+      '/shows/' + traktId + '/progress/watched',
+      { params: { hidden: 'true', specials: 'true' } }
+    );
+  }
+
   public async getSyncWatched(
     mediaType: 'movie' | 'tv'
   ): Promise<TraktListEntry[]> {

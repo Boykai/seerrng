@@ -82,3 +82,61 @@ describe('Simkl episode history payloads', () => {
     );
   });
 });
+
+describe('Simkl watched episode lookup', () => {
+  it('posts a bounded, episode-expanded watch-state read', async () => {
+    const api = new SimklAPI({
+      clientId: 'watched-read-client',
+      accessToken: 'watched-read-token',
+    });
+    const posted = mock.method(
+      (api as unknown as { rawAxios: AxiosInstance }).rawAxios,
+      'post',
+      async () => ({ data: [] })
+    );
+
+    const result = await api.getWatchedEpisodes([{ simkl: 42 }]);
+
+    assert.deepEqual(result, []);
+    assert.equal(posted.mock.callCount(), 1);
+    const [path, body] = posted.mock.calls[0].arguments;
+    const requestUrl = new URL(String(path), 'https://api.simkl.com');
+    assert.equal(requestUrl.pathname, '/sync/watched');
+    assert.equal(
+      requestUrl.searchParams.get('extended'),
+      'episodes,specials,counters'
+    );
+    assert.equal(
+      requestUrl.searchParams.get('client_id'),
+      'watched-read-client'
+    );
+    assert.deepEqual(body, [{ simkl: 42 }]);
+  });
+
+  it('rejects empty, oversized, or unidentified watch-state lookups', async () => {
+    const api = new SimklAPI({
+      clientId: 'watched-read-invalid-client',
+      accessToken: 'watched-read-invalid-token',
+    });
+    await assert.rejects(() => api.getWatchedEpisodes([]), /Invalid Simkl/);
+    await assert.rejects(
+      () =>
+        api.getWatchedEpisodes(
+          Array.from({ length: 101 }, () => ({ simkl: 1 }))
+        ),
+      /Invalid Simkl/
+    );
+    await assert.rejects(
+      () => api.getWatchedEpisodes([{ season: 1 } as never]),
+      /Invalid Simkl/
+    );
+    await assert.rejects(
+      () => api.getWatchedEpisodes([null as never]),
+      /Invalid Simkl/
+    );
+    await assert.rejects(
+      () => api.getWatchedEpisodes([{ simkl: 2147483648 }]),
+      /Invalid Simkl/
+    );
+  });
+});

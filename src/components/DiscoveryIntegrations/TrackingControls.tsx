@@ -46,6 +46,14 @@ const messages = defineMessages('components.TrackingControls', {
   loadingSeasons: 'Loading seasons…',
   loadingEpisodes: 'Loading episodes…',
   loadEpisodesFailed: 'Episode details could not be loaded. Try again.',
+  loadingWatchState: 'Loading provider episode status…',
+  watchStateUnavailable:
+    'Provider episode status could not be loaded. Tracking actions are still available.',
+  watchedOnProvider: 'This episode is marked watched on {provider}.',
+  unwatchedOnProvider: 'This episode is not marked watched on {provider}.',
+  providerWatched: 'Watched',
+  providerUnwatched: 'Not watched',
+  episodeStateUnknown: 'No provider status is available for this episode.',
 });
 export default function TrackingControls({
   item,
@@ -112,6 +120,26 @@ export default function TrackingControls({
       : null
   );
   const episodes = seasonDetails?.episodes ?? EMPTY_EPISODES;
+  const episodeWatchStateKey =
+    episodeTrackingOpen &&
+    selectedSeason !== undefined &&
+    seasonDetails &&
+    supportsEpisodeTracking
+      ? `/api/v1/integrations/discovery/tracking/${item.source}/episodes?sourceId=${encodeURIComponent(item.sourceId)}&tmdbId=${item.tmdbId}&season=${selectedSeason}`
+      : null;
+  const {
+    data: episodeWatchState,
+    error: episodeWatchStateError,
+    isLoading: episodeWatchStateLoading,
+    mutate: mutateEpisodeWatchState,
+  } = useSWR<{
+    available: boolean;
+    season: number;
+    episodes: { episode: number; watched: boolean }[];
+  }>(episodeWatchStateKey);
+  const selectedEpisodeWatched = episodeWatchState?.episodes.find(
+    (episode) => episode.episode === selectedEpisode
+  )?.watched;
   useEffect(() => {
     if (!episodes.length) {
       setSelectedEpisode(undefined);
@@ -148,6 +176,7 @@ export default function TrackingControls({
       setNotice(intl.formatMessage(messages.succeeded));
       setConfirm(null);
       setEpisodeRemovalConfirm(null);
+      if (episode) await mutateEpisodeWatchState();
       await onUpdated();
     } catch {
       try {
@@ -158,6 +187,7 @@ export default function TrackingControls({
           setNotice(intl.formatMessage(messages.succeeded));
           setConfirm(null);
           setEpisodeRemovalConfirm(null);
+          if (episode) await mutateEpisodeWatchState();
           await onUpdated();
         } else if (data.state === 'unknown') {
           setNotice(intl.formatMessage(messages.uncertain));
@@ -240,6 +270,7 @@ export default function TrackingControls({
                             Number.isSafeInteger(value) ? value : undefined
                           );
                           setSelectedEpisode(undefined);
+                          setEpisodeRemovalConfirm(null);
                         }}
                       >
                         {seasons.map((season) => (
@@ -267,6 +298,18 @@ export default function TrackingControls({
                   )}
                   {episodes.length > 0 && (
                     <>
+                      {episodeWatchStateLoading && (
+                        <p role="status" className="text-xs text-gray-400">
+                          {intl.formatMessage(messages.loadingWatchState)}
+                        </p>
+                      )}
+                      {(episodeWatchStateError ||
+                        (!episodeWatchStateLoading &&
+                          !episodeWatchState?.available)) && (
+                        <p role="status" className="text-xs text-yellow-300">
+                          {intl.formatMessage(messages.watchStateUnavailable)}
+                        </p>
+                      )}
                       <label className="block text-xs">
                         {intl.formatMessage(messages.chooseEpisode)}
                         <select
@@ -283,36 +326,50 @@ export default function TrackingControls({
                                 ? value
                                 : undefined
                             );
+                            setEpisodeRemovalConfirm(null);
                           }}
                         >
-                          {episodes.map((episode) => (
-                            <option
-                              key={episode.id}
-                              value={episode.episodeNumber}
-                            >
-                              {`E${episode.episodeNumber} — ${episode.name || `Episode ${episode.episodeNumber}`}`}
-                            </option>
-                          ))}
+                          {episodes.map((episode) => {
+                            const watched = episodeWatchState?.episodes.find(
+                              (state) => state.episode === episode.episodeNumber
+                            )?.watched;
+                            const stateLabel =
+                              watched === true
+                                ? intl.formatMessage(messages.providerWatched)
+                                : watched === false
+                                  ? intl.formatMessage(
+                                      messages.providerUnwatched
+                                    )
+                                  : '';
+                            return (
+                              <option
+                                key={episode.id}
+                                value={episode.episodeNumber}
+                              >
+                                {`E${episode.episodeNumber} — ${episode.name || `Episode ${episode.episodeNumber}`}${stateLabel ? ` (${stateLabel})` : ''}`}
+                              </option>
+                            );
+                          })}
                         </select>
                       </label>
-                      <Button
-                        className="w-full"
-                        disabled={
-                          busy ||
-                          selectedSeason === undefined ||
-                          selectedEpisode === undefined
-                        }
-                        onClick={() =>
-                          selectedSeason !== undefined &&
-                          selectedEpisode !== undefined &&
-                          void apply('watched', true, {
-                            season: selectedSeason,
-                            episode: selectedEpisode,
-                          })
-                        }
-                      >
-                        {intl.formatMessage(messages.markEpisodeWatched)}
-                      </Button>
+                      {selectedEpisodeWatched !== undefined ? (
+                        <p role="status" className="text-xs text-gray-300">
+                          {intl.formatMessage(
+                            selectedEpisodeWatched
+                              ? messages.watchedOnProvider
+                              : messages.unwatchedOnProvider,
+                            {
+                              provider:
+                                item.source === 'simkl' ? 'Simkl' : 'Trakt',
+                            }
+                          )}
+                        </p>
+                      ) : episodeWatchState?.available &&
+                        selectedEpisode !== undefined ? (
+                        <p role="status" className="text-xs text-gray-400">
+                          {intl.formatMessage(messages.episodeStateUnknown)}
+                        </p>
+                      ) : null}
                       {episodeRemovalConfirm ? (
                         <div className="space-y-2 rounded-md border border-yellow-700 p-2 text-xs">
                           <p>
@@ -340,7 +397,7 @@ export default function TrackingControls({
                             {intl.formatMessage(messages.cancel)}
                           </Button>
                         </div>
-                      ) : (
+                      ) : selectedEpisodeWatched === true ? (
                         <Button
                           className="w-full"
                           disabled={
@@ -359,6 +416,64 @@ export default function TrackingControls({
                         >
                           {intl.formatMessage(messages.markEpisodeUnwatched)}
                         </Button>
+                      ) : selectedEpisodeWatched === false ? (
+                        <Button
+                          className="w-full"
+                          disabled={
+                            busy ||
+                            selectedSeason === undefined ||
+                            selectedEpisode === undefined
+                          }
+                          onClick={() =>
+                            selectedSeason !== undefined &&
+                            selectedEpisode !== undefined &&
+                            void apply('watched', true, {
+                              season: selectedSeason,
+                              episode: selectedEpisode,
+                            })
+                          }
+                        >
+                          {intl.formatMessage(messages.markEpisodeWatched)}
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            className="w-full"
+                            disabled={
+                              busy ||
+                              selectedSeason === undefined ||
+                              selectedEpisode === undefined
+                            }
+                            onClick={() =>
+                              selectedSeason !== undefined &&
+                              selectedEpisode !== undefined &&
+                              void apply('watched', true, {
+                                season: selectedSeason,
+                                episode: selectedEpisode,
+                              })
+                            }
+                          >
+                            {intl.formatMessage(messages.markEpisodeWatched)}
+                          </Button>
+                          <Button
+                            className="w-full"
+                            disabled={
+                              busy ||
+                              selectedSeason === undefined ||
+                              selectedEpisode === undefined
+                            }
+                            onClick={() =>
+                              selectedSeason !== undefined &&
+                              selectedEpisode !== undefined &&
+                              setEpisodeRemovalConfirm({
+                                season: selectedSeason,
+                                episode: selectedEpisode,
+                              })
+                            }
+                          >
+                            {intl.formatMessage(messages.markEpisodeUnwatched)}
+                          </Button>
+                        </>
                       )}
                     </>
                   )}

@@ -1,14 +1,21 @@
 import AnilistAPI from '@server/api/anilist';
+import ExternalAPI from '@server/api/externalapi';
 import SimklAPI from '@server/api/simkl';
 import TheMovieDb from '@server/api/themoviedb';
 import TraktAPI from '@server/api/trakt';
 import { getRepository } from '@server/datasource';
 import DiscoveryAccount from '@server/entity/DiscoveryAccount';
 import { User } from '@server/entity/User';
-import { getSettings } from '@server/lib/settings';
+import { getSettings, MetadataProviderType } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
 import assert from 'node:assert/strict';
 import { afterEach, it, mock } from 'node:test';
+import {
+  parseEpisodeWatchStateRequest,
+  parseSimklSeasonWatchState,
+  providerEpisodeWatchState,
+  simklWatchedEpisodeLookup,
+} from './episodeWatchState';
 import { savePersonalIdentityMapping } from './identityMappings';
 import { personalProviderLibrary } from './library';
 setupTestDb();
@@ -225,4 +232,172 @@ it('rejects unsupported pages before looking up a provider account', async () =>
     () => personalProviderLibrary(999999, 'trakt', 'watched', 501),
     /valid library shelf and page/
   );
+});
+
+it('shows Trakt episode state after the current rewatch reset point', async () => {
+  const userId = await connect('trakt');
+  mock.method(TraktAPI.prototype, 'prepareAccessToken', async () => undefined);
+  const read = mock.method(
+    TraktAPI.prototype,
+    'getShowWatchedProgress',
+    async () => ({
+      reset_at: '2026-01-01T00:00:00Z',
+      seasons: [
+        {
+          number: 1,
+          episodes: [
+            {
+              number: 1,
+              completed: true,
+              last_watched_at: '2025-12-31T23:59:59Z',
+            },
+            {
+              number: 2,
+              completed: true,
+              last_watched_at: '2026-02-01T00:00:00Z',
+            },
+            { number: 3, completed: false },
+          ],
+        },
+      ],
+    })
+  );
+
+  const result = await providerEpisodeWatchState(userId, 'trakt', {
+    sourceId: '42',
+    tmdbId: 420,
+    season: 1,
+  });
+
+  assert.equal(read.mock.calls[0].arguments[0], 42);
+  assert.deepEqual(result, {
+    available: true,
+    season: 1,
+    episodes: [
+      { episode: 1, watched: false },
+      { episode: 2, watched: true },
+      { episode: 3, watched: false },
+    ],
+  });
+});
+
+it('validates bounded provider episode watch-state identifiers', () => {
+  assert.deepEqual(
+    parseEpisodeWatchStateRequest({ sourceId: '42', tmdbId: 420, season: 0 }),
+    { sourceId: '42', tmdbId: 420, season: 0 }
+  );
+  assert.throws(
+    () =>
+      parseEpisodeWatchStateRequest({
+        sourceId: '9999999999',
+        tmdbId: 420,
+        season: 0,
+      }),
+    /valid provider title/
+  );
+});
+
+it('uses TVDB season coordinates for Simkl anime when TVDB supplies metadata', () => {
+  const lookup = simklWatchedEpisodeLookup(
+    '84',
+    true,
+    9876,
+    MetadataProviderType.TVDB
+  );
+  assert.deepEqual(lookup, { tvdb: 9876 });
+  assert.deepEqual(
+    simklWatchedEpisodeLookup('84', true, 9876, MetadataProviderType.TMDB),
+    { simkl: 84 }
+  );
+  assert.deepEqual(
+    parseSimklSeasonWatchState(
+      [
+        {
+          tvdb: 9876,
+          result: true,
+          seasons: [
+            {
+              number: 2,
+              episodes: [
+                { number: 3, watched: true },
+                { number: 4, watched: false },
+              ],
+            },
+          ],
+        },
+      ],
+      2
+    ),
+    {
+      available: true,
+      season: 2,
+      episodes: [
+        { episode: 3, watched: true },
+        { episode: 4, watched: false },
+      ],
+    }
+  );
+});
+
+it('reads Simkl episode state by provider identity and selected season', async () => {
+  const userId = await connect('simkl');
+  mock.method(
+    ExternalAPI.prototype as unknown as {
+      get: (endpoint: string, ...args: unknown[]) => Promise<unknown>;
+    },
+    'get',
+    async () => ({
+      id: 420,
+      keywords: { results: [] },
+      external_ids: { tvdb_id: 9876 },
+    })
+  );
+  const read = mock.method(
+    SimklAPI.prototype,
+    'getWatchedEpisodes',
+    async () => [
+      {
+        simkl: 84,
+        result: true,
+        seasons: [
+          {
+            number: 1,
+            episodes: [
+              { number: 1, watched: true },
+              { number: 2, watched: false },
+            ],
+          },
+          { number: 2, episodes: [{ number: 1, watched: false }] },
+        ],
+      },
+    ]
+  );
+
+  const result = await providerEpisodeWatchState(userId, 'simkl', {
+    sourceId: '84',
+    tmdbId: 420,
+    season: 1,
+  });
+
+  assert.deepEqual(read.mock.calls[0].arguments[0], [{ simkl: 84 }]);
+  assert.deepEqual(result, {
+    available: true,
+    season: 1,
+    episodes: [
+      { episode: 1, watched: true },
+      { episode: 2, watched: false },
+    ],
+  });
+
+  const secondSeason = await providerEpisodeWatchState(userId, 'simkl', {
+    sourceId: '84',
+    tmdbId: 420,
+    season: 2,
+  });
+  assert.deepEqual(secondSeason, {
+    available: true,
+    season: 2,
+    episodes: [{ episode: 1, watched: false }],
+  });
+  assert.equal(read.mock.callCount(), 1);
 });

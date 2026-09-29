@@ -21,6 +21,10 @@ import {
   parseCuratedIdentityMappingPack,
   removeCuratedIdentityPack,
 } from '@server/lib/discoveryIntegrations/curatedIdentityPacks';
+import {
+  parseEpisodeWatchStateRequest,
+  providerEpisodeWatchState,
+} from '@server/lib/discoveryIntegrations/episodeWatchState';
 import { discoveryFeed } from '@server/lib/discoveryIntegrations/feeds';
 import {
   handleDiscoveryIntegration,
@@ -81,6 +85,15 @@ const identityMappingRateLimit = rateLimit({
 const identityMappingPackRateLimit = rateLimit({
   windowMs: 5 * 60_000,
   limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `user:${req.user?.id ?? 'anonymous'}`,
+  skip: () =>
+    process.env.NODE_ENV === 'test' || process.env.E2E_TESTS === 'true',
+});
+const episodeWatchStateRateLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 60,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => `user:${req.user?.id ?? 'anonymous'}`,
@@ -715,6 +728,33 @@ router.get(
         mediaType as 'movie' | 'tv' | undefined
       )
     );
+  })
+);
+router.get(
+  '/tracking/:provider/episodes',
+  episodeWatchStateRateLimit,
+  handle(async (req, res) => {
+    requireDiscoveryBrowserSession(req);
+    const provider = String(req.params.provider);
+    if (provider !== 'trakt' && provider !== 'simkl')
+      throw new DiscoveryIntegrationError(
+        400,
+        'Choose Trakt or Simkl for episode watch status.'
+      );
+    const request = parseEpisodeWatchStateRequest({
+      sourceId: req.query.sourceId,
+      tmdbId:
+        typeof req.query.tmdbId === 'string' ||
+        typeof req.query.tmdbId === 'number'
+          ? Number(req.query.tmdbId)
+          : req.query.tmdbId,
+      season:
+        typeof req.query.season === 'string' ||
+        typeof req.query.season === 'number'
+          ? Number(req.query.season)
+          : req.query.season,
+    });
+    res.json(await providerEpisodeWatchState(req.user!.id, provider, request));
   })
 );
 router.post(

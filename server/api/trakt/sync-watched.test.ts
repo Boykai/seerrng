@@ -35,6 +35,26 @@ afterEach(() => {
 });
 
 describe('TraktAPI watched sync pagination', () => {
+  it('reads watched progress for one show with hidden and special seasons', async () => {
+    const api = makeApi();
+    let request:
+      { path?: string; params?: Record<string, unknown> } | undefined;
+    rawClient(api).defaults.adapter = async (config) => {
+      request = { path: config.url, params: config.params };
+      return jsonResponse(config, { seasons: [] });
+    };
+
+    assert.deepEqual(await api.getShowWatchedProgress(123), { seasons: [] });
+    assert.deepEqual(request, {
+      path: '/shows/123/progress/watched',
+      params: { hidden: 'true', specials: 'true' },
+    });
+    await assert.rejects(
+      api.getShowWatchedProgress(0),
+      /Invalid Trakt show ID/
+    );
+  });
+
   it('requests episode progress on every watched-show page', async () => {
     const api = makeApi();
     const requests: { path?: string; params?: Record<string, unknown> }[] = [];

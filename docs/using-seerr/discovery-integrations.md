@@ -90,12 +90,14 @@ whole-number 1–10 values; choose **Remove rating** to clear one. Changing a
 series watched state applies to the whole series, and SeerrNG asks you to
 confirm. Removing a movie's watched state also asks for confirmation.
 For Trakt and Simkl TV titles, open **Episode-level tracking**, choose a season
-and episode, then mark that episode watched. Removing one episode's watched
-status asks for confirmation. SeerrNG sends the selected catalog coordinates
-and uses the linked TMDB and TVDB series IDs when available; Simkl's anime
-season mapping is enabled only for anime when its configured metadata provider
-supplies TVDB coordinates. The episode list follows the configured TV metadata
-provider, so use the same season order that your provider account recognizes.
+and episode, then mark that episode watched. The episode choices show each
+episode's current watched state from Trakt or Simkl, and the action switches to
+the matching watched or unwatched change. Removing one episode's watched status
+asks for confirmation. SeerrNG sends the selected catalog coordinates and uses
+the linked TMDB and TVDB series IDs when available; Simkl's anime season mapping
+is enabled only for anime when its configured metadata provider supplies TVDB
+coordinates. The episode list follows the configured TV metadata provider, so
+use the same season order that your provider account recognizes.
 
 When a provider does not confirm a write, SeerrNG records the outcome as
 uncertain and will not automatically repeat that action. Check the provider
