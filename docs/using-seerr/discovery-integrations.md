@@ -74,12 +74,20 @@ more results are available, up to SeerrNG's safety cap. Link the media-server
 account under **Profile → Settings**; tracking-account connections remain under
 **Linked Accounts**.
 
-Trakt shelves are paged separately for movies and series. AniList and Simkl
-show the linked user's native library and keep provider IDs when a confirmed
-TMDB match is unavailable. Use **Match catalog title** to choose a confirmed
-movie or series for an unmatched item; the saved match is private to your user
-and can be changed or reset later. Simkl anime entries stay unmapped until the
-identity and media type can be confirmed.
+Trakt shelves can show movies and series together or filter either type; the
+provider still pages each type separately. AniList and Simkl show the linked
+user's native library and keep provider IDs when a confirmed TMDB match is
+unavailable. Use **Match catalog title** to choose a confirmed movie or series
+for an unmatched item; the saved match is private to your user and can be
+changed or reset later. Simkl anime entries stay unmapped until the identity and
+media type can be confirmed.
+
+Choose **Find exact ID matches across this library** to scan a connected
+Trakt, AniList, or Simkl shelf for unique IMDb or TVDB matches. SeerrNG scans
+five pages at a time, saves confirmed matches to your private title matches,
+and lets you stop and resume the scan. Existing private and administrator
+shared matches are preserved. Titles without a unique exact match remain
+available for manual matching; SeerrNG does not match them by title text.
 
 Provider writes are off by default. To enable them, turn on the explicit
 watched-status, progress, and rating consent for each account under **Linked

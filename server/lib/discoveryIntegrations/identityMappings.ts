@@ -207,6 +207,114 @@ export async function savePersonalIdentityMapping(
   };
 }
 
+export interface ExternalIdentityMappingMatch {
+  identity: string;
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+}
+
+export async function saveExternalIdentityMappings(
+  userId: number,
+  source: Extract<PersonalIdentitySource, 'trakt' | 'anilist' | 'simkl'>,
+  candidates: ExternalIdentityMappingMatch[]
+) {
+  if (!Number.isSafeInteger(userId) || userId < 1)
+    throw new DiscoveryIntegrationError(400, 'Choose a valid library user.');
+
+  const byIdentity = new Map<string, ExternalIdentityMappingMatch>();
+  const ambiguous = new Set<string>();
+  for (const candidate of candidates) {
+    if (
+      parsePersonalIdentitySource(candidate.identity) !== source ||
+      !Number.isSafeInteger(candidate.tmdbId) ||
+      candidate.tmdbId < 1 ||
+      candidate.tmdbId > 1_000_000_000 ||
+      (candidate.mediaType !== 'movie' && candidate.mediaType !== 'tv')
+    )
+      throw new DiscoveryIntegrationError(
+        400,
+        'The provider returned an invalid exact title match.'
+      );
+
+    const previous = byIdentity.get(candidate.identity);
+    if (
+      previous &&
+      (previous.tmdbId !== candidate.tmdbId ||
+        previous.mediaType !== candidate.mediaType)
+    ) {
+      byIdentity.delete(candidate.identity);
+      ambiguous.add(candidate.identity);
+    } else if (!ambiguous.has(candidate.identity)) {
+      byIdentity.set(candidate.identity, candidate);
+    }
+  }
+  if (!byIdentity.size) return { saved: 0, limitReached: false };
+
+  const repository = getRepository(DiscoveryIdentityMapping);
+  return repository.manager.transaction(async (manager) => {
+    const transactionRepository = manager.getRepository(
+      DiscoveryIdentityMapping
+    );
+    const matches = [...byIdentity.values()];
+    const identities = matches.map(({ identity }) => identity);
+    const existing = await transactionRepository.findBy({
+      userId,
+      identity: In(identities),
+    });
+    const existingIdentities = new Set(
+      existing.map(({ identity }) => identity)
+    );
+    const pending = matches.filter(
+      ({ identity }) => !existingIdentities.has(identity)
+    );
+    if (!pending.length) return { saved: 0, limitReached: false };
+
+    const currentTotal = await transactionRepository.countBy({ userId });
+    const available = Math.max(
+      0,
+      MAX_PERSONAL_IDENTITY_MAPPINGS - currentTotal
+    );
+    const toInsert = pending.slice(0, available);
+    if (!toInsert.length) return { saved: 0, limitReached: true };
+
+    await manager
+      .createQueryBuilder()
+      .insert()
+      .into(DiscoveryIdentityMapping)
+      .values(
+        toInsert.map((candidate) => ({
+          userId,
+          ...candidate,
+          updatedAt: new Date(),
+        }))
+      )
+      .orIgnore()
+      .execute();
+
+    // Inserts are conflict-ignored so a concurrent manual match cannot be
+    // overwritten by an automatic exact-ID result.
+    const persisted = await transactionRepository.findBy({
+      userId,
+      identity: In(toInsert.map(({ identity }) => identity)),
+    });
+    const persistedByIdentity = new Map(
+      persisted.map((mapping) => [mapping.identity, mapping])
+    );
+    const saved = toInsert.filter((candidate) => {
+      const mapping = persistedByIdentity.get(candidate.identity);
+      return (
+        mapping?.tmdbId === candidate.tmdbId &&
+        mapping.mediaType === candidate.mediaType
+      );
+    }).length;
+
+    return {
+      saved,
+      limitReached: pending.length > toInsert.length,
+    };
+  });
+}
+
 export async function removePersonalIdentityMapping(
   userId: number,
   identity: string

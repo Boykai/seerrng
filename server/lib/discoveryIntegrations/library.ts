@@ -14,7 +14,10 @@ import {
   resolveExternalIdentityMatches,
   toPublicIdentityCandidate,
 } from './externalIdentityResolver';
-import { applyPersonalIdentityMappings } from './identityMappings';
+import {
+  applyPersonalIdentityMappings,
+  type ExternalIdentityMappingMatch,
+} from './identityMappings';
 import type { NativeLibrarySource } from './mediaServerLibrary';
 
 export interface PersonalLibraryItem {
@@ -51,6 +54,8 @@ export type LibraryShelf =
   | 'in-progress'
   | 'completed'
   | 'rated';
+export const MAX_PROVIDER_LIBRARY_REPAIR_PAGES_PER_BATCH = 5;
+
 const positive = (value: unknown): number | undefined => {
   const number =
     typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
@@ -297,7 +302,12 @@ export async function personalProviderLibrary(
     );
   await requireDiscoveryAccount(userId, provider);
   if (provider === 'trakt') {
-    if (!isMediaCategoryEnabled(mediaType ?? 'movie'))
+    const mediaTypes = mediaType
+      ? isMediaCategoryEnabled(mediaType)
+        ? [mediaType]
+        : []
+      : (['movie', 'tv'] as const).filter(isMediaCategoryEnabled);
+    if (!mediaTypes.length)
       return {
         items: [] as PersonalLibraryItem[],
         page,
@@ -306,12 +316,15 @@ export async function personalProviderLibrary(
         missingMappings: 0,
         truncated: false,
       };
-    const result = await traktLibrary(
-      userId,
-      shelf,
-      page,
-      mediaType ?? 'movie'
-    );
+    const results = [];
+    for (const type of mediaTypes)
+      results.push(await traktLibrary(userId, shelf, page, type));
+    const providerHasMore = results.some((result) => result.hasMore);
+    const result = {
+      items: results.flatMap((result) => result.items),
+      hasMore: providerHasMore,
+      truncated: providerHasMore && page === 500,
+    };
     const current = await requireDiscoveryAccount(userId, provider);
     const personalItems = await applyPersonalIdentityMappings(
       userId,
@@ -322,8 +335,7 @@ export async function personalProviderLibrary(
     return {
       ...result,
       items: items.map(toPublicIdentityCandidate),
-      hasMore: result.hasMore && page < 500,
-      truncated: result.hasMore && page === 500,
+      hasMore: providerHasMore && page < 500,
       page,
       allowWrites: current.allowWrites,
       missingMappings: items.filter((item) => !item.tmdbId || !item.mediaType)
@@ -379,5 +391,89 @@ export async function personalProviderLibrary(
     hasMore: page * 20 < items.length,
     allowWrites: (await requireDiscoveryAccount(userId, provider)).allowWrites,
     missingMappings,
+  };
+}
+
+export async function resolvePersonalProviderLibraryMappings(
+  userId: number,
+  provider: DiscoveryAccountProvider,
+  shelf: LibraryShelf,
+  startPage: number,
+  pageCount: number,
+  mediaType?: 'movie' | 'tv'
+) {
+  if (
+    !['trakt', 'anilist', 'simkl'].includes(provider) ||
+    !Number.isSafeInteger(startPage) ||
+    startPage < 1 ||
+    startPage > 500 ||
+    !Number.isSafeInteger(pageCount) ||
+    pageCount < 1 ||
+    pageCount > MAX_PROVIDER_LIBRARY_REPAIR_PAGES_PER_BATCH
+  )
+    throw new DiscoveryIntegrationError(
+      400,
+      'Choose a valid provider library scan range.'
+    );
+
+  let scanned = 0;
+  let pagesScanned = 0;
+  let page = startPage;
+  let hasMore = true;
+  let truncated = false;
+  const exactMatches = new Map<string, ExternalIdentityMappingMatch>();
+  const ambiguous = new Set<string>();
+  while (page < startPage + pageCount && page <= 500) {
+    const result = await personalProviderLibrary(
+      userId,
+      provider,
+      shelf,
+      page,
+      mediaType
+    );
+    pagesScanned += 1;
+    scanned += result.items.length;
+    for (const item of result.items) {
+      if (
+        item.identityResolution !== 'external-id' ||
+        !item.tmdbId ||
+        !item.mediaType
+      )
+        continue;
+      const candidate = {
+        identity: item.id,
+        tmdbId: item.tmdbId,
+        mediaType: item.mediaType,
+      };
+      const previous = exactMatches.get(candidate.identity);
+      if (
+        previous &&
+        (previous.tmdbId !== candidate.tmdbId ||
+          previous.mediaType !== candidate.mediaType)
+      ) {
+        exactMatches.delete(candidate.identity);
+        ambiguous.add(candidate.identity);
+      } else if (!ambiguous.has(candidate.identity)) {
+        exactMatches.set(candidate.identity, candidate);
+      }
+    }
+
+    truncated ||= result.truncated;
+    hasMore = result.hasMore || result.truncated;
+    if (!hasMore || result.truncated) break;
+    page += 1;
+  }
+
+  const matches = [...exactMatches.values()];
+  const nextPage = truncated ? 500 : hasMore ? page : page + 1;
+  return {
+    startPage,
+    nextPage,
+    pagesScanned,
+    scanned,
+    matches,
+    matched: matches.length,
+    hasMore: hasMore && !truncated && nextPage <= 500,
+    truncated,
   };
 }

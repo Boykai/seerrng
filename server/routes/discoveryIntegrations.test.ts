@@ -4,9 +4,12 @@ import MdblistAPI, {
   MdblistListNotFoundError,
   MdblistQuotaExceededError,
 } from '@server/api/mdblist';
+import SimklAPI from '@server/api/simkl';
+import TheMovieDb from '@server/api/themoviedb';
 import TraktAPI from '@server/api/trakt';
 import { getRepository } from '@server/datasource';
 import DiscoveryAccount from '@server/entity/DiscoveryAccount';
+import DiscoveryIdentityMapping from '@server/entity/DiscoveryIdentityMapping';
 import { User } from '@server/entity/User';
 import { getSettings } from '@server/lib/settings';
 import { checkUser } from '@server/middleware/auth';
@@ -125,6 +128,106 @@ describe('personal discovery account boundaries', () => {
     );
     assert.equal(removed.status, 200);
     assert.equal(removed.body.removed, true);
+  });
+
+  it('saves only exact provider-ID repairs and preserves personal overrides', async () => {
+    const agent = await login();
+    const admin = await getRepository(User).findOneByOrFail({
+      email: 'admin@seerr.dev',
+    });
+    getSettings().discoveryIntegrations.simkl.clientId = 'test-simkl-app';
+    await getRepository(DiscoveryAccount).save({
+      userId: admin.id,
+      provider: 'simkl',
+      clientId: 'test-simkl-app',
+      accessToken: 'private-simkl-token',
+      refreshToken: null,
+      expiresAt: null,
+      username: 'viewer',
+      providerUserId: 'viewer-id',
+      allowWrites: false,
+    });
+    await getRepository(DiscoveryIdentityMapping).save({
+      userId: admin.id,
+      identity: 'simkl:movies:2',
+      tmdbId: 222,
+      mediaType: 'movie',
+      updatedAt: new Date(),
+    });
+    mock.method(SimklAPI.prototype, 'getAllItems', async () => ({
+      movies: [
+        {
+          movie: {
+            title: 'Exact external match',
+            ids: { simkl: 1, imdb: 'tt0000001' },
+          },
+          status: 'completed',
+        },
+        {
+          movie: {
+            title: 'Keep manual override',
+            ids: { simkl: 2, imdb: 'tt0000002' },
+          },
+          status: 'completed',
+        },
+        {
+          movie: {
+            title: 'No external ID',
+            ids: { simkl: 3 },
+          },
+          status: 'completed',
+        },
+      ],
+    }));
+    const externalLookup = mock.method(
+      TheMovieDb.prototype,
+      'getByExternalId',
+      async () =>
+        ({
+          movie_results: [{ id: 456 }],
+          tv_results: [],
+          person_results: [],
+        }) as never
+    );
+    mock.method(
+      ExternalAPI.prototype as unknown as {
+        get: (endpoint: string, ...args: unknown[]) => Promise<unknown>;
+      },
+      'get',
+      async (endpoint: string) => ({
+        id: endpoint === '/movie/456' ? 456 : 0,
+        title: 'Exact external match',
+      })
+    );
+
+    const result = await agent
+      .post('/integrations/discovery/library/simkl/repair')
+      .send({ shelf: 'all', startPage: 1, pageCount: 5, mediaType: 'movie' });
+
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body, {
+      startPage: 1,
+      nextPage: 2,
+      pagesScanned: 1,
+      scanned: 3,
+      matched: 1,
+      saved: 1,
+      hasMore: false,
+      truncated: false,
+      limitReached: false,
+    });
+    assert.equal(externalLookup.mock.callCount(), 1);
+    const mappings = await getRepository(DiscoveryIdentityMapping).findBy({
+      userId: admin.id,
+    });
+    assert.equal(
+      mappings.find(({ identity }) => identity === 'simkl:movies:1')?.tmdbId,
+      456
+    );
+    assert.equal(
+      mappings.find(({ identity }) => identity === 'simkl:movies:2')?.tmdbId,
+      222
+    );
   });
 
   it('imports and exports private title matches without provider credentials', async () => {

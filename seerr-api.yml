@@ -570,6 +570,71 @@ components:
               type:
                 type: string
                 enum: [show, movie]
+    ProviderLibraryRepairRequest:
+      type: object
+      additionalProperties: false
+      required: [shelf, startPage, pageCount]
+      properties:
+        shelf:
+          type: string
+          enum: [all, watchlist, watched, in-progress, completed, rated]
+        startPage:
+          type: integer
+          minimum: 1
+          maximum: 500
+        pageCount:
+          type: integer
+          minimum: 1
+          maximum: 5
+        mediaType:
+          type: string
+          enum: [movie, tv]
+    ProviderLibraryRepairResult:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          startPage,
+          nextPage,
+          pagesScanned,
+          scanned,
+          matched,
+          saved,
+          hasMore,
+          truncated,
+          limitReached,
+        ]
+      properties:
+        startPage:
+          type: integer
+          minimum: 1
+          maximum: 500
+        nextPage:
+          type: integer
+          minimum: 1
+          maximum: 501
+        pagesScanned:
+          type: integer
+          minimum: 0
+          maximum: 5
+        scanned:
+          type: integer
+          minimum: 0
+          maximum: 200
+        matched:
+          type: integer
+          minimum: 0
+          maximum: 200
+        saved:
+          type: integer
+          minimum: 0
+          maximum: 200
+        hasMore:
+          type: boolean
+        truncated:
+          type: boolean
+        limitReached:
+          type: boolean
     DiscoveryIdentityMappingRequest:
       type: object
       additionalProperties: false
@@ -16744,6 +16809,42 @@ paths:
           description: Provider account needs to be connected
         '429':
           description: Provider quota reached; retry later
+        '502':
+          description: Provider unavailable
+  /integrations/discovery/library/{provider}/repair:
+    post:
+      summary: Save exact external-ID matches across bounded provider-library pages
+      description: Scans up to five pages per request. Only unique confirmed IMDb or TVDB matches are stored as private user mappings; existing personal or curated matches are not overwritten.
+      tags:
+        - user
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [trakt, anilist, simkl]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderLibraryRepairRequest'
+      responses:
+        '200':
+          description: Completed bounded provider-library identity scan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderLibraryRepairResult'
+        '400':
+          description: Invalid provider, shelf, or scan range
+        '403':
+          description: Browser session or media permission required
+        '409':
+          description: Provider account needs to be connected
+        '429':
+          description: Provider or scan quota reached; continue later
         '502':
           description: Provider unavailable
   /integrations/discovery/mappings:

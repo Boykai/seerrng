@@ -14,6 +14,7 @@ import type {
   NativeLibrarySource,
   PersonalLibrarySource,
 } from '@server/lib/discoveryIntegrations/mediaServerLibrary';
+import axios from 'axios';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -50,6 +51,22 @@ const messages = defineMessages('library', {
   retry: 'Retry',
   unmapped:
     'Some titles retain their original provider identity until a catalog match is confirmed.',
+  repair: 'Find exact ID matches across this library',
+  repairDescription:
+    'Scan every page for unique IMDb or TVDB matches. Confirmed matches are saved to your private title matches; titles without a clear exact match remain available for manual matching.',
+  repairContinue: 'Continue scan',
+  repairStop: 'Stop after this batch',
+  repairStopping: 'Stopping after this batch…',
+  repairRunning: 'Scanning page {page}…',
+  repairSummary:
+    'Scanned {scanned} titles, found {matched} exact matches, and saved {saved} private title matches.',
+  repairPaused: 'Scan paused at page {page}.',
+  repairComplete: 'Library scan complete.',
+  repairFailed: 'The scan stopped at page {page}. You can continue from there.',
+  repairLimit:
+    'Your private title-match limit was reached. Later exact matches were not saved.',
+  repairTruncated:
+    'The provider library reached SeerrNG’s 500-page scan limit. Continue browsing in the provider app.',
   limit:
     'This page reached a safety limit. Continue with Next if available, or finish browsing in your provider app.',
   previous: 'Previous page',
@@ -77,19 +94,62 @@ const isNativeSource = (
 ): source is NativeLibrarySource =>
   source === 'plex' || source === 'jellyfin' || source === 'emby';
 const base = '/api/v1/integrations/discovery';
+const repairPageCount = 5;
+const repairRequestIntervalMs = 3100;
+interface IdentityRepairResponse {
+  startPage: number;
+  nextPage: number;
+  pagesScanned: number;
+  scanned: number;
+  matched: number;
+  saved: number;
+  hasMore: boolean;
+  truncated: boolean;
+  limitReached: boolean;
+}
+interface IdentityRepairProgress {
+  running: boolean;
+  stopping: boolean;
+  cancelled: boolean;
+  failed: boolean;
+  complete: boolean;
+  nextPage: number;
+  pagesScanned: number;
+  scanned: number;
+  matched: number;
+  saved: number;
+  hasMore: boolean;
+  truncated: boolean;
+  limitReached: boolean;
+}
 export default function LibraryPage() {
   const intl = useIntl();
   const [provider, setProvider] = useState<PersonalLibrarySource>('trakt');
   const [shelf, setShelf] = useState<LibraryShelf>('watched');
-  const [type, setType] = useState('movie');
+  const [type, setType] = useState('');
   const [libraryId, setLibraryId] = useState('');
   const [page, setPage] = useState(1);
   const [nativeCursors, setNativeCursors] = useState<number[]>([0]);
+  const [repairProgress, setRepairProgress] =
+    useState<IdentityRepairProgress>();
   const initializedProvider = useRef(false);
+  const repairRunId = useRef(0);
+  const stopRepairAfterBatch = useRef(false);
   const resetPage = useCallback(() => {
     setPage(1);
     setNativeCursors([0]);
   }, []);
+  const resetRepair = useCallback(() => {
+    repairRunId.current += 1;
+    stopRepairAfterBatch.current = false;
+    setRepairProgress(undefined);
+  }, []);
+  useEffect(
+    () => () => {
+      repairRunId.current += 1;
+    },
+    []
+  );
   const { data: connections } = useSWR<{
     accounts: { provider: DiscoveryAccountProvider }[];
     mediaServer: { provider: NativeLibrarySource; connected: boolean } | null;
@@ -102,7 +162,7 @@ export default function LibraryPage() {
       : (connections.accounts[0]?.provider ?? 'trakt');
     setProvider(first);
     setShelf(first === 'trakt' ? 'watched' : 'all');
-    setType(isNativeSource(first) || first !== 'trakt' ? '' : 'movie');
+    setType('');
   }, [connections]);
   const nativeSource = isNativeSource(provider);
   const connected = nativeSource
@@ -175,8 +235,9 @@ export default function LibraryPage() {
               const source = event.target.value as PersonalLibrarySource;
               setProvider(source);
               setShelf(source === 'trakt' ? 'watched' : 'all');
-              setType(source === 'trakt' ? 'movie' : '');
+              setType('');
               setLibraryId('');
+              resetRepair();
               resetPage();
             }}
           >
@@ -200,6 +261,7 @@ export default function LibraryPage() {
             value={shelf}
             onChange={(event) => {
               setShelf(event.target.value as LibraryShelf);
+              resetRepair();
               resetPage();
             }}
           >
@@ -220,6 +282,7 @@ export default function LibraryPage() {
                 value={libraryId}
                 onChange={(event) => {
                   setLibraryId(event.target.value);
+                  resetRepair();
                   resetPage();
                 }}
               >
@@ -240,14 +303,11 @@ export default function LibraryPage() {
               value={type}
               onChange={(event) => {
                 setType(event.target.value);
+                resetRepair();
                 resetPage();
               }}
             >
-              {provider !== 'trakt' && (
-                <option value="">
-                  {intl.formatMessage(messages.allTypes)}
-                </option>
-              )}
+              <option value="">{intl.formatMessage(messages.allTypes)}</option>
               <option value="movie">
                 {intl.formatMessage(messages.movies)}
               </option>
@@ -256,6 +316,192 @@ export default function LibraryPage() {
           </label>
         )}
       </div>
+      {connected && !nativeSource && (
+        <section className="mb-6 rounded-lg border border-gray-700 bg-gray-800 p-4">
+          <p className="mb-3 text-sm text-gray-300">
+            {intl.formatMessage(messages.repairDescription)}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              disabled={repairProgress?.running}
+              onClick={() => {
+                const isResuming = Boolean(
+                  repairProgress?.hasMore && !repairProgress?.complete
+                );
+                const previous = isResuming ? repairProgress : undefined;
+                const startPage = previous?.nextPage ?? 1;
+                const runId = ++repairRunId.current;
+                stopRepairAfterBatch.current = false;
+                setRepairProgress({
+                  running: true,
+                  stopping: false,
+                  cancelled: false,
+                  failed: false,
+                  complete: false,
+                  nextPage: startPage,
+                  pagesScanned: previous?.pagesScanned ?? 0,
+                  scanned: previous?.scanned ?? 0,
+                  matched: previous?.matched ?? 0,
+                  saved: previous?.saved ?? 0,
+                  hasMore: true,
+                  truncated: false,
+                  limitReached: false,
+                });
+                void (async () => {
+                  let currentPage = startPage;
+                  let totals = {
+                    pagesScanned: previous?.pagesScanned ?? 0,
+                    scanned: previous?.scanned ?? 0,
+                    matched: previous?.matched ?? 0,
+                    saved: previous?.saved ?? 0,
+                  };
+                  try {
+                    while (currentPage <= 500) {
+                      const response = await axios.post<IdentityRepairResponse>(
+                        base + '/library/' + provider + '/repair',
+                        {
+                          shelf,
+                          startPage: currentPage,
+                          pageCount: repairPageCount,
+                          ...(type ? { mediaType: type } : {}),
+                        }
+                      );
+                      if (repairRunId.current !== runId) return;
+                      const batch = response.data;
+                      totals = {
+                        pagesScanned: totals.pagesScanned + batch.pagesScanned,
+                        scanned: totals.scanned + batch.scanned,
+                        matched: totals.matched + batch.matched,
+                        saved: totals.saved + batch.saved,
+                      };
+                      currentPage = batch.nextPage;
+                      const hasMore = batch.hasMore && !batch.limitReached;
+                      const cancelled = stopRepairAfterBatch.current;
+                      const complete = !hasMore || batch.truncated;
+                      setRepairProgress({
+                        running: !cancelled && !complete,
+                        stopping: false,
+                        cancelled,
+                        failed: false,
+                        complete: complete && !cancelled,
+                        nextPage: batch.nextPage,
+                        ...totals,
+                        hasMore,
+                        truncated: batch.truncated,
+                        limitReached: batch.limitReached,
+                      });
+                      if (batch.saved > 0) void mutate();
+                      if (cancelled || complete) return;
+                      await new Promise((resolve) =>
+                        window.setTimeout(resolve, repairRequestIntervalMs)
+                      );
+                      if (repairRunId.current !== runId) return;
+                      if (stopRepairAfterBatch.current) {
+                        setRepairProgress((current) =>
+                          current
+                            ? {
+                                ...current,
+                                running: false,
+                                stopping: false,
+                                cancelled: true,
+                              }
+                            : current
+                        );
+                        return;
+                      }
+                    }
+                    setRepairProgress((current) =>
+                      current
+                        ? {
+                            ...current,
+                            running: false,
+                            complete: false,
+                            hasMore: false,
+                            truncated: true,
+                          }
+                        : current
+                    );
+                  } catch {
+                    if (repairRunId.current !== runId) return;
+                    setRepairProgress((current) =>
+                      current
+                        ? { ...current, running: false, failed: true }
+                        : current
+                    );
+                  }
+                })();
+              }}
+            >
+              {intl.formatMessage(
+                repairProgress?.hasMore &&
+                  (repairProgress.cancelled || repairProgress.failed)
+                  ? messages.repairContinue
+                  : messages.repair
+              )}
+            </Button>
+            {repairProgress?.running && (
+              <Button
+                disabled={repairProgress.stopping}
+                onClick={() => {
+                  stopRepairAfterBatch.current = true;
+                  setRepairProgress((current) =>
+                    current ? { ...current, stopping: true } : current
+                  );
+                }}
+              >
+                {intl.formatMessage(
+                  repairProgress.stopping
+                    ? messages.repairStopping
+                    : messages.repairStop
+                )}
+              </Button>
+            )}
+          </div>
+          {repairProgress && (
+            <div className="mt-3 space-y-1 text-sm" aria-live="polite">
+              <p>
+                {intl.formatMessage(messages.repairSummary, {
+                  scanned: repairProgress.scanned,
+                  matched: repairProgress.matched,
+                  saved: repairProgress.saved,
+                })}
+              </p>
+              {repairProgress.running && (
+                <p>
+                  {intl.formatMessage(messages.repairRunning, {
+                    page: repairProgress.nextPage,
+                  })}
+                </p>
+              )}
+              {repairProgress.cancelled && (
+                <p>
+                  {intl.formatMessage(messages.repairPaused, {
+                    page: repairProgress.nextPage,
+                  })}
+                </p>
+              )}
+              {repairProgress.complete && (
+                <p>{intl.formatMessage(messages.repairComplete)}</p>
+              )}
+              {repairProgress.failed && (
+                <p role="alert">
+                  {intl.formatMessage(messages.repairFailed, {
+                    page: repairProgress.nextPage,
+                  })}
+                </p>
+              )}
+              {repairProgress.limitReached && (
+                <p role="alert">{intl.formatMessage(messages.repairLimit)}</p>
+              )}
+              {repairProgress.truncated && (
+                <p role="status">
+                  {intl.formatMessage(messages.repairTruncated)}
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
       {connections && !connected && (
         <p>
           {nativeSource

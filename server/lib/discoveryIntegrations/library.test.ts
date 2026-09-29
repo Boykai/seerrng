@@ -17,7 +17,10 @@ import {
   simklWatchedEpisodeLookup,
 } from './episodeWatchState';
 import { savePersonalIdentityMapping } from './identityMappings';
-import { personalProviderLibrary } from './library';
+import {
+  personalProviderLibrary,
+  resolvePersonalProviderLibraryMappings,
+} from './library';
 setupTestDb();
 afterEach(() => mock.restoreAll());
 let sequence = 0;
@@ -77,6 +80,46 @@ it('reads the requested Trakt page and preserves incomplete series progress', as
   assert.equal(result.items[0].status, 'watched');
   assert.equal(result.items[0].progress, 1);
   assert.equal(result.items[0].tmdbId, 80);
+});
+it('combines movie and series pages when browsing all Trakt media types', async () => {
+  const userId = await connect('trakt');
+  mock.method(TraktAPI.prototype, 'prepareAccessToken', async () => undefined);
+  const read = mock.method(
+    TraktAPI.prototype,
+    'getSyncLibraryPage',
+    async (mediaType: 'movie' | 'tv') =>
+      mediaType === 'movie'
+        ? [
+            {
+              movie: {
+                title: 'A tracked movie',
+                ids: { trakt: 11, tmdb: 110 },
+              },
+            },
+          ]
+        : [
+            {
+              show: {
+                title: 'A tracked series',
+                ids: { trakt: 22, tmdb: 220 },
+              },
+            },
+          ]
+  );
+
+  const result = await personalProviderLibrary(userId, 'trakt', 'watched', 1);
+
+  assert.deepEqual(
+    result.items.map(({ title, mediaType }) => ({ title, mediaType })),
+    [
+      { title: 'A tracked movie', mediaType: 'movie' },
+      { title: 'A tracked series', mediaType: 'tv' },
+    ]
+  );
+  assert.deepEqual(
+    read.mock.calls.map((call) => call.arguments[0]),
+    ['movie', 'tv']
+  );
 });
 it('keeps native AniList identity, maps shelves, and paginates the filtered library', async () => {
   const userId = await connect('anilist');
@@ -226,6 +269,48 @@ it('resolves only the visible personal-library page and hides external IDs', asy
       (_, index) => `tt${String(index + 21).padStart(7, '0')}`
     )
   );
+});
+it('scans only the requested bounded pages and returns a resume page', async () => {
+  const userId = await connect('simkl');
+  mock.method(SimklAPI.prototype, 'getAllItems', async () => ({
+    movies: Array.from({ length: 80 }, (_, index) => ({
+      movie: {
+        title: 'Movie ' + String(index + 1).padStart(2, '0'),
+        year: 2024,
+        ids: {
+          simkl: index + 1,
+          imdb: 'tt' + String(index + 1).padStart(7, '0'),
+        },
+      },
+      status: 'completed',
+    })),
+  }));
+  let lookups = 0;
+  mock.method(TheMovieDb.prototype, 'getByExternalId', async () => {
+    lookups += 1;
+    return {
+      movie_results: [],
+      tv_results: [],
+      person_results: [],
+    } as never;
+  });
+
+  const result = await resolvePersonalProviderLibraryMappings(
+    userId,
+    'simkl',
+    'completed',
+    2,
+    2,
+    'movie'
+  );
+
+  assert.equal(result.startPage, 2);
+  assert.equal(result.nextPage, 4);
+  assert.equal(result.pagesScanned, 2);
+  assert.equal(result.scanned, 40);
+  assert.equal(result.matched, 0);
+  assert.equal(result.hasMore, true);
+  assert.equal(lookups, 40);
 });
 it('rejects unsupported pages before looking up a provider account', async () => {
   await assert.rejects(

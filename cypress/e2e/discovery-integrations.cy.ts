@@ -685,6 +685,89 @@ describe('Discovery provider integrations', () => {
       });
     });
 
+  it('scans exact provider IDs in bounded batches and resumes from the next page', () => {
+    cy.intercept('GET', '/api/v1/integrations/discovery/accounts', {
+      accounts: [{ provider: 'anilist', username: 'Reader' }],
+    });
+    cy.intercept('GET', '/api/v1/integrations/discovery/library/anilist*', {
+      items: [],
+      page: 1,
+      hasMore: false,
+      allowWrites: false,
+      missingMappings: 0,
+      truncated: false,
+    });
+    let batch = 0;
+    cy.intercept(
+      'POST',
+      '/api/v1/integrations/discovery/library/anilist/repair',
+      (request) => {
+        batch += 1;
+        if (batch === 1) {
+          expect(request.body).to.deep.equal({
+            shelf: 'all',
+            startPage: 1,
+            pageCount: 5,
+          });
+          request.reply({
+            delay: 1500,
+            body: {
+              startPage: 1,
+              nextPage: 3,
+              pagesScanned: 2,
+              scanned: 40,
+              matched: 3,
+              saved: 3,
+              hasMore: true,
+              truncated: false,
+              limitReached: false,
+            },
+          });
+          return;
+        }
+        expect(request.body).to.deep.equal({
+          shelf: 'all',
+          startPage: 3,
+          pageCount: 5,
+        });
+        request.reply({
+          body: {
+            startPage: 3,
+            nextPage: 4,
+            pagesScanned: 1,
+            scanned: 1,
+            matched: 1,
+            saved: 1,
+            hasMore: false,
+            truncated: false,
+            limitReached: false,
+          },
+        });
+      }
+    ).as('repairBatch');
+
+    cy.visit('/library');
+    cy.contains('button', 'Find exact ID matches across this library').click();
+    cy.contains('button', 'Stop after this batch').click();
+    cy.wait('@repairBatch');
+    cy.contains('Scan paused at page 3.').should('be.visible');
+    cy.contains(
+      'Scanned 40 titles, found 3 exact matches, and saved 3 private title matches.'
+    ).should('be.visible');
+
+    cy.contains('button', 'Continue scan').click();
+    cy.wait('@repairBatch').its('request.body').should('deep.equal', {
+      shelf: 'all',
+      startPage: 3,
+      pageCount: 5,
+    });
+    cy.contains('Library scan complete.').should('be.visible');
+    cy.contains(
+      'Scanned 41 titles, found 4 exact matches, and saved 4 private title matches.'
+    ).should('be.visible');
+    cy.wrap(null).should(() => expect(batch).to.equal(2));
+  });
+
   it('repairs and resets an unmatched personal library title', () => {
     cy.viewport(1280, 900);
     let matched = false;

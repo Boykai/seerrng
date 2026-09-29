@@ -37,10 +37,13 @@ import {
   parsePersonalIdentityMappingPack,
   parsePersonalIdentitySource,
   removePersonalIdentityMapping,
+  saveExternalIdentityMappings,
   savePersonalIdentityMapping,
 } from '@server/lib/discoveryIntegrations/identityMappings';
 import {
+  MAX_PROVIDER_LIBRARY_REPAIR_PAGES_PER_BATCH,
   personalProviderLibrary,
+  resolvePersonalProviderLibraryMappings,
   type LibraryShelf,
 } from '@server/lib/discoveryIntegrations/library';
 import {
@@ -88,6 +91,15 @@ const identityMappingPackRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => `user:${req.user?.id ?? 'anonymous'}`,
+  skip: () =>
+    process.env.NODE_ENV === 'test' || process.env.E2E_TESTS === 'true',
+});
+const identityRepairRateLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => 'user:' + (req.user?.id ?? 'anonymous'),
   skip: () =>
     process.env.NODE_ENV === 'test' || process.env.E2E_TESTS === 'true',
 });
@@ -728,6 +740,69 @@ router.get(
         mediaType as 'movie' | 'tv' | undefined
       )
     );
+  })
+);
+router.post(
+  '/library/:provider/repair',
+  identityRepairRateLimit,
+  handle(async (req, res) => {
+    requireDiscoveryBrowserSession(req);
+    const provider = parseDiscoveryProvider(req.params.provider);
+    if (provider !== 'trakt' && provider !== 'anilist' && provider !== 'simkl')
+      throw new DiscoveryIntegrationError(
+        400,
+        'Choose Trakt, AniList, or Simkl to scan a provider library.'
+      );
+
+    const body = req.body;
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      Array.isArray(body) ||
+      Object.keys(body).some(
+        (key) => !['shelf', 'startPage', 'pageCount', 'mediaType'].includes(key)
+      ) ||
+      ![
+        'all',
+        'watchlist',
+        'watched',
+        'in-progress',
+        'completed',
+        'rated',
+      ].includes(body.shelf) ||
+      !Number.isSafeInteger(body.startPage) ||
+      body.startPage < 1 ||
+      body.startPage > 500 ||
+      !Number.isSafeInteger(body.pageCount) ||
+      body.pageCount < 1 ||
+      body.pageCount > MAX_PROVIDER_LIBRARY_REPAIR_PAGES_PER_BATCH ||
+      (body.mediaType !== undefined &&
+        body.mediaType !== 'movie' &&
+        body.mediaType !== 'tv')
+    )
+      throw new DiscoveryIntegrationError(
+        400,
+        'Choose a valid provider library scan range.'
+      );
+
+    const result = await resolvePersonalProviderLibraryMappings(
+      req.user!.id,
+      provider,
+      body.shelf as LibraryShelf,
+      body.startPage,
+      body.pageCount,
+      body.mediaType as 'movie' | 'tv' | undefined
+    );
+    const { matches, ...scan } = result;
+    const saved = await personalMutation(req, () =>
+      saveExternalIdentityMappings(req.user!.id, provider, matches)
+    );
+    res.json({
+      ...scan,
+      matched: matches.length,
+      saved: saved.saved,
+      limitReached: saved.limitReached,
+    });
   })
 );
 router.get(

@@ -99,6 +99,19 @@ describe('discovery integration OpenAPI contracts', () => {
     );
     assert.equal(
       (
+        await request(app)
+          .post('/api/v1/integrations/discovery/library/anilist/repair')
+          .send({
+            shelf: 'all',
+            startPage: 1,
+            pageCount: 5,
+            mediaType: 'tv',
+          })
+      ).status,
+      200
+    );
+    assert.equal(
+      (
         await request(app).get(
           '/api/v1/integrations/discovery/tracking/trakt/episodes?sourceId=123&tmdbId=456&season=1'
         )
@@ -290,6 +303,17 @@ describe('discovery integration OpenAPI contracts', () => {
             tmdbId: 55,
             accessToken: 'must-not-pass',
           })
+      ).status,
+      400
+    );
+  });
+  it('rejects oversized provider-library repair batches', async () => {
+    const app = createApp();
+    assert.equal(
+      (
+        await request(app)
+          .post('/api/v1/integrations/discovery/library/anilist/repair')
+          .send({ shelf: 'all', startPage: 1, pageCount: 6 })
       ).status,
       400
     );
