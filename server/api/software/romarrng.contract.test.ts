@@ -39,7 +39,13 @@ it('uses the versioned SeerrNG catalog contract and preserves IGDB identity', as
             : url.pathname.endsWith('/platforms')
               ? []
               : url.pathname.endsWith('/games/42')
-                ? { id: 'igdb-42', igdbId: 42 }
+                ? {
+                    id: 'igdb-42',
+                    igdbId: 42,
+                    ...(url.searchParams.has('platformId')
+                      ? { platformReleaseDate: '2026-10-12' }
+                      : {}),
+                  }
                 : url.pathname.endsWith('/requests')
                   ? { externalRequestId: 'request-42', status: 'accepted' }
                   : { error: 'Unknown test endpoint' };
@@ -84,6 +90,7 @@ it('uses the versioned SeerrNG catalog contract and preserves IGDB identity', as
     assert.deepEqual(platforms, []);
     assert.equal(game.igdbId, 42);
     assert.equal(platformGame.igdbId, 42);
+    assert.equal(platformGame.platformReleaseDate, '2026-10-12');
     assert.deepEqual(
       requests.map(({ method, path }) => `${method} ${path.split('?')[0]}`),
       [

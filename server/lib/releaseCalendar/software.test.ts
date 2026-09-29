@@ -239,6 +239,13 @@ it('omits invalid dates and reports an unavailable software catalog without leak
   });
   await addSoftwareRequest({
     requestedById: 1,
+    category: 'retro',
+    catalogId: 47,
+    platformName: 'Game Boy Advance',
+    platformId: 120,
+  });
+  await addSoftwareRequest({
+    requestedById: 1,
     category: 'modern',
     catalogId: 45,
     platformName: 'Steam Deck',
@@ -249,6 +256,7 @@ it('omits invalid dates and reports an unavailable software catalog without leak
     'getCatalogGame',
     async (igdbId: number) => {
       if (igdbId === 44) return game(igdbId, '2026-02-30');
+      if (igdbId === 47) return game(igdbId, null);
       throw new Error('upstream failure includes private-api-key');
     }
   );
