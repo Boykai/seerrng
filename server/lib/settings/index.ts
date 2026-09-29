@@ -512,6 +512,7 @@ export type JobId =
   | 'download-sync-reset'
   | 'jellyfin-recently-added-scan'
   | 'jellyfin-full-scan'
+  | 'jellyfin-watch-ahead'
   | 'image-cache-cleanup'
   | 'availability-sync'
   | 'process-blocklisted-tags';
@@ -856,6 +857,9 @@ class Settings {
         },
         'jellyfin-full-scan': {
           schedule: '0 0 3 * * *',
+        },
+        'jellyfin-watch-ahead': {
+          schedule: '*/30 * * * * *',
         },
         'image-cache-cleanup': {
           schedule: '0 0 5 * * *',
@@ -1700,6 +1704,9 @@ class Settings {
         },
         'jellyfin-full-scan': {
           schedule: '0 0 3 * * *',
+        },
+        'jellyfin-watch-ahead': {
+          schedule: '*/30 * * * * *',
         },
         'image-cache-cleanup': {
           schedule: '0 0 5 * * *',

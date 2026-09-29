@@ -80,6 +80,7 @@ import {
   Column,
   Entity,
   Index,
+  JoinColumn,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
@@ -2602,6 +2603,31 @@ export class MediaRequest {
 
   @Column({ default: false })
   public is4k: boolean;
+
+  /** Number of upcoming unwatched episodes to keep requested automatically. */
+  @Column({ type: 'integer', default: 0 })
+  public watchAheadEpisodeCount: number;
+
+  /** Highest episode whose watched state has been handled by watch-ahead. */
+  @Column({ type: 'integer', nullable: true })
+  public watchAheadLastSeason?: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  public watchAheadLastEpisode?: number | null;
+
+  /** Last time the worker reconciled this enrollment against Sonarr. */
+  @Column({ type: 'integer', nullable: true })
+  public watchAheadLastReconciledAt?: number | null;
+
+  @ManyToOne(() => MediaRequest, (request) => request.watchAheadRequests, {
+    nullable: true,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'watchAheadParentRequestId' })
+  public watchAheadParent?: MediaRequest | null;
+
+  @OneToMany(() => MediaRequest, (request) => request.watchAheadParent)
+  public watchAheadRequests?: MediaRequest[];
 
   @Column({ nullable: true })
   public serverId: number;

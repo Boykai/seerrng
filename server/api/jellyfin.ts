@@ -139,6 +139,7 @@ export interface JellyfinLibraryItemExtended extends JellyfinLibraryItem {
   IsHD?: boolean;
   DateCreated?: string;
   ProductionYear?: number;
+  RunTimeTicks?: number;
   UserData?: {
     Played: boolean;
     PlayCount?: number;
@@ -169,6 +170,11 @@ export interface JellyfinSession {
   SupportsRemoteControl: boolean;
   PlayableMediaTypes: string[];
   SupportedCommands: string[];
+  NowPlayingItem?: JellyfinLibraryItemExtended;
+  PlayState?: {
+    PositionTicks?: number;
+    IsPaused?: boolean;
+  };
 }
 
 export interface JellyfinPlaylist {
@@ -351,6 +357,7 @@ export const sanitizeJellyfinLibraryItem = (
     IsHD: typeof value.IsHD === 'boolean' ? value.IsHD : undefined,
     DateCreated: boundedJellyfinText(value.DateCreated, 128) || undefined,
     ProductionYear: optionalJellyfinInteger(value.ProductionYear),
+    RunTimeTicks: optionalJellyfinInteger(value.RunTimeTicks),
     UserData: isRecord(value.UserData)
       ? {
           Played: value.UserData.Played === true,
@@ -498,6 +505,17 @@ export const sanitizeJellyfinSession = (
       .slice(0, 100)
       .map((item) => boundedJellyfinText(item, 64))
       .filter(Boolean),
+    NowPlayingItem: sanitizeJellyfinLibraryItem(value.NowPlayingItem, true) as
+      JellyfinLibraryItemExtended | undefined,
+    PlayState: isRecord(value.PlayState)
+      ? {
+          PositionTicks: optionalJellyfinInteger(value.PlayState.PositionTicks),
+          IsPaused:
+            typeof value.PlayState.IsPaused === 'boolean'
+              ? value.PlayState.IsPaused
+              : undefined,
+        }
+      : undefined,
   };
 };
 
@@ -1181,6 +1199,40 @@ class JellyfinAPI extends ExternalAPI {
           session.SupportsMediaControl &&
           session.SupportsRemoteControl
       );
+  }
+
+  public async getPlaybackSessions(): Promise<JellyfinSession[]> {
+    const response = await this.get<unknown>('/Sessions', {
+      params: { ActiveWithinSeconds: 300 },
+    });
+
+    return (Array.isArray(response) ? response : [])
+      .slice(0, 100)
+      .flatMap((session) => {
+        const normalized = sanitizeJellyfinSession(session);
+        return normalized?.IsActive && normalized.NowPlayingItem
+          ? [normalized]
+          : [];
+      });
+  }
+
+  public async getUserPlaybackItem(
+    userId: string,
+    itemId: string
+  ): Promise<JellyfinLibraryItemExtended | undefined> {
+    const safeUserId = boundedJellyfinText(userId, 128);
+    const safeItemId = boundedJellyfinText(itemId, 128);
+    if (!safeUserId || !safeItemId) {
+      return undefined;
+    }
+
+    const response = await this.get<unknown>(
+      `/Users/${encodeURIComponent(safeUserId)}/Items/${encodeURIComponent(safeItemId)}`,
+      { params: { fields: 'UserData,ProviderIds,RunTimeTicks' } }
+    );
+    const item = sanitizeJellyfinLibraryItem(response, true) as
+      JellyfinLibraryItemExtended | undefined;
+    return item?.Id === safeItemId ? item : undefined;
   }
 
   public async playOnSession(
