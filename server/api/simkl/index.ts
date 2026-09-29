@@ -54,6 +54,13 @@ export class SimklTemporarilyUnavailableError extends Error {
   }
 }
 
+type SimklEpisodeIds = {
+  simkl?: string | number;
+  tmdb?: number;
+  tvdb?: number;
+  anidb?: number;
+};
+
 type SimklOptions = {
   clientId?: string;
   accessToken?: string;
@@ -361,35 +368,39 @@ export default class SimklAPI extends ExternalAPI {
    * coordinates came from TVDB; TMDB coordinates must keep their own numbering.
    */
   public async setEpisodeHistory(
-    ids: {
-      simkl?: string | number;
-      tmdb?: number;
-      tvdb?: number;
-      anidb?: number;
-    },
+    ids: SimklEpisodeIds,
     season: number,
     episode: number,
     watched: boolean,
     useTvdbAnimeSeasons = false
   ): Promise<unknown> {
+    return this.simklRequest(
+      'post',
+      watched ? '/sync/history' : '/sync/history/remove',
+      SimklAPI.episodeHistoryPayload(ids, season, episode, useTvdbAnimeSeasons)
+    );
+  }
+
+  public static episodeHistoryPayload(
+    ids: SimklEpisodeIds,
+    season: number,
+    episode: number,
+    useTvdbAnimeSeasons = false
+  ): Record<string, unknown> {
     const identifiers = Object.fromEntries(
       Object.entries(ids).filter(([, value]) => Boolean(value))
     );
     if (!Object.keys(identifiers).length) {
       throw new Error('setEpisodeHistory requires at least one id');
     }
-    return this.simklRequest(
-      'post',
-      watched ? '/sync/history' : '/sync/history/remove',
-      {
-        shows: [
-          {
-            ids: identifiers,
-            ...(useTvdbAnimeSeasons ? { use_tvdb_anime_seasons: true } : {}),
-            seasons: [{ number: season, episodes: [{ number: episode }] }],
-          },
-        ],
-      }
-    );
+    return {
+      shows: [
+        {
+          ids: identifiers,
+          ...(useTvdbAnimeSeasons ? { use_tvdb_anime_seasons: true } : {}),
+          seasons: [{ number: season, episodes: [{ number: episode }] }],
+        },
+      ],
+    };
   }
 }

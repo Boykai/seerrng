@@ -34,5 +34,13 @@ describe('TraktAPI sync payload helpers', () => {
         },
       ],
     });
+    assert.deepEqual(TraktAPI.episodeHistoryPayload(42, 3, 7, 1399), {
+      shows: [
+        {
+          ids: { tmdb: 42, tvdb: 1399 },
+          seasons: [{ number: 3, episodes: [{ number: 7 }] }],
+        },
+      ],
+    });
   });
 });

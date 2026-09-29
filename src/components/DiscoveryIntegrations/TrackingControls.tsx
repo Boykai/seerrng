@@ -10,6 +10,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
+const EMPTY_EPISODES: SeasonWithEpisodes['episodes'] = [];
+
 const messages = defineMessages('components.TrackingControls', {
   consent: 'Enable tracking updates in Linked Accounts',
   watched: 'Mark watched',
@@ -39,8 +41,10 @@ const messages = defineMessages('components.TrackingControls', {
   clearEpisodeConfirm:
     'Remove watched status for S{season}E{episode} from your provider account?',
   noEpisodes: 'No episodes are available for this season.',
+  noSeasons: 'No seasons are available for this series.',
   loadSeasonsFailed: 'Series seasons could not be loaded. Try again.',
   loadingSeasons: 'Loading seasons…',
+  loadingEpisodes: 'Loading episodes…',
   loadEpisodesFailed: 'Episode details could not be loaded. Try again.',
 });
 export default function TrackingControls({
@@ -98,13 +102,16 @@ export default function TrackingControls({
       setSelectedEpisode(undefined);
     }
   }, [seasons, selectedSeason]);
-  const { data: seasonDetails, error: seasonError } =
-    useSWR<SeasonWithEpisodes>(
-      episodeTrackingOpen && selectedSeason !== undefined
-        ? `/api/v1/tv/${item.tmdbId}/season/${selectedSeason}`
-        : null
-    );
-  const episodes = seasonDetails?.episodes ?? [];
+  const {
+    data: seasonDetails,
+    error: seasonError,
+    isLoading: episodesLoading,
+  } = useSWR<SeasonWithEpisodes>(
+    episodeTrackingOpen && selectedSeason !== undefined
+      ? `/api/v1/tv/${item.tmdbId}/season/${selectedSeason}`
+      : null
+  );
+  const episodes = seasonDetails?.episodes ?? EMPTY_EPISODES;
   useEffect(() => {
     if (!episodes.length) {
       setSelectedEpisode(undefined);
@@ -196,7 +203,7 @@ export default function TrackingControls({
             <section className="space-y-2 rounded-md border border-gray-700 p-2">
               <Button
                 className="w-full"
-                disabled={busy}
+                disabled={busy || episodeRemovalConfirm !== null}
                 onClick={() => setEpisodeTrackingOpen((value) => !value)}
                 aria-expanded={episodeTrackingOpen}
               >
@@ -212,6 +219,11 @@ export default function TrackingControls({
                   {tvError && (
                     <p role="status" className="text-xs text-red-300">
                       {intl.formatMessage(messages.loadSeasonsFailed)}
+                    </p>
+                  )}
+                  {tvDetails && seasons?.length === 0 && (
+                    <p className="text-xs text-gray-400">
+                      {intl.formatMessage(messages.noSeasons)}
                     </p>
                   )}
                   {seasons && seasons.length > 0 && (
@@ -241,6 +253,11 @@ export default function TrackingControls({
                   {seasonError && (
                     <p role="status" className="text-xs text-red-300">
                       {intl.formatMessage(messages.loadEpisodesFailed)}
+                    </p>
+                  )}
+                  {episodesLoading && (
+                    <p role="status" className="text-xs text-gray-400">
+                      {intl.formatMessage(messages.loadingEpisodes)}
                     </p>
                   )}
                   {seasonDetails && episodes.length === 0 && (

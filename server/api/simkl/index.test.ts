@@ -47,3 +47,38 @@ describe('Simkl account response caching', () => {
     assert.equal(secondRequest.mock.callCount(), 1);
   });
 });
+
+describe('Simkl episode history payloads', () => {
+  it('keeps catalog coordinates and opts into TVDB anime numbering only when requested', () => {
+    assert.deepEqual(
+      SimklAPI.episodeHistoryPayload({ tmdb: 1429, tvdb: 267440 }, 2, 4, true),
+      {
+        shows: [
+          {
+            ids: { tmdb: 1429, tvdb: 267440 },
+            use_tvdb_anime_seasons: true,
+            seasons: [{ number: 2, episodes: [{ number: 4 }] }],
+          },
+        ],
+      }
+    );
+    assert.deepEqual(
+      SimklAPI.episodeHistoryPayload({ tmdb: 1429, tvdb: 267440 }, 1, 7),
+      {
+        shows: [
+          {
+            ids: { tmdb: 1429, tvdb: 267440 },
+            seasons: [{ number: 1, episodes: [{ number: 7 }] }],
+          },
+        ],
+      }
+    );
+  });
+
+  it('requires at least one series identity', () => {
+    assert.throws(
+      () => SimklAPI.episodeHistoryPayload({}, 1, 1),
+      /requires at least one id/
+    );
+  });
+});
