@@ -1,3 +1,6 @@
+import { MediaServerType } from '@server/constants/server';
+import episodeWatchAhead from '@server/lib/episodeWatchAhead';
+import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
 import schedule from 'node-schedule';
@@ -32,6 +35,38 @@ describe('scheduled job lifecycle', () => {
       } else {
         process.env.E2E_TESTS = previousE2eFlag;
       }
+    }
+  });
+
+  it('schedules watch-ahead every 30 seconds only for Jellyfin', async () => {
+    const settings = getSettings();
+    mock.method(episodeWatchAhead, 'run', async () => undefined);
+    const previousMediaServerType = settings.main.mediaServerType;
+    const previousWatchAheadSchedule =
+      settings.jobs['jellyfin-watch-ahead'].schedule;
+
+    try {
+      settings.jobs['jellyfin-watch-ahead'].schedule = '*/30 * * * * *';
+      settings.main.mediaServerType = MediaServerType.EMBY;
+      startJobs();
+      assert.equal(
+        scheduledJobs.some((job) => job.id === 'jellyfin-watch-ahead'),
+        false
+      );
+
+      await stopJobs();
+      settings.main.mediaServerType = MediaServerType.JELLYFIN;
+      startJobs();
+      const watchAheadJob = scheduledJobs.find(
+        (job) => job.id === 'jellyfin-watch-ahead'
+      );
+      assert.ok(watchAheadJob);
+      assert.equal(watchAheadJob.interval, 'seconds');
+      assert.equal(watchAheadJob.cronSchedule, '*/30 * * * * *');
+    } finally {
+      settings.main.mediaServerType = previousMediaServerType;
+      settings.jobs['jellyfin-watch-ahead'].schedule =
+        previousWatchAheadSchedule;
     }
   });
 

@@ -5,6 +5,7 @@ import bookRequestSearchManager from '@server/lib/bookRequestSearch';
 import { syncManagedCollections } from '@server/lib/collectionSync';
 import downloadRecovery from '@server/lib/downloadRecovery';
 import downloadTracker from '@server/lib/downloadtracker';
+import episodeWatchAhead from '@server/lib/episodeWatchAhead';
 import ImageProxy from '@server/lib/imageproxy';
 import refreshToken from '@server/lib/refreshToken';
 import { reconcileActiveRequests } from '@server/lib/requestStatus';
@@ -297,6 +298,21 @@ export const startJobs = (): void => {
       running: () => jellyfinFullScanner.status().running,
       cancelFn: () => jellyfinFullScanner.cancel(),
     });
+
+    if (mediaServerType === MediaServerType.JELLYFIN) {
+      scheduledJobs.push({
+        id: 'jellyfin-watch-ahead',
+        name: 'Jellyfin Episode Watch-Ahead',
+        type: 'process',
+        interval: 'seconds',
+        cronSchedule: jobs['jellyfin-watch-ahead'].schedule,
+        job: schedule.scheduleJob(jobs['jellyfin-watch-ahead'].schedule, () =>
+          runTrackedJob('Jellyfin Episode Watch-Ahead', () =>
+            episodeWatchAhead.run()
+          )
+        ),
+      });
+    }
   }
 
   // Run full radarr scan every 24 hours

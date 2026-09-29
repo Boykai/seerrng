@@ -10,6 +10,7 @@ import request from 'supertest';
 describe('request status routes behind the OpenAPI validator', () => {
   function createValidatedApp(): Express {
     const app = express();
+    app.use(express.json());
     app.use(
       OpenApiValidator.middleware({
         apiSpec: path.join(process.cwd(), 'seerr-api.yml'),
@@ -19,6 +20,9 @@ describe('request status routes behind the OpenAPI validator', () => {
     );
     app.delete('/api/v1/request/:requestId/status', (_req, res) =>
       res.status(204).send()
+    );
+    app.put('/api/v1/request/:requestId/watch-ahead', (_req, res) =>
+      res.status(200).json({})
     );
     app.get('/api/v1/request/status', (_req, res) =>
       res.status(200).json({
@@ -63,6 +67,22 @@ describe('request status routes behind the OpenAPI validator', () => {
     );
 
     assert.strictEqual(response.status, 204);
+  });
+
+  it('allows an integer watch-ahead buffer through the request contract', async () => {
+    const response = await request(createValidatedApp())
+      .put('/api/v1/request/31/watch-ahead')
+      .send({ episodeCount: 3 });
+
+    assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+  });
+
+  it('rejects a watch-ahead buffer above the supported limit', async () => {
+    const response = await request(createValidatedApp())
+      .put('/api/v1/request/31/watch-ahead')
+      .send({ episodeCount: 6 });
+
+    assert.strictEqual(response.status, 400);
   });
 
   for (const filter of ['pending', 'processing', 'deleted']) {

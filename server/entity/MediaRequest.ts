@@ -12,6 +12,7 @@ import {
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
+import { MediaServerType } from '@server/constants/server';
 import dataSource, { getRepository } from '@server/datasource';
 import { Blocklist } from '@server/entity/Blocklist';
 import MediaIdentifier, {
@@ -84,6 +85,7 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
+  RelationId,
   UpdateDateColumn,
   VirtualColumn,
   type EntityManager,
@@ -373,7 +375,7 @@ export class MediaRequest {
   public static request(
     requestBody: MediaRequestBody,
     user: User,
-    options: MediaRequestOptions = {}
+    options: InternalMediaRequestOptions = {}
   ): Promise<MediaRequest> {
     requestBody = { ...requestBody, is4k: requestBody.is4k ?? false };
 
@@ -471,6 +473,29 @@ export class MediaRequest {
 
     if (!requestUser) {
       throw new Error('User missing from request context.');
+    }
+
+    const watchAheadEpisodeCount = requestBody.watchAheadEpisodeCount ?? 0;
+    if (
+      !Number.isSafeInteger(watchAheadEpisodeCount) ||
+      watchAheadEpisodeCount < 0 ||
+      watchAheadEpisodeCount > 5
+    ) {
+      throw new RequestPermissionError(
+        'Jellyfin watch-ahead must be between 0 and 5 episodes.'
+      );
+    }
+    if (watchAheadEpisodeCount > 0) {
+      if (
+        requestBody.mediaType !== MediaType.TV ||
+        requestUser.id !== user.id ||
+        settings.main.mediaServerType !== MediaServerType.JELLYFIN ||
+        !requestUser.jellyfinUserId
+      ) {
+        throw new RequestPermissionError(
+          'Jellyfin watch-ahead can only be enabled by the linked owner of a TV request.'
+        );
+      }
     }
 
     const isManagedRequestForAnotherUser =
@@ -1910,6 +1935,17 @@ export class MediaRequest {
       }
     }
 
+    const resolvedTvdbId = media.tvdbId ?? tvdbId;
+    if (
+      (requestBody.watchAheadEpisodeCount ?? 0) > 0 &&
+      (!Number.isSafeInteger(Number(resolvedTvdbId)) ||
+        Number(resolvedTvdbId) <= 0)
+    ) {
+      throw new ServiceConfigurationError(
+        'Jellyfin watch-ahead requires a valid TVDB identity for this series.'
+      );
+    }
+
     const useAdvancedOptions = canUseAdvancedRequestOptions(user);
     const useOverrides = !user.hasPermission(Permission.MANAGE_REQUESTS);
     const defaultRadarr = requestBody.is4k
@@ -2454,6 +2490,7 @@ export class MediaRequest {
             : MediaRequestStatus.PENDING,
           modifiedBy: autoApproved ? user : undefined,
           is4k: requestBody.is4k,
+          watchAheadEpisodeCount,
           serverId,
           profileId: profileId,
           rootFolder: rootFolder,
@@ -2606,7 +2643,7 @@ export class MediaRequest {
 
   /** Number of upcoming unwatched episodes to keep requested automatically. */
   @Column({ type: 'integer', default: 0 })
-  public watchAheadEpisodeCount: number;
+  public watchAheadEpisodeCount = 0;
 
   /** Highest episode whose watched state has been handled by watch-ahead. */
   @Column({ type: 'integer', nullable: true })
@@ -2625,6 +2662,9 @@ export class MediaRequest {
   })
   @JoinColumn({ name: 'watchAheadParentRequestId' })
   public watchAheadParent?: MediaRequest | null;
+
+  @RelationId((request: MediaRequest) => request.watchAheadParent)
+  public watchAheadParentRequestId?: number | null;
 
   @OneToMany(() => MediaRequest, (request) => request.watchAheadParent)
   public watchAheadRequests?: MediaRequest[];

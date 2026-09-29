@@ -4,7 +4,14 @@ import React from 'react';
 
 interface BadgeProps {
   badgeType?:
-    'default' | 'primary' | 'danger' | 'warning' | 'success' | 'dark' | 'light';
+    | 'default'
+    | 'primary'
+    | 'danger'
+    | 'warning'
+    | 'success'
+    | 'dark'
+    | 'light'
+    | 'association';
   className?: string;
   shape?: 'pill' | 'standard';
   href?: string;
@@ -68,6 +75,14 @@ const Badge = (
       badgeStyle.push('bg-gray-700/35 !text-gray-300');
       if (href) {
         badgeStyle.push('hover:bg-gray-600/55 active:bg-gray-600/70');
+      }
+      break;
+    case 'association':
+      badgeStyle.push(
+        'border border-cyan-500/90 bg-cyan-950/35 !text-cyan-300'
+      );
+      if (href) {
+        badgeStyle.push('hover:bg-cyan-900/55 active:bg-cyan-900/70');
       }
       break;
     default:

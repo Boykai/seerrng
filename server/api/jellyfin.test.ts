@@ -6,6 +6,7 @@ import JellyfinAPI, {
   MAX_JELLYFIN_USERS,
   sanitizeJellyfinLibraryItem,
   sanitizeJellyfinLoginResponse,
+  sanitizeJellyfinSession,
   sanitizeJellyfinSystemInfo,
   sanitizeJellyfinUsers,
 } from './jellyfin';
@@ -89,6 +90,45 @@ describe('JellyfinAPI address policy', () => {
 });
 
 describe('Jellyfin response normalization', () => {
+  it('preserves safe playback tick values larger than ordinary API integers', () => {
+    const runtimeTicks = 2_400_000_000_000;
+    const positionTicks = 2_200_000_000_000;
+    const session = sanitizeJellyfinSession({
+      Id: 'session',
+      DeviceName: 'TV',
+      Client: 'Jellyfin',
+      IsActive: true,
+      NowPlayingItem: {
+        Id: 'episode',
+        Name: 'Episode',
+        Type: 'Episode',
+        RunTimeTicks: runtimeTicks,
+        UserData: {
+          Played: true,
+          PlaybackPositionTicks: positionTicks,
+        },
+      },
+      PlayState: { PositionTicks: positionTicks, IsPaused: false },
+    });
+
+    assert.equal(session?.NowPlayingItem?.RunTimeTicks, runtimeTicks);
+    assert.equal(
+      session?.NowPlayingItem?.UserData?.PlaybackPositionTicks,
+      positionTicks
+    );
+    assert.equal(session?.PlayState?.PositionTicks, positionTicks);
+    assert.equal(
+      sanitizeJellyfinSession({
+        Id: 'unsafe',
+        DeviceName: 'TV',
+        Client: 'Jellyfin',
+        IsActive: true,
+        PlayState: { PositionTicks: Number.MAX_SAFE_INTEGER + 1 },
+      })?.PlayState?.PositionTicks,
+      undefined
+    );
+  });
+
   it('caps users and drops provider credentials and unknown fields', () => {
     const users = sanitizeJellyfinUsers([
       null,

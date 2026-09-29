@@ -36,6 +36,7 @@ import {
 import { ArrowDownTrayIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+import { MediaServerType } from '@server/constants/server';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { SeasonEpisodeSelection } from '@server/interfaces/api/seasonInterfaces';
@@ -88,6 +89,12 @@ const messages = defineMessages('components.RequestModal', {
   notAvailable: 'Not Available',
   advancedOptions: 'Advanced Options',
   quality: 'Quality',
+  watchAheadLabel: 'Keep upcoming episodes requested',
+  watchAheadDescription:
+    'After this TV request is approved, SeerrNG checks your linked Jellyfin playback every 30 seconds and keeps this many upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
+  watchAheadOff: 'Off',
+  watchAheadEpisodeOption:
+    '{count, plural, one {# episode} other {# episodes}}',
 });
 
 interface RequestModalProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -110,6 +117,7 @@ const TvRequestModal = ({
   allow4kServerSelection = false,
 }: RequestModalProps) => {
   const settings = useSettings();
+  const { user, hasPermission } = useUser();
   const [selectedIs4k, setSelectedIs4k] = useState(is4k);
   const [qualityRevision, setQualityRevision] = useState(0);
   const { addToast } = useToasts();
@@ -125,6 +133,9 @@ const TvRequestModal = ({
   const [seasonSelections, setSeasonSelections] = useState<
     SeasonEpisodeSelection[]
   >(editRequest ? editingSeasonSelections : []);
+  const [watchAheadEpisodeCount, setWatchAheadEpisodeCount] = useState(
+    editRequest?.watchAheadEpisodeCount ?? 0
+  );
   const [initializedSelectionKey, setInitializedSelectionKey] = useState('');
   const [activeSeason, setActiveSeason] = useState<number>(
     editingSeasonSelections[0]?.seasonNumber ?? -1
@@ -150,7 +161,6 @@ const TvRequestModal = ({
     [playbackCatalog]
   );
   const intl = useIntl();
-  const { user, hasPermission } = useUser();
   const [searchModal, setSearchModal] = useState<{
     show: boolean;
   }>({
@@ -166,6 +176,9 @@ const TvRequestModal = ({
       ? `/api/v1/user/${requestOverrides?.user?.id ?? user.id}/quota`
       : null
   );
+  const isWatchAheadRequestForCurrentUser = editRequest
+    ? editRequest.requestedBy.id === user?.id
+    : !requestOverrides?.user || requestOverrides.user.id === user?.id;
   const { data: sonarrServers } = useSWR<ServiceCommonServer[]>(
     '/api/v1/service/sonarr',
     {
@@ -180,6 +193,23 @@ const TvRequestModal = ({
   const fallbackService = sonarrServers?.find(
     (server) => server.isDefault && server.is4k === effectiveIs4k
   );
+  const watchAheadTvdbId = editRequest
+    ? editRequest.media.tvdbId
+    : (tvdbId ?? data?.externalIds.tvdbId);
+  const canConfigureWatchAhead =
+    settings.currentSettings.mediaServerType === MediaServerType.JELLYFIN &&
+    Boolean(user?.jellyfinUsername) &&
+    Number.isSafeInteger(Number(watchAheadTvdbId)) &&
+    Number(watchAheadTvdbId) > 0 &&
+    hasPermission(
+      effectiveIs4k
+        ? [Permission.REQUEST_4K, Permission.REQUEST_4K_TV]
+        : [Permission.REQUEST, Permission.REQUEST_TV],
+      { type: 'or' }
+    ) &&
+    Boolean(selectedService ?? fallbackService) &&
+    isWatchAheadRequestForCurrentUser &&
+    !editRequest?.watchAheadParentRequestId;
   const selectedDestination = useMemo(
     () =>
       createRequestDestination(
@@ -236,6 +266,10 @@ const TvRequestModal = ({
           tags: requestOverrides?.tags,
           seasons: [...selectedSeasons].sort((a, b) => a - b),
           seasonRequests: seasonSelections,
+          ...(canConfigureWatchAhead ||
+          (isWatchAheadRequestForCurrentUser && watchAheadEpisodeCount === 0)
+            ? { watchAheadEpisodeCount }
+            : {}),
         });
 
         if (alsoApproveRequest) {
@@ -329,6 +363,9 @@ const TvRequestModal = ({
         seasonRequests: settings.currentSettings.partialRequestsEnabled
           ? requestableSelections
           : undefined,
+        ...(isWatchAheadRequestForCurrentUser
+          ? { watchAheadEpisodeCount }
+          : {}),
         ...overrideParams,
       });
       mutate('/api/v1/request?filter=all&take=10&sort=modified&skip=0');
@@ -886,6 +923,39 @@ const TvRequestModal = ({
               }
             }}
           />
+        )}
+
+        {canConfigureWatchAhead && (
+          <div className="mt-3 rounded-md border border-indigo-500/40 bg-indigo-950/30 p-3">
+            <label
+              htmlFor="tv-watch-ahead-count"
+              className="block text-sm font-semibold text-gray-100"
+            >
+              {intl.formatMessage(messages.watchAheadLabel)}
+            </label>
+            <select
+              id="tv-watch-ahead-count"
+              className="app-control-standard-radius mt-2 w-full bg-gray-800 px-3 py-2 text-sm text-white"
+              value={watchAheadEpisodeCount}
+              onChange={(event) =>
+                setWatchAheadEpisodeCount(Number(event.target.value))
+              }
+            >
+              <option value={0}>
+                {intl.formatMessage(messages.watchAheadOff)}
+              </option>
+              {[1, 2, 3, 4, 5].map((count) => (
+                <option key={count} value={count}>
+                  {intl.formatMessage(messages.watchAheadEpisodeOption, {
+                    count,
+                  })}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-gray-300">
+              {intl.formatMessage(messages.watchAheadDescription)}
+            </p>
+          </div>
         )}
 
         {!editRequest && (

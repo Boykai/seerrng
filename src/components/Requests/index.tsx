@@ -25,6 +25,7 @@ import useDebouncedState from '@app/hooks/useDebouncedState';
 import useMediaFilterPin from '@app/hooks/useMediaFilterPin';
 import useRequestStatusScrollRestoration from '@app/hooks/useRequestStatusScrollRestoration';
 import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
+import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import {
@@ -53,11 +54,13 @@ import {
 } from '@heroicons/react/24/outline';
 import { BarsArrowDownIcon, BarsArrowUpIcon } from '@heroicons/react/24/solid';
 import { MediaRequestStatus } from '@server/constants/media';
+import { MediaServerType } from '@server/constants/server';
 import type {
   RequestStatusDetailResponse,
   RequestStatusResultsResponse,
   RequestStatusUsersResponse,
 } from '@server/interfaces/api/requestInterfaces';
+import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfaces';
 import type { RequestStatusSortField } from '@server/lib/requestStatusSort';
 import type { BookDetails } from '@server/models/Book';
 import type { ComicDetails } from '@server/models/Comic';
@@ -214,6 +217,13 @@ const messages = defineMessages('components.Requests', {
   edit: 'Edit',
   editTooltip: 'Edit this pending request.',
   modifyFailed: 'Unable to update this request.',
+  watchAheadLabel: 'Keep next episodes requested',
+  watchAheadDescription:
+    'After this TV request is approved, SeerrNG checks your linked Jellyfin playback every 30 seconds and keeps this many upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
+  watchAheadOff: 'Off',
+  watchAheadOption: '{count, plural, one {# episode} other {# episodes}}',
+  watchAheadUpdated: 'Jellyfin watch-ahead setting updated.',
+  watchAheadFailed: 'Unable to update Jellyfin watch-ahead.',
   retryFailed: 'Unable to retry this request.',
   retrySuccess: 'Request queued for another attempt.',
   ...requestActionMessageText,
@@ -1151,7 +1161,15 @@ const RequestStatusCard = ({
   const intl = useIntl();
   const { addToast } = useToasts();
   const { hasPermission, user } = useUser();
+  const { currentSettings } = useSettings();
+  const { data: sonarrServers } = useSWR<ServiceCommonServer[]>(
+    '/api/v1/service/sonarr'
+  );
   const { mutate: mutateCache } = useSWRConfig();
+  const [watchAheadEpisodeCount, setWatchAheadEpisodeCount] = useState(
+    item.request.watchAheadEpisodeCount ?? 0
+  );
+  const [isUpdatingWatchAhead, setIsUpdatingWatchAhead] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [isModifying, setIsModifying] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -1169,6 +1187,31 @@ const RequestStatusCard = ({
       }
     );
   const reportedCurrent = detail?.current ?? item.status;
+  const matchingSonarr =
+    item.request.serverId != null
+      ? sonarrServers?.find(
+          (server) =>
+            server.id === item.request.serverId &&
+            server.is4k === item.request.is4k
+        )
+      : sonarrServers?.find(
+          (server) => server.isDefault && server.is4k === item.request.is4k
+        );
+  const canEnableWatchAhead =
+    currentSettings.mediaServerType === MediaServerType.JELLYFIN &&
+    Boolean(user?.jellyfinUsername) &&
+    Number.isSafeInteger(Number(item.request.media.tvdbId)) &&
+    Number(item.request.media.tvdbId) > 0 &&
+    Boolean(matchingSonarr) &&
+    hasPermission(
+      item.request.is4k
+        ? [Permission.REQUEST_4K, Permission.REQUEST_4K_TV]
+        : [Permission.REQUEST, Permission.REQUEST_TV],
+      { type: 'or' }
+    );
+  useEffect(() => {
+    setWatchAheadEpisodeCount(item.request.watchAheadEpisodeCount ?? 0);
+  }, [item.request.id, item.request.watchAheadEpisodeCount]);
   const observedCurrent =
     item.request.rootFolder === '__preview_downloading__'
       ? {
@@ -1263,6 +1306,11 @@ const RequestStatusCard = ({
     isAdminView &&
     hasPermission(Permission.MANAGE_REQUESTS) &&
     item.request.status === MediaRequestStatus.PENDING;
+  const canManageWatchAhead =
+    item.request.type === 'tv' &&
+    !item.request.watchAheadParentRequestId &&
+    item.request.requestedBy.id === user?.id &&
+    (canEnableWatchAhead || watchAheadEpisodeCount > 0);
   const posterBadgeClassName =
     'h-[18px] w-full justify-center gap-0.5 px-1 py-0 text-[9px] shadow-sm backdrop-blur-[1px] [&_svg]:h-2.5 [&_svg]:w-2.5 [&_svg]:-translate-y-px';
   const posterBadge = bookFormat ? (
@@ -1287,6 +1335,27 @@ const RequestStatusCard = ({
       ),
       mutateCache('/api/v1/request/count'),
     ]);
+  };
+  const updateWatchAhead = async (episodeCount: number) => {
+    setIsUpdatingWatchAhead(true);
+    try {
+      await axios.put(`/api/v1/request/${item.request.id}/watch-ahead`, {
+        episodeCount,
+      });
+      setWatchAheadEpisodeCount(episodeCount);
+      await refreshRequestStatus();
+      addToast(intl.formatMessage(messages.watchAheadUpdated), {
+        appearance: 'success',
+        autoDismiss: true,
+      });
+    } catch {
+      addToast(intl.formatMessage(messages.watchAheadFailed), {
+        appearance: 'error',
+        autoDismiss: true,
+      });
+    } finally {
+      setIsUpdatingWatchAhead(false);
+    }
   };
   const modifyPendingRequest = async (action: 'approve' | 'decline') => {
     setIsModifying(true);
@@ -1335,6 +1404,47 @@ const RequestStatusCard = ({
   }, []);
   const actionControls = (
     <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+      {canManageWatchAhead && (
+        <Tooltip content={intl.formatMessage(messages.watchAheadDescription)}>
+          <span className="inline-flex">
+            <label
+              className="sr-only"
+              htmlFor={`watch-ahead-${item.request.id}`}
+            >
+              {intl.formatMessage(messages.watchAheadLabel)}
+            </label>
+            <select
+              id={`watch-ahead-${item.request.id}`}
+              aria-label={intl.formatMessage(messages.watchAheadLabel)}
+              className="compact-control rounded-md border border-indigo-500/70 bg-indigo-950/50 px-2 text-[11px] font-semibold text-indigo-100"
+              value={watchAheadEpisodeCount}
+              disabled={isUpdatingWatchAhead}
+              onChange={(event) =>
+                void updateWatchAhead(Number(event.target.value))
+              }
+            >
+              <option value={0}>
+                {intl.formatMessage(messages.watchAheadOff)}
+              </option>
+              {canEnableWatchAhead
+                ? [1, 2, 3, 4, 5].map((count) => (
+                    <option key={count} value={count}>
+                      {intl.formatMessage(messages.watchAheadOption, {
+                        count,
+                      })}
+                    </option>
+                  ))
+                : watchAheadEpisodeCount > 0 && (
+                    <option value={watchAheadEpisodeCount} disabled>
+                      {intl.formatMessage(messages.watchAheadOption, {
+                        count: watchAheadEpisodeCount,
+                      })}
+                    </option>
+                  )}
+            </select>
+          </span>
+        </Tooltip>
+      )}
       {canModeratePending && (
         <>
           <Tooltip content={intl.formatMessage(messages.approveTooltip)}>
@@ -2003,7 +2113,12 @@ const Requests = () => {
     setTimeFrame('all');
     setSearchFilter('');
     if (canViewOtherUsers) setSelectedUser('all');
-  }, [canViewOtherUsers, focusedRequestId, focusedSoftwareRequestId]);
+  }, [
+    canViewOtherUsers,
+    focusedRequestId,
+    focusedSoftwareRequestId,
+    setSearchFilter,
+  ]);
   const page = Math.max(Number(router.query.page) || 1, 1);
   const apiMediaType =
     mediaFilter === 'book' || mediaFilter === 'audiobook'

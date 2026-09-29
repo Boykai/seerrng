@@ -8,6 +8,7 @@ import {
   MediaType,
 } from '@server/constants/media';
 import type { MediaCategoryKey } from '@server/constants/mediaCategories';
+import { MediaServerType } from '@server/constants/server';
 import dataSource, { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import MediaIdentifier, {
@@ -395,6 +396,41 @@ const logRequestValidationFailure = (
     userId,
   });
 };
+
+const getWatchAheadEligibilityError = (
+  requestUser: User,
+  actorId: number,
+  is4k: boolean,
+  serverId: number | undefined
+): string | undefined => {
+  if (requestUser.id !== actorId) {
+    return 'Only the request owner can enable Jellyfin watch-ahead.';
+  }
+  if (!hasMediaRequestPermission(requestUser, MediaType.TV, is4k)) {
+    return 'Your account does not have permission to request TV.';
+  }
+  const settings = getExternalRuntimeConfig();
+  if (
+    settings.main.mediaServerType !== MediaServerType.JELLYFIN ||
+    !requestUser.jellyfinUserId
+  ) {
+    return 'Link a Jellyfin account to enable watch-ahead.';
+  }
+  const sonarrServer =
+    serverId === undefined
+      ? settings.sonarr.find(
+          (server) => server.isDefault && Boolean(server.is4k) === is4k
+        )
+      : settings.sonarr.find(
+          (server) => server.id === serverId && Boolean(server.is4k) === is4k
+        );
+  return sonarrServer
+    ? undefined
+    : 'A matching Sonarr server must be configured to enable watch-ahead.';
+};
+
+const hasWatchAheadTvdbIdentity = (tvdbId: unknown): boolean =>
+  Number.isSafeInteger(Number(tvdbId)) && Number(tvdbId) > 0;
 
 const parseRequestStatusAction = (
   status: unknown
@@ -801,6 +837,29 @@ const sanitizeMediaRequestBody = (
     };
   }
 
+  if (bodyObject.watchAheadEpisodeCount !== undefined) {
+    if (
+      !Number.isSafeInteger(bodyObject.watchAheadEpisodeCount) ||
+      Number(bodyObject.watchAheadEpisodeCount) < 0 ||
+      Number(bodyObject.watchAheadEpisodeCount) > 5
+    ) {
+      return {
+        error: {
+          status: 400,
+          message: 'watchAheadEpisodeCount must be an integer from 0 to 5.',
+        },
+      };
+    }
+    if (mediaType !== MediaType.TV) {
+      return {
+        error: {
+          status: 400,
+          message: 'watchAheadEpisodeCount is only valid for TV requests.',
+        },
+      };
+    }
+  }
+
   if (mediaType === MediaType.MUSIC && bodyObject.mediaId !== undefined) {
     if (
       typeof bodyObject.mediaId !== 'string' ||
@@ -1114,6 +1173,8 @@ const sanitizeMediaRequestBody = (
       seasonRequests.value?.map((selection) => selection.seasonNumber) ??
       seasons.value,
     seasonRequests: seasonRequests.value,
+    watchAheadEpisodeCount: bodyObject.watchAheadEpisodeCount as
+      number | undefined,
   } as MediaRequestBody;
 
   return {
@@ -2228,6 +2289,27 @@ requestRoutes.post<never, MediaRequest, MediaRequestBody>(
         });
       }
 
+      if ((body.value.watchAheadEpisodeCount ?? 0) > 0) {
+        if (
+          body.value.userId !== undefined &&
+          body.value.userId !== req.user.id
+        ) {
+          return next({
+            status: 403,
+            message: 'Only the request owner can enable Jellyfin watch-ahead.',
+          });
+        }
+        const eligibilityError = getWatchAheadEligibilityError(
+          req.user,
+          req.user.id,
+          body.value.is4k ?? false,
+          body.value.serverId
+        );
+        if (eligibilityError) {
+          return next({ status: 409, message: eligibilityError });
+        }
+      }
+
       const request = await MediaRequest.request(body.value, req.user, {
         expectedCredentialVersion: getExpectedCredentialVersion(req),
       });
@@ -3188,6 +3270,177 @@ requestRoutes.get('/:requestId', async (req, res, next) => {
 });
 
 requestRoutes.put<{ requestId: string }>(
+  '/:requestId/watch-ahead',
+  async (req, res, next) => {
+    try {
+      const requestId = parseRequestParamId(req.params.requestId);
+      if (!requestId) {
+        return next({ status: 404, message: 'Request not found.' });
+      }
+      const body = req.body as { episodeCount?: unknown } | undefined;
+      const episodeCount = body?.episodeCount;
+      if (
+        !Number.isSafeInteger(episodeCount) ||
+        Number(episodeCount) < 0 ||
+        Number(episodeCount) > 5
+      ) {
+        return next({
+          status: 400,
+          message: 'episodeCount must be an integer from 0 to 5.',
+        });
+      }
+      const parsedEpisodeCount = Number(episodeCount);
+
+      const requestRepository = getRepository(MediaRequest);
+      const initialRequest = await requestRepository.findOne({
+        where: { id: requestId },
+        relations: { requestedBy: true, watchAheadParent: true },
+      });
+      if (!initialRequest) {
+        return next({ status: 404, message: 'Request not found.' });
+      }
+
+      return await runUserSecurityMutationWithActor(
+        req.user!.id,
+        initialRequest.requestedBy.id,
+        [Permission.MANAGE_REQUESTS],
+        async (actor) => {
+          // Enabling watch-ahead is explicit consent for future acquisition;
+          // administrators can manage the request but cannot opt in for its owner.
+          if (actor.id !== initialRequest.requestedBy.id) {
+            return next({
+              status: 403,
+              message:
+                'Only the request owner can change Jellyfin watch-ahead.',
+            });
+          }
+
+          return await runWithRequestAdmission(
+            [getRequestMutationAdmissionKey(requestId)],
+            async () => {
+              const updatedRequest = await dataSource.transaction(
+                async (manager) => {
+                  const repository = manager.getRepository(MediaRequest);
+                  const current = await repository.findOne({
+                    where: { id: requestId },
+                    relations: {
+                      media: true,
+                      requestedBy: true,
+                      watchAheadParent: true,
+                    },
+                  });
+                  if (!current) {
+                    return undefined;
+                  }
+                  if (
+                    current.type !== MediaType.TV ||
+                    current.watchAheadParentRequestId
+                  ) {
+                    throw Object.assign(
+                      new Error(
+                        'Watch-ahead can only be changed on a parent TV request.'
+                      ),
+                      { status: 400 }
+                    );
+                  }
+                  if (current.requestedBy.id !== actor.id) {
+                    throw Object.assign(new Error('Access denied.'), {
+                      status: 403,
+                    });
+                  }
+
+                  if (parsedEpisodeCount > 0) {
+                    if (
+                      ![
+                        MediaRequestStatus.PENDING,
+                        MediaRequestStatus.APPROVED,
+                        MediaRequestStatus.COMPLETED,
+                      ].includes(current.status)
+                    ) {
+                      throw Object.assign(
+                        new Error(
+                          'Watch-ahead can only be enabled for pending, approved, or completed requests.'
+                        ),
+                        { status: 409 }
+                      );
+                    }
+                    const eligibilityError = getWatchAheadEligibilityError(
+                      current.requestedBy,
+                      actor.id,
+                      current.is4k,
+                      current.serverId
+                    );
+                    if (eligibilityError) {
+                      throw Object.assign(new Error(eligibilityError), {
+                        status: 409,
+                      });
+                    }
+                    if (!hasWatchAheadTvdbIdentity(current.media.tvdbId)) {
+                      throw Object.assign(
+                        new Error(
+                          'Jellyfin watch-ahead requires a valid TVDB identity for this series.'
+                        ),
+                        { status: 409 }
+                      );
+                    }
+                  }
+
+                  const changed =
+                    current.watchAheadEpisodeCount !== parsedEpisodeCount;
+                  await repository.update(current.id, {
+                    watchAheadEpisodeCount: parsedEpisodeCount,
+                    ...(changed
+                      ? {
+                          watchAheadLastSeason: null,
+                          watchAheadLastEpisode: null,
+                          watchAheadLastReconciledAt: null,
+                        }
+                      : {}),
+                  });
+                  return repository.findOne({
+                    where: { id: current.id },
+                    relations: { media: true, requestedBy: true },
+                  });
+                }
+              );
+
+              if (!updatedRequest) {
+                return next({ status: 404, message: 'Request not found.' });
+              }
+              return res
+                .status(200)
+                .json(filterEntityResponse(updatedRequest, actor));
+            }
+          );
+        },
+        { expectedCredentialVersion: getExpectedCredentialVersion(req) }
+      );
+    } catch (error) {
+      if (error instanceof UserMutationActorUnauthorizedError) {
+        return next({ status: 403, message: 'Access denied.' });
+      }
+      if (
+        error &&
+        typeof error === 'object' &&
+        'status' in error &&
+        typeof error.status === 'number'
+      ) {
+        return next({
+          status: error.status,
+          message: error instanceof Error ? error.message : 'Invalid request.',
+        });
+      }
+      logger.error('Failed to update Jellyfin watch-ahead setting', {
+        label: 'Request',
+        requestId: req.params.requestId,
+        ...getErrorLogFields(error),
+      });
+      return next({ status: 500, message: 'Unable to update watch-ahead.' });
+    }
+  }
+);
+
+requestRoutes.put<{ requestId: string }>(
   '/:requestId',
   async (req, res, next) => {
     const requestRepository = getRepository(MediaRequest);
@@ -3372,6 +3625,50 @@ requestRoutes.put<{ requestId: string }>(
                         body.format ?? request.bookFormat ?? 'ebook';
                     }
                   } else if (request.type === MediaType.TV) {
+                    if (body.watchAheadEpisodeCount !== undefined) {
+                      if (requestUser.id !== actor.id) {
+                        return next({
+                          status: 403,
+                          message:
+                            'Only the request owner can change Jellyfin watch-ahead.',
+                        });
+                      }
+                      if (body.watchAheadEpisodeCount > 0) {
+                        const eligibilityError = getWatchAheadEligibilityError(
+                          requestUser,
+                          actor.id,
+                          request.is4k,
+                          body.serverId ?? request.serverId
+                        );
+                        if (eligibilityError) {
+                          return next({
+                            status: eligibilityError.startsWith(
+                              'Only the request owner'
+                            )
+                              ? 403
+                              : 409,
+                            message: eligibilityError,
+                          });
+                        }
+                        if (!hasWatchAheadTvdbIdentity(request.media.tvdbId)) {
+                          return next({
+                            status: 409,
+                            message:
+                              'Jellyfin watch-ahead requires a valid TVDB identity for this series.',
+                          });
+                        }
+                      }
+                      const watchAheadChanged =
+                        request.watchAheadEpisodeCount !==
+                        body.watchAheadEpisodeCount;
+                      request.watchAheadEpisodeCount =
+                        body.watchAheadEpisodeCount;
+                      if (watchAheadChanged) {
+                        request.watchAheadLastSeason = null;
+                        request.watchAheadLastEpisode = null;
+                        request.watchAheadLastReconciledAt = null;
+                      }
+                    }
                     const requestedSeasons =
                       body.seasons === 'all' ? undefined : body.seasons;
                     const requestedSelections:
@@ -3593,6 +3890,12 @@ requestRoutes.put<{ requestId: string }>(
                     }
                   }
 
+                  if (changesRequestUser && request.type === MediaType.TV) {
+                    request.watchAheadEpisodeCount = 0;
+                    request.watchAheadLastSeason = null;
+                    request.watchAheadLastEpisode = null;
+                    request.watchAheadLastReconciledAt = null;
+                  }
                   request.requestedBy = requestUser;
                   await requestRepository.save(request);
                   return res

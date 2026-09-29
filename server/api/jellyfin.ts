@@ -209,6 +209,14 @@ const optionalJellyfinInteger = (value: unknown): number | undefined =>
     ? value
     : undefined;
 
+// Jellyfin stores playback offsets and runtimes in 100-nanosecond ticks.
+// Those values are routinely in the tens of billions, so they must not use
+// the small bound intended for episode numbers and other ordinary integers.
+const optionalJellyfinTicks = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : undefined;
+
 const jellyfinItemTypes = [
   'Movie',
   'Episode',
@@ -357,12 +365,12 @@ export const sanitizeJellyfinLibraryItem = (
     IsHD: typeof value.IsHD === 'boolean' ? value.IsHD : undefined,
     DateCreated: boundedJellyfinText(value.DateCreated, 128) || undefined,
     ProductionYear: optionalJellyfinInteger(value.ProductionYear),
-    RunTimeTicks: optionalJellyfinInteger(value.RunTimeTicks),
+    RunTimeTicks: optionalJellyfinTicks(value.RunTimeTicks),
     UserData: isRecord(value.UserData)
       ? {
           Played: value.UserData.Played === true,
           PlayCount: optionalJellyfinInteger(value.UserData.PlayCount),
-          PlaybackPositionTicks: optionalJellyfinInteger(
+          PlaybackPositionTicks: optionalJellyfinTicks(
             value.UserData.PlaybackPositionTicks
           ),
           PlayedPercentage:
@@ -509,7 +517,7 @@ export const sanitizeJellyfinSession = (
       JellyfinLibraryItemExtended | undefined,
     PlayState: isRecord(value.PlayState)
       ? {
-          PositionTicks: optionalJellyfinInteger(value.PlayState.PositionTicks),
+          PositionTicks: optionalJellyfinTicks(value.PlayState.PositionTicks),
           IsPaused:
             typeof value.PlayState.IsPaused === 'boolean'
               ? value.PlayState.IsPaused

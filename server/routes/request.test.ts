@@ -16,6 +16,7 @@ import {
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
+import { MediaServerType } from '@server/constants/server';
 import { UserType } from '@server/constants/user';
 import dataSource, { getRepository } from '@server/datasource';
 import { Blocklist } from '@server/entity/Blocklist';
@@ -399,6 +400,291 @@ function createSonarrSettings(id: number, isDefault = true) {
     monitorNewItems: 'all' as const,
   };
 }
+
+describe('PUT /request/:requestId/watch-ahead', () => {
+  it('allows the linked request owner to enable and disable their TV buffer', async () => {
+    const settings = getSettings();
+    const previousMediaServerType = settings.main.mediaServerType;
+    settings.main.mediaServerType = MediaServerType.JELLYFIN;
+    configureSonarr([{}]);
+
+    try {
+      const userRepository = getRepository(User);
+      const requestedBy = await userRepository.findOneOrFail({
+        where: { email: 'friend@seerr.dev' },
+      });
+      requestedBy.jellyfinUserId = '01234567-89ab-cdef-0123-456789abcdef';
+      requestedBy.jellyfinUsername = 'friend';
+      await userRepository.save(requestedBy);
+
+      const media = await getRepository(Media).save(
+        new Media({
+          mediaType: MediaType.TV,
+          tmdbId: 765432,
+          tvdbId: 123456,
+          status: MediaStatus.UNKNOWN,
+          status4k: MediaStatus.UNKNOWN,
+        })
+      );
+      const tvRequest = await getRepository(MediaRequest).save(
+        new MediaRequest({
+          type: MediaType.TV,
+          status: MediaRequestStatus.APPROVED,
+          media,
+          requestedBy,
+          is4k: false,
+          serverId: 0,
+          seasons: [],
+        })
+      );
+
+      const owner = await loginAs('friend@seerr.dev', 'test1234');
+      const enabled = await owner
+        .put(`/request/${tvRequest.id}/watch-ahead`)
+        .send({ episodeCount: 3 });
+      assert.strictEqual(enabled.status, 200);
+      assert.strictEqual(enabled.body.watchAheadEpisodeCount, 3);
+
+      const disabled = await owner
+        .put(`/request/${tvRequest.id}/watch-ahead`)
+        .send({ episodeCount: 0 });
+      assert.strictEqual(disabled.status, 200);
+      assert.strictEqual(disabled.body.watchAheadEpisodeCount, 0);
+    } finally {
+      settings.main.mediaServerType = previousMediaServerType;
+    }
+  });
+
+  it('does not let an administrator opt in for another user', async () => {
+    const settings = getSettings();
+    const previousMediaServerType = settings.main.mediaServerType;
+    settings.main.mediaServerType = MediaServerType.JELLYFIN;
+    configureSonarr([{}]);
+
+    try {
+      const userRepository = getRepository(User);
+      const requestedBy = await userRepository.findOneOrFail({
+        where: { email: 'friend@seerr.dev' },
+      });
+      requestedBy.jellyfinUserId = '01234567-89ab-cdef-0123-456789abcdef';
+      requestedBy.jellyfinUsername = 'friend';
+      await userRepository.save(requestedBy);
+
+      const media = await getRepository(Media).save(
+        new Media({
+          mediaType: MediaType.TV,
+          tmdbId: 765433,
+          tvdbId: 123457,
+          status: MediaStatus.UNKNOWN,
+          status4k: MediaStatus.UNKNOWN,
+        })
+      );
+      const tvRequest = await getRepository(MediaRequest).save(
+        new MediaRequest({
+          type: MediaType.TV,
+          status: MediaRequestStatus.APPROVED,
+          media,
+          requestedBy,
+          is4k: false,
+          serverId: 0,
+          seasons: [],
+        })
+      );
+
+      const admin = await loginAs('admin@seerr.dev', 'test1234');
+      const response = await admin
+        .put(`/request/${tvRequest.id}/watch-ahead`)
+        .send({ episodeCount: 2 });
+      assert.strictEqual(response.status, 403);
+
+      tvRequest.watchAheadEpisodeCount = 2;
+      await getRepository(MediaRequest).save(tvRequest);
+      const disableResponse = await admin
+        .put(`/request/${tvRequest.id}/watch-ahead`)
+        .send({ episodeCount: 0 });
+      assert.strictEqual(disableResponse.status, 403);
+      assert.strictEqual(
+        (
+          await getRepository(MediaRequest).findOneByOrFail({
+            id: tvRequest.id,
+          })
+        ).watchAheadEpisodeCount,
+        2
+      );
+    } finally {
+      settings.main.mediaServerType = previousMediaServerType;
+    }
+  });
+
+  it('rejects enabling watch-ahead for an owner without TV request permission', async () => {
+    const settings = getSettings();
+    const previousMediaServerType = settings.main.mediaServerType;
+    settings.main.mediaServerType = MediaServerType.JELLYFIN;
+    configureSonarr([{}]);
+
+    try {
+      const userRepository = getRepository(User);
+      const requestedBy = await userRepository.findOneOrFail({
+        where: { email: 'friend@seerr.dev' },
+      });
+      requestedBy.jellyfinUserId = '01234567-89ab-cdef-0123-456789abcdef';
+      requestedBy.jellyfinUsername = 'friend';
+      requestedBy.permissions = Permission.NONE;
+      await userRepository.save(requestedBy);
+
+      const media = await getRepository(Media).save(
+        new Media({
+          mediaType: MediaType.TV,
+          tmdbId: 765434,
+          tvdbId: 123458,
+          status: MediaStatus.UNKNOWN,
+          status4k: MediaStatus.UNKNOWN,
+        })
+      );
+      const tvRequest = await getRepository(MediaRequest).save(
+        new MediaRequest({
+          type: MediaType.TV,
+          status: MediaRequestStatus.APPROVED,
+          media,
+          requestedBy,
+          is4k: false,
+          serverId: 0,
+          seasons: [],
+        })
+      );
+
+      const owner = await loginAs('friend@seerr.dev', 'test1234');
+      const response = await owner
+        .put(`/request/${tvRequest.id}/watch-ahead`)
+        .send({ episodeCount: 2 });
+      assert.strictEqual(response.status, 409);
+      assert.match(response.body.message, /permission to request TV/i);
+      assert.equal(
+        (
+          await getRepository(MediaRequest).findOneByOrFail({
+            id: tvRequest.id,
+          })
+        ).watchAheadEpisodeCount,
+        0
+      );
+    } finally {
+      settings.main.mediaServerType = previousMediaServerType;
+    }
+  });
+
+  it('rejects enrollment when the saved series has no TVDB identity', async () => {
+    const settings = getSettings();
+    const previousMediaServerType = settings.main.mediaServerType;
+    settings.main.mediaServerType = MediaServerType.JELLYFIN;
+    configureSonarr([{}]);
+
+    try {
+      const userRepository = getRepository(User);
+      const requestedBy = await userRepository.findOneOrFail({
+        where: { email: 'friend@seerr.dev' },
+      });
+      requestedBy.jellyfinUserId = '01234567-89ab-cdef-0123-456789abcdef';
+      requestedBy.jellyfinUsername = 'friend';
+      await userRepository.save(requestedBy);
+
+      const media = await getRepository(Media).save(
+        new Media({
+          mediaType: MediaType.TV,
+          tmdbId: 765436,
+          status: MediaStatus.UNKNOWN,
+          status4k: MediaStatus.UNKNOWN,
+        })
+      );
+      const tvRequest = await getRepository(MediaRequest).save(
+        new MediaRequest({
+          type: MediaType.TV,
+          status: MediaRequestStatus.APPROVED,
+          media,
+          requestedBy,
+          is4k: false,
+          serverId: 0,
+          seasons: [],
+        })
+      );
+
+      const owner = await loginAs('friend@seerr.dev', 'test1234');
+      const response = await owner
+        .put(`/request/${tvRequest.id}/watch-ahead`)
+        .send({ episodeCount: 2 });
+      assert.strictEqual(response.status, 409);
+      assert.match(response.body.message, /TVDB identity/);
+    } finally {
+      settings.main.mediaServerType = previousMediaServerType;
+    }
+  });
+
+  it('rejects watch-ahead buffers above five episodes', async () => {
+    const media = await getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.TV,
+        tmdbId: 765435,
+        tvdbId: 123459,
+        status: MediaStatus.UNKNOWN,
+        status4k: MediaStatus.UNKNOWN,
+      })
+    );
+    const tvRequest = await getRepository(MediaRequest).save(
+      new MediaRequest({
+        type: MediaType.TV,
+        status: MediaRequestStatus.APPROVED,
+        media,
+        requestedBy: await getRepository(User).findOneOrFail({
+          where: { email: 'friend@seerr.dev' },
+        }),
+        is4k: false,
+        seasons: [],
+      })
+    );
+    const owner = await loginAs('friend@seerr.dev', 'test1234');
+    const response = await owner
+      .put(`/request/${tvRequest.id}/watch-ahead`)
+      .send({ episodeCount: 6 });
+
+    assert.strictEqual(response.status, 400);
+  });
+});
+
+describe('POST /request with Jellyfin watch-ahead', () => {
+  it('rejects opt-in when TMDB has no TVDB identity for the series', async () => {
+    const settings = getSettings();
+    const previousMediaServerType = settings.main.mediaServerType;
+    settings.main.mediaServerType = MediaServerType.JELLYFIN;
+    configureSonarr([{}]);
+
+    try {
+      const userRepository = getRepository(User);
+      const requestedBy = await userRepository.findOneOrFail({
+        where: { email: 'friend@seerr.dev' },
+      });
+      requestedBy.jellyfinUserId = '01234567-89ab-cdef-0123-456789abcdef';
+      requestedBy.jellyfinUsername = 'friend';
+      await userRepository.save(requestedBy);
+
+      const owner = await loginAs('friend@seerr.dev', 'test1234');
+      const response = await owner.post('/request').send({
+        mediaType: 'tv',
+        mediaId: 765437,
+        seasons: [1],
+        watchAheadEpisodeCount: 2,
+      });
+      assert.strictEqual(response.status, 400);
+      assert.match(response.body.message, /TVDB identity/);
+      assert.strictEqual(
+        await getRepository(MediaRequest).count({
+          where: { requestedBy: { id: requestedBy.id } },
+        }),
+        0
+      );
+    } finally {
+      settings.main.mediaServerType = previousMediaServerType;
+    }
+  });
+});
 
 describe('GET /request/count', () => {
   it('limits ordinary users to their own counts while managers see all requests', async () => {

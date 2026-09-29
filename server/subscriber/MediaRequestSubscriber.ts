@@ -528,6 +528,12 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     entity: MediaRequest,
     event: InsertEvent<MediaRequest>
   ): Promise<void> {
+    // Watch-ahead enrollments can create one small request batch per watched
+    // episode. The owner already opted into that automation, so avoid sending
+    // a fresh approval/request notification for each generated child.
+    if (entity.watchAheadParent || entity.watchAheadParentRequestId) {
+      return;
+    }
     if (entity.status === MediaRequestStatus.PENDING) {
       await this.enqueueRequestNotification(
         Notification.MEDIA_PENDING,

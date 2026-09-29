@@ -34,6 +34,14 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
 - My Library browses Trakt, AniList, Simkl, Plex, Jellyfin, and Emby shelves;
   explicit watched, rating, and AniList progress writes are confirmed and
   idempotent. Manual TMDB matches are private to the current user's library.
+- TV request owners can opt into Jellyfin watch-ahead when their linked Jellyfin
+  user, TV-request permission, and matching Sonarr destination are available.
+  The worker checks active playback every 30 seconds, requires Jellyfin to mark
+  the matching episode played at or beyond 90% runtime, retains progress while
+  approval is pending, and creates linked, quota-exempt Sonarr child requests
+  under the parent approval to maintain a buffer of up to five missing episodes.
+  Disabling watch-ahead stops future additions and leaves already-created child
+  requests in place.
 - Movie/series release calendar with personal/shared scopes, bounded cached
   backend reads, episode hydration and partial-source reporting.
 - Dedicated-permission download intervention inbox with durable warnings, explicit
@@ -57,7 +65,6 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
 - Additional provider-specific live resolvers and bulk gap repair across sources
   beyond per-title, current-page, and pack import.
 - Episode-level cross-provider identity.
-- Opt-in rolling watch-ahead, durable scheduling and episode progress handling.
 - Optional Jellyfin plugin using the independently deployed SeerrNG server,
   server-validated sessions and revocation, preserving existing media servers.
 - Optional desktop playback with browser fallback.
