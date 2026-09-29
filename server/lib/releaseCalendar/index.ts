@@ -318,7 +318,10 @@ export async function getReleaseCalendar(
       }
     }
     results = results.filter((item) => {
-      if (item.mediaType === 'software') return true;
+      if (item.mediaType === 'software') {
+        // The software-request query applied the user's scope before catalog lookup.
+        return true;
+      }
       if (item.mediaType === 'music')
         return !!item.mbId && musicIds.has(normalizeMusicBrainzId(item.mbId));
       if (item.mediaType === 'book') {
