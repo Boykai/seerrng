@@ -51,83 +51,88 @@ metadata profiles remain shared by both formats. Separate BookshelfNG instances 
 optional when you need isolated databases or different settings for the same
 author.
 
-[Chaptarr](https://github.com/Chaptarr/chaptarr) is a supported Readarr-
-compatible alternative. SeerrNG sends the selected book format explicitly, so
-Chaptarr can serve ebooks and audiobooks from one instance without a
-provider-specific URL Base or API adapter.
+[ChaptarrNG](https://github.com/snapetech/chaptarrng) is Snapetech's maintained
+fork of [Chaptarr](https://github.com/Chaptarr/chaptarr), supported as a
+Readarr-compatible alternative. We maintain the fork because SeerrNG needs
+format-scoped requests and durable tracking when author metadata preparation
+delays a book add. ChaptarrNG remains a standalone app. SeerrNG sends the
+selected format explicitly, so one ChaptarrNG instance can serve ebooks and
+audiobooks without a provider-specific URL Base or API adapter.
 
-### Chaptarr
+### ChaptarrNG
 
-Configure Chaptarr in **Settings > Services** as a Bookshelf server:
+Configure ChaptarrNG in **Settings > Services** as a Bookshelf server. Its
+system-status response identifies the app as `Chaptarr` so SeerrNG's
+Readarr-compatible detection continues to work:
 
 1. Add one service entry for each format you want to request. Set **Book
-   Format** to **Book** or **Audiobook** to match the Chaptarr root folder and
+   Format** to **Book** or **Audiobook** to match the ChaptarrNG root folder and
    profiles selected below it.
-2. Use Chaptarr's normal host, port, and API key. Leave **URL Base** blank
-   unless you deliberately configured a URL Base in Chaptarr.
+2. Use ChaptarrNG's normal host, port, and API key. Leave **URL Base** blank
+   unless you deliberately configured a URL Base in ChaptarrNG.
 3. Select the format-specific root folder, quality profile, and metadata
    profile returned by the connection test.
 4. Enable **Scan** after saving. Enable **Automatic Search** if approvals
-   should start a Chaptarr search.
+   should start a ChaptarrNG search.
 
-For a single Chaptarr instance that manages both formats, create two SeerrNG
+For a single ChaptarrNG instance that manages both formats, create two SeerrNG
 service entries with the same connection details and different **Book Format**
 values. Mark one entry of each format as the default. A **Both** request then
 dispatches once to each entry.
 
-SeerrNG sends Chaptarr the requested book identity and selected-book monitoring
-intent. Chaptarr may still create unmonitored catalogue rows for other books by
-the same author; only the requested format/book is marked for monitoring. This
-is normal Chaptarr behaviour, not evidence that SeerrNG approved those other
-books.
+SeerrNG sends ChaptarrNG the requested book identity and selected-book
+monitoring intent. ChaptarrNG may still create unmonitored catalogue rows for
+other books by the same author; only the requested format/book is marked for
+monitoring. This is normal ChaptarrNG behavior, not evidence that SeerrNG
+approved those other books.
 
-### Chaptarr interoperability
+### ChaptarrNG interoperability
 
-SeerrNG detects Chaptarr from its system status and sends each Bookshelf service
-through the matching ebook or audiobook API facade. It reads Chaptarr's
-Hardcover setting to choose the provider-ID dialect; older Chaptarr versions
-without that setting use the Hardcover facade. Keep both SeerrNG service entries
-on the same Chaptarr instance when it manages both formats, and select the
-matching format in each entry.
+SeerrNG sends each ChaptarrNG Bookshelf service through the matching ebook or
+audiobook API facade. It reads ChaptarrNG's Hardcover setting to choose the
+provider-ID dialect; older versions without that setting use the Hardcover
+facade. Keep both SeerrNG service entries on the same ChaptarrNG instance when
+it manages both formats, and select the matching format in each entry.
 
 | Operation | SeerrNG behavior |
 | --- | --- |
 | Search and edition selection | Uses format-scoped lookups, retains the provider's work and edition IDs, and falls back to native lookup results when a format facade has no addressable result. |
-| Library scan | Reads paged, format-scoped results including unmonitored catalogue rows. It follows Chaptarr's reported total even when a page is short, and refuses to return a scan known to be incomplete. |
-| Add and search | Sends the selected format and monitoring intent. When Chaptarr queues author metadata preparation, SeerrNG stores the pending import and resumes the requested book add and search when it is ready. |
-| Request cancellation | Cancels the pending author import only when no other active request on the same Chaptarr instance references it. The check includes both SeerrNG ebook and audiobook service entries. For completed adds, normal book and queue cleanup applies. |
-| Settings diagnostic | A normal diagnostic checks the connection, profiles, folders, and lookup. The optional `testAdd` API flag performs a real add and removes the local book afterward. If Chaptarr returns a pending import, the diagnostic displays its ID and leaves it queued because Chaptarr may share that import with an active request. Check the import in Chaptarr and cancel it only if no request needs it. |
+| Library scan | Reads paged, format-scoped results including unmonitored catalogue rows. It follows ChaptarrNG's reported total even when a page is short, and refuses to return a scan known to be incomplete. |
+| Add and search | Sends the selected format and monitoring intent. When ChaptarrNG queues author metadata preparation, SeerrNG stores the pending import and resumes the requested book add and search when it is ready. |
+| Request cancellation | Cancels the pending author import only when no other active request on the same ChaptarrNG instance references it. The check includes both SeerrNG ebook and audiobook service entries. For completed adds, normal book and queue cleanup applies. |
+| Settings diagnostic | A normal diagnostic checks the connection, profiles, folders, and lookup. The optional `testAdd` API flag performs a real add and removes the local book afterward. If ChaptarrNG returns a pending import, the diagnostic displays its ID and leaves it queued because that import may also serve an active request. Check the import in ChaptarrNG and cancel it only if no request needs it. |
 
 The `testAdd` diagnostic is an API option; the Settings modal's **Run
 Diagnostic** button does not enable it. Use it only when you intend to exercise
 the add endpoint and can review any provider-side work it queues.
 
-When Chaptarr accepts an add with `202 Accepted` while it prepares author
+When ChaptarrNG accepts an add with `202 Accepted` while it prepares author
 metadata, SeerrNG keeps the request waiting and resumes the selected format's
-add and search after Chaptarr reports that import complete. SeerrNG retains the
-provider work and edition IDs for that request, so it can restore tracking if
-Chaptarr assigns the local book a different row ID. Cancelling a waiting
+add and search after ChaptarrNG reports that import complete. SeerrNG retains
+the provider work and edition IDs for that request, so it can restore tracking
+if ChaptarrNG assigns the local book a different row ID. Cancelling a waiting
 request checks for active references across both format entries when they point
-to the same Chaptarr instance, and cancels the pending author import only when
-no other request depends on it.
+to the same ChaptarrNG instance, and cancels the pending author import only
+when no other request depends on it.
 
-The last end-to-end Docker validation used Chaptarr `0.9.911.0`. As of
-2026-09-24, the client contract has also been source-reviewed against
-[Chaptarr v0.9.958](https://github.com/Chaptarr/chaptarr/releases/tag/v0.9.958),
-the latest listed pre-release, including the pending-add response and
-pending-author-import API available since v0.9.936. The v0.9.958 Docker image
-has not been runtime-tested with SeerrNG. Pin an exact Chaptarr image version
-instead of relying on `latest`, because Chaptarr is actively developed and its
-Readarr-compatible surface can change between releases.
-The source-reviewed contracts are in Chaptarr's
-[BookController](https://github.com/Chaptarr/chaptarr/blob/v0.9.958/src/Chaptarr.Api.V1/Books/BookController.cs)
+The last end-to-end Docker validation used Chaptarr `0.9.911.0`. ChaptarrNG's
+format-scoped add and pending-import contracts have been source-reviewed at
+fork commit [`fec5ea2`](https://github.com/snapetech/chaptarrng/tree/fec5ea2),
+including its
+[BookController](https://github.com/snapetech/chaptarrng/blob/fec5ea2/src/Chaptarr.Api.V1/Books/BookController.cs)
 and
-[PendingAuthorImportController](https://github.com/Chaptarr/chaptarr/blob/v0.9.958/src/Chaptarr.Api.V1/PendingImport/PendingAuthorImportController.cs).
+[PendingAuthorImportController](https://github.com/snapetech/chaptarrng/blob/fec5ea2/src/Chaptarr.Api.V1/PendingImport/PendingAuthorImportController.cs).
+That source review is not an end-to-end runtime validation. The fork's first
+GHCR image release has not been published yet, so the new Unraid template is
+not installable until that release creates
+`ghcr.io/snapetech/chaptarrng:latest`. Pin an exact ChaptarrNG image version
+after publication because its Readarr-compatible surface can change between
+releases.
 
-If a Chaptarr lookup is empty, first verify that the selected **Book Format**
+If a ChaptarrNG lookup is empty, first verify that the selected **Book Format**
 has a writable root folder and matching quality/metadata profiles. If the
 connection test succeeds but diagnosis reports incomplete metadata, check the
-Chaptarr metadata provider and retry the lookup from its UI.
+ChaptarrNG metadata provider and retry the lookup from its UI.
 
 ## Deployment Policy
 

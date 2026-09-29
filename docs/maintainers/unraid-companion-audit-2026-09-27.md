@@ -1,4 +1,4 @@
-# Unraid companion template audit (2026-09-27)
+# Unraid companion template audit (2026-09-27; ChaptarrNG status updated 2026-09-28)
 
 The SeerrNG Community Apps repository now contains only the SeerrNG XML template. Community Apps Docker templates configure one container at a time. BookshelfNG uses the dedicated [bookshelfng-unraid](https://github.com/snapetech/bookshelfng-unraid) repository because its application source contains 30 unrelated XML files that cause scanner warnings. ROMarrNG and QuestarrNG keep standalone XML templates in their own repositories. The upstream apps use their existing Community Apps listings. The Compose project remains an alternate deployment path and does not create appfeed listings.
 
@@ -10,7 +10,8 @@ The SeerrNG Community Apps repository now contains only the SeerrNG XML template
 | Kapowarr | `mrcas/kapowarr:latest` | [Kapowarr](https://ca.unraid.net/apps/kapowarr-1p27chu0mk08ni) | Fresh config; web UI HTTP 200 |
 | ROMarrNG | `ghcr.io/snapetech/romarrng:latest` | No NG fork entry located | Fresh folder library; health HTTP 200 |
 | QuestarrNG | `ghcr.io/snapetech/questarrng:latest` | [Upstream Questarr](https://ca.unraid.net/apps/questarr-0335hnh1oyuaqh) | Fresh config; health HTTP 200 |
+| ChaptarrNG | `ghcr.io/snapetech/chaptarrng:latest` | Not yet listed | Template is in the fork repository; first stable image release is published |
 
 Each image was started independently without SeerrNG on a local Docker host. The service and its temporary data volume were removed after checking. Metadata lookup and acquisition were not exercised because these require personal provider credentials and configured download clients. BookshelfNG's current fork supports ebooks and audiobooks in one instance; both SeerrNG service entries can point to its single API URL and key.
 
-SeerrNG previously duplicated the BookshelfNG, ROMarrNG, and QuestarrNG XML from their own repositories. Those copies were removed to avoid a duplicate submission collision. The LazyLibrarian, Mylar3, and Kapowarr copies were also removed because we do not fork those apps and their Community Apps listings already exist. Community Apps ingestion is separate from pushing XML to GitHub; submit each NG fork's own repository through the portal and verify the public listing after its scan.
+SeerrNG previously duplicated the BookshelfNG, ROMarrNG, and QuestarrNG XML from their own repositories. Those copies were removed to avoid a duplicate submission collision. ChaptarrNG keeps its template at `packaging/unraid/chaptarrng.xml` in its source repository. The LazyLibrarian, Mylar3, and Kapowarr copies were also removed because we do not fork those apps and their Community Apps listings already exist. Community Apps ingestion is separate from pushing XML or publishing a GHCR image; submit the ChaptarrNG fork repository URL through the portal and verify the public listing after its scan.
