@@ -339,6 +339,27 @@ it('uses TVDB season coordinates for Simkl anime when TVDB supplies metadata', (
   );
 });
 
+it('does not show episode status for an unmatched Simkl title', () => {
+  assert.deepEqual(
+    parseSimklSeasonWatchState(
+      [
+        {
+          simkl: 84,
+          result: false,
+          seasons: [
+            {
+              number: 2,
+              episodes: [{ number: 3, watched: true }],
+            },
+          ],
+        },
+      ],
+      2
+    ),
+    { available: false, season: 2, episodes: [] }
+  );
+});
+
 it('reads Simkl episode state by provider identity and selected season', async () => {
   const userId = await connect('simkl');
   mock.method(

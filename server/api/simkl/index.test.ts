@@ -127,7 +127,11 @@ describe('Simkl watched episode lookup', () => {
       /Invalid Simkl/
     );
     await assert.rejects(
-      () => api.getWatchedEpisodes([{ season: 1 } as never]),
+      () => api.getWatchedEpisodes([{ simkl: 42, season: 1 } as never]),
+      /Invalid Simkl/
+    );
+    await assert.rejects(
+      () => api.getWatchedEpisodes([{ simkl: 42, tmdb: 84 }]),
       /Invalid Simkl/
     );
     await assert.rejects(

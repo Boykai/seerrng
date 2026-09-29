@@ -325,15 +325,16 @@ export default class SimklAPI extends ExternalAPI {
       items.length > 100 ||
       items.some((item) => {
         if (!item || typeof item !== 'object') return true;
-        const identifiers = ['simkl', 'tmdb', 'tvdb'].some(
-          (key) =>
-            Number.isSafeInteger(
-              item[key as keyof SimklWatchedEpisodeLookup]
-            ) &&
-            Number(item[key as keyof SimklWatchedEpisodeLookup]) > 0 &&
-            Number(item[key as keyof SimklWatchedEpisodeLookup]) <= 2147483647
+        const identifiers = Object.entries(item);
+        if (identifiers.length !== 1) return true;
+        const [key, value] = identifiers[0];
+        return (
+          !['simkl', 'tmdb', 'tvdb'].includes(key) ||
+          typeof value !== 'number' ||
+          !Number.isSafeInteger(value) ||
+          value <= 0 ||
+          value > 2147483647
         );
-        return !identifiers;
       })
     )
       throw new Error('Invalid Simkl watched episode lookup.');

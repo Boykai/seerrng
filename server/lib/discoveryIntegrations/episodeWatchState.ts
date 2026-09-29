@@ -101,6 +101,8 @@ export function parseSimklSeasonWatchState(
 ): ProviderEpisodeWatchState {
   const rows = Array.isArray(value) ? value : [];
   const row = record(rows[0]);
+  if (row.result !== true)
+    return { available: false, season: seasonNumber, episodes: [] };
   const seasons = Array.isArray(row.seasons) ? row.seasons : [];
   const season = seasons.find(
     (candidate) => coordinate(record(candidate).number) === seasonNumber
