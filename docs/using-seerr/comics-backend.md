@@ -160,14 +160,18 @@ pnpm backissue:service -- add --name Home --host backissue --default --sync
 pnpm backissue:service -- list
 pnpm backissue:service -- update 1 --host backissue.example.com --https
 pnpm backissue:service -- remove 1
+pnpm backissue:service -- scan
 ```
 
 The CLI also accepts `--base-url` and `--external-url`. Use `--no-default` or
-`--no-sync` while updating a server to turn those settings off. The API exposes
-`GET` and `POST /api/v1/settings/backissue`, `POST
+`--no-sync` while updating a server to turn those settings off. The `scan`
+command starts the BackIssue collection sync immediately and needs only the
+SeerrNG administrator API key. The API exposes `GET` and `POST
+/api/v1/settings/backissue`, `POST
 /api/v1/settings/backissue/test`, and `PUT` or `DELETE
-/api/v1/settings/backissue/{id}`. These endpoints require administrator
-authentication.
+/api/v1/settings/backissue/{id}`, plus `POST
+/api/v1/settings/jobs/backissue-scan/run` to start the same scan task. These
+endpoints require administrator authentication.
 
 ## Configuration checklist
 

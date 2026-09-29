@@ -2758,6 +2758,7 @@
   "components.Settings.SettingsCategories.tv": "Series",
   "components.Settings.SettingsCategories.tvDescription": "Allow series discovery and requests.",
   "components.Settings.SettingsJobsCache.availability-sync": "Media Availability Sync",
+  "components.Settings.SettingsJobsCache.backissue-scan": "BackIssue Comics Scan",
   "components.Settings.SettingsJobsCache.cache": "Cache",
   "components.Settings.SettingsJobsCache.cacheDescription": "Seerr caches requests to external API endpoints to optimize performance and avoid making unnecessary API calls.",
   "components.Settings.SettingsJobsCache.cacheflushed": "{cachename} cache flushed.",

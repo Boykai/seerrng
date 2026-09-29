@@ -97,6 +97,7 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages(
     'readarr-request-retry': 'Bookshelf Request Retry',
     'mylar-scan': 'Mylar Comics Scan',
     'kapowarr-scan': 'Kapowarr Comics Scan',
+    'backissue-scan': 'BackIssue Comics Scan',
     'magazine-scan': 'LazyLibrarian Magazine Scan',
     'download-sync': 'Download Sync',
     'software-request-reconciliation': 'Software Request Reconciliation',

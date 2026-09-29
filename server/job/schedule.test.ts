@@ -91,6 +91,21 @@ describe('scheduled job lifecycle', () => {
     assert.strictEqual(scheduledJobs[0].job, job);
   });
 
+  it('registers the BackIssue collection sync as a scheduled process task', () => {
+    startJobs();
+
+    const backissueJob = scheduledJobs.find(
+      (job) => job.id === 'backissue-scan'
+    );
+
+    assert.ok(backissueJob);
+    assert.equal(backissueJob.name, 'BackIssue Comics Scan');
+    assert.equal(backissueJob.type, 'process');
+    assert.equal(backissueJob.interval, 'hours');
+    assert.equal(backissueJob.cronSchedule, '0 30 5 * * *');
+    assert.equal(typeof backissueJob.cancelFn, 'function');
+  });
+
   it('cancels future invocations and waits for active work', async () => {
     let cancelCalled = false;
     let release: (() => void) | undefined;

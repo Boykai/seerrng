@@ -3,6 +3,7 @@
 import { pathToFileURL } from 'node:url';
 
 const API_PREFIX = '/api/v1/settings/backissue';
+const BACKISSUE_SCAN_PATH = '/api/v1/settings/jobs/backissue-scan/run';
 
 export const usage = `Manage a BackIssue connection in SeerrNG (administrator API key required)
 
@@ -12,6 +13,7 @@ Commands:
   pnpm backissue:service -- add --name Home --host backissue --api-key-env BACKISSUE_API_KEY --default --sync
   pnpm backissue:service -- update 1 --host backissue-new --default
   pnpm backissue:service -- remove 1
+  pnpm backissue:service -- scan
 
 Options:
   --name NAME               Display name (required for add)
@@ -28,7 +30,9 @@ Options:
 Environment:
   SEERRNG_URL       SeerrNG base URL, for example https://media.example.com
   SEERRNG_API_KEY   SeerrNG administrator API key (not the BackIssue key)
-  BACKISSUE_API_KEY BackIssue key, unless --api-key-env selects another name
+  BACKISSUE_API_KEY BackIssue key for test/add, unless --api-key-env selects another name
+
+The scan command needs only the SeerrNG administrator API key.
 
 The command sends keys through environment variables, never command-line arguments.
 `;
@@ -48,7 +52,7 @@ export const parseArgs = (args) => {
   if (!command || command === '--help' || command === '-h') {
     return { command: command ?? 'help', help: true, options: {} };
   }
-  if (!['list', 'test', 'add', 'update', 'remove'].includes(command)) {
+  if (!['list', 'test', 'add', 'update', 'remove', 'scan'].includes(command)) {
     throw new Error(`Unknown command: ${command}`);
   }
 
@@ -184,7 +188,7 @@ const apiCredentials = (env) => {
 };
 
 const request = async (credentials, method, path, body) => {
-  const response = await fetch(`${credentials.base}${API_PREFIX}${path}`, {
+  const response = await fetch(`${credentials.base}${path}`, {
     method,
     redirect: 'error',
     signal: AbortSignal.timeout(30_000),
@@ -301,15 +305,20 @@ export const run = async (args = process.argv.slice(2), env = process.env) => {
 
   try {
     const credentials = apiCredentials(env);
+    if (parsed.command === 'scan') {
+      await request(credentials, 'POST', BACKISSUE_SCAN_PATH, undefined);
+      console.log('BackIssue collection scan started.');
+      return 0;
+    }
     if (parsed.command === 'list') {
-      displayList(await request(credentials, 'GET', '', undefined));
+      displayList(await request(credentials, 'GET', API_PREFIX, undefined));
       return 0;
     }
     if (parsed.command === 'remove') {
       const removed = await request(
         credentials,
         'DELETE',
-        `/${parsed.id}`,
+        `${API_PREFIX}/${parsed.id}`,
         undefined
       );
       console.log(`Removed BackIssue server ${removed.name} (${removed.id}).`);
@@ -319,7 +328,7 @@ export const run = async (args = process.argv.slice(2), env = process.env) => {
       const result = await request(
         credentials,
         'POST',
-        '/test',
+        `${API_PREFIX}/test`,
         connection(env, parsed.options)
       );
       console.log(
@@ -331,7 +340,7 @@ export const run = async (args = process.argv.slice(2), env = process.env) => {
       const created = await request(
         credentials,
         'POST',
-        '',
+        API_PREFIX,
         serviceSettings(env, parsed.options, {
           ...connection(env, parsed.options),
           name: parsed.options['--name'],
@@ -346,7 +355,7 @@ export const run = async (args = process.argv.slice(2), env = process.env) => {
       return 0;
     }
 
-    const items = await request(credentials, 'GET', '', undefined);
+    const items = await request(credentials, 'GET', API_PREFIX, undefined);
     const existing = Array.isArray(items)
       ? items.find((item) => item.id === parsed.id)
       : undefined;
@@ -356,7 +365,7 @@ export const run = async (args = process.argv.slice(2), env = process.env) => {
     const updated = await request(
       credentials,
       'PUT',
-      `/${parsed.id}`,
+      `${API_PREFIX}/${parsed.id}`,
       serviceSettings(env, parsed.options, existing)
     );
     console.log(`Updated BackIssue server ${updated.name} (${updated.id}).`);

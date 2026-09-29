@@ -2532,6 +2532,39 @@ describe('Settings route input validation', () => {
     assert.strictEqual(res.status, 404);
   });
 
+  it('lists and manually starts the BackIssue collection scan through the API', async () => {
+    let invoked = false;
+    scheduledJobs.push({
+      id: 'backissue-scan',
+      name: 'BackIssue Comics Scan',
+      type: 'process',
+      interval: 'hours',
+      cronSchedule: '0 30 5 * * *',
+      job: {
+        invoke: () => {
+          invoked = true;
+        },
+        nextInvocation: () => null,
+      } as never,
+    });
+
+    const validatedApp = createOpenApiValidatedApp();
+    const jobs = await request(validatedApp).get('/api/v1/settings/jobs');
+    const run = await request(validatedApp).post(
+      '/api/v1/settings/jobs/backissue-scan/run'
+    );
+
+    assert.strictEqual(jobs.status, 200);
+    assert.ok(
+      jobs.body.some(
+        (job: { id: string; name: string }) =>
+          job.id === 'backissue-scan' && job.name === 'BackIssue Comics Scan'
+      )
+    );
+    assert.strictEqual(run.status, 200);
+    assert.strictEqual(invoked, true);
+  });
+
   it('does not invoke a job that already reports running', async () => {
     let invoked = false;
     scheduledJobs.push({
