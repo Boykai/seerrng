@@ -148,40 +148,45 @@ def main() -> int:
             else:
                 publication = max(publications, key=lambda item: item.date_created)
                 publication_status = publication.status
+                builds = get_builds(publication)
+                amd64_builds = [
+                    build for build in builds if build.arch_tag == "amd64"
+                ]
+
+                for build in amd64_builds:
+                    if build.buildstate == "Failed to upload":
+                        classify_failed_upload(
+                            build,
+                            args.archive_web,
+                            args.source_version,
+                            args.series,
+                        )
+                    if build.buildstate in (
+                        "Failed to build",
+                        "Build for superseded Source",
+                        "Cancelled build",
+                    ):
+                        fail_for_build(build)
+
                 if publication_status != PUBLISHED:
                     if publication_status in ("Superseded", "Deleted", "Obsolete"):
                         raise RuntimeError(
                             f"Launchpad source publication {publication.self_link} "
                             f"ended in '{publication_status}'."
                         )
+                    build_states = ", ".join(
+                        build.buildstate for build in amd64_builds
+                    ) or "no build records"
                     report = (
                         f"Waiting for source publication {publication.self_link} "
-                        f"to become Published (currently {publication_status})."
+                        f"to become Published (currently {publication_status}; "
+                        f"builds [{build_states}])."
                     )
                 else:
-                    builds = get_builds(publication)
-                    amd64_builds = [
-                        build for build in builds if build.arch_tag == "amd64"
-                    ]
                     if not amd64_builds:
                         raise RuntimeError(
                             f"No amd64 build record exists for {publication.self_link}."
                         )
-
-                    for build in amd64_builds:
-                        if build.buildstate == "Failed to upload":
-                            classify_failed_upload(
-                                build,
-                                args.archive_web,
-                                args.source_version,
-                                args.series,
-                            )
-                        if build.buildstate in (
-                            "Failed to build",
-                            "Build for superseded Source",
-                            "Cancelled build",
-                        ):
-                            fail_for_build(build)
 
                     completed = all(
                         build.buildstate == "Successfully built"
