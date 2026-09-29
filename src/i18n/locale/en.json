@@ -3182,7 +3182,7 @@
   "components.Settings.searchKeywords": "Search keywords…",
   "components.Settings.searchSettings": "Search Settings",
   "components.Settings.seerrngBridgeLogin": "Enable SeerrNG sign-in from Jellyfin",
-  "components.Settings.seerrngBridgeLoginDescription": "Allow users with an already linked Jellyfin account to sign in from the optional Jellyfin plugin while Jellyfin is the active media server and media-server sign-in is enabled. Each sign-in checks the current Jellyfin session. Disabling the bridge revokes its sessions; turning it back on does not restore them.",
+  "components.Settings.seerrngBridgeLoginDescription": "Allow Jellyfin administrators to open SeerrNG from the Jellyfin dashboard and sign in with an already linked account while Jellyfin is active and media-server sign-in is enabled. Regular users should sign in on SeerrNG with Jellyfin. Disabling the bridge revokes its sessions; turning it back on does not restore them.",
   "components.Settings.seerrngBridgeLoginFailure": "Unable to save the SeerrNG Jellyfin sign-in setting.",
   "components.Settings.seerrngBridgeLoginSuccess": "SeerrNG Jellyfin sign-in setting saved.",
   "components.Settings.selectAllLibraries": "Select All",
