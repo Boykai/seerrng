@@ -23,6 +23,10 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   libraries are resolved through TMDB when the result is unique and type-safe.
   Stale, ambiguous and unavailable matches stay in the manual repair flow; users
   can save a private override for an automatic result.
+- Personal Trakt, AniList, and Simkl libraries support bounded bulk repair scans
+  with progress, stop/resume, batches of up to five pages, and a 500-page cap.
+  Only unique, type-safe matches from supported exact IMDb/TVDB identifiers are
+  saved; titles without those identifiers remain available for manual repair.
 - Users can export and import a versioned personal mapping pack without provider
   credentials. Import is bounded, transactional, idempotent, and private to the
   importing account; it can be restored before provider reconnection.
@@ -80,8 +84,10 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   including the supported Readarr-compatible backend variants.
 - Additional calendar media sources beyond Radarr, Sonarr, Lidarr, and
   Readarr-compatible Bookshelf services.
-- Additional provider-specific live resolvers and bulk gap repair across sources
-  beyond per-title, current-page, and pack import.
+- Additional provider-specific live resolvers beyond the exact IMDb/TVDB
+  identifiers currently supported. AniList library entries do not expose either
+  identifier in the current client contract, so its bulk scan does not infer
+  title matches from names alone.
 - AniList exposes sequential episode progress rather than individual watched
   episode identities, so its library remains count-based while Trakt and Simkl
   use provider-confirmed episode states.
