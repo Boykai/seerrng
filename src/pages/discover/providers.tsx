@@ -226,7 +226,8 @@ export default function ProviderDiscoverPage() {
                 title={item.title}
               />
               {(item.identityMapped ||
-                item.identityResolution === 'external-id') && (
+                item.identityResolution === 'external-id' ||
+                item.identityResolution === 'curated') && (
                 <IdentityMappingControls
                   item={item}
                   onUpdated={() => mutate()}

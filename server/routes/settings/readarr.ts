@@ -1,8 +1,15 @@
-import type { ReadarrBookLookupResult } from '@server/api/servarr/readarr';
+import type {
+  ReadarrBookLookupResult,
+  ReadarrMediaMoveAuthor,
+  ReadarrMediaType,
+} from '@server/api/servarr/readarr';
 import ReadarrAPI from '@server/api/servarr/readarr';
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import { Permission } from '@server/lib/permissions';
-import { runWithServarrServiceCollectionMutationAdmission } from '@server/lib/serviceAdmission';
+import {
+  runWithCurrentServarrService,
+  runWithServarrServiceCollectionMutationAdmission,
+} from '@server/lib/serviceAdmission';
 import {
   allocateServarrServiceId,
   assertServarrServiceCanBeRemoved,
@@ -45,7 +52,118 @@ const MAX_DIAGNOSTIC_PATH_LENGTH = 4096;
 const MAX_DIAGNOSTIC_PROFILE_ID = 1_000_000;
 export const MAX_DIAGNOSTIC_LOOKUP_RESULTS = 50;
 export const DIAGNOSTIC_LOOKUP_HYDRATION_CONCURRENCY = 5;
+export const MAX_BOOKSHELF_MEDIA_MOVE_AUTHORS = 1_000;
+const MAX_BOOKSHELF_MEDIA_MOVE_DIRECTORY_RESULTS = 10_000;
+const MAX_BOOKSHELF_MEDIA_MOVE_PATH_LENGTH = 4096;
+const hasControlCharacters = (value: string): boolean =>
+  Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 0x20 || code === 0x7f;
+  });
 type DiagnosticAuthor = NonNullable<ReadarrBookLookupResult['author']>;
+
+type BookshelfMediaMoveRequest = {
+  authorIds: number[];
+  format: ReadarrMediaType;
+  destinationRootPath: string;
+  sourceRootPath?: string;
+  previewToken?: string;
+};
+
+const normalizeProviderPath = (value: string): string => {
+  const normalized = value.replaceAll('\\', '/').replace(/\/+$/, '') || '/';
+  return /^[a-z]:\//i.test(normalized) ? normalized.toLowerCase() : normalized;
+};
+
+const parseBookshelfMediaMoveRequest = (
+  value: unknown,
+  requirePreviewToken: boolean
+): { value: BookshelfMediaMoveRequest } | { error: string } => {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return { error: 'Move details must be an object.' };
+  const record = value as Record<string, unknown>;
+  const { authorIds, format } = record;
+  const destinationRootPath = record.destinationRootPath;
+  const sourceRootPath = record.sourceRootPath;
+  const previewToken = record.previewToken;
+  if (format !== 'ebook' && format !== 'audiobook')
+    return { error: 'Choose ebook or audiobook media.' };
+  if (
+    !Array.isArray(authorIds) ||
+    authorIds.length < 1 ||
+    authorIds.length > MAX_BOOKSHELF_MEDIA_MOVE_AUTHORS ||
+    authorIds.some((id) => !Number.isSafeInteger(id) || Number(id) < 1) ||
+    new Set(authorIds).size !== authorIds.length
+  )
+    return {
+      error: `Select between 1 and ${MAX_BOOKSHELF_MEDIA_MOVE_AUTHORS} unique authors.`,
+    };
+  if (
+    typeof destinationRootPath !== 'string' ||
+    !destinationRootPath.trim() ||
+    destinationRootPath.length > MAX_BOOKSHELF_MEDIA_MOVE_PATH_LENGTH ||
+    hasControlCharacters(destinationRootPath)
+  )
+    return { error: 'Choose a valid destination root folder.' };
+  if (
+    sourceRootPath !== undefined &&
+    (typeof sourceRootPath !== 'string' ||
+      !sourceRootPath.trim() ||
+      sourceRootPath.length > MAX_BOOKSHELF_MEDIA_MOVE_PATH_LENGTH ||
+      hasControlCharacters(sourceRootPath))
+  )
+    return { error: 'Choose a valid source folder.' };
+  if (
+    requirePreviewToken &&
+    (typeof previewToken !== 'string' ||
+      !previewToken.trim() ||
+      previewToken.length > 512)
+  )
+    return { error: 'Preview the move again before starting it.' };
+  return {
+    value: {
+      authorIds: authorIds as number[],
+      format,
+      destinationRootPath: destinationRootPath.trim(),
+      ...(typeof sourceRootPath === 'string'
+        ? { sourceRootPath: sourceRootPath.trim() }
+        : {}),
+      ...(typeof previewToken === 'string'
+        ? { previewToken: previewToken.trim() }
+        : {}),
+    },
+  };
+};
+
+const createReadarrApi = (settings: ReadarrSettings): ReadarrAPI =>
+  new ReadarrAPI({
+    apiKey: settings.apiKey,
+    url: ReadarrAPI.buildUrl(settings, '/api/v1'),
+    mediaType: settings.serviceType ?? 'ebook',
+  });
+
+const selectMoveAuthors = (
+  authors: ReadarrMediaMoveAuthor[],
+  format: ReadarrMediaType,
+  authorIds: number[],
+  sourceRootPath?: string
+): ReadarrMediaMoveAuthor[] | undefined => {
+  const requested = new Set(authorIds);
+  const selected = authors.filter((author) => requested.has(author.id));
+  if (selected.length !== authorIds.length) return;
+  if (!sourceRootPath) return selected;
+  return selected.every((author) => {
+    const currentPath =
+      (format === 'ebook' ? author.ebookPath : author.audiobookPath) ||
+      author.path;
+    return (
+      normalizeProviderPath(currentPath) ===
+      normalizeProviderPath(sourceRootPath)
+    );
+  })
+    ? selected
+    : undefined;
+};
 
 const parseOptionalDiagnosticId = (
   value: unknown,
@@ -93,6 +211,259 @@ readarrRoutes.get('/', (_req, res) => {
 
   res.status(200).json(redactSecrets(settings.readarr));
 });
+
+readarrRoutes.get(
+  '/:id/media-move/configuration',
+  authorizedMutation(Permission.ADMIN, async (req, res, next) => {
+    const readarrId = parseNonNegativeRouteId(req.params.id);
+    const format = req.query.format;
+    if (readarrId === undefined)
+      return next({ status: 404, message: 'Bookshelf service not found.' });
+    if (format !== 'ebook' && format !== 'audiobook')
+      return res.status(400).json({ message: 'Choose ebook or audiobook.' });
+
+    try {
+      const result = await runWithCurrentServarrService(
+        'readarr',
+        readarrId,
+        async (service) => {
+          const api = createReadarrApi(service);
+          const [authors, rootFolders] = await Promise.all([
+            api.getMediaMoveAuthors(),
+            api.getRootFolders(),
+          ]);
+          return res.status(200).json({
+            serviceId: service.id,
+            serviceName: service.name,
+            configuredFormat: service.serviceType ?? 'ebook',
+            format,
+            truncated:
+              authors.length > MAX_BOOKSHELF_MEDIA_MOVE_DIRECTORY_RESULTS,
+            authors: authors
+              .slice(0, MAX_BOOKSHELF_MEDIA_MOVE_DIRECTORY_RESULTS)
+              .map((author) => ({
+                id: author.id,
+                name: author.name,
+                path: author.path,
+                currentFormatPath:
+                  (format === 'ebook'
+                    ? author.ebookPath
+                    : author.audiobookPath) || author.path,
+                bookFileCount: author.bookFileCount,
+              })),
+            rootFolders: rootFolders.map(({ id, path, accessible }) => ({
+              id,
+              path,
+              accessible: accessible !== false,
+            })),
+          });
+        }
+      );
+      if (result === undefined)
+        return next({ status: 404, message: 'Bookshelf service not found.' });
+      return result;
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response
+        ?.status;
+      logger.warn('Failed to load Bookshelf media-move configuration.', {
+        label: 'Readarr',
+        serviceId: readarrId,
+        providerStatus: status,
+      });
+      return res.status(status === 404 ? 409 : 502).json({
+        message:
+          status === 404
+            ? 'This BookshelfNG instance does not expose the media-move API. Update BookshelfNG, then retry.'
+            : 'Bookshelf library details could not be loaded.',
+      });
+    }
+  })
+);
+
+readarrRoutes.post(
+  '/:id/media-move/preview',
+  authorizedMutation(Permission.ADMIN, async (req, res, next) => {
+    const readarrId = parseNonNegativeRouteId(req.params.id);
+    const parsed = parseBookshelfMediaMoveRequest(req.body, false);
+    if (readarrId === undefined)
+      return next({ status: 404, message: 'Bookshelf service not found.' });
+    if ('error' in parsed)
+      return res.status(400).json({ message: parsed.error });
+
+    try {
+      const result = await runWithCurrentServarrService(
+        'readarr',
+        readarrId,
+        async (service) => {
+          const api = createReadarrApi(service);
+          const [authors, rootFolders] = await Promise.all([
+            api.getMediaMoveAuthors(),
+            api.getRootFolders(),
+          ]);
+          const selectedAuthors = selectMoveAuthors(
+            authors,
+            parsed.value.format,
+            parsed.value.authorIds,
+            parsed.value.sourceRootPath
+          );
+          if (!selectedAuthors)
+            return res.status(400).json({
+              message:
+                'The selected authors no longer match this source folder. Reload the library and preview again.',
+            });
+          const destination = rootFolders.find(
+            (folder) =>
+              folder.accessible !== false &&
+              normalizeProviderPath(folder.path) ===
+                normalizeProviderPath(parsed.value.destinationRootPath)
+          );
+          if (!destination)
+            return res.status(400).json({
+              message:
+                'Choose an accessible destination root folder from this BookshelfNG instance.',
+            });
+          const preview = await api.previewMediaMoveBatch({
+            authorIds: parsed.value.authorIds,
+            format: parsed.value.format,
+            destinationRootPath: destination.path,
+          });
+          return res.status(200).json(preview);
+        }
+      );
+      if (result === undefined)
+        return next({ status: 404, message: 'Bookshelf service not found.' });
+      return result;
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response
+        ?.status;
+      logger.warn('Bookshelf media-move preview failed.', {
+        label: 'Readarr',
+        serviceId: readarrId,
+        providerStatus: status,
+      });
+      return res.status(status === 404 ? 409 : 502).json({
+        message:
+          status === 404
+            ? 'This BookshelfNG instance does not support media moves. Update BookshelfNG, then retry.'
+            : 'BookshelfNG could not preview this move. Reload the library and try again.',
+      });
+    }
+  })
+);
+
+readarrRoutes.post(
+  '/:id/media-move/start',
+  authorizedMutation(Permission.ADMIN, async (req, res, next) => {
+    const readarrId = parseNonNegativeRouteId(req.params.id);
+    const parsed = parseBookshelfMediaMoveRequest(req.body, true);
+    if (readarrId === undefined)
+      return next({ status: 404, message: 'Bookshelf service not found.' });
+    if ('error' in parsed)
+      return res.status(400).json({ message: parsed.error });
+
+    try {
+      const result = await runWithCurrentServarrService(
+        'readarr',
+        readarrId,
+        async (service) => {
+          const api = createReadarrApi(service);
+          const [authors, rootFolders] = await Promise.all([
+            api.getMediaMoveAuthors(),
+            api.getRootFolders(),
+          ]);
+          if (
+            !selectMoveAuthors(
+              authors,
+              parsed.value.format,
+              parsed.value.authorIds,
+              parsed.value.sourceRootPath
+            )
+          )
+            return res.status(409).json({
+              message:
+                'The selected authors or source folder changed after preview. Preview the move again.',
+            });
+          const destination = rootFolders.find(
+            (folder) =>
+              folder.accessible !== false &&
+              normalizeProviderPath(folder.path) ===
+                normalizeProviderPath(parsed.value.destinationRootPath)
+          );
+          if (!destination)
+            return res.status(409).json({
+              message:
+                'The destination root folder is no longer available. Preview the move again.',
+            });
+          const command = await api.startMediaMoveBatch({
+            authorIds: parsed.value.authorIds,
+            format: parsed.value.format,
+            destinationRootPath: destination.path,
+            previewToken: parsed.value.previewToken!,
+          });
+          return res.status(202).json({ command });
+        }
+      );
+      if (result === undefined)
+        return next({ status: 404, message: 'Bookshelf service not found.' });
+      return result;
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response
+        ?.status;
+      logger.warn('Bookshelf media-move could not be queued.', {
+        label: 'Readarr',
+        serviceId: readarrId,
+        providerStatus: status,
+      });
+      return res.status(status === 404 ? 409 : 502).json({
+        message:
+          status === 404
+            ? 'This BookshelfNG instance does not support media moves. Update BookshelfNG, then retry.'
+            : status === 409
+              ? 'The library changed after preview. Preview the move again.'
+              : 'BookshelfNG could not queue this move.',
+      });
+    }
+  })
+);
+
+readarrRoutes.get(
+  '/:id/media-move/commands/:commandId',
+  authorizedMutation(Permission.ADMIN, async (req, res, next) => {
+    const readarrId = parseNonNegativeRouteId(req.params.id);
+    const commandId = parseNonNegativeRouteId(req.params.commandId);
+    if (readarrId === undefined || commandId === undefined)
+      return next({ status: 404, message: 'Media-move command not found.' });
+    try {
+      const result = await runWithCurrentServarrService(
+        'readarr',
+        readarrId,
+        async (service) => {
+          const command =
+            await createReadarrApi(service).getMediaMoveCommand(commandId);
+          return res.status(200).json({ command });
+        }
+      );
+      if (result === undefined)
+        return next({ status: 404, message: 'Bookshelf service not found.' });
+      return result;
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response
+        ?.status;
+      logger.warn('Bookshelf media-move command lookup failed.', {
+        label: 'Readarr',
+        serviceId: readarrId,
+        commandId,
+        providerStatus: status,
+      });
+      return res.status(status === 404 ? 404 : 502).json({
+        message:
+          status === 404
+            ? 'Media-move command not found.'
+            : 'BookshelfNG command status could not be loaded.',
+      });
+    }
+  })
+);
 
 readarrRoutes.post(
   '/',

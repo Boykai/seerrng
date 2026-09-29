@@ -13,6 +13,14 @@ import {
   requireDiscoveryAccount,
   saveDiscoveryAccount,
 } from '@server/lib/discoveryIntegrations/accounts';
+import {
+  exportCuratedIdentityPack,
+  importCuratedIdentityMappingPack,
+  listCuratedIdentityPacks,
+  MAX_CURATED_IDENTITY_PACK_BYTES,
+  parseCuratedIdentityMappingPack,
+  removeCuratedIdentityPack,
+} from '@server/lib/discoveryIntegrations/curatedIdentityPacks';
 import { discoveryFeed } from '@server/lib/discoveryIntegrations/feeds';
 import {
   handleDiscoveryIntegration,
@@ -32,8 +40,8 @@ import {
   type LibraryShelf,
 } from '@server/lib/discoveryIntegrations/library';
 import {
-  MAX_NATIVE_LIBRARY_CURSOR,
   getNativeLibraryConnection,
+  MAX_NATIVE_LIBRARY_CURSOR,
   personalMediaServerLibrary,
   type NativeLibrarySource,
 } from '@server/lib/discoveryIntegrations/mediaServerLibrary';
@@ -46,7 +54,11 @@ import {
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
-import { authorizedMutation } from '@server/middleware/authorizedMutation';
+import { isAuthenticated } from '@server/middleware/auth';
+import {
+  authorizedMutation,
+  authorizedRouteAccess,
+} from '@server/middleware/authorizedMutation';
 import express, { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 
@@ -67,6 +79,15 @@ const identityMappingRateLimit = rateLimit({
     process.env.NODE_ENV === 'test' || process.env.E2E_TESTS === 'true',
 });
 const identityMappingPackRateLimit = rateLimit({
+  windowMs: 5 * 60_000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `user:${req.user?.id ?? 'anonymous'}`,
+  skip: () =>
+    process.env.NODE_ENV === 'test' || process.env.E2E_TESTS === 'true',
+});
+const curatedIdentityPackRateLimit = rateLimit({
   windowMs: 5 * 60_000,
   limit: 5,
   standardHeaders: true,
@@ -196,6 +217,65 @@ router.post(
       )
     );
   })
+);
+router.get(
+  '/mappings/packs',
+  isAuthenticated(Permission.ADMIN),
+  authorizedRouteAccess(Permission.ADMIN),
+  handle(async (_req, res) => {
+    res.json({ packs: await listCuratedIdentityPacks() });
+  })
+);
+router.get(
+  '/mappings/packs/:packId',
+  isAuthenticated(Permission.ADMIN),
+  authorizedRouteAccess(Permission.ADMIN),
+  handle(async (req, res) => {
+    res.json(await exportCuratedIdentityPack(req.params.packId));
+  })
+);
+router.post(
+  '/mappings/packs',
+  curatedIdentityPackRateLimit,
+  isAuthenticated(Permission.ADMIN),
+  express.text({
+    type: 'text/plain',
+    limit: MAX_CURATED_IDENTITY_PACK_BYTES,
+  }),
+  authorizedMutation(
+    Permission.ADMIN,
+    handle(async (req, res) => {
+      requireDiscoveryBrowserSession(req);
+      if (typeof req.body !== 'string')
+        throw new DiscoveryIntegrationError(
+          400,
+          'Select a valid shared title-match file.'
+        );
+      let value: unknown;
+      try {
+        value = JSON.parse(req.body);
+      } catch {
+        throw new DiscoveryIntegrationError(
+          400,
+          'This shared title-match file is not valid JSON.'
+        );
+      }
+      const pack = parseCuratedIdentityMappingPack(value);
+      res.json(await importCuratedIdentityMappingPack(pack));
+    })
+  )
+);
+router.delete(
+  '/mappings/packs/:packId',
+  curatedIdentityPackRateLimit,
+  isAuthenticated(Permission.ADMIN),
+  authorizedMutation(
+    Permission.ADMIN,
+    handle(async (req, res) => {
+      requireDiscoveryBrowserSession(req);
+      res.json(await removeCuratedIdentityPack(req.params.packId));
+    })
+  )
 );
 function publicConfiguration() {
   const config = getSettings().discoveryIntegrations;

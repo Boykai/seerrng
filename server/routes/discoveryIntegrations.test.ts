@@ -164,6 +164,66 @@ describe('personal discovery account boundaries', () => {
     );
   });
 
+  it('publishes, lists, exports, and deletes administrator-shared title packs', async () => {
+    const agent = await login();
+    const pack = {
+      format: 'seerrng.curated-title-matches',
+      version: 1,
+      packId: 'route-test-pack',
+      name: 'Route test pack',
+      exportedAt: new Date().toISOString(),
+      entries: [{ identity: 'anilist:901234', tmdbId: 987, mediaType: 'tv' }],
+    };
+
+    const imported = await agent
+      .post('/integrations/discovery/mappings/packs')
+      .type('text')
+      .send(JSON.stringify(pack));
+    assert.equal(imported.status, 200);
+    assert.deepEqual(imported.body, {
+      packId: 'route-test-pack',
+      name: 'Route test pack',
+      imported: 1,
+      updated: 0,
+      unchanged: 0,
+      removed: 0,
+      total: 1,
+    });
+
+    const listed = await agent.get('/integrations/discovery/mappings/packs');
+    assert.equal(listed.status, 200);
+    assert.equal(
+      listed.body.packs.find(
+        (entry: { packId: string }) => entry.packId === 'route-test-pack'
+      ).count,
+      1
+    );
+
+    const exported = await agent.get(
+      '/integrations/discovery/mappings/packs/route-test-pack'
+    );
+    assert.equal(exported.status, 200);
+    assert.equal(exported.body.entries[0].identity, 'anilist:901234');
+    assert.equal(exported.body.entries[0].tmdbId, 987);
+
+    const apiKeyWrite = await request(app)
+      .post('/integrations/discovery/mappings/packs')
+      .set('X-API-Key', getSettings().main.apiKey)
+      .type('text')
+      .send(JSON.stringify({ ...pack, packId: 'api-key-pack' }));
+    assert.equal(apiKeyWrite.status, 403);
+
+    const removed = await agent.delete(
+      '/integrations/discovery/mappings/packs/route-test-pack'
+    );
+    assert.equal(removed.status, 200);
+    assert.deepEqual(removed.body, { removed: true });
+    const missing = await agent.get(
+      '/integrations/discovery/mappings/packs/route-test-pack'
+    );
+    assert.equal(missing.status, 404);
+  });
+
   it('omits stored tokens and client secrets from account and configuration responses', async () => {
     const agent = await login();
     const admin = await getRepository(User).findOneByOrFail({

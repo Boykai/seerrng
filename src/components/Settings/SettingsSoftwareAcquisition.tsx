@@ -2,7 +2,9 @@ import Alert from '@app/components/Common/Alert';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import SelectionCircle from '@app/components/Common/SelectionCircle';
+import Tooltip from '@app/components/Common/Tooltip';
 import defineMessages from '@app/utils/defineMessages';
+import { QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
 import type { EmulationSystemGroup } from '@server/lib/settings';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
@@ -41,6 +43,9 @@ const messages = defineMessages('components.SettingsSoftwareAcquisition', {
   systemGroups: 'Emulation system groups',
   systemGroupsDescription:
     'Assign each ROMarrNG system to Retro or Modern before users can request titles for it.',
+  systemGroupsHelpLabel: 'About Retro and Modern groups',
+  systemGroupsHelp:
+    'Use Retro for older consoles and handhelds. Use Modern for newer platforms such as PS4, PS5, PS Vita, Xbox One, and Xbox Series. These groups organize browsing and requests in SeerrNG; they do not change ROMarrNG or automatically classify systems. Choose a group for each platform.',
   systemGroupsSourceHint:
     'This list uses saved ROMarrNG settings, not unsaved test values. Systems from a recent successful fetch can remain visible for up to five minutes.',
   assignAllRetro: 'Assign all to Retro',
@@ -218,11 +223,16 @@ const SettingsSoftwareAcquisition = () => {
       if (provider === 'romarr') {
         await mutate('/api/v1/request/software/catalog/systems');
       }
-    } catch {
+    } catch (error) {
+      const detail =
+        axios.isAxiosError(error) &&
+        typeof error.response?.data?.error === 'string'
+          ? error.response.data.error
+          : intl.formatMessage(messages.testError);
       setTestState({
         provider,
         success: false,
-        message: intl.formatMessage(messages.testError),
+        message: detail,
       });
     } finally {
       setTesting(null);
@@ -442,9 +452,25 @@ const SettingsSoftwareAcquisition = () => {
 
         <section className="mt-8 rounded-lg border border-gray-700 bg-gray-800/50 p-4 sm:p-5">
           <div className="mb-4">
-            <h4 className="text-lg font-semibold text-white">
-              {intl.formatMessage(messages.systemGroups)}
-            </h4>
+            <div className="flex items-center gap-2">
+              <h4 className="text-lg font-semibold text-white">
+                {intl.formatMessage(messages.systemGroups)}
+              </h4>
+              <Tooltip content={intl.formatMessage(messages.systemGroupsHelp)}>
+                <button
+                  type="button"
+                  aria-label={intl.formatMessage(
+                    messages.systemGroupsHelpLabel
+                  )}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full text-gray-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+                >
+                  <QuestionMarkCircleIcon
+                    aria-hidden="true"
+                    className="h-4 w-4"
+                  />
+                </button>
+              </Tooltip>
+            </div>
             <p className="mt-1 text-sm text-gray-300">
               {intl.formatMessage(messages.systemGroupsDescription)}
             </p>

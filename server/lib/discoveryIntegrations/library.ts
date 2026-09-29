@@ -9,6 +9,7 @@ import {
   requireDiscoveryAccount,
 } from './accounts';
 import { cachedAccountRead } from './cache';
+import { applyCuratedIdentityMappings } from './curatedIdentityPacks';
 import {
   resolveExternalIdentityMatches,
   toPublicIdentityCandidate,
@@ -37,7 +38,7 @@ export interface PersonalLibraryItem {
   progress?: number;
   totalEpisodes?: number;
   identityMapped?: boolean;
-  identityResolution?: 'personal' | 'external-id';
+  identityResolution?: 'personal' | 'curated' | 'external-id';
   /** Internal resolver inputs; removed before the API response is serialized. */
   imdbId?: string;
   tvdbId?: number;
@@ -316,7 +317,8 @@ export async function personalProviderLibrary(
       userId,
       result.items
     );
-    const items = await resolveExternalIdentityMatches(personalItems);
+    const curatedItems = await applyCuratedIdentityMappings(personalItems);
+    const items = await resolveExternalIdentityMatches(curatedItems);
     return {
       ...result,
       items: items.map(toPublicIdentityCandidate),
@@ -336,7 +338,10 @@ export async function personalProviderLibrary(
     userId,
     snapshot
   );
-  const items = manuallyMappedSnapshot
+  const curatedMappedSnapshot = await applyCuratedIdentityMappings(
+    manuallyMappedSnapshot
+  );
+  const items = curatedMappedSnapshot
     .filter(
       (item) =>
         (item.mediaType

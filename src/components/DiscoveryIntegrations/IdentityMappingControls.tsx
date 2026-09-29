@@ -25,6 +25,8 @@ const messages = defineMessages('components.IdentityMappingControls', {
   resetFailed: 'The match could not be reset. Try again.',
   externalMatch:
     'This match came from an exact IMDb or TVDB ID. Choose another title to save a private override.',
+  curatedMatch:
+    'This match comes from an administrator-managed shared pack. Choose another title to save a private override.',
 });
 
 type MappingSearchResult =
@@ -127,6 +129,11 @@ export default function IdentityMappingControls({
       {item.identityResolution === 'external-id' && !item.identityMapped && (
         <p className="text-xs text-gray-400">
           {intl.formatMessage(messages.externalMatch)}
+        </p>
+      )}
+      {item.identityResolution === 'curated' && !item.identityMapped && (
+        <p className="text-xs text-gray-400">
+          {intl.formatMessage(messages.curatedMatch)}
         </p>
       )}
       {open && (

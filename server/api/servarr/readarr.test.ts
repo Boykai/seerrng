@@ -1480,3 +1480,193 @@ describe('ReadarrAPI Chaptarr compatibility', () => {
     }
   });
 });
+
+describe('ReadarrAPI Bookshelf media moves', () => {
+  afterEach(() => {
+    mock.restoreAll();
+  });
+
+  it('uses the bulk preview token flow and sanitizes provider responses', async () => {
+    const api = new ReadarrAPI({
+      url: 'http://localhost:8787/api/v1',
+      apiKey: 'key',
+      mediaType: 'ebook',
+    });
+    const internalApi = api as unknown as {
+      ensureProvider: () => Promise<void>;
+      request: (
+        method: string,
+        path: string,
+        data?: unknown,
+        config?: unknown
+      ) => Promise<{ data: unknown }>;
+    };
+    mock.method(internalApi, 'ensureProvider', async () => undefined);
+    const requests: { method: string; path: string; data?: unknown }[] = [];
+    mock.method(
+      internalApi,
+      'request',
+      async (method: string, path: string, data?: unknown) => {
+        requests.push({ method, path, data });
+        if (path === '/author')
+          return {
+            data: [
+              {
+                id: 4,
+                authorName: 'Octavia Butler',
+                path: '/media/books',
+                ebookPath: '/media/ebooks',
+                audiobookPath: '/media/audiobooks',
+                statistics: { bookFileCount: 3 },
+              },
+              { id: 'bad', authorName: 'Ignored' },
+            ],
+          };
+        if (path === '/author/media-move/bulk/preview')
+          return {
+            data: {
+              format: 'ebook',
+              destinationRootPath: '/media/new-books',
+              previewToken: 'fresh-preview-token',
+              authorCount: 1,
+              mediaFileCount: 1,
+              sidecarFileCount: 1,
+              missingFileCount: 0,
+              totalSize: 100,
+              requiredCopyBytes: 100,
+              availableSpace: 10_000,
+              canMove: true,
+              warnings: [],
+              conflicts: [],
+              authors: [
+                {
+                  authorId: 4,
+                  authorName: 'Octavia Butler',
+                  format: 'ebook',
+                  sourcePath: '/media/ebooks/Octavia Butler',
+                  destinationPath: '/media/new-books/Octavia Butler',
+                  mediaFileCount: 1,
+                  sidecarFileCount: 1,
+                  missingFileCount: 0,
+                  alreadyAtDestinationCount: 0,
+                  totalSize: 100,
+                  requiredCopyBytes: 100,
+                  canMove: true,
+                  warnings: [],
+                  conflicts: [],
+                  files: [
+                    {
+                      fileType: 'media',
+                      sourcePath: '/media/ebooks/book.epub',
+                      destinationPath: '/media/new-books/book.epub',
+                      status: 'ready',
+                      sourceExists: true,
+                      destinationExists: false,
+                      size: 100,
+                    },
+                    { fileType: 'unexpected', sourcePath: 'ignored' },
+                  ],
+                },
+              ],
+            },
+          };
+        if (path === '/author/media-move/bulk/start')
+          return {
+            data: { id: 91, name: 'MoveAuthorMediaBatch', status: 'queued' },
+          };
+        if (path === '/command/91')
+          return {
+            data: {
+              id: 91,
+              name: 'MoveAuthorMediaBatch',
+              status: 'completed',
+              progress: 100,
+            },
+          };
+        throw new Error(`Unexpected Bookshelf request: ${method} ${path}`);
+      }
+    );
+
+    const authors = await api.getMediaMoveAuthors();
+    assert.deepEqual(authors, [
+      {
+        id: 4,
+        name: 'Octavia Butler',
+        path: '/media/books',
+        ebookPath: '/media/ebooks',
+        audiobookPath: '/media/audiobooks',
+        bookFileCount: 3,
+      },
+    ]);
+
+    const preview = await api.previewMediaMoveBatch({
+      authorIds: [4],
+      format: 'ebook',
+      destinationRootPath: '/media/new-books',
+    });
+    assert.equal(preview.previewToken, 'fresh-preview-token');
+    assert.equal(preview.authors[0].files.length, 1);
+    assert.equal(preview.authors[0].files[0].status, 'ready');
+    assert.deepEqual(requests[1].data, {
+      authorIds: [4],
+      format: 'ebook',
+      destinationRootPath: '/media/new-books',
+    });
+
+    const command = await api.startMediaMoveBatch({
+      authorIds: [4],
+      format: 'ebook',
+      destinationRootPath: '/media/new-books',
+      previewToken: preview.previewToken,
+    });
+    assert.equal(command.id, 91);
+    assert.equal(command.status, 'queued');
+    assert.deepEqual(requests[2].data, {
+      authorIds: [4],
+      format: 'ebook',
+      destinationRootPath: '/media/new-books',
+      previewToken: 'fresh-preview-token',
+    });
+
+    assert.equal((await api.getMediaMoveCommand(91)).status, 'completed');
+    assert.deepEqual(
+      requests.map(({ method, path }) => [method, path]),
+      [
+        ['GET', '/author'],
+        ['POST', '/author/media-move/bulk/preview'],
+        ['POST', '/author/media-move/bulk/start'],
+        ['GET', '/command/91'],
+      ]
+    );
+  });
+
+  it('rejects incomplete preview responses instead of applying an ambiguous batch', async () => {
+    const api = new ReadarrAPI({
+      url: 'http://localhost:8787/api/v1',
+      apiKey: 'key',
+      mediaType: 'ebook',
+    });
+    const internalApi = api as unknown as {
+      ensureProvider: () => Promise<void>;
+      request: () => Promise<{ data: unknown }>;
+    };
+    mock.method(internalApi, 'ensureProvider', async () => undefined);
+    mock.method(internalApi, 'request', async () => ({
+      data: {
+        format: 'ebook',
+        destinationRootPath: '/media/new-books',
+        previewToken: 'fresh-preview-token',
+        authors: [],
+      },
+    }));
+
+    await assert.rejects(
+      api.previewMediaMoveBatch({
+        authorIds: [4],
+        format: 'ebook',
+        destinationRootPath: '/media/new-books',
+      }),
+      /incomplete media-move preview/
+    );
+  });
+});

@@ -94,6 +94,10 @@ recommended Docker Compose deployment. Hardcover is the default for new
 deployments, while existing Goodreads/softcover and other compatible metadata
 sources remain supported. Migration is optional.
 
+Administrators can [preview and move ebook or audiobook paths](/using-seerr/bookshelf-media-path-migration)
+inside one BookshelfNG database. This tool does not merge split Bookshelf
+databases.
+
 If you choose to switch providers, use the
 [Bookshelf Hardcover Migration](/using-seerr/bookshelf-hardcover-migration)
 runbook. Provider IDs are not portable; the runbook rebuilds records and can

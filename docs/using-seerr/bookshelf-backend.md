@@ -875,6 +875,9 @@ and both-format requests have been tested through SeerrNG.
 In **Settings > Services**, add two Bookshelf service entries that point to
 the same BookshelfNG host, port, and API key. This keeps SeerrNG's format
 routing separate while BookshelfNG stores both formats in one library.
+To reorganize files inside that combined database, use the admin-only
+[Bookshelf media path mover](./bookshelf-media-path-migration.md). It previews
+the file moves and requires confirmation before BookshelfNG queues them.
 
 Book service:
 

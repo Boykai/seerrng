@@ -162,6 +162,47 @@ describe('discovery integration OpenAPI contracts', () => {
       200
     );
     assert.equal(
+      (await request(app).get('/api/v1/integrations/discovery/mappings/packs'))
+        .status,
+      200
+    );
+    assert.equal(
+      (
+        await request(app).get(
+          '/api/v1/integrations/discovery/mappings/packs/anime-core'
+        )
+      ).status,
+      200
+    );
+    assert.equal(
+      (
+        await request(app)
+          .post('/api/v1/integrations/discovery/mappings/packs')
+          .type('text')
+          .send(
+            JSON.stringify({
+              format: 'seerrng.curated-title-matches',
+              version: 1,
+              packId: 'anime-core',
+              name: 'Anime core',
+              exportedAt: new Date().toISOString(),
+              entries: [
+                { identity: 'anilist:123', tmdbId: 456, mediaType: 'tv' },
+              ],
+            })
+          )
+      ).status,
+      200
+    );
+    assert.equal(
+      (
+        await request(app).delete(
+          '/api/v1/integrations/discovery/mappings/packs/anime-core'
+        )
+      ).status,
+      200
+    );
+    assert.equal(
       (
         await request(app)
           .post('/api/v1/integrations/discovery/tracking/trakt')

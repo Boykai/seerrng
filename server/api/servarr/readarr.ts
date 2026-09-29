@@ -116,6 +116,171 @@ export interface ReadarrAuthorLookupResult {
   images?: ReadarrBookImage[];
 }
 
+export interface ReadarrMediaMoveAuthor {
+  id: number;
+  name: string;
+  path: string;
+  ebookPath?: string;
+  audiobookPath?: string;
+  bookFileCount: number;
+}
+
+export interface ReadarrMediaMoveFile {
+  fileType: 'media' | 'metadata' | 'extra';
+  sourcePath: string;
+  destinationPath: string;
+  status: 'ready' | 'missing' | 'alreadyAtDestination' | 'conflict';
+  sourceExists: boolean;
+  destinationExists: boolean;
+  size: number;
+}
+
+export interface ReadarrMediaMoveAuthorPreview {
+  authorId: number;
+  authorName: string;
+  format: ReadarrMediaType;
+  sourcePath: string;
+  destinationPath: string;
+  mediaFileCount: number;
+  sidecarFileCount: number;
+  missingFileCount: number;
+  alreadyAtDestinationCount: number;
+  totalSize: number;
+  requiredCopyBytes: number;
+  availableSpace?: number;
+  canMove: boolean;
+  warnings: string[];
+  conflicts: string[];
+  files: ReadarrMediaMoveFile[];
+}
+
+export interface ReadarrMediaMoveBatchPreview {
+  format: ReadarrMediaType;
+  destinationRootPath: string;
+  previewToken: string;
+  authorCount: number;
+  mediaFileCount: number;
+  sidecarFileCount: number;
+  missingFileCount: number;
+  totalSize: number;
+  requiredCopyBytes: number;
+  availableSpace?: number;
+  canMove: boolean;
+  warnings: string[];
+  conflicts: string[];
+  authors: ReadarrMediaMoveAuthorPreview[];
+}
+
+export interface ReadarrMediaMoveCommand {
+  id: number;
+  name: string;
+  status: string;
+  message?: string;
+  progress?: number;
+  queued?: string;
+  started?: string;
+  ended?: string;
+}
+
+const MEDIA_MOVE_MAX_AUTHORS = 1_000;
+const MEDIA_MOVE_MAX_FILES_PER_AUTHOR = 10_000;
+const MEDIA_MOVE_MAX_TEXT = 4_096;
+const boundedMediaMoveText = (value: unknown): string =>
+  typeof value === 'string' ? value.slice(0, MEDIA_MOVE_MAX_TEXT) : '';
+const mediaMoveInteger = (value: unknown): number =>
+  Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : 0;
+
+const sanitizeMediaMoveFile = (
+  value: unknown
+): ReadarrMediaMoveFile | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return undefined;
+  const record = value as Record<string, unknown>;
+  const fileType = record.fileType;
+  const status = record.status;
+  if (
+    !['media', 'metadata', 'extra'].includes(String(fileType)) ||
+    !['ready', 'missing', 'alreadyAtDestination', 'conflict'].includes(
+      String(status)
+    )
+  )
+    return undefined;
+  const sourcePath = boundedMediaMoveText(record.sourcePath);
+  const destinationPath = boundedMediaMoveText(record.destinationPath);
+  if (!sourcePath || !destinationPath) return undefined;
+  return {
+    fileType: fileType as ReadarrMediaMoveFile['fileType'],
+    sourcePath,
+    destinationPath,
+    status: status as ReadarrMediaMoveFile['status'],
+    sourceExists: record.sourceExists === true,
+    destinationExists: record.destinationExists === true,
+    size: mediaMoveInteger(record.size),
+  };
+};
+
+const sanitizeMediaMoveAuthorPreview = (
+  value: unknown
+): ReadarrMediaMoveAuthorPreview | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return undefined;
+  const record = value as Record<string, unknown>;
+  const authorId = mediaMoveInteger(record.authorId);
+  const authorName = boundedMediaMoveText(record.authorName);
+  const format = record.format;
+  const sourcePath = boundedMediaMoveText(record.sourcePath);
+  const destinationPath = boundedMediaMoveText(record.destinationPath);
+  if (
+    authorId <= 0 ||
+    !authorName ||
+    (format !== 'ebook' && format !== 'audiobook') ||
+    !sourcePath ||
+    !destinationPath
+  )
+    return undefined;
+  const files = Array.isArray(record.files)
+    ? record.files.slice(0, MEDIA_MOVE_MAX_FILES_PER_AUTHOR).flatMap((file) => {
+        const sanitized = sanitizeMediaMoveFile(file);
+        return sanitized ? [sanitized] : [];
+      })
+    : [];
+  return {
+    authorId,
+    authorName,
+    format,
+    sourcePath,
+    destinationPath,
+    mediaFileCount: mediaMoveInteger(record.mediaFileCount),
+    sidecarFileCount: mediaMoveInteger(record.sidecarFileCount),
+    missingFileCount: mediaMoveInteger(record.missingFileCount),
+    alreadyAtDestinationCount: mediaMoveInteger(
+      record.alreadyAtDestinationCount
+    ),
+    totalSize: mediaMoveInteger(record.totalSize),
+    requiredCopyBytes: mediaMoveInteger(record.requiredCopyBytes),
+    ...(Number.isSafeInteger(record.availableSpace) &&
+    Number(record.availableSpace) >= 0
+      ? { availableSpace: Number(record.availableSpace) }
+      : {}),
+    canMove: record.canMove === true,
+    warnings: Array.isArray(record.warnings)
+      ? record.warnings
+          .slice(0, 100)
+          .flatMap((warning) =>
+            typeof warning === 'string' ? [boundedMediaMoveText(warning)] : []
+          )
+      : [],
+    conflicts: Array.isArray(record.conflicts)
+      ? record.conflicts
+          .slice(0, 100)
+          .flatMap((conflict) =>
+            typeof conflict === 'string' ? [boundedMediaMoveText(conflict)] : []
+          )
+      : [],
+    files,
+  };
+};
+
 export interface ReadarrEdition {
   foreignEditionId: string;
   title: string;
@@ -931,6 +1096,191 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
         cause: e,
       });
     }
+  }
+
+  public async getMediaMoveAuthors(): Promise<ReadarrMediaMoveAuthor[]> {
+    await this.ensureProvider();
+    const response = await this.request<unknown>(
+      'GET',
+      '/author',
+      undefined,
+      this.getRequestConfig()
+    );
+    return sanitizeServarrRecordArray<Record<string, unknown>>(
+      response.data,
+      MAX_SERVARR_LIBRARY_RESULTS
+    ).flatMap((record) => {
+      const id = mediaMoveInteger(record.id);
+      const name = boundedMediaMoveText(record.authorName ?? record.name);
+      const path = boundedMediaMoveText(record.path);
+      const statistics =
+        record.statistics &&
+        typeof record.statistics === 'object' &&
+        !Array.isArray(record.statistics)
+          ? (record.statistics as Record<string, unknown>)
+          : {};
+      if (id <= 0 || !name) return [];
+      return [
+        {
+          id,
+          name,
+          path,
+          ...(typeof record.ebookPath === 'string' && record.ebookPath
+            ? { ebookPath: boundedMediaMoveText(record.ebookPath) }
+            : {}),
+          ...(typeof record.audiobookPath === 'string' && record.audiobookPath
+            ? { audiobookPath: boundedMediaMoveText(record.audiobookPath) }
+            : {}),
+          bookFileCount: mediaMoveInteger(statistics.bookFileCount),
+        },
+      ];
+    });
+  }
+
+  public async previewMediaMoveBatch(options: {
+    authorIds: number[];
+    format: ReadarrMediaType;
+    destinationRootPath: string;
+  }): Promise<ReadarrMediaMoveBatchPreview> {
+    await this.ensureProvider();
+    const response = await this.request<unknown>(
+      'POST',
+      '/author/media-move/bulk/preview',
+      options,
+      this.getRequestConfig()
+    );
+    if (
+      !response.data ||
+      typeof response.data !== 'object' ||
+      Array.isArray(response.data)
+    ) {
+      throw new Error('BookshelfNG returned an invalid media-move preview.');
+    }
+    const record = response.data as Record<string, unknown>;
+    const format = record.format;
+    const destinationRootPath = boundedMediaMoveText(
+      record.destinationRootPath
+    );
+    const previewToken = boundedMediaMoveText(record.previewToken);
+    const authors = Array.isArray(record.authors)
+      ? record.authors.slice(0, MEDIA_MOVE_MAX_AUTHORS).flatMap((author) => {
+          const sanitized = sanitizeMediaMoveAuthorPreview(author);
+          return sanitized ? [sanitized] : [];
+        })
+      : [];
+    if (
+      format !== options.format ||
+      destinationRootPath !== options.destinationRootPath ||
+      !previewToken ||
+      authors.length !== options.authorIds.length
+    ) {
+      throw new Error('BookshelfNG returned an incomplete media-move preview.');
+    }
+    return {
+      format: options.format,
+      destinationRootPath,
+      previewToken,
+      authorCount: mediaMoveInteger(record.authorCount) || authors.length,
+      mediaFileCount:
+        mediaMoveInteger(record.mediaFileCount) ||
+        authors.reduce((count, author) => count + author.mediaFileCount, 0),
+      sidecarFileCount:
+        mediaMoveInteger(record.sidecarFileCount) ||
+        authors.reduce((count, author) => count + author.sidecarFileCount, 0),
+      missingFileCount:
+        mediaMoveInteger(record.missingFileCount) ||
+        authors.reduce((count, author) => count + author.missingFileCount, 0),
+      totalSize:
+        mediaMoveInteger(record.totalSize) ||
+        authors.reduce((size, author) => size + author.totalSize, 0),
+      requiredCopyBytes:
+        mediaMoveInteger(record.requiredCopyBytes) ||
+        authors.reduce((size, author) => size + author.requiredCopyBytes, 0),
+      ...(Number.isSafeInteger(record.availableSpace) &&
+      Number(record.availableSpace) >= 0
+        ? { availableSpace: Number(record.availableSpace) }
+        : {}),
+      canMove: record.canMove === true,
+      warnings: Array.isArray(record.warnings)
+        ? record.warnings
+            .slice(0, 100)
+            .flatMap((warning) =>
+              typeof warning === 'string' ? [boundedMediaMoveText(warning)] : []
+            )
+        : [],
+      conflicts: Array.isArray(record.conflicts)
+        ? record.conflicts
+            .slice(0, 100)
+            .flatMap((conflict) =>
+              typeof conflict === 'string'
+                ? [boundedMediaMoveText(conflict)]
+                : []
+            )
+        : [],
+      authors,
+    };
+  }
+
+  public async startMediaMoveBatch(options: {
+    authorIds: number[];
+    format: ReadarrMediaType;
+    destinationRootPath: string;
+    previewToken: string;
+  }): Promise<ReadarrMediaMoveCommand> {
+    await this.ensureProvider();
+    const response = await this.request<unknown>(
+      'POST',
+      '/author/media-move/bulk/start',
+      options,
+      this.getRequestConfig()
+    );
+    return ReadarrAPI.sanitizeMediaMoveCommand(response.data);
+  }
+
+  public async getMediaMoveCommand(
+    commandId: number
+  ): Promise<ReadarrMediaMoveCommand> {
+    await this.ensureProvider();
+    const response = await this.request<unknown>(
+      'GET',
+      `/command/${commandId}`,
+      undefined,
+      this.getRequestConfig()
+    );
+    return ReadarrAPI.sanitizeMediaMoveCommand(response.data);
+  }
+
+  private static sanitizeMediaMoveCommand(
+    value: unknown
+  ): ReadarrMediaMoveCommand {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      throw new Error('BookshelfNG returned an invalid media-move command.');
+    const record = value as Record<string, unknown>;
+    const id = mediaMoveInteger(record.id);
+    const name = boundedMediaMoveText(record.name);
+    const status = boundedMediaMoveText(record.status);
+    if (!id || !name || !status)
+      throw new Error('BookshelfNG returned an invalid media-move command.');
+    return {
+      id,
+      name,
+      status,
+      ...(typeof record.message === 'string'
+        ? { message: boundedMediaMoveText(record.message) }
+        : {}),
+      ...(Number.isFinite(record.progress)
+        ? { progress: Number(record.progress) }
+        : {}),
+      ...(typeof record.queued === 'string'
+        ? { queued: boundedMediaMoveText(record.queued) }
+        : {}),
+      ...(typeof record.started === 'string'
+        ? { started: boundedMediaMoveText(record.started) }
+        : {}),
+      ...(typeof record.ended === 'string'
+        ? { ended: boundedMediaMoveText(record.ended) }
+        : {}),
+    };
   }
 
   public async getBook(

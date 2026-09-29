@@ -17,6 +17,7 @@ import {
   normalizeServiceHostname,
   normalizeUrlBase,
 } from '@server/utils/serviceUrl';
+import axios from 'axios';
 import { Router } from 'express';
 
 const softwareAcquisitionRoutes = Router();
@@ -168,6 +169,36 @@ const isSupportedHandshake = (
     : capabilities.catalog === true && capabilities.pcAcquisition === true;
 };
 
+const providerFailureMessage = (
+  provider: 'romarr' | 'questarr',
+  phase: 'integration handshake' | 'platform list',
+  error: unknown
+): string => {
+  const service = provider === 'romarr' ? 'ROMarrNG' : 'QuestarrNG';
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    if (status === 401 || status === 403) {
+      return `${service} rejected the API key (HTTP ${status}) during the ${phase}.`;
+    }
+    if (status === 404) {
+      return `${service} returned HTTP 404 during the ${phase}. Check the service version and base path.`;
+    }
+    if (typeof status === 'number') {
+      return `${service} returned HTTP ${status} during the ${phase}.`;
+    }
+    if (error.code === 'ECONNREFUSED') {
+      return `${service} refused the connection during the ${phase}. Check the hostname and port.`;
+    }
+    if (error.code === 'ENOTFOUND') {
+      return `The ${service} hostname could not be resolved during the ${phase}.`;
+    }
+    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+      return `The connection to ${service} timed out during the ${phase}. Check its address and container network.`;
+    }
+  }
+  return `${service} connection failed during the ${phase}. Check its address and API key.`;
+};
+
 softwareAcquisitionRoutes.get('/', (_req, res) => {
   res.status(200).json(settingsView(getSettings().softwareAcquisition));
 });
@@ -284,6 +315,8 @@ softwareAcquisitionRoutes.post(
         .json({ error: 'Provider hostname and API key are required.' });
     }
 
+    let phase: 'integration handshake' | 'platform list' =
+      'integration handshake';
     try {
       if (provider === 'romarr') {
         const api = new ROMarrNGAPI(parsed.value);
@@ -293,6 +326,7 @@ softwareAcquisitionRoutes.post(
             error: 'ROMarrNG returned an unsupported integration contract.',
           });
         }
+        phase = 'platform list';
         const platforms = await api.getPlatforms(true);
         return res.status(200).json({
           success: true,
@@ -326,9 +360,9 @@ softwareAcquisitionRoutes.post(
           ? { capabilities: handshake.capabilities }
           : {}),
       });
-    } catch {
+    } catch (error) {
       return res.status(502).json({
-        error: `${provider === 'romarr' ? 'ROMarrNG' : 'QuestarrNG'} connection failed.`,
+        error: providerFailureMessage(provider, phase, error),
       });
     }
   })

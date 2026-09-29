@@ -26,6 +26,11 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
 - Users can export and import a versioned personal mapping pack without provider
   credentials. Import is bounded, transactional, idempotent, and private to the
   importing account; it can be restored before provider reconnection.
+- Administrators can publish, export and remove bounded versioned title-match
+  packs shared by every account on the instance. Provider identities are unique
+  across shared packs, private matches take precedence, and the UI requires an
+  explicit all-accounts acknowledgement before publishing and a second step
+  before deleting.
 - My Library browses Trakt, AniList, Simkl, Plex, Jellyfin, and Emby shelves;
   explicit watched, rating, and AniList progress writes are confirmed and
   idempotent. Manual TMDB matches are private to the current user's library.
@@ -49,8 +54,8 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
 - Verify manual-import payloads and acquisition actions against live services,
   including the supported Readarr-compatible backend variants.
 - Calendar date-change history and additional media sources.
-- Curated shared mapping packs, additional provider-specific live resolvers, and
-  bulk gap repair across sources beyond per-title, current-page, and pack import.
+- Additional provider-specific live resolvers and bulk gap repair across sources
+  beyond per-title, current-page, and pack import.
 - Episode-level cross-provider identity.
 - Opt-in rolling watch-ahead, durable scheduling and episode progress handling.
 - Optional Jellyfin plugin using the independently deployed SeerrNG server,

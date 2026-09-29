@@ -29,6 +29,7 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
   - [Software requests: ROMs and PC games](./docs/using-seerr/software-acquisition.md)
   - [Request Status and Download copy](./docs/using-seerr/request-status.md)
   - [Books, authors, and series](./docs/using-seerr/books-and-series.md)
+  - [Move Bookshelf media paths](./docs/using-seerr/bookshelf-media-path-migration.md)
   - [Configure comics](./docs/using-seerr/comics-backend.md)
   - [Configure magazines](./docs/using-seerr/magazines-backend.md)
   - [Indexer searches by media category](./docs/using-seerr/indexer-searches.md)
@@ -69,6 +70,7 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
 - Administrator-controlled availability switches for each supported category, including separate ebook, audiobook, Retro, Modern, and PC Games controls.
 - Bookshelf backend diagnostics that classify Hardcover, softcover/Goodreads, and unknown metadata providers.
 - Hardcover-first Bookshelf deployment and migration tooling for existing Readarr or softcover libraries.
+- Admin-only Bookshelf path moves with a conflict and disk-space preview, confirmation, API access, and a dry-run-first CLI. The mover works inside one BookshelfNG database; consolidate an old split deployment before using it.
 - Resumable, layered Readarr/softcover-to-Hardcover migration with strict matching, softcover metadata recovery, validation, cutover checks, and an opt-in deterministic local-record fallback for books Hardcover cannot import.
 - Watchlists, blocklists, request quotas, override rules, permissions, notifications, issue reporting, and request management.
 - Authenticated **Download copy** links in Request Status for verified movie, TV, book, comic, magazine, ROM, and PC game files.
@@ -120,6 +122,7 @@ SeerrNG documentation is maintained in the [docs folder](https://github.com/snap
 - [Hide requested or available media](./docs/using-seerr/settings/general.md)
 - [Choose which media categories are available](./docs/using-seerr/settings/media-categories.md)
 - [Configure Bookshelf](./docs/using-seerr/bookshelf-backend.md)
+- [Move ebook or audiobook files between Bookshelf root folders](./docs/using-seerr/bookshelf-media-path-migration.md)
 - [Bookshelf metadata sources](./docs/using-seerr/bookshelf-metadata-sources.md)
 - [Configure override rules](./docs/using-seerr/override-rules.md)
 - [Manage users and request preferences](./docs/using-seerr/users/editing-users.md)

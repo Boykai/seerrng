@@ -2,6 +2,7 @@ import ExternalAPI from '@server/api/externalapi';
 import cacheManager from '@server/lib/cache';
 import type { SoftwareProviderSettings } from '@server/lib/settings';
 import { buildServiceUrl } from '@server/utils/serviceUrl';
+import axios from 'axios';
 import { Readable } from 'node:stream';
 import type {
   PcGameVariant,
@@ -13,7 +14,7 @@ import type {
 } from './types';
 
 export interface QuestarrHandshake extends SoftwareProviderHandshake {
-  requestContractVersion: number;
+  requestContractVersion?: number;
 }
 
 export interface SoftwareCatalogSearchPage {
@@ -69,8 +70,19 @@ export class QuestarrNGAPI extends ExternalAPI {
     );
   }
 
-  public getHandshake(): Promise<QuestarrHandshake> {
-    return this.get('/api/integration/seerrng/v1/ping', {}, 0);
+  public async getHandshake(): Promise<QuestarrHandshake> {
+    try {
+      return await this.get<QuestarrHandshake>(
+        '/api/integration/seerrng/v1/ping',
+        {},
+        0
+      );
+    } catch (error) {
+      if (!axios.isAxiosError(error) || error.response?.status !== 404) {
+        throw error;
+      }
+      return this.get<QuestarrHandshake>('/api/integration/ping', {}, 0);
+    }
   }
 
   public searchCatalog(

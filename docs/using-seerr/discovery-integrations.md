@@ -105,6 +105,26 @@ provider item IDs and TMDB IDs only, not account tokens or application secrets.
 An import can be restored before you reconnect the provider accounts; the
 matches take effect when those items appear in a library or discovery feed.
 
+## Administrator-managed shared matches
+
+Administrators can publish versioned packs under **Settings → Discovery
+Integrations → Shared discovery title matches**. A published pack applies to
+every account on this SeerrNG instance. The page previews each pack before it is
+published, asks for an explicit instance-wide confirmation, and requires a
+second confirmation before deleting a pack. Packs can be downloaded for backup
+or transfer to another instance.
+
+Publishing a pack replaces all entries for the same pack ID. Each provider
+identity can appear in only one shared pack; an import with an identity already
+owned by another pack is rejected. Packs are limited to 10,000 entries and
+contain provider item IDs and TMDB matches, never provider credentials.
+
+Shared matches are applied in discovery feeds and connected libraries when an
+item does not already have a catalog ID. A match you save privately takes
+precedence over a shared pack. You can change a shared match on an item to save
+a private override; removing or replacing the shared pack does not remove that
+private match.
+
 ## Release calendar
 
 **Calendar** displays movie releases and series episodes from configured Radarr

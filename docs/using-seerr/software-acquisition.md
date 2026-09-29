@@ -85,9 +85,14 @@ media automation services.
 ROMarrNG's supported platform list is the source of selectable emulation
 systems. The administrator assigns each system to one of these groups:
 
-- **Retro** — systems grouped as retro in the user catalog.
-- **Modern** — systems grouped as modern in the user catalog.
+- **Retro** — older console and handheld systems.
+- **Modern** — newer platforms such as PS4, PS5, Vita, Xbox One, and Xbox
+  Series.
 - **Not available in requests** — the default for an unassigned system.
+
+These labels organize emulation browsing and requests in SeerrNG. They do not
+change ROMarrNG's platform setup or automatically classify systems; choose the
+group for each platform that matches how you want users to browse it.
 
 The assignment is saved by the system's stable slug, so a provider display-name
 change does not discard it. SeerrNG matches IGDB catalog platforms to a

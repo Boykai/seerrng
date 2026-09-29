@@ -545,6 +545,72 @@ describe('software request routes', () => {
     assert.match(response.body.error, /unsupported integration contract/i);
   });
 
+  it('reports API-key rejection without exposing provider response details', async () => {
+    const app = createOpenApiValidatedSettingsApp();
+    mock.method(QuestarrNGAPI.prototype, 'getHandshake', async () => {
+      throw Object.assign(new AxiosError('private provider body and key'), {
+        response: { status: 401 },
+      });
+    });
+
+    const response = await request(app)
+      .post('/api/v1/settings/software-acquisition/test/questarr')
+      .send({
+        hostname: '127.0.0.1',
+        port: 3000,
+        useSsl: false,
+        baseUrl: '',
+        apiKey: 'questarr-test-key',
+      });
+
+    assert.strictEqual(response.status, 502);
+    assert.match(response.body.error, /rejected the API key \(HTTP 401\)/);
+    assert.match(response.body.error, /integration handshake/);
+    assert.doesNotMatch(
+      response.body.error,
+      /private provider body|questarr-test-key/
+    );
+  });
+
+  it('reports connection failures with the failing provider phase', async () => {
+    const app = createOpenApiValidatedSettingsApp();
+    mock.method(ROMarrNGAPI.prototype, 'getHandshake', async () => ({
+      service: 'romarr',
+      apiVersion: 1,
+      capabilities: {
+        catalog: true,
+        pcAcquisition: false,
+        emulationAcquisition: true,
+        requestActions: { retry: true, cancel: true },
+        assetStreaming: true,
+      },
+    }));
+    mock.method(ROMarrNGAPI.prototype, 'getPlatforms', async () => {
+      throw Object.assign(new AxiosError('private provider body'), {
+        code: 'ECONNREFUSED',
+      });
+    });
+
+    const response = await request(app)
+      .post('/api/v1/settings/software-acquisition/test/romarr')
+      .send({
+        hostname: 'romarr.test',
+        port: 6868,
+        useSsl: false,
+        baseUrl: '',
+        apiKey: 'romarr-test-key',
+      });
+
+    assert.strictEqual(response.status, 502);
+    assert.match(response.body.error, /ROMarrNG refused the connection/);
+    assert.match(response.body.error, /platform list/);
+    assert.match(response.body.error, /hostname and port/);
+    assert.doesNotMatch(
+      response.body.error,
+      /private provider body|romarr-test-key/
+    );
+  });
+
   it('refreshes ROMarr systems while testing edited settings and reports the count', async () => {
     const app = createOpenApiValidatedSettingsApp();
     mock.method(ROMarrNGAPI.prototype, 'getHandshake', async () => ({

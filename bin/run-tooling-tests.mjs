@@ -11,6 +11,7 @@ const portableTests = [
   'bin/duplicate-detector/triage.test.mjs',
   'scripts/chart-workflow.test.mjs',
   'scripts/check-container-security.test.mjs',
+  'scripts/bookshelf-media-move.test.mjs',
   'scripts/check-helm-security.test.mjs',
   'scripts/check-workflow-boundaries.test.mjs',
   'scripts/release-notes.test.mjs',

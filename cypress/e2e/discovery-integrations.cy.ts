@@ -39,6 +39,120 @@ describe('Discovery provider integrations', () => {
     cy.get('#trakt-clientSecret').should('have.value', '');
     cy.screenshot('discovery-integrations-settings');
   });
+  it('publishes and removes shared packs with an instance-wide confirmation', () => {
+    const packUrl = '/api/v1/integrations/discovery/mappings/packs';
+    const pack = {
+      format: 'seerrng.curated-title-matches',
+      version: 1,
+      packId: 'anime-core',
+      name: 'Anime core',
+      exportedAt: new Date().toISOString(),
+      entries: [{ identity: 'anilist:123', tmdbId: 456, mediaType: 'tv' }],
+    };
+    const summary = {
+      packId: 'anime-core',
+      name: 'Anime core',
+      version: 1,
+      count: 1,
+      updatedAt: new Date().toISOString(),
+    };
+    let published = false;
+    cy.intercept('GET', packUrl, (request) =>
+      request.reply({ packs: published ? [summary] : [] })
+    ).as('sharedPacks');
+    cy.intercept('POST', packUrl, (request) => {
+      expect(request.headers['content-type']).to.contain('text/plain');
+      expect(JSON.parse(request.body)).to.deep.equal(pack);
+      published = true;
+      request.reply({
+        packId: 'anime-core',
+        name: 'Anime core',
+        imported: 1,
+        updated: 0,
+        unchanged: 0,
+        removed: 0,
+        total: 1,
+      });
+    }).as('publishPack');
+    cy.intercept('DELETE', `${packUrl}/anime-core`, (request) => {
+      published = false;
+      request.reply({ removed: true });
+    }).as('deletePack');
+
+    cy.visit('/settings/discovery');
+    cy.wait('@sharedPacks');
+    cy.contains(
+      'Every pack below affects all accounts on this SeerrNG instance'
+    ).should('be.visible');
+    cy.get('#curated-identity-pack-file').selectFile({
+      contents: Cypress.Buffer.from(JSON.stringify(pack)),
+      fileName: 'anime-core.json',
+      mimeType: 'application/json',
+    });
+    cy.contains('Anime core (anime-core) contains 1 title matches').should(
+      'be.visible'
+    );
+    cy.contains(
+      'label',
+      'I understand this shared pack applies to every account'
+    )
+      .find('input')
+      .check();
+    cy.contains('button', 'Publish shared pack').click();
+    cy.wait('@publishPack');
+    cy.wait('@sharedPacks');
+    cy.contains('Shared pack “Anime core” saved. Entries: 1').should(
+      'be.visible'
+    );
+    cy.contains('button', 'Delete pack').click();
+    cy.contains(
+      'Deleting “Anime core” removes its shared matches for every account'
+    ).should('be.visible');
+    cy.contains('button', 'Delete shared pack').click();
+    cy.wait('@deletePack');
+    cy.wait('@sharedPacks');
+    cy.contains(
+      'Shared pack “Anime core” was deleted for every account.'
+    ).should('be.visible');
+  });
+  it('labels administrator-curated title matches and offers private overrides', () => {
+    cy.intercept(
+      'GET',
+      '/api/v1/integrations/discovery/feeds/anilist/trending*',
+      {
+        page: 1,
+        hasMore: false,
+        missingMappings: 0,
+        items: [
+          {
+            id: 'anilist:456',
+            source: 'anilist',
+            sourceId: '456',
+            title: 'Shared catalog series',
+            mediaType: 'tv',
+            tmdbId: 987,
+            identityResolution: 'curated',
+            mappingAvailable: true,
+          },
+        ],
+      }
+    ).as('curatedFeed');
+    cy.intercept('/api/v1/tv/987*', {
+      id: 987,
+      name: 'Shared catalog series',
+      firstAirDate: '2021-01-01',
+      genreIds: [],
+    });
+    cy.visit('/discover/providers');
+    cy.get('#provider-feed').select('anilist/trending');
+    cy.wait('@curatedFeed');
+    cy.contains('Shared catalog series').should('be.visible');
+    cy.contains(
+      'This match comes from an administrator-managed shared pack. Choose another title to save a private override.'
+    ).should('be.visible');
+    cy.contains('button', 'Change title match').should('be.visible');
+    cy.contains('button', 'Reset title match').should('not.exist');
+  });
   it('shows personal authorization codes and permits cancelling an attempt', () => {
     cy.intercept(
       'POST',

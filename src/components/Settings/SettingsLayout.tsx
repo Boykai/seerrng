@@ -6,6 +6,7 @@ import type { SettingsRoute } from '@app/components/Common/SettingsTabs';
 import SettingsTabs from '@app/components/Common/SettingsTabs';
 import { SETTINGS_USER_CHANGE_EVENT } from '@app/components/Settings/settingsEvents';
 import useSettings from '@app/hooks/useSettings';
+import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
@@ -30,6 +31,7 @@ const messages = defineMessages('components.Settings', {
   menuPlexSettings: 'Plex',
   menuJellyfinSettings: '{mediaServerName}',
   menuServices: 'Services',
+  menuLibraryMigration: 'Library Migration',
   menuNetwork: 'Network',
   menuNotifications: 'Notifications',
   menuLogs: 'Logs',
@@ -69,12 +71,16 @@ export const useSettingsPageAction = (action: SettingsPageAction | null) => {
 };
 
 const editableSettingsRoute = (path: string) =>
-  !/^\/settings\/(?:services|logs|jobs|about|discovery)(?:\/|$)/.test(path);
+  !/^\/settings\/(?:services|library-migration|logs|jobs|about|discovery)(?:\/|$)/.test(
+    path
+  );
 
 const SettingsLayout = ({ children }: SettingsLayoutProps) => {
   const intl = useIntl();
   const router = useRouter();
   const settings = useSettings();
+  const { hasPermission } = useUser();
+  const canAdminister = hasPermission(Permission.ADMIN);
   const contentRef = useRef<HTMLDivElement>(null);
   const currentSettingsPathRef = useRef(router.asPath);
   const dirtyRef = useRef(false);
@@ -119,6 +125,15 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
       route: '/settings/services',
       regex: /^\/settings\/services/,
     },
+    ...(canAdminister
+      ? [
+          {
+            text: intl.formatMessage(messages.menuLibraryMigration),
+            route: '/settings/library-migration',
+            regex: /^\/settings\/library-migration/,
+          },
+        ]
+      : []),
     {
       text: intl.formatMessage(messages.menuDiscoveryIntegrations),
       route: '/settings/discovery',

@@ -10,6 +10,7 @@ import {
   requireDiscoveryAccount,
 } from './accounts';
 import { cachedAccountRead } from './cache';
+import { applyCuratedIdentityMappings } from './curatedIdentityPacks';
 import {
   resolveExternalIdentityMatches,
   toPublicIdentityCandidate,
@@ -26,7 +27,7 @@ export interface DiscoveryFeedItem {
   year?: number;
   imageUrl?: string;
   identityMapped?: boolean;
-  identityResolution?: 'personal' | 'external-id';
+  identityResolution?: 'personal' | 'curated' | 'external-id';
   mappingAvailable?: boolean;
 }
 interface DiscoveryFeedResolverCandidate extends DiscoveryFeedItem {
@@ -199,8 +200,10 @@ export async function discoveryFeed(
     userId,
     items
   );
+  const curatedMappedItems =
+    await applyCuratedIdentityMappings(manuallyMappedItems);
   const resolvedItems =
-    await resolveExternalIdentityMatches(manuallyMappedItems);
+    await resolveExternalIdentityMatches(curatedMappedItems);
   const visibleItems = resolvedItems.filter(
     (item) => !item.mediaType || isMediaCategoryEnabled(item.mediaType)
   );

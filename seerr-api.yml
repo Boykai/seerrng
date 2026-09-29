@@ -20,6 +20,8 @@ tags:
     description: Endpoints related to user management.
   - name: search
     description: Endpoints related to search and discovery.
+  - name: admin
+    description: Administrator-managed instance-wide configuration and tools.
   - name: request
     description: Endpoints related to request management.
   - name: movies
@@ -439,7 +441,7 @@ components:
           type: boolean
         identityResolution:
           type: string
-          enum: [personal, external-id]
+          enum: [personal, curated, external-id]
         mappingAvailable:
           type: boolean
     DiscoveryFeedPage:
@@ -505,7 +507,7 @@ components:
           type: boolean
         identityResolution:
           type: string
-          enum: [personal, external-id]
+          enum: [personal, curated, external-id]
         imageUrl:
           type: string
         year:
@@ -653,6 +655,92 @@ components:
         total:
           type: integer
           minimum: 0
+    CuratedIdentityMappingPack:
+      type: object
+      additionalProperties: false
+      required: [format, version, packId, name, exportedAt, entries]
+      properties:
+        format:
+          type: string
+          enum: [seerrng.curated-title-matches]
+        version:
+          type: integer
+          enum: [1]
+        packId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        exportedAt:
+          type: string
+          format: date-time
+        entries:
+          type: array
+          maxItems: 10000
+          items:
+            $ref: '#/components/schemas/PersonalIdentityMappingPackEntry'
+    CuratedIdentityPackSummary:
+      type: object
+      additionalProperties: false
+      required: [packId, name, version, count, updatedAt]
+      properties:
+        packId:
+          type: string
+          maxLength: 64
+        name:
+          type: string
+          maxLength: 128
+        version:
+          type: integer
+          enum: [1]
+        count:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        updatedAt:
+          type: string
+          format: date-time
+    CuratedIdentityPackList:
+      type: object
+      additionalProperties: false
+      required: [packs]
+      properties:
+        packs:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/CuratedIdentityPackSummary'
+    CuratedIdentityPackImportResult:
+      type: object
+      additionalProperties: false
+      required: [packId, name, imported, updated, unchanged, removed, total]
+      properties:
+        packId:
+          type: string
+          maxLength: 64
+        name:
+          type: string
+          maxLength: 128
+        imported:
+          type: integer
+          minimum: 0
+        updated:
+          type: integer
+          minimum: 0
+        unchanged:
+          type: integer
+          minimum: 0
+        removed:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
     DiscoveryTrackingRequest:
       type: object
       additionalProperties: false
@@ -3776,6 +3864,263 @@ components:
               type: string
             metadataSource:
               type: string
+    BookshelfMediaMoveAuthor:
+      type: object
+      required: [id, name, path, currentFormatPath, bookFileCount]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        path:
+          type: string
+        currentFormatPath:
+          type: string
+        bookFileCount:
+          type: integer
+          minimum: 0
+    BookshelfMediaMoveRootFolder:
+      type: object
+      required: [id, path, accessible]
+      properties:
+        id:
+          type: integer
+        path:
+          type: string
+        accessible:
+          type: boolean
+    BookshelfMediaMoveConfiguration:
+      type: object
+      required:
+        - serviceId
+        - serviceName
+        - configuredFormat
+        - format
+        - truncated
+        - authors
+        - rootFolders
+      properties:
+        serviceId:
+          type: integer
+        serviceName:
+          type: string
+        configuredFormat:
+          type: string
+          enum: [ebook, audiobook]
+        format:
+          type: string
+          enum: [ebook, audiobook]
+        truncated:
+          type: boolean
+          description: True when more than 10,000 author records were found.
+        authors:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookshelfMediaMoveAuthor'
+        rootFolders:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookshelfMediaMoveRootFolder'
+    BookshelfMediaMovePreviewRequest:
+      type: object
+      required: [authorIds, format, destinationRootPath]
+      properties:
+        authorIds:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: integer
+            minimum: 1
+        format:
+          type: string
+          enum: [ebook, audiobook]
+        sourceRootPath:
+          type: string
+          maxLength: 4096
+        destinationRootPath:
+          type: string
+          maxLength: 4096
+    BookshelfMediaMoveStartRequest:
+      allOf:
+        - $ref: '#/components/schemas/BookshelfMediaMovePreviewRequest'
+        - type: object
+          required: [previewToken]
+          properties:
+            previewToken:
+              type: string
+              minLength: 1
+              maxLength: 512
+    BookshelfMediaMoveFile:
+      type: object
+      required:
+        - fileType
+        - sourcePath
+        - destinationPath
+        - status
+        - sourceExists
+        - destinationExists
+        - size
+      properties:
+        fileType:
+          type: string
+          enum: [media, metadata, extra]
+        sourcePath:
+          type: string
+        destinationPath:
+          type: string
+        status:
+          type: string
+          enum: [ready, missing, alreadyAtDestination, conflict]
+        sourceExists:
+          type: boolean
+        destinationExists:
+          type: boolean
+        size:
+          type: integer
+          minimum: 0
+    BookshelfMediaMoveAuthorPreview:
+      type: object
+      required:
+        - authorId
+        - authorName
+        - format
+        - sourcePath
+        - destinationPath
+        - mediaFileCount
+        - sidecarFileCount
+        - missingFileCount
+        - alreadyAtDestinationCount
+        - totalSize
+        - requiredCopyBytes
+        - canMove
+        - warnings
+        - conflicts
+        - files
+      properties:
+        authorId:
+          type: integer
+        authorName:
+          type: string
+        format:
+          type: string
+          enum: [ebook, audiobook]
+        sourcePath:
+          type: string
+        destinationPath:
+          type: string
+        mediaFileCount:
+          type: integer
+          minimum: 0
+        sidecarFileCount:
+          type: integer
+          minimum: 0
+        missingFileCount:
+          type: integer
+          minimum: 0
+        alreadyAtDestinationCount:
+          type: integer
+          minimum: 0
+        totalSize:
+          type: integer
+          minimum: 0
+        requiredCopyBytes:
+          type: integer
+          minimum: 0
+        availableSpace:
+          type: integer
+          minimum: 0
+        canMove:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+        conflicts:
+          type: array
+          items:
+            type: string
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookshelfMediaMoveFile'
+    BookshelfMediaMoveBatchPreview:
+      type: object
+      required:
+        - format
+        - destinationRootPath
+        - previewToken
+        - authorCount
+        - mediaFileCount
+        - sidecarFileCount
+        - missingFileCount
+        - totalSize
+        - requiredCopyBytes
+        - canMove
+        - warnings
+        - conflicts
+        - authors
+      properties:
+        format:
+          type: string
+          enum: [ebook, audiobook]
+        destinationRootPath:
+          type: string
+        previewToken:
+          type: string
+        authorCount:
+          type: integer
+        mediaFileCount:
+          type: integer
+        sidecarFileCount:
+          type: integer
+        missingFileCount:
+          type: integer
+        totalSize:
+          type: integer
+        requiredCopyBytes:
+          type: integer
+        availableSpace:
+          type: integer
+        canMove:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+        conflicts:
+          type: array
+          items:
+            type: string
+        authors:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookshelfMediaMoveAuthorPreview'
+    BookshelfMediaMoveCommand:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+            [queued, started, completed, failed, aborted, cancelled, orphaned]
+        message:
+          type: string
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+        queued:
+          type: string
+        started:
+          type: string
+        ended:
+          type: string
     ServarrServiceDetails:
       type: object
       properties:
@@ -11823,6 +12168,143 @@ paths:
                     type: string
                   lookupCount:
                     type: number
+  /settings/readarr/{readarrId}/media-move/configuration:
+    get:
+      summary: List Bookshelf library details for a path move
+      description: Admin-only. Reads authors and accessible root folders from one Bookshelf instance. It does not merge separate Bookshelf databases.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: readarrId
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: format
+          required: true
+          schema:
+            type: string
+            enum: [ebook, audiobook]
+      responses:
+        '200':
+          description: Bookshelf library and accessible destination folders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookshelfMediaMoveConfiguration'
+        '400':
+          description: Unsupported format
+        '403':
+          description: Administrator permission required
+        '409':
+          description: BookshelfNG does not support this operation
+        '502':
+          description: Bookshelf library details could not be loaded
+  /settings/readarr/{readarrId}/media-move/preview:
+    post:
+      summary: Preview a bulk Bookshelf media path move
+      description: Admin-only. Returns file paths, conflicts, missing files, and space estimates for selected authors in one Bookshelf instance. The preview token expires when the underlying move inputs change.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: readarrId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookshelfMediaMovePreviewRequest'
+      responses:
+        '200':
+          description: Fresh batch preview and preview token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookshelfMediaMoveBatchPreview'
+        '400':
+          description: Invalid selection, source folder, or destination
+        '403':
+          description: Administrator permission required
+        '409':
+          description: BookshelfNG does not support this operation
+        '502':
+          description: BookshelfNG could not produce a preview
+  /settings/readarr/{readarrId}/media-move/start:
+    post:
+      summary: Start a previewed bulk Bookshelf media path move
+      description: Admin-only. Requires the preview token and queues the move in the selected Bookshelf instance. Preview again if the library changes.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: readarrId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookshelfMediaMoveStartRequest'
+      responses:
+        '202':
+          description: BookshelfNG accepted the move command
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [command]
+                properties:
+                  command:
+                    $ref: '#/components/schemas/BookshelfMediaMoveCommand'
+        '400':
+          description: Invalid move request or missing preview token
+        '403':
+          description: Administrator permission required
+        '409':
+          description: Preview is stale, destination changed, or BookshelfNG lacks move support
+        '502':
+          description: BookshelfNG could not start the move
+  /settings/readarr/{readarrId}/media-move/commands/{commandId}:
+    get:
+      summary: Read a Bookshelf media move command
+      description: Admin-only. Returns the queued move command status from the selected Bookshelf instance.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: readarrId
+          required: true
+          schema:
+            type: integer
+        - in: path
+          name: commandId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Current Bookshelf command status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [command]
+                properties:
+                  command:
+                    $ref: '#/components/schemas/BookshelfMediaMoveCommand'
+        '403':
+          description: Administrator permission required
+        '404':
+          description: Bookshelf or command not found
+        '502':
+          description: Bookshelf command status could not be loaded
   /settings/readarr/{readarrId}:
     put:
       summary: Update Bookshelf settings
@@ -16240,6 +16722,106 @@ paths:
           description: Pack exceeds the 5 MiB upload limit
         '429':
           description: Pack import rate limit reached
+  /integrations/discovery/mappings/packs:
+    get:
+      summary: List administrator-managed title-match packs shared by all accounts
+      tags:
+        - admin
+      responses:
+        '200':
+          description: Shared mapping-pack names, update times, and entry counts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuratedIdentityPackList'
+        '403':
+          description: Administrator permission required
+    post:
+      summary: Import or replace an administrator-managed shared title-match pack
+      tags:
+        - admin
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+              maxLength: 5242880
+              description: UTF-8 JSON text containing a CuratedIdentityMappingPack
+      responses:
+        '200':
+          description: Shared entries imported, updated, retained, or removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuratedIdentityPackImportResult'
+        '400':
+          description: Invalid or unsupported pack
+        '403':
+          description: Administrator permission and browser session required
+        '409':
+          description: Another shared pack owns one of these provider identities or the pack limit is reached
+        '413':
+          description: Pack exceeds the 5 MiB upload limit
+        '429':
+          description: Shared pack import rate limit reached
+  /integrations/discovery/mappings/packs/{packId}:
+    get:
+      summary: Export an administrator-managed shared title-match pack
+      tags:
+        - admin
+      parameters:
+        - name: packId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            pattern: '^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$'
+      responses:
+        '200':
+          description: Versioned shared pack without provider credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuratedIdentityMappingPack'
+        '403':
+          description: Administrator permission required
+        '404':
+          description: Shared pack not found
+    delete:
+      summary: Delete a shared title-match pack for every account
+      tags:
+        - admin
+      parameters:
+        - name: packId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            pattern: '^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$'
+      responses:
+        '200':
+          description: Shared pack removed
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [removed]
+                properties:
+                  removed:
+                    type: boolean
+                    enum: [true]
+        '403':
+          description: Administrator permission and browser session required
+        '404':
+          description: Shared pack not found
+        '429':
+          description: Shared pack modification rate limit reached
   /integrations/discovery/mappings/{identity}:
     delete:
       summary: Remove a personal library title match

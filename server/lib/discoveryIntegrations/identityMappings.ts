@@ -23,7 +23,7 @@ export interface IdentityMappingCandidate {
   tmdbId?: number;
   mediaType?: 'movie' | 'tv';
   identityMapped?: boolean;
-  identityResolution?: 'personal' | 'external-id';
+  identityResolution?: 'personal' | 'curated' | 'external-id';
 }
 
 export interface PersonalIdentityMappingPackEntry {

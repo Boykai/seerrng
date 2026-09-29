@@ -17,6 +17,7 @@ import { getSettings } from '@server/lib/settings';
 import { getHostname } from '@server/utils/getHostname';
 import { normalizeJellyfinGuid } from '@server/utils/jellyfin';
 import { createHash } from 'node:crypto';
+import { applyCuratedIdentityMappings } from './curatedIdentityPacks';
 import {
   resolveExternalIdentityMatches,
   toPublicIdentityCandidate,
@@ -554,7 +555,8 @@ export async function personalMediaServerLibrary(
       }
 
       const personalItems = await applyPersonalIdentityMappings(userId, items);
-      const mappedItems = await resolveExternalIdentityMatches(personalItems);
+      const curatedItems = await applyCuratedIdentityMappings(personalItems);
+      const mappedItems = await resolveExternalIdentityMatches(curatedItems);
       return {
         items: mappedItems.map(toPublicIdentityCandidate),
         libraries,

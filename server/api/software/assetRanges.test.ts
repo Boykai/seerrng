@@ -50,3 +50,41 @@ for (const Provider of [ROMarrNGAPI, QuestarrNGAPI]) {
     }
   });
 }
+
+it('QuestarrNG falls back to the legacy integration handshake route on 404', async () => {
+  const paths: string[] = [];
+  const server = createServer((req, res) => {
+    paths.push(req.url ?? '');
+    assert.strictEqual(req.headers['x-api-key'], 'test');
+    if (req.url === '/api/integration/seerrng/v1/ping') {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'private route details' }));
+      return;
+    }
+    assert.strictEqual(req.url, '/api/integration/ping');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ service: 'QuestarrNG', apiVersion: 1 }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const api = new QuestarrNGAPI({
+      hostname: '127.0.0.1',
+      port: (server.address() as AddressInfo).port,
+      baseUrl: '',
+      useSsl: false,
+      apiKey: 'test',
+    });
+    const handshake = await api.getHandshake();
+    assert.deepStrictEqual(handshake, {
+      service: 'QuestarrNG',
+      apiVersion: 1,
+    });
+    assert.deepStrictEqual(paths, [
+      '/api/integration/seerrng/v1/ping',
+      '/api/integration/ping',
+    ]);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});

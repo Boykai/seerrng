@@ -1,4 +1,5 @@
 import Button from '@app/components/Common/Button';
+import CuratedIdentityPackControls from '@app/components/DiscoveryIntegrations/CuratedIdentityPackControls';
 import discoveryMessages from '@app/components/DiscoveryIntegrations/messages';
 import axios from 'axios';
 import { useState } from 'react';
@@ -153,6 +154,7 @@ export default function DiscoveryConfiguration() {
       >
         <FormattedMessage {...discoveryMessages['configuration.save']} />
       </Button>
+      <CuratedIdentityPackControls />
     </section>
   );
 }
