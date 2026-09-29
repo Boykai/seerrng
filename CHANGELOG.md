@@ -126,6 +126,27 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.39.2](https://github.com/snapetech/seerrng/compare/v3.39.1..v3.39.2) - 2026-09-29
+
+### User-facing changes
+
+#### Changed
+
+- **Bookshelf:** Book requests now leave acquisition and monitoring to Bookshelf or Chaptarr, then update availability after the library scan finds the requested files.
+
+#### Fixed
+
+- **Bookshelf:** All-format book discovery now shows enabled audiobook catalog matches alongside ebook results, labels each format correctly, and skips disabled formats.
+- **Playback:** Native Jellyfin playback now retries startup authentication when the desktop bridge temporarily cannot clear a stale session.
+
+### 🐛 Bug Fixes
+- *(bookshelf)* Track monitored requests until available - ([7a4fd1e](https://github.com/snapetech/seerrng/commit/7a4fd1edbfcf540c58bbacde7584c183121abcbd))
+- *(ci)* Align book discovery contract checks - ([90663e5](https://github.com/snapetech/seerrng/commit/90663e5f9ca8f9cc403c8fb694e91dab2500f6e7))
+- *(desktop)* Retry failed native session resets - ([baa1377](https://github.com/snapetech/seerrng/commit/baa1377a0da18c692047dff19f29a9a6f5cd53f1))
+- *(discovery)* Include enabled audiobook catalog results - ([401dae2](https://github.com/snapetech/seerrng/commit/401dae2bf9cbe3b6b66b81326b3c3114a9657eb3))
+
 ## [3.39.1](https://github.com/snapetech/seerrng/compare/v3.39.0..v3.39.1) - 2026-09-29
 
 ### User-facing changes
