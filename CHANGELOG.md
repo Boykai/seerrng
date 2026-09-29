@@ -118,6 +118,132 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.37.0](https://github.com/snapetech/seerrng/compare/v3.36.0..v3.37.0) - 2026-09-29
+
+### User-facing changes
+
+#### Added
+
+- **Bookshelf:** Administrators can preview and move ebook or audiobook paths inside one BookshelfNG library from the web UI, API, or a dry-run-first CLI, with live command status updates. Older split deployments must be consolidated before moving files.
+  - **Action required:** Update BookshelfNG to a build with the bulk media-move API.
+- **Discovery:** Users can repair unmatched Trakt, AniList, and MDBList discovery titles by choosing a SeerrNG catalog match. Saved matches stay private to the account and unlock the normal title card without changing the provider's original ID.
+- **Discovery Integrations:** Provider discovery now explains when an account needs reconnecting, MDBList setup is missing, a list cannot be found, or a quota cooldown is active, so you can take the right recovery step.
+- **Downloads:** The Download Inbox can match unmatched files to an existing movie, series, album, or book in Radarr, Sonarr, Lidarr, or Readarr before import. SeerrNG rechecks the selected target and file list before submitting the import.
+- **Discovery:** Discovery feeds and personal libraries can match titles using exact IMDb or TVDB IDs when TMDB returns one valid result of the right media type. Ambiguous or unavailable titles remain in the manual repair flow, and you can save a private override for an automatic match.
+- **Discovery Integrations:** Movie and series details, poster rating popovers, and collection averages now include available MDBList IMDb, Rotten Tomatoes, Metacritic, and Trakt scores. Existing rating sources remain visible when MDBList is unconfigured or unavailable.
+- **Discovery:** Discover now shows personal Trakt recommendations and watchlists, plus AniList and Simkl planning and in-progress shelves for each connected account.
+- **Personal Library:** My Library can save a private match from a Trakt, AniList, Simkl, Plex, Jellyfin, or Emby item to a movie or series in the SeerrNG catalog. Change or reset a match at any time; provider IDs and tracking actions remain tied to the original account item.
+- **Discovery:** My Library can export saved provider-to-catalog title matches to a versioned JSON pack and import them elsewhere. Packs contain no provider credentials, and restored matches remain private to the importing account.
+- **Prowlarr:** Administrators can test each enabled searchable Prowlarr indexer and see feed-specific failures and cooldown history alongside category coverage. The checks contact providers but never grab or download releases.
+- **Media Requests:** Administrators can connect Prowlarr and inspect indexer coverage by medium. Users with Manage Requests can search movies, TV, music, ebooks, audiobooks, comics, magazines, ROMs, and PC games; approved requests still use their configured provider.
+- **Discovery:** Administrators can share curated title matches with every account on a SeerrNG instance. Users’ private matches stay in control, and pack changes require clear confirmation because they affect all accounts.
+- **Software Acquisition:** Administrators can choose ROMarrNG for the emulation IGDB catalog only when its handshake advertises SeerrNG catalog support; QuestarrNG remains the default catalog and PC-game provider, and ROMarrNG continues to acquire ROMs. Software request status also reflects retry and cancel restrictions when a provider reports them, while existing v1 provider routes remain compatible.
+- **Release Calendar:** Daily release-history snapshots now track date changes for books in configured Bookshelf services. Calendar entries show recent previous and current dates within the same personal or shared scope as the matching ebook or audiobook request.
+- **Release Calendar:** The release calendar now includes book releases from configured Bookshelf services, links each entry to book details, and keeps ebook and audiobook requests in their matching calendar views.
+  - **Action required:** Configure a Readarr-compatible Bookshelf service for ebooks or audiobooks.
+- **Jellyfin:** Jellyfin administrators can open a separately hosted SeerrNG from the dashboard with an already linked account. SeerrNG validates the active Jellyfin session and revokes bridge access when disabled or unlinked. Regular users should open SeerrNG directly and use its configured Jellyfin sign-in.
+  - **Action required:** Link user accounts and enable bridge sign-in in SeerrNG, then install and configure the optional Jellyfin plugin.
+- **Discovery:** Browse your linked Trakt, AniList, and Simkl libraries in My Library. You can update watched status and ratings, plus AniList episode progress, after enabling write consent for that account. SeerrNG does not automatically repeat an uncertain provider update.
+- **Tracking:** Trakt and Simkl episode controls now show which episodes your linked account marks as watched and switch to the matching action. Simkl anime status follows TVDB season numbering when TVDB provides your anime metadata.
+- **Discovery Integrations:** My Library can scan connected Trakt, AniList, and Simkl shelves for unique IMDb or TVDB matches and save confirmed results to your private title matches. Pause or resume a scan; existing manual and shared matches stay intact.
+- **Calendar:** SeerrNG now tracks release-date and episode-air-time changes from monitored Radarr and Sonarr titles. Calendar entries show recent previous and current dates, with visibility following the selected personal or shared calendar scope.
+- **Unraid:** SeerrNG's guides now explain the Snapetech-maintained ChaptarrNG fork, its format-aware pending-import integration, and its Unraid template. The template is published in the fork repository, but its first stable GHCR image is still pending, so wait for the image before installing.
+  - **Action required:** Wait for ChaptarrNG's first stable GHCR image before installing its template.
+- **Discovery Integrations:** My Library now lets you mark individual TV episodes watched or unwatched on Trakt and Simkl. Episode updates use the configured season list and linked catalog identities, with Simkl’s anime mapping applied when SeerrNG supplies TVDB coordinates.
+- **Requests:** Jellyfin-linked TV request owners can opt into keeping up to five upcoming episodes requested in Sonarr as they watch. SeerrNG checks playback every 30 seconds by default, adds quota-exempt episodes after the parent request is approved, and matches requests by TVDB identity. Turning the buffer off stops future additions; episodes already requested remain in Sonarr.
+- **Release Calendar:** The Release Calendar now includes upcoming album releases from Lidarr, with a music filter and links to matching music pages.
+  - **Action required:** Configure Lidarr and enable Music to show album releases.
+- **Personal Library:** My Library now browses each user's enabled Plex, Jellyfin, or Emby libraries with personal watched state and paged results. Only libraries accessible to that user and enabled in SeerrNG appear.
+
+#### Changed
+
+- **Books:** Audiobook discovery and search now use the configured audiobook catalog, including keyword searches and narrator filters, without mixing in ebook-only results. The Books link is hidden when ebook discovery is disabled.
+- **Bookshelf:** BookshelfNG deployment guidance now distinguishes the shared catalog configuration used by one instance from per-process catalog choices in the optional split setup, including its default Library of Congress and Gutendex sources.
+- **Discovery Integrations:** Provider quota alerts now show a concise countdown while Retry is paused, making it clear when another request can be sent.
+- **Discovery:** Title-match controls now label the movie or series selector separately from the catalog search box, making automatic matches easier to review and override.
+- **Discovery:** Discover now waits to request each connected provider's personal feed until its row nears the screen, reducing unnecessary provider traffic and keeping the initial page load lighter.
+- **Media Requests:** Prowlarr's default searches now reach broader audio and PC indexer categories, separate console generations from PC games, and expose more standard category filters. Administrators can tune each medium to the categories their indexers advertise.
+- **Indexer Search:** Prowlarr category suggestions now recognize more retro console aliases and newer systems such as Switch 2, helping administrators map custom ROM categories to the right media search.
+- **Indexer Search:** Prowlarr settings can now suggest custom indexer categories from their advertised names for each medium. Administrators can review and save clear matches while leaving ambiguous categories under manual control.
+- **Prowlarr:** Prowlarr searches now use media-specific search modes where supported, and media detail pages can open a prefilled search for that title. Search results remain informational and do not send releases to download clients.
+- **Software Acquisition:** ROMarrNG connection checks now verify live system access instead of relying on cached platform data. The systems list explains its saved or cached source, and administrators can assign all systems to Retro or Modern at once.
+- **Unraid:** ChaptarrNG's Unraid profile and Docker template now live in a dedicated package repository. Submit `snapetech/chaptarrng-unraid` in the Community Apps portal; the application source repository is no longer the catalog package source.
+  - **Action required:** Submit https://github.com/snapetech/chaptarrng-unraid to Community Apps to make it searchable.
+- **Jellyfin:** SeerrNG now enables Jellyfin bridge sign-in only when Jellyfin is the active media server and media-server login is available. The Jellyfin settings page shows these prerequisites, preventing a switch that appears enabled but cannot authenticate users.
+  - **Action required:** Set Jellyfin as the active media server and enable media-server sign-in before enabling bridge sign-in.
+- **Unraid:** SeerrNG's guides now confirm that ChaptarrNG v0.9.936 is available from GHCR and explain its fork-owned Unraid template. The image supports amd64, arm64, and armv7; Community Apps catalog submission is still pending.
+  - **Action required:** Submit snapetech/chaptarrng to the Community Apps portal to make it searchable there.
+- **Release Calendar:** Daily release-history snapshots now include monitored Lidarr albums, so upcoming music releases show date changes alongside movie releases and episode air times.
+
+#### Fixed
+
+- **Docs:** The Unraid guide now points to the published Bookshelf migration page, so its migration link opens correctly.
+- **Personal Library:** Plex, Jellyfin, and Emby watched and in-progress shelves now filter and paginate against each user's own playback state, so sparse matches no longer disappear between pages.
+- **Indexers:** Prowlarr coverage summaries now expose category counts without returning configured indexer names. Connection guidance also correctly describes approved requests handled by media and software providers.
+- **Indexer Search:** Prowlarr category suggestions now refresh when you edit the connection, so custom IDs from a previous instance are not carried into the new mapping.
+- **Database:** SeerrNG can now start cleanly while upgrading an existing database, even when newer per-user settings columns have not been added yet.
+- **Software Acquisition:** Software provider connection checks now identify API-key, route, and network failures, and older compatible QuestarrNG integrations keep working. The Retro and Modern system-group help explains how those labels organize emulation browsing and requests.
+- **Discovery Integrations:** Episode watch updates now use the catalog identities and season numbering configured for the connected provider, including TVDB anime numbering when applicable. The episode tracker also shows loading and empty-season states while retrieving episode lists.
+- **Discovery Integrations:** Simkl episode tracking now applies TVDB anime-season mapping only when your configured anime metadata provider uses TVDB. Other series keep the season order selected for the provider account.
+- **Bookshelf:** Book and audiobook discovery now follows the matching configured service and enablement setting. Audiobook-only setups no longer show ebook search options, and audiobook keyword searches stay scoped to audiobook catalogs.
+- **Playback:** Named media-server playback windows now open on explicitly enabled HTTP deployments in browsers that do not provide crypto.randomUUID outside secure contexts.
+- **Release Calendar:** Lidarr album entries now stay on the release date Lidarr reports, even when its API includes a timezone offset, so all-day releases no longer shift to a neighboring day.
+- **Tracking:** Simkl episode controls now show watched state only after Simkl confirms the requested show match, so an unmatched result cannot be mistaken for watched episodes.
+
+#### Security
+
+- **Security:** SeerrNG updates its bundled upload and WebSocket dependencies to patched versions, closing newly reported denial-of-service issues without changing setup or use.
+- **Bookshelf:** **Breaking:** The Bookshelf path-move CLI now opens saved preview files without following symbolic links, preventing a substituted file from redirecting an administrator API key. Windows CLI apply is disabled because Node.js does not provide the required no-follow open flag there.
+  - **Action required:** Run CLI apply on Linux or macOS; Windows users can apply saved previews through the web UI or administrator API.
+
+### 🚀 Features
+- *(calendar)* Add Bookshelf book release events - ([0b79c1c](https://github.com/snapetech/seerrng/commit/0b79c1c49297bd4adfc8107683ae8ea19c01b315))
+- *(calendar)* Include Lidarr album releases - ([8461bb7](https://github.com/snapetech/seerrng/commit/8461bb7e53533b71a29d9a6f3a4e838ce69521df))
+- *(calendar)* Show recent release date changes - ([8bff46e](https://github.com/snapetech/seerrng/commit/8bff46ee24d0cb5f600e3af31bb6a75fc0ba1194))
+- *(discovery)* Add bounded exact-ID library repair - ([e3d5168](https://github.com/snapetech/seerrng/commit/e3d5168ca7d0d69f06f054bb84a5798c0c5125b5))
+- *(discovery)* Add episode-level watch tracking - ([ec288e3](https://github.com/snapetech/seerrng/commit/ec288e3144efcb6b17fbf3f30c92921c48bed1fb))
+- *(jellyfin)* Add standalone SeerrNG bridge plugin - ([d8374ea](https://github.com/snapetech/seerrng/commit/d8374ea6a4d2c93f953d2777c6a62f46bc9e85ba))
+- *(jellyfin)* Add episode watch-ahead requests - ([e0c67f1](https://github.com/snapetech/seerrng/commit/e0c67f1107567b20f451a7a18244c363803ab558))
+- *(tracking)* Show provider episode watch state - ([deb9076](https://github.com/snapetech/seerrng/commit/deb90761055259e120fbcd27fc9b4c861a1bef90))
+- Add Bookshelf media moves and shared title packs - ([156053f](https://github.com/snapetech/seerrng/commit/156053f0b373805a1e357285c84a72f7c9604901))
+- Resolve exact provider IDs in discovery - ([1ff84e3](https://github.com/snapetech/seerrng/commit/1ff84e37dec5ddf7cd5c18c077575a9ddcb9a709))
+- Back up personal title matches - ([c956c65](https://github.com/snapetech/seerrng/commit/c956c658a8005881b8c205a5aa1ac93cea68bd03))
+- Repair unmatched discovery titles - ([b1006e2](https://github.com/snapetech/seerrng/commit/b1006e2306d82b43a53e25858e571c69ba2275cb))
+
+### 🐛 Bug Fixes
+- *(bookshelf)* Respect configured book formats - ([6eecd0a](https://github.com/snapetech/seerrng/commit/6eecd0a920bf621777e9afb09726422852c5abc2))
+- *(calendar)* Preserve Lidarr album release days - ([c65aaa9](https://github.com/snapetech/seerrng/commit/c65aaa975dfd1a3e8bd8cdc0c83e49f4ea38c3ae))
+- *(discovery)* Align Simkl anime season mapping - ([b0ca2c4](https://github.com/snapetech/seerrng/commit/b0ca2c43e7cbd79d05bb72fee245ae0f9630fdfe))
+- *(discovery)* Match episode tracking identities - ([a11843c](https://github.com/snapetech/seerrng/commit/a11843cc8a979a817e47f93524f73025d2122eca))
+- *(docs)* Repair Bookshelf migration link - ([adad2be](https://github.com/snapetech/seerrng/commit/adad2be3f96290e8522ad8fe44c126e8ab72e719))
+- *(jellyfin)* Require active Jellyfin login for bridge - ([b1292ea](https://github.com/snapetech/seerrng/commit/b1292ea768ab861e2e61235d1c364a0cc71c909a))
+- *(security)* Reject unsafe Bookshelf preview files - ([5add058](https://github.com/snapetech/seerrng/commit/5add0587b82a763cfe3106b63276111abbe06e5e))
+- *(security)* Update vulnerable dependency overrides - ([b0e7e81](https://github.com/snapetech/seerrng/commit/b0e7e81f184dde8a6073f72f000fd7e624460cdd))
+- *(tracking)* Ignore unmatched Simkl episode state - ([bb9dff1](https://github.com/snapetech/seerrng/commit/bb9dff1e70a807a63674f747d0d1074e4b61d361))
+- Distinguish discovery title match controls - ([d532853](https://github.com/snapetech/seerrng/commit/d532853a1849aca2a966199f643ad19f1afeae3b))
+- Align UI contract with typed checkbox values - ([3ef5026](https://github.com/snapetech/seerrng/commit/3ef50269aef598cf9b62cc9aa15dfea44a194abf))
+- Link to the Bookshelf path migration guide - ([ea9a712](https://github.com/snapetech/seerrng/commit/ea9a712a611e1637bccd2d30805242707c192663))
+
+### 📖 Documentation
+- *(calendar)* Note Lidarr date history - ([cbe6f14](https://github.com/snapetech/seerrng/commit/cbe6f140eddb3cce4250e7a577390d1f99f87fc1))
+- *(release)* Note Bookshelf calendar date history - ([6b9f625](https://github.com/snapetech/seerrng/commit/6b9f6253d49b040452a3c373e699fde9a76fa63a))
+- *(unraid)* Add ChaptarrNG image availability note - ([729274c](https://github.com/snapetech/seerrng/commit/729274c602fd6f1b94504ca651402f88f6e9ef6f))
+- *(unraid)* Document released ChaptarrNG image - ([e87068f](https://github.com/snapetech/seerrng/commit/e87068ff806e4c272bba1ba4553657f0edc1ff9b))
+- *(unraid)* Clarify pending ChaptarrNG image release - ([cbed1e1](https://github.com/snapetech/seerrng/commit/cbed1e17f9b4b594e7ab62b41559ddc8d85c1700))
+- *(unraid)* Add ChaptarrNG fork and template guidance - ([29aa761](https://github.com/snapetech/seerrng/commit/29aa761a62176915c174dbe199669e0ee278d0c6))
+- Use dedicated ChaptarrNG Unraid package repo - ([8f03215](https://github.com/snapetech/seerrng/commit/8f03215fb069156cf44a8e0b4d0422174fe61923))
+
+### 🧪 Testing
+- *(calendar)* Cover date-change history - ([3c4791c](https://github.com/snapetech/seerrng/commit/3c4791c534e23a9f46639e99142c3d5923bc091e))
+- *(cypress)* Enable Bookshelf in discovery fixtures - ([bec9f87](https://github.com/snapetech/seerrng/commit/bec9f87453f865dbe023a3f275512b61ea6ddbf0))
+- *(cypress)* Stabilize seeded discovery fixtures - ([8ae98d8](https://github.com/snapetech/seerrng/commit/8ae98d8c62d62908adab0dffd0f340ce4b7186e3))
+
+### ⚙️ Miscellaneous Tasks
+- *(i18n)* Sync Jellyfin bridge setting copy - ([151d9c0](https://github.com/snapetech/seerrng/commit/151d9c05a25d5d652b6f1f521b8be292f50afcc2))
+- *(jellyfin)* Stage episode watch-ahead state - ([ee08a38](https://github.com/snapetech/seerrng/commit/ee08a384bd2c4a0f1706af0dedd195d08644b9ce))
+
 ## [3.36.0](https://github.com/snapetech/seerrng/compare/v3.35.0..v3.36.0) - 2026-09-28
 
 ### User-facing changes
