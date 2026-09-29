@@ -34,7 +34,7 @@ Services.
 | Optional service | Purpose | Installation and setup | Manual template |
 | --- | --- | --- | --- |
 | BookshelfNG | Ebooks and audiobooks; one instance can handle both | [Install BookshelfNG](https://ca.unraid.net/apps/bookshelfng-1fdcqrv18pja7r) · [Setup guide](https://github.com/snapetech/bookshelfng-unraid#installation-and-setup) | [BookshelfNG XML](https://raw.githubusercontent.com/snapetech/bookshelfng-unraid/main/templates/bookshelfng.xml) |
-| ChaptarrNG | Readarr-compatible ebook and audiobook acquisition with SeerrNG pending-request support | [ChaptarrNG setup](https://github.com/snapetech/chaptarrng#unraid-community-applications) · `ghcr.io/snapetech/chaptarrng:0.9.936` · Not yet listed in Community Apps | [ChaptarrNG XML](https://raw.githubusercontent.com/snapetech/chaptarrng/main/packaging/unraid/chaptarrng.xml) |
+| ChaptarrNG | Readarr-compatible ebook and audiobook acquisition with SeerrNG pending-request support | [ChaptarrNG setup](https://github.com/snapetech/chaptarrng#unraid-community-applications) · `ghcr.io/snapetech/chaptarrng:0.9.937` · Not yet listed in Community Apps | [ChaptarrNG XML](https://raw.githubusercontent.com/snapetech/chaptarrng-unraid/main/templates/chaptarrng.xml) |
 | ROMarrNG | ROMs and console game acquisition | [ROMarrNG guide](https://github.com/snapetech/ROMarrNG#readme) | [ROMarrNG XML](https://raw.githubusercontent.com/snapetech/ROMarrNG/main/packaging/unraid/romarrng.xml) |
 | QuestarrNG | Games and IGDB catalog | [QuestarrNG guide](https://github.com/snapetech/QuestarrNG#unraid) | [QuestarrNG XML](https://raw.githubusercontent.com/snapetech/QuestarrNG/main/unraid/questarr.xml) |
 
@@ -46,11 +46,13 @@ BookshelfNG, ChaptarrNG, ROMarrNG, and QuestarrNG are Snapetech NG forks that
 work independently and add SeerrNG integration APIs. ChaptarrNG is the
 maintained Chaptarr fork; we keep it so SeerrNG can depend on format-scoped
 book requests and durable tracking for author imports that complete
-asynchronously. Its Unraid template is published in the fork repository, and
-the public `v0.9.936` GHCR image is available. Pin
-`ghcr.io/snapetech/chaptarrng:0.9.936` for a reproducible install. The template
-is not listed in Community Apps yet; submit the fork repository there to make
-it searchable. Use the
+asynchronously. Its Unraid profile and template live in the dedicated
+[ChaptarrNG Unraid package repository](https://github.com/snapetech/chaptarrng-unraid).
+The public `v0.9.937` GHCR image is available. Pin
+`ghcr.io/snapetech/chaptarrng:0.9.937` for a reproducible install. The template
+is not listed in Community Apps yet; submit
+`https://github.com/snapetech/chaptarrng-unraid` there to make it searchable.
+Use the
 [SeerrNG issue tracker](https://github.com/snapetech/seerrng/issues) for
 integration support. The upstream [Bookshelf](https://ca.unraid.net/apps/bookshelf-1d1gz3s0hj3af8)
 and [Questarr](https://ca.unraid.net/apps/questarr-0335hnh1oyuaqh) listings

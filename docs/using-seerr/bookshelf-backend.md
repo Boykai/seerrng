@@ -122,12 +122,15 @@ including its
 [BookController](https://github.com/snapetech/chaptarrng/blob/fec5ea2/src/Chaptarr.Api.V1/Books/BookController.cs)
 and
 [PendingAuthorImportController](https://github.com/snapetech/chaptarrng/blob/fec5ea2/src/Chaptarr.Api.V1/PendingImport/PendingAuthorImportController.cs).
-The fork's first stable release, `v0.9.936`, is published. Its public GHCR
-images `ghcr.io/snapetech/chaptarrng:0.9.936` and
+The fork's first stable release was `v0.9.936`; the current
+[ChaptarrNG v0.9.937 release](https://github.com/snapetech/chaptarrng/releases/tag/v0.9.937)
+adds format-scoped remote lookup fixes. Its public GHCR images
+`ghcr.io/snapetech/chaptarrng:0.9.937` and
 `ghcr.io/snapetech/chaptarrng:latest` are available for `linux/amd64`,
-`linux/arm64`, and `linux/arm/v7`, so the Unraid template can now install it.
+`linux/arm64`, and `linux/arm/v7`. Its Unraid template is available from the
+[dedicated ChaptarrNG Unraid package repository](https://github.com/snapetech/chaptarrng-unraid).
 The source review and image publication are not end-to-end runtime validation
-of SeerrNG with ChaptarrNG. Pin `0.9.936` for reproducible deployments because
+of SeerrNG with ChaptarrNG. Pin `0.9.937` for reproducible deployments because
 the Readarr-compatible surface can change between releases.
 
 If a ChaptarrNG lookup is empty, first verify that the selected **Book Format**
