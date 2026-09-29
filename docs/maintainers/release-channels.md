@@ -181,3 +181,25 @@ For package smoke tests against a non-default PPA:
 ```bash
 PPA=ppa:keefshape/seerrng packaging/smoke/package-smoke seerrng ppa v3.2.7 --arch amd64
 ```
+
+The PPA release workflow treats a successful `dput` as source transfer only. It
+waits for the exact source publication and Jammy/Noble `seerrng` binaries to be
+Published in Launchpad. If Launchpad rejects a binary upload before its source
+is Published, the workflow retries that build through Launchpad's authenticated
+API and keeps the package channel red until the binary is Published.
+
+Automatic retry requires the repository secret `LAUNCHPAD_CREDENTIALS`, which
+contains a Launchpad OAuth credentials file for an account with permission to
+upload to the PPA. Generate or refresh it on a trusted machine using
+`launchpadlib`, approve the OAuth request in Launchpad, then store the file as a
+GitHub Actions secret without printing it:
+
+```bash
+sudo apt-get install python3-launchpadlib
+python3 scripts/create-launchpad-credentials.py --output "$HOME/.config/seerrng/launchpad-credentials"
+gh secret set LAUNCHPAD_CREDENTIALS --repo snapetech/seerrng < "$HOME/.config/seerrng/launchpad-credentials"
+```
+
+The workflow fails before uploading if this secret is missing. Keep the OAuth
+credential private; revoke it from Launchpad if it is exposed or no longer
+needed.

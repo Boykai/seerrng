@@ -596,7 +596,7 @@ jobs:
   dispatch-package-channels:
     name: Dispatch package channels
     needs: [verify, build-release-assets]
-    timeout-minutes: 120
+    timeout-minutes: 240
     runs-on: ubuntu-latest
     permissions:
       actions: write

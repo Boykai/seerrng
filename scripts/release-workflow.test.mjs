@@ -29,7 +29,7 @@ test('release package channels wait for the reusable release asset build', () =>
   assert.equal(assetBuild.with.tag, '${{ inputs.tag || github.ref_name }}');
   assert.equal(assetBuild.permissions.actions, 'read');
   assert.deepEqual(packageDispatch.needs, ['verify', 'build-release-assets']);
-  assert.equal(packageDispatch['timeout-minutes'], 120);
+  assert.equal(packageDispatch['timeout-minutes'], 240);
   assert.match(dispatchScript, /--ref main/u);
   assert.match(dispatchScript, /release-linux-packages\.yml/u);
   assert.match(dispatchScript, /gh run watch/u);
