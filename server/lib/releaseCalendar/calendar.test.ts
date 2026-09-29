@@ -66,6 +66,11 @@ it('validates real dates, bounded ranges, and shared calendar authority', () => 
     parseCalendarQuery({ ...range, mediaType: 'book' }, false, false).mediaType,
     'book'
   );
+  assert.equal(
+    parseCalendarQuery({ ...range, mediaType: 'software' }, false, false)
+      .mediaType,
+    'software'
+  );
   for (const query of [
     { start: '2026-02-30', end: '2026-03-10' },
     { start: '2026-01-01', end: '2026-06-01' },
