@@ -94,7 +94,7 @@ def run_attempt(
     deadline: float,
 ) -> int:
     package_dir = attempt_dir / source_dir.name
-    shutil.copytree(source_dir, package_dir)
+    shutil.copytree(source_dir, package_dir, symlinks=True)
     write_changelog(package_dir, args, version)
 
     print(f"Building signed source package {version}.", flush=True)
