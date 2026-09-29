@@ -12,6 +12,7 @@ const messages = defineMessages('components.IdentityMappingControls', {
   change: 'Change title match',
   reset: 'Reset title match',
   searchLabel: 'Search SeerrNG catalog',
+  mediaTypeLabel: 'Catalog media type',
   movie: 'Movie',
   series: 'Series',
   searching: 'Searching…',
@@ -139,7 +140,7 @@ export default function IdentityMappingControls({
       {open && (
         <div className="space-y-2 rounded-md border border-gray-700 p-3">
           <label className="block text-xs" htmlFor={`mapping-type-${item.id}`}>
-            {intl.formatMessage(messages.searchLabel)}
+            {intl.formatMessage(messages.mediaTypeLabel)}
             <select
               id={`mapping-type-${item.id}`}
               className="mt-1 block w-full"

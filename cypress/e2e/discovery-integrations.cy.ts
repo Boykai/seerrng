@@ -379,6 +379,8 @@ describe('Discovery provider integrations', () => {
     cy.contains('Exact ID series').should('be.visible');
     cy.contains('exact IMDb or TVDB ID').should('be.visible');
     cy.contains('button', 'Change title match').click();
+    cy.contains('label', 'Catalog media type').should('be.visible');
+    cy.get('input[aria-label="Search SeerrNG catalog"]').should('be.visible');
     cy.get('input[aria-label="Search SeerrNG catalog"]').type('Override');
     cy.contains('button', 'Use this match').click();
     cy.wait('@savePrivateOverride');
