@@ -10,7 +10,7 @@ The SeerrNG Community Apps repository now contains only the SeerrNG XML template
 | Kapowarr | `mrcas/kapowarr:latest` | [Kapowarr](https://ca.unraid.net/apps/kapowarr-1p27chu0mk08ni) | Fresh config; web UI HTTP 200 |
 | ROMarrNG | `ghcr.io/snapetech/romarrng:latest` | No NG fork entry located | Fresh folder library; health HTTP 200 |
 | QuestarrNG | `ghcr.io/snapetech/questarrng:latest` | [Upstream Questarr](https://ca.unraid.net/apps/questarr-0335hnh1oyuaqh) | Fresh config; health HTTP 200 |
-| ChaptarrNG | `ghcr.io/snapetech/chaptarrng:latest` | Not yet listed | Template is in the fork repository; first stable image release is published |
+| ChaptarrNG | `ghcr.io/snapetech/chaptarrng:latest` (release pending) | Not yet listed | Template is in the fork repository; first stable image release has not published yet |
 
 Each image was started independently without SeerrNG on a local Docker host. The service and its temporary data volume were removed after checking. Metadata lookup and acquisition were not exercised because these require personal provider credentials and configured download clients. BookshelfNG's current fork supports ebooks and audiobooks in one instance; both SeerrNG service entries can point to its single API URL and key.
 

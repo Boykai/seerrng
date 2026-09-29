@@ -2,7 +2,7 @@
 category: added
 audience: operators
 area: unraid
-action: Submit ChaptarrNG's repository through the Community Apps portal to make it searchable.
+action: Wait for ChaptarrNG's first stable GHCR image before installing its template.
 breaking: false
 ---
-SeerrNG's book-backend guide now explains the Snapetech-maintained ChaptarrNG fork, its format-aware pending-import integration, and its Unraid template. ChaptarrNG's first stable GHCR image is available; submitting the fork repository makes it searchable in Community Apps.
+SeerrNG's guides now explain the Snapetech-maintained ChaptarrNG fork, its format-aware pending-import integration, and its Unraid template. The template is published in the fork repository, but its first stable GHCR image is still pending, so wait for the image before installing.
