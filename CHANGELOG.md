@@ -130,6 +130,29 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.40.0](https://github.com/snapetech/seerrng/compare/v3.39.3..v3.40.0) - 2026-09-29
+
+### User-facing changes
+
+#### Added
+
+- **Comics:** Administrators can connect BackIssue through Settings, the administrator API, or the CLI. Comic requests can use it as their default destination, while SeerrNG syncs its collection and shows active queue status and progress when BackIssue reports it.
+
+#### Fixed
+
+- **Comics:** Comic detail pages now report when ComicVine rejects an issue-page request instead of showing a misleading empty issue list. Users can retry after fixing a connection problem or waiting for ComicVine to recover.
+- **Release Pipeline:** PPA releases now wait for Launchpad to publish the matching Ubuntu source and binary packages, and retry binary uploads rejected before source publication.
+  - **Action required:** configure LAUNCHPAD_CREDENTIALS for PPA publishing
+
+### 🚀 Features
+- *(comics)* Add BackIssue service support - ([ea06d28](https://github.com/snapetech/seerrng/commit/ea06d28d0c95d76905f45fe24c50b9b739154618))
+
+### 🐛 Bug Fixes
+- *(comics)* Surface ComicVine issue browsing failures - ([a61dac5](https://github.com/snapetech/seerrng/commit/a61dac517f565dc296c70fb9adffb74fcbf0a8fd))
+- *(release)* Verify Launchpad PPA publication - ([edef0a4](https://github.com/snapetech/seerrng/commit/edef0a4b73ebdfd19c6ad4f0089b3519a3d2a5d9))
+
 ## [3.39.3](https://github.com/snapetech/seerrng/compare/v3.39.2..v3.39.3) - 2026-09-29
 
 ### User-facing changes
