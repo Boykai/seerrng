@@ -3590,7 +3590,7 @@ const validateCurrentBatchContract = (files) => {
     "import SelectionCircle from '@app/components/Common/SelectionCircle';",
     "props.type === 'checkbox'",
     '<SelectionCircle',
-    'selected={Boolean(field.value)}',
+    'selected={field.value}',
     'void helpers.setValue(checked);',
   ]) {
     requireText(
