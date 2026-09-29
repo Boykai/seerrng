@@ -128,6 +128,19 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.39.3](https://github.com/snapetech/seerrng/compare/v3.39.2..v3.39.3) - 2026-09-29
+
+### User-facing changes
+
+#### Fixed
+
+- **Magazines:** Tracked magazine searches now work with older SeerrNG server contracts that do not recognize the optional public catalog selector; public catalog searches still use Google Books.
+
+### 🐛 Bug Fixes
+- *(magazines)* Omit the default tracked catalog query - ([6407a59](https://github.com/snapetech/seerrng/commit/6407a594ee9a3ac211ca6cb4401f54c606070901))
+
 ## [3.39.2](https://github.com/snapetech/seerrng/compare/v3.39.1..v3.39.2) - 2026-09-29
 
 ### User-facing changes
