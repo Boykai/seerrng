@@ -4,6 +4,7 @@ describe('Title card image fill', () => {
   });
 
   it('fills book and music cards with cover images like video cards', () => {
+    cy.mockConfiguredMediaAvailability({ booksEnabled: true });
     cy.intercept('GET', '/api/v1/discover/books*', {
       page: 1,
       totalPages: 1,

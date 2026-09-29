@@ -39,6 +39,7 @@ describe('Narrow-window media audit', () => {
   });
 
   it('keeps book and music Discover controls within a phone viewport', () => {
+    cy.mockConfiguredMediaAvailability({ booksEnabled: true });
     cy.intercept('GET', '/api/v1/discover/books*', {
       ...emptyPage,
       totalResults: 1,
