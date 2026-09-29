@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SeerrNG</title>
+  </head>
+  <body>
+    <div id="SeerrNGBridgePage" data-role="page" class="page type-interior">
+      <div data-role="content">
+        <div class="content-primary">
+          <h1>SeerrNG</h1>
+          <p>
+            Open the request and discovery app connected to this Jellyfin
+            server with your linked Jellyfin account.
+          </p>
+          <button
+            id="openSeerrNG"
+            is="emby-button"
+            type="button"
+            class="raised button-submit"
+            disabled
+          >
+            <span>Continue to SeerrNG</span>
+          </button>
+          <p id="status" role="status" aria-live="polite">
+            Loading bridge settings…
+          </p>
+          <p id="setupHint" hidden>
+            Ask your Jellyfin administrator to configure the SeerrNG URL and ask
+            a SeerrNG administrator to enable Jellyfin sign-in. Your Jellyfin
+            account must already be linked in SeerrNG.
+          </p>
+        </div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        const button = document.getElementById('openSeerrNG');
+        const status = document.getElementById('status');
+        const setupHint = document.getElementById('setupHint');
+        let bridgeUrl = '';
+
+        async function load() {
+          try {
+            const configuration = await ApiClient.getJSON(
+              ApiClient.getUrl('Plugins/SeerrNGBridge/Configuration')
+            );
+            if (!configuration.seerrNgUrl) {
+              status.textContent =
+                'SeerrNG has not been configured for this Jellyfin server.';
+              setupHint.hidden = false;
+              return;
+            }
+            const base = configuration.seerrNgUrl.replace(/\/+$/, '') + '/';
+            bridgeUrl = new URL('api/v1/auth/jellyfin/bridge', base).href;
+            if (!ApiClient.accessToken()) {
+              throw new Error('Jellyfin did not provide a signed-in session.');
+            }
+            button.disabled = false;
+            status.textContent =
+              'Your Jellyfin account will be checked by SeerrNG when you continue.';
+          } catch (error) {
+            status.textContent =
+              'Unable to load SeerrNG bridge settings: ' + error;
+          }
+        }
+
+        button.addEventListener('click', function () {
+          const token = ApiClient.accessToken();
+          if (!token || !bridgeUrl) {
+            status.textContent =
+              'Sign in to Jellyfin and reload this page before continuing.';
+            return;
+          }
+
+          const form = document.createElement('form');
+          form.method = 'post';
+          form.action = bridgeUrl;
+          form.target = '_blank';
+          form.autocomplete = 'off';
+          const field = document.createElement('input');
+          field.type = 'hidden';
+          field.name = 'token';
+          field.value = token;
+          form.appendChild(field);
+          document.body.appendChild(form);
+          form.submit();
+          form.remove();
+        });
+
+        load();
+      })();
+    </script>
+  </body>
+</html>

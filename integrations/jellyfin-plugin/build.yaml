@@ -1,0 +1,17 @@
+---
+name: 'SeerrNG Bridge'
+guid: '812a21b1-2e18-4ff7-a9b8-3dd84e2a0e16'
+version: '0.1.0.0'
+targetAbi: '10.11.0.0'
+framework: 'net9.0'
+overview: 'Open SeerrNG from Jellyfin using the current Jellyfin session.'
+description: >
+  Adds an optional Jellyfin main-menu link that signs an already-linked user
+  into an independently deployed SeerrNG instance. The plugin does not bundle
+  or host SeerrNG.
+category: 'General'
+owner: 'snapetech'
+artifacts:
+  - 'Jellyfin.Plugin.SeerrNGBridge.dll'
+changelog: >
+  Initial release of the optional SeerrNG Jellyfin sign-in bridge.

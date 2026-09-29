@@ -58,6 +58,10 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   rejection options, existing-library matching and backend-specific manual-import
   previews for Radarr, Sonarr, Lidarr and Readarr, backend identity checks,
   command/history outcome verification and bounded action history.
+- Optional Jellyfin companion plugin for a separately deployed SeerrNG server.
+  The plugin adds an administrator-dashboard shortcut, validates an already-linked user's
+  current session on the SeerrNG server, and supports administrator and account
+  unlink revocation without replacing other media-server integrations.
 - Selectable QuestarrNG or ROMarrNG IGDB catalog for emulation, with QuestarrNG
   retained for PC games and ROMarrNG for ROM acquisition. Provider actions and
   game/platform identity use the versioned SeerrNG integration contract.
@@ -78,8 +82,8 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
 - AniList exposes sequential episode progress rather than individual watched
   episode identities, so its library remains count-based while Trakt and Simkl
   use provider-confirmed episode states.
-- Optional Jellyfin plugin using the independently deployed SeerrNG server,
-  server-validated sessions and revocation, preserving existing media servers.
+- Publish the Jellyfin bridge plugin as an installable Jellyfin repository/release
+  artifact and verify its menu/authentication flow against live Jellyfin 10.11.x.
 - Optional desktop playback with browser fallback.
 - Finish end-to-end UI and deployment verification before describing parity as
   complete. A provider client or an account link alone is not parity.

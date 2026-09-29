@@ -593,7 +593,6 @@ export const parseJellyfinSettingsBody = (
     }
   );
   if ('error' in apiKey) return apiKey;
-
   return {
     value: {
       name: current.name,
@@ -606,8 +605,18 @@ export const parseJellyfinSettingsBody = (
       externalHostname: externalHostname.value ?? '',
       jellyfinForgotPasswordUrl: jellyfinForgotPasswordUrl.value ?? '',
       apiKey: apiKey.value,
+      // Bridge login is controlled through its independent endpoint so an
+      // administrator can revoke it without contacting Jellyfin.
+      bridgeLoginEnabled: current.bridgeLoginEnabled ?? false,
+      bridgeLoginGeneration: current.bridgeLoginGeneration ?? 0,
     },
   };
+};
+
+const redactJellyfinSettings = (settings: JellyfinSettings) => {
+  const publicSettings = { ...settings };
+  delete publicSettings.bridgeLoginGeneration;
+  return redactSecrets(publicSettings);
 };
 
 export const parseTautulliSettingsBody = (
@@ -1786,8 +1795,59 @@ settingsRoutes.post(
 settingsRoutes.get('/jellyfin', (_req, res) => {
   const settings = getSettings();
 
-  res.status(200).json(redactSecrets(settings.jellyfin));
+  res.status(200).json(redactJellyfinSettings(settings.jellyfin));
 });
+
+settingsRoutes.post(
+  '/jellyfin/bridge-login',
+  authorizedMutation(Permission.ADMIN, async (req, res) => {
+    const parsedBody = parseSettingsBodyObject(req.body);
+    if ('error' in parsedBody) {
+      return res.status(400).json({ message: parsedBody.error });
+    }
+
+    const enabled = parseOptionalBodyBoolean(
+      parsedBody.value.enabled,
+      'enabled'
+    );
+    if ('error' in enabled) {
+      return res.status(400).json({ message: enabled.error });
+    }
+    if (enabled.value === undefined) {
+      return res.status(400).json({ message: 'enabled must be a boolean.' });
+    }
+
+    const settings = getSettings();
+    if (enabled.value && !settings.jellyfin.serverId) {
+      return res.status(400).json({
+        message: 'Connect a Jellyfin server before enabling bridge sign-in.',
+      });
+    }
+    const jellyfin = await runWithConfigurationAdmission('jellyfin', () =>
+      settings.persistSection('jellyfin', (current) => {
+        const generation = current.bridgeLoginGeneration;
+        const previousGeneration =
+          Number.isSafeInteger(generation) && (generation ?? -1) >= 0
+            ? generation!
+            : 0;
+        const wasEnabled = current.bridgeLoginEnabled ?? false;
+
+        return {
+          ...current,
+          bridgeLoginEnabled: enabled.value!,
+          bridgeLoginGeneration:
+            wasEnabled === enabled.value
+              ? previousGeneration
+              : previousGeneration + 1,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      bridgeLoginEnabled: jellyfin.bridgeLoginEnabled ?? false,
+    });
+  })
+);
 
 settingsRoutes.post(
   '/jellyfin',
@@ -1872,7 +1932,7 @@ settingsRoutes.post(
         }
       }
 
-      return res.status(200).json(redactSecrets(settings.jellyfin));
+      return res.status(200).json(redactJellyfinSettings(settings.jellyfin));
     });
   })
 );

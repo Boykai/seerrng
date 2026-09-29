@@ -47,3 +47,46 @@ it('propagates API key rotation authority into admitted mutations', async () => 
   await assert.rejects(mutation, UserMutationActorUnauthorizedError);
   response.emit('finish');
 });
+
+it('destroys a Jellyfin bridge session when its linked user no longer exists', async () => {
+  const settings = getSettings();
+  const previousBridgeLoginEnabled = settings.jellyfin.bridgeLoginEnabled;
+  settings.jellyfin.bridgeLoginEnabled = true;
+  let destroyed = false;
+  const session = {
+    userId: 999999,
+    credentialVersion: 0,
+    jellyfinBridge: {
+      jellyfinUserId: '0123456789abcdef0123456789abcdef',
+      authorityKey: 'stale-jellyfin-authority',
+    },
+    destroy: (callback: (error?: Error | null) => void) => {
+      destroyed = true;
+      callback(null);
+    },
+  };
+  const request = {
+    header: () => undefined,
+    headers: {},
+    session,
+  } as unknown as Request;
+  const response = new EventEmitter() as Response & EventEmitter;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      checkUser(request, response, ((error?: unknown) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      }) as NextFunction);
+    });
+
+    assert.strictEqual(destroyed, true);
+    assert.strictEqual(request.user, undefined);
+  } finally {
+    settings.jellyfin.bridgeLoginEnabled = previousBridgeLoginEnabled;
+    response.emit('finish');
+  }
+});

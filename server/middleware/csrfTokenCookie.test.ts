@@ -67,6 +67,22 @@ describe('csrfTokenCookie', () => {
       .expect(204);
   });
 
+  it('lets the Jellyfin bridge submit its token without a CSRF cookie', async () => {
+    const app = express();
+    app.use(cookieParser());
+    app.use(csrfProtection());
+    app.use(csrfTokenCookie(false));
+    app.post('/api/v1/auth/jellyfin/bridge', (_req, res) =>
+      res.sendStatus(204)
+    );
+
+    await request(app)
+      .post('/api/v1/auth/jellyfin/bridge')
+      .type('form')
+      .send({ token: 'jellyfin-session-token' })
+      .expect(204);
+  });
+
   it('secures both CSRF cookies behind a trusted HTTPS terminator', async () => {
     const response = await request(
       createTransportAwareApp({ trustProxy: true })

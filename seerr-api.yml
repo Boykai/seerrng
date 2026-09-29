@@ -1622,6 +1622,15 @@ components:
         serverID:
           type: string
           readOnly: true
+        bridgeLoginEnabled:
+          type: boolean
+          readOnly: true
+          description: Whether linked Jellyfin users may sign in through the optional SeerrNG Jellyfin plugin.
+        bridgeLoginGeneration:
+          type: integer
+          minimum: 0
+          readOnly: true
+          description: Changes when bridge sign-in is enabled or disabled, revoking sessions created before the change.
     MetadataSettings:
       type: object
       properties:
@@ -5934,6 +5943,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JellyfinSettings'
+  /settings/jellyfin/bridge-login:
+    post:
+      summary: Enable or disable Jellyfin bridge sign-in
+      description: Changes the optional SeerrNG Jellyfin plugin sign-in setting without contacting Jellyfin, so administrators can revoke bridge sessions during a server outage.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Bridge login setting updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bridgeLoginEnabled]
+                properties:
+                  bridgeLoginEnabled:
+                    type: boolean
+        '400':
+          description: Invalid setting value, or Jellyfin is not connected when enabling bridge login.
+        '403':
+          description: An administrator account is required.
   /settings/jellyfin/library:
     get:
       summary: Get Jellyfin libraries
@@ -8048,6 +8089,36 @@ paths:
               required:
                 - username
                 - password
+  /auth/jellyfin/bridge:
+    post:
+      summary: Sign in to SeerrNG from a Jellyfin session
+      description: Validates the current Jellyfin user's access token against the configured server and creates a SeerrNG session only for an already-linked account. The token is accepted in a form body and is never stored.
+      security: []
+      tags:
+        - auth
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  maxLength: 4096
+      responses:
+        '303':
+          description: SeerrNG session created; redirects to the configured application URL.
+        '400':
+          description: The form body or Jellyfin token is invalid.
+        '403':
+          description: Bridge login is disabled, the Jellyfin token is invalid, or the account is not linked.
+        '409':
+          description: Jellyfin settings changed during authentication.
+        '502':
+          description: SeerrNG could not validate the session with Jellyfin.
   /auth/jellyfin/quickconnect/initiate:
     post:
       summary: Initiate Jellyfin Quick Connect

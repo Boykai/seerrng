@@ -26,16 +26,29 @@ const createCsrfProtection = (secure: boolean): RequestHandler =>
 // unconditionally-trusted header.
 export const requestUsesSecureTransport = (req: Request): boolean => req.secure;
 
+export const isJellyfinBridgeAuthRequest = (
+  req: Pick<Request, 'method' | 'path'>
+): boolean =>
+  req.method === 'POST' &&
+  /(?:^|\/)api\/v1\/auth\/jellyfin\/bridge\/?$/u.test(req.path);
+
 export const csrfProtection = (): RequestHandler => {
   const httpProtection = createCsrfProtection(false);
   const httpsProtection = createCsrfProtection(true);
 
-  return (req, res, next) =>
-    (requestUsesSecureTransport(req) ? httpsProtection : httpProtection)(
+  return (req, res, next) => {
+    // This credential exchange validates the configured Jellyfin origin and
+    // the current Jellyfin token in the auth route.
+    if (isJellyfinBridgeAuthRequest(req)) {
+      return next();
+    }
+
+    return (requestUsesSecureTransport(req) ? httpsProtection : httpProtection)(
       req,
       res,
       next
     );
+  };
 };
 
 export default csrfProtection;

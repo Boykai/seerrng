@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SeerrNG Bridge Settings</title>
+  </head>
+  <body>
+    <div
+      id="SeerrNGBridgeConfigurationPage"
+      data-role="page"
+      class="page type-interior pluginConfigurationPage"
+    >
+      <div data-role="content">
+        <div class="content-primary">
+          <h1>SeerrNG Bridge Settings</h1>
+          <p>
+            Connect this Jellyfin server to a separately deployed SeerrNG
+            instance.
+          </p>
+          <div class="inputContainer">
+            <label class="inputLabel inputLabelUnfocused" for="SeerrNgUrl"
+              >SeerrNG URL</label
+            >
+            <input
+              id="SeerrNgUrl"
+              type="url"
+              is="emby-input"
+              placeholder="https://requests.example.com"
+            />
+            <div class="fieldDescription">
+              Use the public HTTPS address users open in their browser. Keep any
+              reverse-proxy path prefix.
+            </div>
+          </div>
+          <button
+            id="saveSeerrNGBridge"
+            is="emby-button"
+            type="button"
+            class="raised button-submit"
+          >
+            <span>Save</span>
+          </button>
+          <div id="status" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        const pluginId = '812a21b1-2e18-4ff7-a9b8-3dd84e2a0e16';
+        const input = document.getElementById('SeerrNgUrl');
+        const status = document.getElementById('status');
+
+        function normalizeUrl(value) {
+          const parsed = new URL(value);
+          if (
+            !['http:', 'https:'].includes(parsed.protocol) ||
+            parsed.username ||
+            parsed.password ||
+            parsed.search ||
+            parsed.hash
+          ) {
+            throw new Error(
+              'Enter an HTTP or HTTPS address without credentials, query parameters, or a fragment.'
+            );
+          }
+          return parsed.href.replace(/\/+$/, '');
+        }
+
+        async function load() {
+          try {
+            const configuration =
+              await ApiClient.getPluginConfiguration(pluginId);
+            input.value = configuration.SeerrNgUrl || '';
+          } catch (error) {
+            status.textContent = 'Unable to load plugin settings: ' + error;
+          }
+        }
+
+        async function save() {
+          try {
+            const url = normalizeUrl(input.value.trim());
+            const configuration =
+              await ApiClient.getPluginConfiguration(pluginId);
+            configuration.SeerrNgUrl = url;
+            const result = await ApiClient.updatePluginConfiguration(
+              pluginId,
+              configuration
+            );
+            if (
+              window.Dashboard &&
+              Dashboard.processPluginConfigurationUpdateResult
+            ) {
+              Dashboard.processPluginConfigurationUpdateResult(result);
+            }
+            status.textContent = 'SeerrNG URL saved.';
+          } catch (error) {
+            status.textContent = 'Unable to save plugin settings: ' + error;
+          }
+        }
+
+        document
+          .getElementById('saveSeerrNGBridge')
+          .addEventListener('click', save);
+        document
+          .querySelector('.pluginConfigurationPage')
+          .addEventListener('pageshow', load);
+        load();
+      })();
+    </script>
+  </body>
+</html>

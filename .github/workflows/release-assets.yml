@@ -125,9 +125,89 @@ jobs:
           name: seerrng-${{ matrix.os }}-${{ matrix.arch }}
           path: dist-release/seerrng-*
 
+  build-jellyfin-plugin:
+    name: Build optional Jellyfin plugin
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Build plugin archive and repository manifest
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          plugin_dir='integrations/jellyfin-plugin'
+          release_dir='dist-release'
+          plugin_version="$(sed -n 's/^version: *"\([^"]*\)"/\1/p' "$plugin_dir/build.yaml")"
+          target_abi="$(sed -n 's/^targetAbi: *"\([^"]*\)"/\1/p' "$plugin_dir/build.yaml")"
+          plugin_guid="$(sed -n 's/^guid: *"\([^"]*\)"/\1/p' "$plugin_dir/build.yaml")"
+          [[ "$plugin_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$target_abi" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$plugin_guid" == '812a21b1-2e18-4ff7-a9b8-3dd84e2a0e16' ]]
+          mkdir -p "$release_dir/plugin"
+          dotnet publish "$plugin_dir/SeerrNG.JellyfinBridge.csproj" \
+            --configuration Release \
+            --output "$release_dir/plugin"
+          test -s "$release_dir/plugin/Jellyfin.Plugin.SeerrNGBridge.dll"
+          cp "$plugin_dir/meta.json" "$release_dir/plugin/meta.json"
+          archive="seerrng-jellyfin-bridge-${RELEASE_TAG}.zip"
+          (
+            cd "$release_dir/plugin"
+            zip -q "../$archive" Jellyfin.Plugin.SeerrNGBridge.dll meta.json
+          )
+          (
+            cd "$release_dir"
+            sha256sum "$archive" > "${archive%.zip}.sha256"
+          )
+          checksum="$(md5sum "$release_dir/$archive" | cut -d ' ' -f1)"
+          [[ "$checksum" =~ ^[a-f0-9]{32}$ ]]
+          source_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${archive}"
+          jq -n \
+            --arg guid "$plugin_guid" \
+            --arg version "$plugin_version" \
+            --arg targetAbi "$target_abi" \
+            --arg sourceUrl "$source_url" \
+            --arg checksum "$checksum" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '[{
+              guid: $guid,
+              name: "SeerrNG Bridge",
+              description: "Optional Jellyfin menu link to a separately deployed SeerrNG server.",
+              overview: "Open SeerrNG using the current Jellyfin session.",
+              owner: "snapetech",
+              category: "General",
+              versions: [{
+                version: $version,
+                changelog: "Initial SeerrNG Jellyfin Bridge release.",
+                targetAbi: $targetAbi,
+                sourceUrl: $sourceUrl,
+                checksum: $checksum,
+                timestamp: $timestamp
+              }]
+            }]' > "$release_dir/seerrng-jellyfin-plugin-manifest.json"
+          jq -e --arg guid "$plugin_guid" --arg checksum "$checksum" \
+            'length == 1 and .[0].guid == $guid and .[0].versions[0].checksum == $checksum' \
+            "$release_dir/seerrng-jellyfin-plugin-manifest.json" >/dev/null
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: seerrng-jellyfin-plugin
+          path: dist-release/seerrng-jellyfin-*
+
   publish:
     name: Upload release assets
-    needs: [resolve, build]
+    needs: [resolve, build, build-jellyfin-plugin]
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -151,6 +231,7 @@ jobs:
             "seerrng-${TAG}-linux-arm64.tar.gz"
             "seerrng-${TAG}-macos-arm64.tar.gz"
             "seerrng-${TAG}-windows-x64.zip"
+            "seerrng-jellyfin-bridge-${TAG}.zip"
           )
           for archive in "${expected[@]}"; do
             test -f "dist-release/$archive"

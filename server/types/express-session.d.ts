@@ -6,6 +6,10 @@ declare module 'express-session' {
   interface SessionData {
     userId: number;
     credentialVersion?: number;
+    jellyfinBridge?: {
+      jellyfinUserId: string;
+      authorityKey: string;
+    };
     discoveryAuth?: Partial<
       Record<
         'trakt' | 'simkl',

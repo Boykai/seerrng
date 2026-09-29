@@ -14,7 +14,10 @@ export const getJellyfinAuthAuthorityKey = (
       settings.jellyfin.port,
       settings.jellyfin.useSsl ?? false,
       settings.jellyfin.urlBase ?? '',
+      settings.jellyfin.externalHostname ?? '',
       settings.jellyfin.serverId,
       settings.jellyfin.apiKey,
+      settings.jellyfin.bridgeLoginEnabled ?? false,
+      settings.jellyfin.bridgeLoginGeneration ?? 0,
     ])
   );

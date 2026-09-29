@@ -1,0 +1,11 @@
+{
+  "guid": "812a21b1-2e18-4ff7-a9b8-3dd84e2a0e16",
+  "name": "SeerrNG Bridge",
+  "description": "Adds an optional Jellyfin menu link that signs an already-linked Jellyfin user into a separately deployed SeerrNG instance.",
+  "overview": "Open SeerrNG from Jellyfin using the current Jellyfin session.",
+  "owner": "snapetech",
+  "category": "General",
+  "version": "0.1.0.0",
+  "targetAbi": "10.11.0.0",
+  "framework": "net9.0"
+}

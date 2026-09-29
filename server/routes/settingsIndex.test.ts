@@ -769,6 +769,7 @@ describe('Settings route input validation', () => {
       libraries: [{ id: '2', name: 'Shows', enabled: true, type: 'show' }],
       serverId: 'stored-server',
       apiKey: 'stored-key',
+      bridgeLoginEnabled: true,
     };
     const parsedJellyfin = parseJellyfinSettingsBody(
       {
@@ -778,6 +779,7 @@ describe('Settings route input validation', () => {
         apiKey: 'new-key',
         name: 'Injected name',
         serverId: 'injected-server',
+        bridgeLoginEnabled: false,
         libraries: [],
         unexpected: 'persisted',
       },
@@ -786,12 +788,37 @@ describe('Settings route input validation', () => {
     assert.ok('value' in parsedJellyfin);
     assert.strictEqual(parsedJellyfin.value.name, 'Stored Jellyfin');
     assert.strictEqual(parsedJellyfin.value.serverId, 'stored-server');
+    assert.strictEqual(parsedJellyfin.value.bridgeLoginEnabled, true);
     assert.deepStrictEqual(parsedJellyfin.value.libraries, jellyfin.libraries);
     assert.strictEqual(
       (parsedJellyfin.value as JellyfinSettings & { unexpected?: unknown })
         .unexpected,
       undefined
     );
+  });
+
+  it('can revoke Jellyfin bridge sessions while Jellyfin is unavailable', async () => {
+    const settings = getSettings();
+    settings.jellyfin.bridgeLoginEnabled = true;
+    const getSystemInfo = mock.method(JellyfinAPI.prototype, 'getSystemInfo');
+
+    try {
+      const response = await request(app)
+        .post('/settings/jellyfin/bridge-login')
+        .send({ enabled: false });
+      const malformed = await request(app)
+        .post('/settings/jellyfin/bridge-login')
+        .send({ enabled: 'false' });
+
+      assert.strictEqual(response.status, 200);
+      assert.deepStrictEqual(response.body, { bridgeLoginEnabled: false });
+      assert.strictEqual(settings.jellyfin.bridgeLoginEnabled, false);
+      assert.strictEqual(getSystemInfo.mock.callCount(), 0);
+      assert.strictEqual(malformed.status, 400);
+      assert.match(malformed.body.message, /enabled must be a boolean/i);
+    } finally {
+      getSystemInfo.mock.restore();
+    }
   });
 
   it('rejects malformed media-server connection fields', () => {
@@ -1461,6 +1488,38 @@ describe('Settings route input validation', () => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body[0].type, 'book');
+  });
+
+  it('keeps the independent Jellyfin bridge switch reachable through OpenAPI', async () => {
+    const settings = getSettings();
+    settings.jellyfin.serverId = 'test-jellyfin-server';
+    settings.jellyfin.bridgeLoginEnabled = false;
+    settings.jellyfin.bridgeLoginGeneration = 4;
+
+    const res = await request(createOpenApiValidatedApp())
+      .post('/api/v1/settings/jellyfin/bridge-login')
+      .send({ enabled: true });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body, { bridgeLoginEnabled: true });
+    assert.strictEqual(settings.jellyfin.bridgeLoginEnabled, true);
+    assert.strictEqual(settings.jellyfin.bridgeLoginGeneration, 5);
+
+    const unchanged = await request(createOpenApiValidatedApp())
+      .post('/api/v1/settings/jellyfin/bridge-login')
+      .send({ enabled: true });
+    assert.strictEqual(unchanged.status, 200);
+    assert.strictEqual(settings.jellyfin.bridgeLoginGeneration, 5);
+
+    const disabled = await request(createOpenApiValidatedApp())
+      .post('/api/v1/settings/jellyfin/bridge-login')
+      .send({ enabled: false });
+    assert.strictEqual(disabled.status, 200);
+    assert.strictEqual(settings.jellyfin.bridgeLoginGeneration, 6);
+
+    const jellyfinSettings = await request(app).get('/settings/jellyfin');
+    assert.strictEqual(jellyfinSettings.status, 200);
+    assert.strictEqual(jellyfinSettings.body.bridgeLoginGeneration, undefined);
   });
 
   it('supports switching an audiobook library back to Music', async () => {

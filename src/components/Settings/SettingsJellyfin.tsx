@@ -41,6 +41,12 @@ const messages = defineMessages('components.Settings', {
   jellyfinSettings: '{mediaServerName} Settings',
   jellyfinSettingsDescription:
     'Optionally configure the internal and external endpoints for your {mediaServerName} server. In most cases, the external URL is different to the internal URL. A custom password reset URL can also be set for {mediaServerName} login, in case you would like to redirect to a different password reset page. You can also change the Jellyfin API key, which was automatically generated previously.',
+  seerrngBridgeLogin: 'Enable SeerrNG sign-in from Jellyfin',
+  seerrngBridgeLoginDescription:
+    'Allow users with an already linked Jellyfin account to sign in to this SeerrNG instance from the optional Jellyfin plugin page in the administrator dashboard. The current Jellyfin session is checked during sign-in. Disabling this or unlinking the account revokes bridge-created sessions.',
+  seerrngBridgeLoginSuccess: 'SeerrNG Jellyfin sign-in setting saved.',
+  seerrngBridgeLoginFailure:
+    'Unable to save the SeerrNG Jellyfin sign-in setting.',
   externalUrl: 'External URL',
   hostname: 'Hostname or IP Address',
   port: 'Port',
@@ -103,6 +109,7 @@ const SettingsJellyfin: React.FC<SettingsJellyfinProps> = ({
   onComplete,
 }) => {
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSavingBridgeLogin, setIsSavingBridgeLogin] = useState(false);
   const {
     data,
     error,
@@ -236,6 +243,26 @@ const SettingsJellyfin: React.FC<SettingsJellyfinProps> = ({
       cancel: true,
     });
     revalidateSync();
+  };
+
+  const updateBridgeLogin = async (enabled: boolean) => {
+    setIsSavingBridgeLogin(true);
+    try {
+      await axios.post('/api/v1/settings/jellyfin/bridge-login', { enabled });
+      await revalidate();
+      addToast(intl.formatMessage(messages.seerrngBridgeLoginSuccess), {
+        autoDismiss: true,
+        appearance: 'success',
+      });
+    } catch {
+      await revalidate();
+      addToast(intl.formatMessage(messages.seerrngBridgeLoginFailure), {
+        autoDismiss: true,
+        appearance: 'error',
+      });
+    } finally {
+      setIsSavingBridgeLogin(false);
+    }
   };
 
   const toggleLibrary = async (libraryId: string) => {
@@ -698,6 +725,41 @@ const SettingsJellyfin: React.FC<SettingsJellyfinProps> = ({
           );
         }}
       </Formik>
+      {!isSetupSettings && (
+        <>
+          <div className="mt-10 mb-6">
+            <h3 className="heading">
+              {intl.formatMessage(messages.seerrngBridgeLogin)}
+            </h3>
+            <p className="description">
+              {intl.formatMessage(messages.seerrngBridgeLoginDescription)}
+            </p>
+          </div>
+          <div className="app-card-sub section">
+            <div className="form-row">
+              <label htmlFor="bridgeLoginEnabled" className="checkbox-label">
+                {intl.formatMessage(messages.seerrngBridgeLogin)}
+              </label>
+              <div className="form-input-area">
+                <input
+                  type="checkbox"
+                  id="bridgeLoginEnabled"
+                  name="bridgeLoginEnabled"
+                  checked={data?.bridgeLoginEnabled ?? false}
+                  disabled={
+                    !data ||
+                    isSavingBridgeLogin ||
+                    (!data.serverId && !data.bridgeLoginEnabled)
+                  }
+                  onChange={(event) =>
+                    void updateBridgeLogin(event.currentTarget.checked)
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 };

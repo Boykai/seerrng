@@ -79,6 +79,8 @@ export interface JellyfinSettings {
   libraries: Library[];
   serverId: string;
   apiKey: string;
+  bridgeLoginEnabled?: boolean;
+  bridgeLoginGeneration?: number;
 }
 
 export type OidcProvider = {
@@ -648,6 +650,8 @@ class Settings {
         libraries: [],
         serverId: '',
         apiKey: '',
+        bridgeLoginEnabled: false,
+        bridgeLoginGeneration: 0,
       },
       oidc: {
         providers: [],
@@ -1505,6 +1509,8 @@ class Settings {
         libraries: [],
         serverId: '',
         apiKey: '',
+        bridgeLoginEnabled: false,
+        bridgeLoginGeneration: 0,
       },
       oidc: {
         providers: [],

@@ -192,6 +192,7 @@ let app: Express;
 function createApp() {
   const app = express();
   app.use(express.json());
+  app.use(express.urlencoded({ extended: false }));
   app.use(cookieParser('SECRET'));
   app.use(
     session({
@@ -1030,6 +1031,218 @@ describe('POST /auth/plex', () => {
 
     assert.strictEqual(res.status, 400);
     assert.strictEqual(res.body.message, 'Request body must be an object.');
+  });
+});
+
+describe('POST /auth/jellyfin/bridge', () => {
+  const jellyfinUserId = '0123456789abcdef0123456789abcdef';
+
+  const configureBridge = async () => {
+    const settings = getSettings();
+    const userRepository = getRepository(User);
+    const existingUser = await userRepository.findOneByOrFail({ id: 1 });
+    settings.main.mediaServerType = MediaServerType.JELLYFIN;
+    settings.main.mediaServerLogin = true;
+    settings.jellyfin.ip = 'jellyfin.local';
+    settings.jellyfin.port = 8096;
+    settings.jellyfin.serverId = 'test-jellyfin-server';
+    settings.jellyfin.externalHostname = 'http://jellyfin.local';
+    settings.jellyfin.bridgeLoginEnabled = true;
+    settings.network.tls.allowHttpAuth = true;
+    await userRepository.update(1, { jellyfinUserId });
+    return {
+      settings,
+      restoreUser: () => userRepository.save(existingUser),
+    };
+  };
+
+  it('validates a linked Jellyfin account and creates a revocable SeerrNG session', async () => {
+    const { settings, restoreUser } = await configureBridge();
+    const getUser = mock.method(
+      JellyfinAPI.prototype,
+      'getUser',
+      async () =>
+        ({
+          Id: jellyfinUserId,
+          Name: 'linked-user',
+          ServerId: 'test-jellyfin-server',
+        }) as never
+    );
+    const agent = request.agent(app);
+
+    try {
+      const response = await agent
+        .post('/auth/jellyfin/bridge')
+        .set('Origin', 'http://jellyfin.local')
+        .type('form')
+        .send({ token: 'current-jellyfin-session-token' });
+
+      assert.strictEqual(response.status, 303);
+      assert.strictEqual(response.headers.location, '/');
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'no-store, private'
+      );
+      assert.strictEqual(response.headers['referrer-policy'], 'no-referrer');
+      assert.strictEqual(getUser.mock.callCount(), 1);
+      assert.strictEqual((await agent.get('/auth/me')).status, 200);
+
+      settings.jellyfin.bridgeLoginEnabled = false;
+      assert.strictEqual((await agent.get('/auth/me')).status, 403);
+      assert.strictEqual((await agent.get('/auth/me')).status, 403);
+    } finally {
+      getUser.mock.restore();
+      await restoreUser();
+    }
+  });
+
+  it('does not allow a Jellyfin token from a different server', async () => {
+    const { restoreUser } = await configureBridge();
+    const getUser = mock.method(
+      JellyfinAPI.prototype,
+      'getUser',
+      async () =>
+        ({
+          Id: jellyfinUserId,
+          Name: 'linked-user',
+          ServerId: 'different-server',
+        }) as never
+    );
+
+    try {
+      const response = await request(app)
+        .post('/auth/jellyfin/bridge')
+        .set('Origin', 'http://jellyfin.local')
+        .type('form')
+        .send({ token: 'current-jellyfin-session-token' });
+
+      assert.strictEqual(response.status, 403);
+      assert.strictEqual(getUser.mock.callCount(), 1);
+    } finally {
+      getUser.mock.restore();
+      await restoreUser();
+    }
+  });
+
+  it('respects the Jellyfin sign-in and HTTP-auth settings before contacting Jellyfin', async () => {
+    const { settings, restoreUser } = await configureBridge();
+    const getUser = mock.method(JellyfinAPI.prototype, 'getUser');
+
+    try {
+      settings.main.mediaServerType = MediaServerType.PLEX;
+      const wrongMediaServer = await request(app)
+        .post('/auth/jellyfin/bridge')
+        .set('Origin', 'http://jellyfin.local')
+        .type('form')
+        .send({ token: 'current-jellyfin-session-token' });
+      assert.strictEqual(wrongMediaServer.status, 403);
+
+      settings.main.mediaServerType = MediaServerType.JELLYFIN;
+      settings.main.mediaServerLogin = false;
+      const signInDisabled = await request(app)
+        .post('/auth/jellyfin/bridge')
+        .set('Origin', 'http://jellyfin.local')
+        .type('form')
+        .send({ token: 'current-jellyfin-session-token' });
+      assert.strictEqual(signInDisabled.status, 403);
+
+      settings.main.mediaServerLogin = true;
+      settings.network.tls.allowHttpAuth = false;
+      const insecureTransport = await request(app)
+        .post('/auth/jellyfin/bridge')
+        .set('Origin', 'http://jellyfin.local')
+        .type('form')
+        .send({ token: 'current-jellyfin-session-token' });
+      assert.strictEqual(insecureTransport.status, 403);
+      assert.strictEqual(getUser.mock.callCount(), 0);
+    } finally {
+      getUser.mock.restore();
+      await restoreUser();
+    }
+  });
+
+  it('revokes a bridge-created session when the user unlinks Jellyfin', async () => {
+    const { settings, restoreUser } = await configureBridge();
+    const getUser = mock.method(
+      JellyfinAPI.prototype,
+      'getUser',
+      async () =>
+        ({
+          Id: jellyfinUserId,
+          Name: 'linked-user',
+          ServerId: 'test-jellyfin-server',
+        }) as never
+    );
+    const agent = request.agent(app);
+
+    try {
+      const response = await agent
+        .post('/auth/jellyfin/bridge')
+        .set('Origin', 'http://jellyfin.local')
+        .type('form')
+        .send({ token: 'current-jellyfin-session-token' });
+      assert.strictEqual(response.status, 303);
+      assert.strictEqual((await agent.get('/auth/me')).status, 200);
+
+      await getRepository(User).update(1, { jellyfinUserId: null });
+      assert.strictEqual((await agent.get('/auth/me')).status, 403);
+
+      // A bridge session that was idle during the toggle must not regain
+      // authority when an administrator re-enables bridge sign-in.
+      await getRepository(User).update(1, { jellyfinUserId });
+      const secondAgent = request.agent(app);
+      const secondLogin = await secondAgent
+        .post('/auth/jellyfin/bridge')
+        .set('Origin', 'http://jellyfin.local')
+        .type('form')
+        .send({ token: 'current-jellyfin-session-token' });
+      assert.strictEqual(secondLogin.status, 303);
+
+      settings.jellyfin.bridgeLoginEnabled = false;
+      settings.jellyfin.bridgeLoginGeneration =
+        (settings.jellyfin.bridgeLoginGeneration ?? 0) + 1;
+      settings.jellyfin.bridgeLoginEnabled = true;
+      settings.jellyfin.bridgeLoginGeneration += 1;
+      assert.strictEqual((await secondAgent.get('/auth/me')).status, 403);
+    } finally {
+      getUser.mock.restore();
+      await restoreUser();
+    }
+  });
+
+  it('rejects bridge login when disabled without contacting Jellyfin', async () => {
+    const getUser = mock.method(JellyfinAPI.prototype, 'getUser');
+
+    try {
+      const response = await request(app)
+        .post('/auth/jellyfin/bridge')
+        .type('form')
+        .send({ token: 'current-jellyfin-session-token' });
+
+      assert.strictEqual(response.status, 403);
+      assert.strictEqual(getUser.mock.callCount(), 0);
+    } finally {
+      getUser.mock.restore();
+    }
+  });
+
+  it('rejects bridge login from an origin other than configured Jellyfin', async () => {
+    const { restoreUser } = await configureBridge();
+    const getUser = mock.method(JellyfinAPI.prototype, 'getUser');
+
+    try {
+      const response = await request(app)
+        .post('/auth/jellyfin/bridge')
+        .set('Origin', 'https://attacker.example')
+        .type('form')
+        .send({ token: 'current-jellyfin-session-token' });
+
+      assert.strictEqual(response.status, 403);
+      assert.strictEqual(getUser.mock.callCount(), 0);
+    } finally {
+      getUser.mock.restore();
+      await restoreUser();
+    }
   });
 });
 

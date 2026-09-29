@@ -1,5 +1,6 @@
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
+import { getJellyfinAuthAuthorityKey } from '@server/lib/mediaServerAuthority';
 import type {
   Permission,
   PermissionCheckOptions,
@@ -11,6 +12,7 @@ import {
   runWithUserCredentialVersionContext,
 } from '@server/lib/userSecurityMutation';
 import logger from '@server/logger';
+import { normalizeJellyfinGuid } from '@server/utils/jellyfin';
 import { getRateLimitKey } from '@server/utils/security';
 import rateLimit from 'express-rate-limit';
 import { timingSafeEqual } from 'node:crypto';
@@ -59,14 +61,23 @@ const checkUserImplementation: Middleware = async (req, res, next) => {
       where: { id: req.session.userId },
     });
 
+    const jellyfinBridge = req.session.jellyfinBridge;
+    const jellyfinBridgeSessionCurrent =
+      !jellyfinBridge ||
+      (settings.jellyfin.bridgeLoginEnabled &&
+        getJellyfinAuthAuthorityKey(settings) === jellyfinBridge.authorityKey &&
+        normalizeJellyfinGuid(user?.jellyfinUserId) ===
+          jellyfinBridge.jellyfinUserId);
+
     if (
-      user &&
-      !isUserSessionCredentialVersionCurrent(
-        user,
-        req.session.credentialVersion
-      )
+      (user &&
+        !isUserSessionCredentialVersionCurrent(
+          user,
+          req.session.credentialVersion
+        )) ||
+      (jellyfinBridge && (!user || !jellyfinBridgeSessionCurrent))
     ) {
-      const staleUserId = user.id;
+      const staleUserId = user?.id ?? req.session.userId;
       user = null;
       req.session.destroy((error) => {
         if (error) {

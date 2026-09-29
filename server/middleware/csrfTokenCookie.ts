@@ -1,9 +1,14 @@
 import type { Request, RequestHandler } from 'express';
+import { isJellyfinBridgeAuthRequest } from './csrfProtection';
 
 type SecureCookiePolicy = boolean | ((req: Request) => boolean);
 
 export const csrfTokenCookie = (secure: SecureCookiePolicy): RequestHandler =>
   function setCsrfTokenCookie(req, res, next) {
+    if (isJellyfinBridgeAuthRequest(req)) {
+      return next();
+    }
+
     // The browser client reads this cookie to populate X-XSRF-TOKEN. Without
     // an explicit root path, a token issued while rendering a nested page is
     // scoped to that page directory and disappears after client navigation.
