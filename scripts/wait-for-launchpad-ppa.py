@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Wait for a PPA source and binary publication using Launchpad's public API.
 
-Exit status 2 means the exact known source-publication race was found. The
-caller can recover by uploading the same payload under a fresh package version.
+Exit status 2 means a fresh source version is needed to recover from the known
+publication race or a stalled binary upload.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import argparse
 import gzip
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.request import urlopen
 
@@ -18,11 +19,12 @@ from launchpadlib.launchpad import Launchpad
 
 
 POLL_INTERVAL_SECONDS = 60
+STALE_UPLOAD_TIMEOUT = timedelta(minutes=45)
 PUBLISHED = "Published"
 
 
 class FreshUploadRequired(RuntimeError):
-    """The known pre-publication upload race needs a fresh source version."""
+    """Launchpad needs a fresh source version to recover the PPA build."""
 
 
 def parse_args() -> argparse.Namespace:
@@ -106,6 +108,30 @@ def classify_failed_upload(
     )
 
 
+def classify_stalled_upload(build: Any, source_version: str, archive_web: str) -> None:
+    if build.buildstate != "Uploading build" or not build.datebuilt:
+        return
+
+    build_finished = build.datebuilt
+    if not isinstance(build_finished, datetime):
+        build_finished = datetime.fromisoformat(
+            str(build_finished).replace("Z", "+00:00")
+        )
+    if build_finished.tzinfo is None:
+        build_finished = build_finished.replace(tzinfo=timezone.utc)
+
+    stalled_for = datetime.now(timezone.utc) - build_finished.astimezone(timezone.utc)
+    if stalled_for < STALE_UPLOAD_TIMEOUT:
+        return
+
+    minutes = int(stalled_for.total_seconds() // 60)
+    raise FreshUploadRequired(
+        f"Launchpad built {source_version} but left {build.web_link} in "
+        f"'Uploading build' for {minutes} minutes without publishing a binary. "
+        f"Republishing a fresh signed source version to {archive_web}."
+    )
+
+
 def fail_for_build(build: Any) -> None:
     state = build.buildstate
     log_url = build.upload_log_url or build.build_log_url or build.web_link
@@ -167,6 +193,11 @@ def main() -> int:
                         "Cancelled build",
                     ):
                         fail_for_build(build)
+                    classify_stalled_upload(
+                        build,
+                        args.source_version,
+                        args.archive_web,
+                    )
 
                 if publication_status != PUBLISHED:
                     if publication_status in ("Superseded", "Deleted", "Obsolete"):
