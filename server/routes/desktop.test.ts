@@ -267,26 +267,26 @@ describe('native desktop authentication ticket flow', () => {
 
     user.jellyfinUserId = 'ffeeddcc-bbaa-9988-7766-554433221100';
     await getRepository(User).save(user);
-    const changedIdentity = await request(app)
-      .post('/api/v1/desktop/auth-tickets/redeem')
-      .send({
-        ticket: first.ticket,
-        verifier: first.verifier,
-        protocolVersion: 1,
-      });
+    const changedIdentity = await securePost(
+      '/api/v1/desktop/auth-tickets/redeem'
+    ).send({
+      ticket: first.ticket,
+      verifier: first.verifier,
+      protocolVersion: 1,
+    });
     assert.equal(changedIdentity.status, 401);
     assert.equal(changedIdentity.body.code, 'session_expired');
 
     const second = await issueTicket(agent);
     getSettings().jellyfin.externalHostname =
       'https://replacement.example.test';
-    const changedServer = await request(app)
-      .post('/api/v1/desktop/auth-tickets/redeem')
-      .send({
-        ticket: second.ticket,
-        verifier: second.verifier,
-        protocolVersion: 1,
-      });
+    const changedServer = await securePost(
+      '/api/v1/desktop/auth-tickets/redeem'
+    ).send({
+      ticket: second.ticket,
+      verifier: second.verifier,
+      protocolVersion: 1,
+    });
     assert.equal(changedServer.status, 409);
     assert.equal(changedServer.body.code, 'unsupported_media_server');
   });
