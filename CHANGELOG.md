@@ -124,6 +124,20 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.39.1](https://github.com/snapetech/seerrng/compare/v3.39.0..v3.39.1) - 2026-09-29
+
+### User-facing changes
+
+#### Fixed
+
+- **Integrations:** ROMarrNG and QuestarrNG connection settings now identify whether SeerrNG itself could complete a test request, and point operators to the API key configured by the corresponding service.
+  - **Action required:** Use the API key configured in each service's General settings.
+
+### 🐛 Bug Fixes
+- Clarify software service connection failures - ([55ab199](https://github.com/snapetech/seerrng/commit/55ab199e8c6c9ad75ffb8cf544590c8a988c152d))
+
 ## [3.39.0](https://github.com/snapetech/seerrng/compare/v3.38.0..v3.39.0) - 2026-09-29
 
 ### User-facing changes
