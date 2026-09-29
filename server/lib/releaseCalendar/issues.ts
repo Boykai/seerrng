@@ -469,11 +469,25 @@ async function loadLibraryTargets(
     }));
 }
 
+const appendIssueEvent = (
+  result: IssueCalendarResult,
+  item: ReleaseCalendarItem | undefined
+): boolean => {
+  if (!item) return true;
+  if (result.results.length >= MAX_ISSUE_CALENDAR_EVENTS) {
+    result.truncated = true;
+    return false;
+  }
+  result.results.push(item);
+  return true;
+};
+
 async function loadConnectionIssues(
   connection: IssueConnection,
   target: LookupTarget,
-  query: CalendarQuery
-): Promise<ReleaseCalendarItem[]> {
+  query: CalendarQuery,
+  result: IssueCalendarResult
+): Promise<void> {
   if (connection.source === 'mylar') {
     const detail = await withMylar(connection.server, (api) =>
       api.getComic(target.id, ISSUE_CALENDAR_CACHE_TTL_SECONDS)
@@ -481,8 +495,8 @@ async function loadConnectionIssues(
     const parentTitle =
       nonEmpty(detail.comic?.name) ?? nonEmpty(target.title) ?? target.id;
     const comicId = positiveIntegerString(detail.comic?.id ?? target.id);
-    if (!comicId) return [];
-    return detail.issues.flatMap((issue) => {
+    if (!comicId) return;
+    for (const issue of detail.issues) {
       const item = comicEvent(
         'mylar',
         connection.server.id,
@@ -491,8 +505,9 @@ async function loadConnectionIssues(
         issue,
         query
       );
-      return item ? [item] : [];
-    });
+      if (!appendIssueEvent(result, item)) break;
+    }
+    return;
   }
   if (connection.source === 'kapowarr') {
     let volume: KapowarrVolume | undefined;
@@ -506,7 +521,7 @@ async function loadConnectionIssues(
         );
     } else {
       const volumeId = Number(target.id);
-      if (!Number.isSafeInteger(volumeId) || volumeId < 1) return [];
+      if (!Number.isSafeInteger(volumeId) || volumeId < 1) return;
       volume = await withKapowarr(connection.server, (api) =>
         api.getVolume(volumeId, ISSUE_CALENDAR_CACHE_TTL_SECONDS)
       );
@@ -514,9 +529,9 @@ async function loadConnectionIssues(
     if (!volume)
       throw new Error('Kapowarr did not return the requested volume.');
     const comicId = positiveIntegerString(volume.comicvine_id);
-    if (!comicId) return [];
+    if (!comicId) return;
     const parentTitle = nonEmpty(volume.title) ?? target.title ?? comicId;
-    return (volume.issues ?? []).flatMap((issue) => {
+    for (const issue of volume.issues ?? []) {
       const item = comicEvent(
         'kapowarr',
         connection.server.id,
@@ -525,28 +540,30 @@ async function loadConnectionIssues(
         issue,
         query
       );
-      return item ? [item] : [];
-    });
+      if (!appendIssueEvent(result, item)) break;
+    }
+    return;
   }
   const detail = await withLazyLibrarian(connection.server, (api) =>
     api.getIssues(target.id, undefined, ISSUE_CALENDAR_CACHE_TTL_SECONDS)
   );
   const magazineTitle =
     nonEmpty(detail.magazine?.title) ?? nonEmpty(target.title) ?? target.id;
-  return detail.issues.flatMap((issue) => {
+  for (const issue of detail.issues) {
     const item = magazineEvent(
       connection.server.id,
       magazineTitle,
       issue,
       query
     );
-    return item ? [item] : [];
-  });
+    if (!appendIssueEvent(result, item)) break;
+  }
 }
 
 export async function getComicMagazineReleaseCalendar(
   query: CalendarQuery,
-  requests: MediaRequest[]
+  requests: MediaRequest[],
+  isAdmin = false
 ): Promise<IssueCalendarResult> {
   const includeComic = !query.mediaType || query.mediaType === 'comic';
   const includeMagazine = !query.mediaType || query.mediaType === 'magazine';
@@ -596,7 +613,7 @@ export async function getComicMagazineReleaseCalendar(
         if (source && serverId !== undefined) {
           result.partialSources.push({
             source,
-            serverId,
+            ...(isAdmin ? { serverId } : {}),
           });
         }
         continue;
@@ -623,7 +640,7 @@ export async function getComicMagazineReleaseCalendar(
         } catch {
           result.partialSources.push({
             source: connection.source,
-            serverId: connection.server.id,
+            ...(isAdmin ? { serverId: connection.server.id } : {}),
           });
           return { connection, targets: [] };
         }
@@ -660,25 +677,36 @@ export async function getComicMagazineReleaseCalendar(
   if (targetsByConnection.some((group) => group.index < group.targets.length))
     result.truncated = true;
 
-  const loadedIssues = await mapWithConcurrency(
-    selected,
-    ISSUE_CALENDAR_LOOKUP_CONCURRENCY,
-    async ({ connection, target }) => {
-      try {
-        return await loadConnectionIssues(connection, target, query);
-      } catch {
-        result.partialSources.push({
-          source: connection.source,
-          serverId: connection.server.id,
-        });
-        return [];
+  for (
+    let index = 0;
+    index < selected.length;
+    index += ISSUE_CALENDAR_LOOKUP_CONCURRENCY
+  ) {
+    const batch = selected.slice(
+      index,
+      index + ISSUE_CALENDAR_LOOKUP_CONCURRENCY
+    );
+    await mapWithConcurrency(
+      batch,
+      ISSUE_CALENDAR_LOOKUP_CONCURRENCY,
+      async ({ connection, target }) => {
+        try {
+          await loadConnectionIssues(connection, target, query, result);
+        } catch {
+          result.partialSources.push({
+            source: connection.source,
+            ...(isAdmin ? { serverId: connection.server.id } : {}),
+          });
+        }
       }
+    );
+    if (
+      result.results.length >= MAX_ISSUE_CALENDAR_EVENTS &&
+      index + batch.length < selected.length
+    ) {
+      result.truncated = true;
+      break;
     }
-  );
-  result.results = loadedIssues.flat();
-  if (result.results.length > MAX_ISSUE_CALENDAR_EVENTS) {
-    result.truncated = true;
-    result.results = result.results.slice(0, MAX_ISSUE_CALENDAR_EVENTS);
   }
   result.partialSources = [
     ...new Map(

@@ -109,7 +109,11 @@ export async function getReleaseCalendar(
     query.mediaType === 'comic' ||
     query.mediaType === 'magazine'
   ) {
-    const issues = await getComicMagazineReleaseCalendar(query, requests);
+    const issues = await getComicMagazineReleaseCalendar(
+      query,
+      requests,
+      isAdmin
+    );
     issueResults = issues.results;
     sourceTruncated ||= issues.truncated;
     partialSources.push(...issues.partialSources);
