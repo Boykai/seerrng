@@ -18,6 +18,18 @@ const COMICVINE_IMAGE_HOSTS = new Set([
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 
+const isValidIssueResponse = (response: unknown): boolean => {
+  if (!isRecord(response)) return false;
+  return (
+    (response.status_code === undefined || response.status_code === 1) &&
+    (response.error === undefined || response.error === 'OK') &&
+    Array.isArray(response.results) &&
+    (response.number_of_page_results === undefined ||
+      (Number.isSafeInteger(response.number_of_page_results) &&
+        response.number_of_page_results === response.results.length))
+  );
+};
+
 const boundedString = (
   value: unknown,
   maxLength = MAX_COMICVINE_TEXT_LENGTH
@@ -305,7 +317,7 @@ class ComicVineAPI extends ExternalAPI {
     }
     const boundedLimit = Math.min(Math.max(1, limit), MAX_COMICVINE_PAGE_SIZE);
     const offset = Math.max(0, (page - 1) * boundedLimit);
-    const response = await this.get<ComicVineIssuesResponse>(
+    const response = await this.get<unknown>(
       '/issues/',
       {
         params: {
@@ -315,20 +327,23 @@ class ComicVineAPI extends ExternalAPI {
           field_list: 'id,name,issue_number,cover_date,image',
         },
       },
-      43200
+      43200,
+      isValidIssueResponse
     );
-    if (!isRecord(response)) {
+    if (
+      !isRecord(response) ||
+      !Array.isArray(response.results) ||
+      !isValidIssueResponse(response)
+    ) {
       throw new Error('ComicVine returned an invalid issue response.');
     }
     return {
       offset: boundedInteger(response.offset) ?? offset,
       number_of_total_results:
         boundedInteger(response.number_of_total_results) ?? 0,
-      results: Array.isArray(response.results)
-        ? response.results
-            .map(sanitizeIssueSummary)
-            .filter((issue): issue is ComicVineIssueSummary => !!issue)
-        : [],
+      results: response.results
+        .map(sanitizeIssueSummary)
+        .filter((issue): issue is ComicVineIssueSummary => !!issue),
     };
   }
 
