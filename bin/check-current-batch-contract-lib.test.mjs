@@ -214,6 +214,13 @@ test('reports an incomplete Books discovery navigation contract', () => {
       )
     )
   );
+  assert.ok(
+    errors.some((error) =>
+      error.includes(
+        'book discovery must retire browser cache entries created under the old stale-empty response contract'
+      )
+    )
+  );
 });
 
 test('reports incomplete primary navigation cleanup', () => {

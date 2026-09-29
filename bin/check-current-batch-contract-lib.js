@@ -4754,7 +4754,7 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'src/components/Discover/DiscoverBooks/index.tsx',
-    'responseVersion: 2',
+    'responseVersion: 3',
     'book discovery must retire browser cache entries created under the old stale-empty response contract'
   );
   requireText(
@@ -5008,7 +5008,7 @@ const validateCurrentBatchContract = (files) => {
     "? 'book'",
     ": 'all'",
     'keyword: searchQuery || undefined',
-    'pageSize: itemsPerPage',
+    'pageSize: pageSizePerFormat',
     'sort: sortByValue',
     'genre: subjectQuery || undefined',
     'firstPublishYear: firstPublishYear || undefined',
