@@ -852,7 +852,7 @@ const getStageFromRequest = (
       queueFailure: false,
       downloads,
       message:
-        'Bookshelf is monitoring this title. Availability will update after the next library scan.',
+        'SeerrNG is preparing a Bookshelf search for this title. Availability will update after a library scan finds the book.',
     };
   }
 

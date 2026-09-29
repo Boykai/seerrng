@@ -174,7 +174,7 @@ describe('BookRequestSearchManager', () => {
     assert.equal(lookupMock.mock.calls.length, 0);
   });
 
-  it('monitors a prepared Chaptarr book without starting a Seerr search', async () => {
+  it('starts a deferred search after a prepared Chaptarr book is added', async () => {
     const { media, request } = await createTrackedRequest({
       createdBook: false,
       createdAuthor: false,
@@ -206,6 +206,12 @@ describe('BookRequestSearchManager', () => {
       createdBook: true,
       createdAuthor: false,
     }));
+    mock.method(ReadarrAPI.prototype, 'getBookIfExists', async () => ({
+      id: 56,
+      title: 'Prepared Book',
+      foreignBookId: 'hc:book-18',
+      statistics: { bookFileCount: 0 },
+    }));
     const startBookSearch = mock.method(
       ReadarrAPI.prototype,
       'startBookSearch',
@@ -227,9 +233,18 @@ describe('BookRequestSearchManager', () => {
     });
     assert.equal(updatedMedia.externalServiceId, 56);
     assert.equal(updatedMedia.externalServiceSlug, 'prepared-book');
+
+    await bookRequestSearchManager.run();
+
+    const searching = await getRepository(BookRequestSearch).findOneByOrFail({
+      requestId: request.id,
+    });
+    assert.equal(searching.state, 'searching');
+    assert.equal(searching.commandId, 903);
+    assert.equal(startBookSearch.mock.callCount(), 1);
   });
 
-  it('keeps a monitored book pending until its library scan finds a file', async () => {
+  it('starts and tracks BookSearch until the library scan finds a file', async () => {
     const { media, request } = await createTrackedRequest({
       createdBook: true,
       createdAuthor: true,
@@ -246,19 +261,22 @@ describe('BookRequestSearchManager', () => {
         statistics: { bookFileCount: fileCount },
       })
     );
+    let commandStatus = 'started';
     const getCommand = mock.method(
       ReadarrAPI.prototype,
       'getCommand',
-      async () => {
-        throw new Error('Monitoring must not poll a search command.');
-      }
+      async () => ({
+        id: 902,
+        name: 'BookSearch',
+        status: commandStatus,
+      })
     );
+    mock.method(ReadarrAPI.prototype, 'getQueue', async () => []);
+    mock.method(ReadarrAPI.prototype, 'getBookHistory', async () => []);
     const startBookSearch = mock.method(
       ReadarrAPI.prototype,
       'startBookSearch',
-      async () => {
-        throw new Error('Monitoring must not start an immediate search.');
-      }
+      async () => ({ id: 902, name: 'BookSearch', status: 'started' })
     );
     const removeBook = mock.method(
       ReadarrAPI.prototype,
@@ -271,10 +289,21 @@ describe('BookRequestSearchManager', () => {
     const operation = await getRepository(BookRequestSearch).findOneByOrFail({
       requestId: request.id,
     });
-    assert.equal(operation.state, 'monitoring');
+    assert.equal(operation.state, 'searching');
+    assert.equal(operation.commandId, 902);
     assert.equal(currentBook.mock.callCount(), 1);
     assert.equal(getCommand.mock.callCount(), 0);
-    assert.equal(startBookSearch.mock.callCount(), 0);
+    assert.equal(startBookSearch.mock.callCount(), 1);
+    assert.equal(removeBook.mock.callCount(), 0);
+
+    commandStatus = 'completed';
+    await bookRequestSearchManager.run();
+
+    const settling = await getRepository(BookRequestSearch).findOneByOrFail({
+      requestId: request.id,
+    });
+    assert.equal(getCommand.mock.callCount(), 1);
+    assert.equal(settling.state, 'settling');
     assert.equal(removeBook.mock.callCount(), 0);
 
     fileCount = 1;
@@ -288,9 +317,45 @@ describe('BookRequestSearchManager', () => {
       id: media.id,
     });
     assert.equal(updatedMedia.status, MediaStatus.AVAILABLE);
-    assert.equal(getCommand.mock.callCount(), 0);
-    assert.equal(startBookSearch.mock.callCount(), 0);
+    assert.equal(getCommand.mock.callCount(), 2);
+    assert.equal(startBookSearch.mock.callCount(), 1);
     assert.equal(removeBook.mock.callCount(), 0);
+  });
+
+  it('retries starting a BookSearch command after a temporary failure', async () => {
+    const { request } = await createTrackedRequest({
+      createdBook: true,
+      createdAuthor: true,
+      monitoring: true,
+    });
+    mockCurrentBooks();
+    let attempts = 0;
+    const startBookSearch = mock.method(
+      ReadarrAPI.prototype,
+      'startBookSearch',
+      async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('Temporary command API failure.');
+        return { id: 904, name: 'BookSearch', status: 'queued' };
+      }
+    );
+
+    await bookRequestSearchManager.run();
+
+    const retryable = await getRepository(BookRequestSearch).findOneByOrFail({
+      requestId: request.id,
+    });
+    assert.equal(retryable.state, 'monitoring');
+    assert.equal(retryable.commandId, null);
+
+    await bookRequestSearchManager.run();
+
+    const searching = await getRepository(BookRequestSearch).findOneByOrFail({
+      requestId: request.id,
+    });
+    assert.equal(searching.state, 'searching');
+    assert.equal(searching.commandId, 904);
+    assert.equal(startBookSearch.mock.callCount(), 2);
   });
 
   it('reports no release and removes only records it created', async () => {

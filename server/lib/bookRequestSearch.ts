@@ -264,10 +264,39 @@ class BookRequestSearchManager {
       providerEditionId
     );
 
-    if (!book || (book.statistics?.bookFileCount ?? 0) === 0) return;
+    if ((book?.statistics?.bookFileCount ?? 0) > 0) {
+      await this.setState(operation, 'available');
+      await this.finalizeRequest(operation.requestId);
+      return;
+    }
 
-    await this.setState(operation, 'available');
-    await this.finalizeRequest(operation.requestId);
+    if (operation.commandId != null) {
+      await this.setState(operation, 'searching');
+      return;
+    }
+
+    const bookId = operation.bookId ?? book?.id;
+    if (bookId == null) return;
+
+    // The add endpoint only creates the monitored Book/Author records. In
+    // particular, Seerr's Bookshelf payload disables the backend's deferred
+    // search flag, so a BookSearch command must be started explicitly. Do it
+    // from this retryable job so a temporary command API failure cannot turn a
+    // successful add into a failed request or leave it silently unsearched.
+    const command = await readarr.startBookSearch(bookId);
+    if (!Number.isSafeInteger(command.id) || command.id <= 0) {
+      throw new Error('Bookshelf returned an invalid BookSearch command ID.');
+    }
+
+    const updatedAt = new Date();
+    await getRepository(BookRequestSearch).update(operation.id, {
+      commandId: command.id,
+      state: 'searching',
+      updatedAt,
+    });
+    operation.commandId = command.id;
+    operation.state = 'searching';
+    operation.updatedAt = updatedAt;
   }
 
   private async reconcilePendingOperation(
