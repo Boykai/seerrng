@@ -52,6 +52,7 @@ export const NativeRuntimeProvider = ({
   children,
 }: React.PropsWithChildren) => {
   const [state, setState] = useState<NativeRuntimeState>('web');
+  const [sessionResetRetry, setSessionResetRetry] = useState(0);
   const activePlayRequestId = useRef<string | undefined>(undefined);
   const activePlayTimeout = useRef<number | undefined>(undefined);
   const previousUserId = useRef<number | undefined>(undefined);
@@ -100,6 +101,15 @@ export const NativeRuntimeProvider = ({
         type: 'session.clear',
         id: createRequestId(),
       });
+      if (!cleared) {
+        setState('degraded');
+        const retry = window.setTimeout(
+          () => setSessionResetRetry((attempt) => attempt + 1),
+          5_000
+        );
+        return () => window.clearTimeout(retry);
+      }
+
       activePlayRequestId.current = undefined;
       window.clearTimeout(activePlayTimeout.current);
       hasObservedUserState.current = true;
@@ -107,10 +117,6 @@ export const NativeRuntimeProvider = ({
       previousJellyfinUsername.current = jellyfinUsername;
       previousUserUpdatedAt.current = userUpdatedAt;
       previousMediaServerType.current = mediaServerType;
-      if (!cleared) {
-        setState('degraded');
-        return;
-      }
     }
 
     if (!userId || !isJellyfin || !jellyfinUsername) {
@@ -290,6 +296,7 @@ export const NativeRuntimeProvider = ({
     jellyfinUsername,
     loading,
     mediaServerType,
+    sessionResetRetry,
     userId,
     userUpdatedAt,
   ]);

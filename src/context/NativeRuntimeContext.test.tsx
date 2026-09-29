@@ -187,4 +187,44 @@ describe('NativeRuntimeProvider recovery handling', () => {
       state.commands.filter((command) => command.type === 'auth.challenge')
     ).toHaveLength(2);
   });
+
+  it('retries a rejected initial session reset before starting authentication', async () => {
+    const retryCallbacks: (() => void)[] = [];
+    let rejectFirstReset = true;
+    dom.window.foreseerNative!.send = (command) => {
+      state.commands.push(command);
+      if (command.type === 'session.clear' && rejectFirstReset) {
+        rejectFirstReset = false;
+        return false;
+      }
+      return true;
+    };
+    vi.spyOn(dom.window, 'setTimeout').mockImplementation((handler) => {
+      if (typeof handler === 'function')
+        retryCallbacks.push(handler as () => void);
+      return 1;
+    });
+    vi.spyOn(dom.window, 'clearTimeout').mockImplementation(() => undefined);
+
+    await renderProvider(() => undefined);
+
+    expect(
+      state.commands.filter((command) => command.type === 'session.clear')
+    ).toHaveLength(1);
+    expect(
+      state.commands.filter((command) => command.type === 'auth.challenge')
+    ).toHaveLength(0);
+
+    await act(async () => {
+      retryCallbacks[0]?.();
+      await Promise.resolve();
+    });
+
+    expect(
+      state.commands.filter((command) => command.type === 'session.clear')
+    ).toHaveLength(2);
+    expect(
+      state.commands.filter((command) => command.type === 'auth.challenge')
+    ).toHaveLength(1);
+  });
 });
