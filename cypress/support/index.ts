@@ -12,6 +12,8 @@ declare global {
           Record<
             | 'musicEnabled'
             | 'booksEnabled'
+            | 'ebookServiceEnabled'
+            | 'audiobookServiceEnabled'
             | 'comicsEnabled'
             | 'magazinesEnabled'
             | 'softwareEnabled'

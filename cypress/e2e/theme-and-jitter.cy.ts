@@ -102,20 +102,33 @@ describe('Theme picker and seeded discovery refresh', () => {
     cy.viewport(1400, 900);
 
     const movieSeeds: string[] = [];
-    cy.intercept('GET', '/api/v1/discover/movies*', (req) => {
-      const seed = req.query.shuffleSeed;
-      expect(seed, 'movie shuffleSeed').to.be.a('string');
-      movieSeeds.push(seed as string);
-      req.reply({
-        page: 1,
-        totalPages: 1,
-        totalResults: 2,
-        results: [
-          makeMovie(`Movie lineup ${seed}`, 101),
-          makeMovie(`Movie backup ${seed}`, 102),
-        ],
-      });
-    }).as('movies');
+    cy.intercept('GET', '/api/v1/discover/movies*', {
+      page: 1,
+      totalPages: 1,
+      totalResults: 0,
+      results: [],
+    });
+    cy.intercept(
+      {
+        method: 'GET',
+        pathname: '/api/v1/discover/movies',
+        query: { shuffleSeed: /.+/ },
+      },
+      (req) => {
+        const seed = req.query.shuffleSeed;
+        expect(seed, 'movie shuffleSeed').to.be.a('string');
+        movieSeeds.push(seed as string);
+        req.reply({
+          page: 1,
+          totalPages: 1,
+          totalResults: 2,
+          results: [
+            makeMovie(`Movie lineup ${seed}`, 101),
+            makeMovie(`Movie backup ${seed}`, 102),
+          ],
+        });
+      }
+    ).as('movies');
     cy.visit('/discover/movies');
     cy.wait('@movies');
     cy.reload();
@@ -126,20 +139,33 @@ describe('Theme picker and seeded discovery refresh', () => {
     });
 
     const seriesSeeds: string[] = [];
-    cy.intercept('GET', '/api/v1/discover/tv*', (req) => {
-      const seed = req.query.shuffleSeed;
-      expect(seed, 'series shuffleSeed').to.be.a('string');
-      seriesSeeds.push(seed as string);
-      req.reply({
-        page: 1,
-        totalPages: 1,
-        totalResults: 2,
-        results: [
-          makeSeries(`Series lineup ${seed}`, 201),
-          makeSeries(`Series backup ${seed}`, 202),
-        ],
-      });
-    }).as('series');
+    cy.intercept('GET', '/api/v1/discover/tv*', {
+      page: 1,
+      totalPages: 1,
+      totalResults: 0,
+      results: [],
+    });
+    cy.intercept(
+      {
+        method: 'GET',
+        pathname: '/api/v1/discover/tv',
+        query: { shuffleSeed: /.+/ },
+      },
+      (req) => {
+        const seed = req.query.shuffleSeed;
+        expect(seed, 'series shuffleSeed').to.be.a('string');
+        seriesSeeds.push(seed as string);
+        req.reply({
+          page: 1,
+          totalPages: 1,
+          totalResults: 2,
+          results: [
+            makeSeries(`Series lineup ${seed}`, 201),
+            makeSeries(`Series backup ${seed}`, 202),
+          ],
+        });
+      }
+    ).as('series');
     cy.visit('/discover/tv');
     cy.wait('@series');
     cy.reload();
@@ -150,20 +176,33 @@ describe('Theme picker and seeded discovery refresh', () => {
     });
 
     const musicSeeds: string[] = [];
-    cy.intercept('GET', '/api/v1/discover/music*', (req) => {
-      const seed = req.query.shuffleSeed;
-      expect(seed, 'music shuffleSeed').to.be.a('string');
-      musicSeeds.push(seed as string);
-      req.reply({
-        page: 1,
-        totalPages: 1,
-        totalResults: 2,
-        results: [
-          makeAlbum(`Music lineup ${seed}`, `album-${seed}`),
-          makeAlbum(`Music backup ${seed}`, `album-backup-${seed}`),
-        ],
-      });
-    }).as('music');
+    cy.intercept('GET', '/api/v1/discover/music*', {
+      page: 1,
+      totalPages: 1,
+      totalResults: 0,
+      results: [],
+    });
+    cy.intercept(
+      {
+        method: 'GET',
+        pathname: '/api/v1/discover/music',
+        query: { shuffleSeed: /.+/ },
+      },
+      (req) => {
+        const seed = req.query.shuffleSeed;
+        expect(seed, 'music shuffleSeed').to.be.a('string');
+        musicSeeds.push(seed as string);
+        req.reply({
+          page: 1,
+          totalPages: 1,
+          totalResults: 2,
+          results: [
+            makeAlbum(`Music lineup ${seed}`, `album-${seed}`),
+            makeAlbum(`Music backup ${seed}`, `album-backup-${seed}`),
+          ],
+        });
+      }
+    ).as('music');
     cy.visit('/discover/music');
     cy.wait('@music');
     cy.reload();
@@ -174,20 +213,33 @@ describe('Theme picker and seeded discovery refresh', () => {
     });
 
     const bookSeeds: string[] = [];
-    cy.intercept('GET', '/api/v1/discover/books*', (req) => {
-      const seed = req.query.shuffleSeed;
-      expect(seed, 'book shuffleSeed').to.be.a('string');
-      bookSeeds.push(seed as string);
-      req.reply({
-        page: 1,
-        totalPages: 1,
-        totalResults: 2,
-        results: [
-          makeBook(`Book lineup ${seed}`, `book-${seed}`),
-          makeBook(`Book backup ${seed}`, `book-backup-${seed}`),
-        ],
-      });
-    }).as('books');
+    cy.intercept('GET', '/api/v1/discover/books*', {
+      page: 1,
+      totalPages: 1,
+      totalResults: 0,
+      results: [],
+    });
+    cy.intercept(
+      {
+        method: 'GET',
+        pathname: '/api/v1/discover/books',
+        query: { shuffleSeed: /.+/ },
+      },
+      (req) => {
+        const seed = req.query.shuffleSeed;
+        expect(seed, 'book shuffleSeed').to.be.a('string');
+        bookSeeds.push(seed as string);
+        req.reply({
+          page: 1,
+          totalPages: 1,
+          totalResults: 2,
+          results: [
+            makeBook(`Book lineup ${seed}`, `book-${seed}`),
+            makeBook(`Book backup ${seed}`, `book-backup-${seed}`),
+          ],
+        });
+      }
+    ).as('books');
     cy.visit('/discover/books');
     cy.wait('@books');
     cy.reload();
