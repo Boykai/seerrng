@@ -1,3 +1,4 @@
+import BackIssueAPI from '@server/api/comics/backissue';
 import KapowarrAPI, {
   KapowarrTaskRunningError,
 } from '@server/api/comics/kapowarr';
@@ -826,9 +827,14 @@ mediaRoutes.delete(
                             ? settings.kapowarr.find(
                                 (kapowarr) => kapowarr.id === selectedServiceId
                               )
-                            : settings.mylar.find(
-                                (mylar) => mylar.id === selectedServiceId
-                              )
+                            : media.comicServiceType === 'backissue'
+                              ? settings.backissue.find(
+                                  (backissue) =>
+                                    backissue.id === selectedServiceId
+                                )
+                              : settings.mylar.find(
+                                  (mylar) => mylar.id === selectedServiceId
+                                )
                           : settings.sonarr.find(
                               (sonarr) => sonarr.id === selectedServiceId
                             );
@@ -856,7 +862,9 @@ mediaRoutes.delete(
                           : isComic
                             ? media.comicServiceType === 'kapowarr'
                               ? 'Kapowarr'
-                              : 'Mylar3'
+                              : media.comicServiceType === 'backissue'
+                                ? 'BackIssue'
+                                : 'Mylar3'
                             : 'Sonarr';
                   logger.warn(
                     `There is no configured ${is4k ? '4K ' : ''}${serviceName} server for this media item.`,
@@ -894,10 +902,15 @@ mediaRoutes.delete(
                           apiKey: serviceSettings!.apiKey,
                           url: KapowarrAPI.buildUrl(serviceSettings!),
                         })
-                      : new MylarAPI({
-                          apiKey: serviceSettings!.apiKey,
-                          url: MylarAPI.buildUrl(serviceSettings!),
-                        });
+                      : media.comicServiceType === 'backissue'
+                        ? new BackIssueAPI({
+                            apiKey: serviceSettings!.apiKey,
+                            url: BackIssueAPI.buildUrl(serviceSettings!),
+                          })
+                        : new MylarAPI({
+                            apiKey: serviceSettings!.apiKey,
+                            url: MylarAPI.buildUrl(serviceSettings!),
+                          });
                 } else if (!isBook) {
                   service = new SonarrAPI({
                     apiKey: serviceSettings!.apiKey,
@@ -1061,6 +1074,10 @@ mediaRoutes.delete(
                   try {
                     if (media.comicServiceType === 'kapowarr') {
                       await (service as KapowarrAPI).removeVolume(
+                        media.externalServiceId
+                      );
+                    } else if (media.comicServiceType === 'backissue') {
+                      await (service as BackIssueAPI).removeSeries(
                         media.externalServiceId
                       );
                     } else {

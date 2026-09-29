@@ -21,13 +21,21 @@ const mediaTypeByService: Record<ServarrServiceType, MediaType> = {
   sonarr: MediaType.TV,
   lidarr: MediaType.MUSIC,
   readarr: MediaType.BOOK,
-  // Mylar and Kapowarr both fulfill comics, so they share one ID space keyed
+  // Mylar, Kapowarr, and BackIssue all fulfill comics, so they share one ID space keyed
   // to MediaType.COMIC (mirrors how ebook/audiobook Readarr instances share
   // MediaType.BOOK's ID space today).
   mylar: MediaType.COMIC,
   kapowarr: MediaType.COMIC,
+  backissue: MediaType.COMIC,
   lazylibrarian: MediaType.MAGAZINE,
 };
+
+export const getHistoricalComicServiceIdMaximum = async (): Promise<number> =>
+  Math.max(
+    await getHistoricalServarrServiceIdMaximum('mylar'),
+    await getHistoricalServarrServiceIdMaximum('kapowarr'),
+    await getHistoricalServarrServiceIdMaximum('backissue')
+  );
 
 const overrideColumnByService: Partial<
   Record<

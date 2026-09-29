@@ -7,6 +7,7 @@ export type RequestServiceType =
   | 'readarr'
   | 'mylar'
   | 'kapowarr'
+  | 'backissue'
   | 'lazylibrarian';
 export type RequestTargetFormat =
   'standard' | '4k' | 'music' | 'ebook' | 'audiobook' | 'comic' | 'magazine';

@@ -25,6 +25,7 @@ export type ExternalRuntimeConfig = Pick<
   | 'readarr'
   | 'mylar'
   | 'kapowarr'
+  | 'backissue'
   | 'lazylibrarian'
   | 'notifications'
   | 'network'
@@ -113,10 +114,9 @@ const validate = (value: unknown): ExternalRuntimeConfig => {
     sonarr: normalizeServarrServices(root.sonarr, 'sonarr'),
     lidarr: normalizeServarrServices(root.lidarr, 'lidarr'),
     readarr: normalizeServarrServices(root.readarr, 'readarr'),
-    // Lenient unlike the four services above: SEERR_EXTERNAL_CONFIG is
-    // hand-maintained by whoever sets it (or predates this feature), and
-    // requiring these two new keys would break every existing config the
-    // moment this shipped.
+    // Lenient for optional comics and magazine services: SEERR_EXTERNAL_CONFIG
+    // is hand-maintained or may predate an integration, so missing keys mean
+    // no configured instances.
     mylar:
       root.mylar === undefined
         ? []
@@ -125,6 +125,10 @@ const validate = (value: unknown): ExternalRuntimeConfig => {
       root.kapowarr === undefined
         ? []
         : normalizeServarrServices(root.kapowarr, 'kapowarr'),
+    backissue:
+      root.backissue === undefined
+        ? []
+        : normalizeServarrServices(root.backissue, 'backissue'),
     lazylibrarian:
       root.lazylibrarian === undefined
         ? []
@@ -162,6 +166,7 @@ const loadFromSettingsFile = (): ExternalRuntimeConfig | undefined => {
       readarr: settings.readarr ?? [],
       mylar: settings.mylar ?? [],
       kapowarr: settings.kapowarr ?? [],
+      backissue: settings.backissue ?? [],
       lazylibrarian: settings.lazylibrarian ?? [],
       notifications: settings.notifications,
       network: settings.network,

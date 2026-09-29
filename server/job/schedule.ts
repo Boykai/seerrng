@@ -10,6 +10,7 @@ import ImageProxy from '@server/lib/imageproxy';
 import refreshToken from '@server/lib/refreshToken';
 import { captureReleaseCalendarHistory } from '@server/lib/releaseCalendar/history';
 import { reconcileActiveRequests } from '@server/lib/requestStatus';
+import { backissueScanner } from '@server/lib/scanners/comics/backissue';
 import { kapowarrScanner } from '@server/lib/scanners/comics/kapowarr';
 import { mylarScanner } from '@server/lib/scanners/comics/mylar';
 import {
@@ -422,6 +423,24 @@ export const startJobs = (): void => {
     }),
     running: () => kapowarrScanner.status().running,
     cancelFn: () => kapowarrScanner.cancel(),
+  });
+
+  scheduledJobs.push({
+    id: 'backissue-scan',
+    name: 'BackIssue Comics Scan',
+    type: 'process',
+    interval: 'hours',
+    cronSchedule: jobs['backissue-scan'].schedule,
+    job: schedule.scheduleJob(jobs['backissue-scan'].schedule, () => {
+      logger.info('Starting scheduled job: BackIssue Comics Scan', {
+        label: 'Jobs',
+      });
+      return runTrackedJob('BackIssue Comics Scan', () =>
+        backissueScanner.run()
+      );
+    }),
+    running: () => backissueScanner.status().running,
+    cancelFn: () => backissueScanner.cancel(),
   });
 
   scheduledJobs.push({

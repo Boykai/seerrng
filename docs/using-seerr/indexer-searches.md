@@ -23,7 +23,7 @@ software provider, which owns acquisition, import, and progress tracking.
 | Music | MusicBrainz and music metadata sources | Configured audio category IDs | Lidarr |
 | Ebooks | Open Library, Bookshelf catalogs, and book metadata providers | Configured ebook/book category IDs | BookshelfNG, Chaptarr, or another configured book service |
 | Audiobooks | Book metadata catalogs and configured Bookshelf catalogs | Configured audiobook/audio category IDs | BookshelfNG, Chaptarr, or another configured book service |
-| Comics | ComicVine | Configured comic/book category IDs | Mylar3 or Kapowarr's direct-download sources |
+| Comics | ComicVine | Configured comic/book category IDs | Mylar3, Kapowarr, or BackIssue using its configured sources |
 | Magazines | Google Books public catalog or titles tracked by LazyLibrarian | Configured magazine/book category IDs | LazyLibrarian |
 | Retro and Modern ROMs | IGDB through the selected catalog provider (QuestarrNG by default, or ROMarrNG), matched to ROMarrNG systems | Configured console/game category IDs | ROMarrNG |
 | PC games | IGDB through QuestarrNG | Configured PC/game category IDs | QuestarrNG |

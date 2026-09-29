@@ -41,7 +41,7 @@ const messages = defineMessages('components.Settings.MylarModal', {
   externalUrl: 'External URL',
   enableSearch: 'Enable Automatic Search',
   compatibilityNote:
-    'Mylar3 is the recommended comics backend: it searches usenet and torrent indexers, so it can find comics that a direct-download-only backend (like Kapowarr) cannot.',
+    'Mylar3 can search Usenet and torrent indexers. Configure its providers in Mylar3; Kapowarr and BackIssue use their own acquisition sources.',
   apiKeyHelp:
     'In Mylar, enable the API under Settings > Web Interface, then find the key there.',
   baseUrlHelp:

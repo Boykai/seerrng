@@ -1,3 +1,4 @@
+import BackIssueAPI from '@server/api/comics/backissue';
 import KapowarrAPI from '@server/api/comics/kapowarr';
 import MylarAPI from '@server/api/comics/mylar';
 import LazyLibrarianAPI from '@server/api/lazylibrarian';
@@ -34,7 +35,11 @@ export const libraryServiceType = (
     case MediaType.BOOK:
       return 'readarr';
     case MediaType.COMIC:
-      if (comicServiceType !== 'mylar' && comicServiceType !== 'kapowarr') {
+      if (
+        comicServiceType !== 'mylar' &&
+        comicServiceType !== 'kapowarr' &&
+        comicServiceType !== 'backissue'
+      ) {
         throw new Error(
           'Cannot safely identify the comic backend. Refresh its metadata before deleting.'
         );
@@ -257,6 +262,23 @@ export const resolveLibraryRemoval = async (
             add(server, item.id, 'Comic', '/volumes/' + item.id, () =>
               api.removeVolume(item.id)
             );
+        }
+      } else if (type === 'backissue') {
+        const comicVineId = Number(
+          media.identifiers?.find(
+            (identifier) =>
+              identifier.provider === MediaIdentifierProvider.COMICVINE
+          )?.value
+        );
+        if (!Number.isSafeInteger(comicVineId) || comicVineId <= 0)
+          throw new Error('Missing ComicVine identifier.');
+        const api = new BackIssueAPI({
+          apiKey: server.apiKey,
+          url: BackIssueAPI.buildUrl(server),
+        });
+        for (const item of await api.getCollection()) {
+          if (item.cv_id === comicVineId)
+            add(server, item.id, 'Comic', '/', () => api.removeSeries(item.id));
         }
       } else {
         const magazineTitles = new Set(

@@ -40,7 +40,7 @@ export interface ComicServiceOption {
   id: number;
   name: string;
   isDefault: boolean;
-  backendType: 'mylar' | 'kapowarr';
+  backendType: 'mylar' | 'kapowarr' | 'backissue';
 }
 
 export interface MagazineServiceOption {

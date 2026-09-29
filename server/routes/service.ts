@@ -383,6 +383,12 @@ serviceRoutes.get('/comic', async (req, res, next) => {
           isDefault: kapowarr.isDefault,
           backendType: 'kapowarr',
         })),
+        ...settings.backissue.map((backissue): ComicServiceOption => ({
+          id: backissue.id,
+          name: backissue.name,
+          isDefault: backissue.isDefault,
+          backendType: 'backissue',
+        })),
       ];
 
       return res.status(200).json(comicServices);

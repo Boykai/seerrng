@@ -10,6 +10,7 @@ const allowedServices: DownloadPathService[] = [
   'readarr',
   'lazylibrarian',
   'kapowarr',
+  'backissue',
 ];
 const maxMappings = 100;
 const maxPathLength = 4_096;

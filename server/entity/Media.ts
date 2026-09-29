@@ -1,3 +1,4 @@
+import BackIssueAPI from '@server/api/comics/backissue';
 import KapowarrAPI from '@server/api/comics/kapowarr';
 import MylarAPI from '@server/api/comics/mylar';
 import LazyLibrarianAPI from '@server/api/lazylibrarian';
@@ -322,9 +323,9 @@ class Media {
   // columns above (like MOVIE/TV/MUSIC do) rather than needing their own set,
   // since a comic only ever has one destination. This column exists purely to
   // disambiguate which settings array serviceId indexes into, since comics
-  // can be fulfilled by either a Mylar or a Kapowarr instance.
+  // can be fulfilled by a Mylar, Kapowarr, or BackIssue instance.
   @Column({ nullable: true, type: 'varchar' })
-  public comicServiceType?: 'mylar' | 'kapowarr' | null;
+  public comicServiceType?: 'mylar' | 'kapowarr' | 'backissue' | null;
 
   @Column({ nullable: true, type: 'varchar' })
   public ratingKey?: string | null;
@@ -598,6 +599,14 @@ class Media {
                   `/volumes/${this.externalServiceSlug}`
                 );
           }
+        } else if (this.comicServiceType === 'backissue') {
+          const server = settings.backissue.find(
+            (backissue) => backissue.id === this.serviceId
+          );
+          if (server) {
+            this.serviceUrl =
+              server.externalUrl ?? BackIssueAPI.buildUrl(server);
+          }
         } else {
           const server = settings.mylar.find(
             (mylar) => mylar.id === this.serviceId
@@ -721,7 +730,8 @@ class Media {
 
     if (
       this.mediaType === MediaType.COMIC &&
-      this.comicServiceType === 'kapowarr' &&
+      (this.comicServiceType === 'kapowarr' ||
+        this.comicServiceType === 'backissue') &&
       this.externalServiceId !== undefined &&
       this.externalServiceId !== null &&
       this.serviceId !== undefined &&

@@ -1,3 +1,4 @@
+import BackIssueAPI from '@server/api/comics/backissue';
 import KapowarrAPI from '@server/api/comics/kapowarr';
 import MylarAPI from '@server/api/comics/mylar';
 import LazyLibrarianAPI from '@server/api/lazylibrarian';
@@ -538,6 +539,30 @@ const getKapowarrAssets = async (
   }
 };
 
+const getBackIssueAssets = async (
+  request: MediaRequest,
+  assets: ResolvedAsset[]
+): Promise<void> => {
+  const media = request.media;
+  const serviceId = request.serverId ?? media.serviceId;
+  const seriesId = Number(media.externalServiceId ?? media.externalServiceSlug);
+  if (!serviceId || !Number.isSafeInteger(seriesId) || seriesId < 1) return;
+  const server = getExternalRuntimeConfig().backissue.find(
+    (instance) => instance.id === serviceId
+  );
+  if (!server) return;
+
+  const api = new BackIssueAPI({
+    url: BackIssueAPI.buildUrl(server),
+    apiKey: server.apiKey,
+  });
+  const series = await api.getSeries(seriesId);
+  if (!series || series.id !== seriesId) return;
+  for (const file of series.files) {
+    await addAsset(assets, request.id, 'backissue', serviceId, file.path);
+  }
+};
+
 const resolveRequestAssets = async (
   request: MediaRequest
 ): Promise<ResolvedAsset[]> => {
@@ -547,11 +572,13 @@ const resolveRequestAssets = async (
     [MediaType.TV]: () => getSonarrAssets(request, assets),
     [MediaType.BOOK]: () => getReadarrAssets(request, assets),
     [MediaType.COMIC]: () =>
-      request.media.comicServiceType === 'kapowarr'
-        ? getKapowarrAssets(request, assets)
-        : request.media.comicServiceType === 'mylar'
-          ? getMylarAssets(request, assets)
-          : Promise.resolve(),
+      request.media.comicServiceType === 'backissue'
+        ? getBackIssueAssets(request, assets)
+        : request.media.comicServiceType === 'kapowarr'
+          ? getKapowarrAssets(request, assets)
+          : request.media.comicServiceType === 'mylar'
+            ? getMylarAssets(request, assets)
+            : Promise.resolve(),
     [MediaType.MAGAZINE]: () => getLazyLibrarianAssets(request, assets),
   };
   const resolve = providers[request.type];

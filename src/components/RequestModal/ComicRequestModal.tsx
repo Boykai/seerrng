@@ -36,7 +36,7 @@ const messages = defineMessages('components.RequestModal.Comic', {
     'The request was submitted, but the comics service rejected it while processing.',
   editerror: 'Something went wrong while canceling the request.',
   noComicsServer:
-    'No Mylar or Kapowarr service is configured. Comic requests are unavailable.',
+    'No Mylar, Kapowarr, or BackIssue service is configured. Comic requests are unavailable.',
   publisher: 'Publisher',
   issueCount: 'Issues',
   status: 'Status',
@@ -387,7 +387,12 @@ const ComicRequestModal = ({
                 </option>
                 {comicServices.map((service) => (
                   <option key={service.id} value={service.id}>
-                    {service.name}
+                    {service.name} ·{' '}
+                    {service.backendType === 'mylar'
+                      ? 'Mylar3'
+                      : service.backendType === 'kapowarr'
+                        ? 'Kapowarr'
+                        : 'BackIssue'}
                   </option>
                 ))}
               </select>

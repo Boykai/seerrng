@@ -88,7 +88,7 @@ export interface ProcessOptions {
     value: string;
   }[];
   bookServiceType?: 'ebook' | 'audiobook';
-  comicServiceType?: 'mylar' | 'kapowarr';
+  comicServiceType?: 'mylar' | 'kapowarr' | 'backissue';
   mutationGuard?: <Result>(callback: () => Promise<Result>) => Promise<Result>;
   outerMutationGuard?: <Result>(
     callback: () => Promise<Result>

@@ -43,7 +43,7 @@ const messages = defineMessages('components.Settings.KapowarrModal', {
   externalUrl: 'External URL',
   enableSearch: 'Enable Automatic Search',
   compatibilityNote:
-    'Kapowarr finds comics via GetComics.org and downloads directly from mirror hosts (MediaFire, etc.) rather than usenet or torrent indexers, so it will find fewer comics than Mylar3. GetComics also has a known, currently-unfixed reliability issue with direct-from-site downloads specifically (mirror hosts are unaffected). Consider Mylar3 as your primary backend and Kapowarr as a fallback.',
+    'Kapowarr finds comics through GetComics.org and downloads from its mirror hosts. This differs from Mylar3 indexers and BackIssue sources. GetComics has a known reliability issue with direct-from-site downloads; mirror-host downloads are generally reliable.',
   flaresolverrNote:
     'Kapowarr needs a companion FlareSolverr container to get past Cloudflare on GetComics and its mirror hosts. Configure its URL in Kapowarr itself (Settings > General), not here.',
   rootFolderHelp:

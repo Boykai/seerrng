@@ -90,6 +90,7 @@ Reflect.set(
       readarr: settings.readarr,
       mylar: settings.mylar,
       kapowarr: settings.kapowarr,
+      backissue: settings.backissue,
       lazylibrarian: settings.lazylibrarian,
       notifications: settings.notifications,
       network: settings.network,

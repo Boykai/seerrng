@@ -58,6 +58,7 @@ import {
   type ServarrServiceType,
 } from '@server/lib/serviceAdmission';
 import {
+  type BackIssueSettings,
   type KapowarrSettings,
   type MylarSettings,
   type RadarrSettings,
@@ -862,18 +863,27 @@ export class MediaRequest {
           requestedServerId != null && !requestedMylar
             ? settings.kapowarr.find(({ id }) => id === requestedServerId)
             : undefined;
+        const requestedBackIssue =
+          requestedServerId != null && !requestedMylar && !requestedKapowarr
+            ? settings.backissue.find(({ id }) => id === requestedServerId)
+            : undefined;
 
         if (requestedMylar) {
           addService('mylar', requestedMylar.id);
         } else if (requestedKapowarr) {
           addService('kapowarr', requestedKapowarr.id);
+        } else if (requestedBackIssue) {
+          addService('backissue', requestedBackIssue.id);
         } else if (requestedServerId == null) {
           const defaultMylar = settings.mylar.find((m) => m.isDefault);
           const defaultKapowarr = settings.kapowarr.find((k) => k.isDefault);
+          const defaultBackIssue = settings.backissue.find((b) => b.isDefault);
           if (defaultMylar) {
             addService('mylar', defaultMylar.id);
           } else if (defaultKapowarr) {
             addService('kapowarr', defaultKapowarr.id);
+          } else if (defaultBackIssue) {
+            addService('backissue', defaultBackIssue.id);
           }
         }
         // A requested serverId matching neither array locks nothing here;
@@ -1527,8 +1537,9 @@ export class MediaRequest {
         ? requestBody.serverId
         : undefined;
 
-      let comicBackendType: 'mylar' | 'kapowarr' | undefined;
-      let selectedServer: MylarSettings | KapowarrSettings | undefined;
+      let comicBackendType: 'mylar' | 'kapowarr' | 'backissue' | undefined;
+      let selectedServer:
+        MylarSettings | KapowarrSettings | BackIssueSettings | undefined;
 
       if (requestedServerId != null) {
         const requestedMylar = settings.mylar.find(
@@ -1537,27 +1548,43 @@ export class MediaRequest {
         const requestedKapowarr = requestedMylar
           ? undefined
           : settings.kapowarr.find(({ id }) => id === requestedServerId);
-        if (!requestedMylar && !requestedKapowarr) {
+        const requestedBackIssue =
+          !requestedMylar && !requestedKapowarr
+            ? settings.backissue.find(({ id }) => id === requestedServerId)
+            : undefined;
+        if (!requestedMylar && !requestedKapowarr && !requestedBackIssue) {
           throw new ServiceConfigurationError(
             'Selected comics server does not exist.'
           );
         }
-        comicBackendType = requestedMylar ? 'mylar' : 'kapowarr';
-        selectedServer = requestedMylar ?? requestedKapowarr;
+        comicBackendType = requestedMylar
+          ? 'mylar'
+          : requestedKapowarr
+            ? 'kapowarr'
+            : 'backissue';
+        selectedServer =
+          requestedMylar ?? requestedKapowarr ?? requestedBackIssue;
       } else {
         const defaultMylar = settings.mylar.find((m) => m.isDefault);
         const defaultKapowarr = settings.kapowarr.find((k) => k.isDefault);
+        const defaultBackIssue = settings.backissue.find((b) => b.isDefault);
         if (defaultMylar) {
           comicBackendType = 'mylar';
           selectedServer = defaultMylar;
         } else if (defaultKapowarr) {
           comicBackendType = 'kapowarr';
           selectedServer = defaultKapowarr;
+        } else if (defaultBackIssue) {
+          comicBackendType = 'backissue';
+          selectedServer = defaultBackIssue;
         }
       }
 
       const serverId = selectedServer?.id;
-      let selectedRootFolder = selectedServer?.rootFolder;
+      let selectedRootFolder =
+        selectedServer && 'rootFolder' in selectedServer
+          ? selectedServer.rootFolder
+          : undefined;
       if (useAdvancedOptions && requestBody.rootFolder) {
         if (comicBackendType !== 'kapowarr' || !selectedServer) {
           throw new ServiceConfigurationError(

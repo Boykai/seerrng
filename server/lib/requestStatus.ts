@@ -139,7 +139,7 @@ type RequestMediaLike = {
   externalServiceId4k?: number | null;
   audiobookServiceId?: number | null;
   audiobookExternalServiceId?: number | null;
-  comicServiceType?: 'mylar' | 'kapowarr' | null;
+  comicServiceType?: 'mylar' | 'kapowarr' | 'backissue' | null;
   seasons?: {
     seasonNumber: number;
     status: MediaStatus;
@@ -413,10 +413,25 @@ const calculateDownloadMetrics = (downloads: DownloadingItem[]) => {
     (total, item) => total + Math.min(item.size, item.sizeLeft),
     0
   );
+  const reportedPercents = downloads
+    .map((item) => item.percent)
+    .filter(
+      (percent): percent is number =>
+        typeof percent === 'number' &&
+        Number.isFinite(percent) &&
+        percent >= 0 &&
+        percent <= 100
+    );
   const percent =
     hasCompleteSizeData && size > 0
       ? Math.round(((size - sizeLeft) / size) * 1000) / 10
-      : null;
+      : downloads.length > 0 && reportedPercents.length === downloads.length
+        ? Math.round(
+            (reportedPercents.reduce((total, value) => total + value, 0) /
+              reportedPercents.length) *
+              10
+          ) / 10
+        : null;
   const completionTimes = downloads
     .map((item) => item.estimatedCompletionTime)
     .filter(
@@ -503,10 +518,11 @@ const getDownloadItems = (request: RequestLike): DownloadingItem[] => {
       : [];
   }
   if (request.type === MediaType.COMIC) {
-    // Kapowarr exposes a live download queue with progress; Mylar3 does not
-    // (same limitation as its lack of a queue-cancel API), so a Mylar-backed
-    // comic never has progress data here.
-    return media.comicServiceType === 'kapowarr' &&
+    // Kapowarr and BackIssue expose live download queues; Mylar3 does not
+    // (and cannot cancel an individual queued download), so a Mylar-backed
+    // comic never has live progress data here.
+    return (media.comicServiceType === 'kapowarr' ||
+      media.comicServiceType === 'backissue') &&
       media.serviceId !== null &&
       media.serviceId !== undefined &&
       media.externalServiceId !== null &&
@@ -627,6 +643,17 @@ const getServiceName = (request: RequestLike): string | null => {
   } else if (request.type === MediaType.MUSIC) {
     const target = getMusicTarget(request);
     add(settings.lidarr.find((server) => server.id === target?.serverId)?.name);
+  } else if (request.type === MediaType.COMIC) {
+    const comicServices =
+      request.media.comicServiceType === 'kapowarr'
+        ? settings.kapowarr
+        : request.media.comicServiceType === 'backissue'
+          ? settings.backissue
+          : settings.mylar;
+    add(
+      comicServices.find((server) => server.id === request.media.serviceId)
+        ?.name
+    );
   } else {
     const formats =
       request.bookFormat === 'both'

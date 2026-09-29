@@ -1,11 +1,11 @@
 import KapowarrAPI from '@server/api/comics/kapowarr';
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import { Permission } from '@server/lib/permissions';
-import { runWithServarrServiceCollectionMutationAdmission } from '@server/lib/serviceAdmission';
+import { runWithComicServiceCollectionMutationAdmission } from '@server/lib/serviceAdmission';
 import {
   allocateServarrServiceId,
   assertServarrServiceCanBeRemoved,
-  getHistoricalServarrServiceIdMaximum,
+  getHistoricalComicServiceIdMaximum,
 } from '@server/lib/serviceId';
 import type { KapowarrSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -25,22 +25,6 @@ import { Router } from 'express';
 
 const kapowarrRoutes = Router();
 
-// See server/routes/settings/mylar.ts - Mylar and Kapowarr instances share
-// one ID space (both fulfill MediaType.COMIC), so allocating or removing an
-// id from either collection has to lock both.
-const runWithComicsCollectionMutationAdmission = <Result>(
-  callback: () => Promise<Result>
-): Promise<Result> =>
-  runWithServarrServiceCollectionMutationAdmission('kapowarr', () =>
-    runWithServarrServiceCollectionMutationAdmission('mylar', callback)
-  );
-
-const getHistoricalComicsServiceIdMaximum = async (): Promise<number> =>
-  Math.max(
-    await getHistoricalServarrServiceIdMaximum('mylar'),
-    await getHistoricalServarrServiceIdMaximum('kapowarr')
-  );
-
 kapowarrRoutes.get('/', (_req, res) => {
   const settings = getSettings();
 
@@ -58,9 +42,9 @@ kapowarrRoutes.post(
       return res.status(400).json({ message: parsedKapowarr.error });
     }
 
-    return runWithComicsCollectionMutationAdmission(async () => {
+    return runWithComicServiceCollectionMutationAdmission(async () => {
       const historicalServiceIdMaximum =
-        await getHistoricalComicsServiceIdMaximum();
+        await getHistoricalComicServiceIdMaximum();
       const kapowarr = await settings.persistSection('kapowarr', (current) => {
         assertServarrInstanceCapacity(current);
         const newKapowarr = {
@@ -69,6 +53,7 @@ kapowarrRoutes.post(
             [
               ...current.map(({ id }) => id),
               ...settings.mylar.map(({ id }) => id),
+              ...settings.backissue.map(({ id }) => id),
             ],
             historicalServiceIdMaximum
           ),
@@ -79,9 +64,14 @@ kapowarrRoutes.post(
         return [...existing, newKapowarr];
       });
       if (parsedKapowarr.value.isDefault) {
-        await settings.persistSection('mylar', (current) =>
-          current.map((instance) => ({ ...instance, isDefault: false }))
-        );
+        await Promise.all([
+          settings.persistSection('mylar', (current) =>
+            current.map((instance) => ({ ...instance, isDefault: false }))
+          ),
+          settings.persistSection('backissue', (current) =>
+            current.map((instance) => ({ ...instance, isDefault: false }))
+          ),
+        ]);
       }
       const newKapowarr = kapowarr[kapowarr.length - 1];
 
@@ -158,7 +148,7 @@ kapowarrRoutes.put<{ id: string }, KapowarrSettings, KapowarrSettings>(
         return next({ status: 404, message: 'Settings instance not found' });
       }
 
-      return runWithComicsCollectionMutationAdmission(async () => {
+      return runWithComicServiceCollectionMutationAdmission(async () => {
         const currentKapowarr = settings.kapowarr.find(
           (instance) => instance.id === kapowarrId
         );
@@ -190,9 +180,14 @@ kapowarrRoutes.put<{ id: string }, KapowarrSettings, KapowarrSettings>(
           })
         );
         if (admittedKapowarr.value.isDefault) {
-          await settings.persistSection('mylar', (current) =>
-            current.map((instance) => ({ ...instance, isDefault: false }))
-          );
+          await Promise.all([
+            settings.persistSection('mylar', (current) =>
+              current.map((instance) => ({ ...instance, isDefault: false }))
+            ),
+            settings.persistSection('backissue', (current) =>
+              current.map((instance) => ({ ...instance, isDefault: false }))
+            ),
+          ]);
         }
 
         return res
@@ -222,7 +217,7 @@ kapowarrRoutes.delete<{ id: string }>(
         return next({ status: 404, message: 'Settings instance not found' });
       }
 
-      return runWithComicsCollectionMutationAdmission(async () => {
+      return runWithComicServiceCollectionMutationAdmission(async () => {
         const removed = settings.kapowarr.find(
           (instance) => instance.id === kapowarrId
         );

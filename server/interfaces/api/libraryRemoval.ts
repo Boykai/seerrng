@@ -8,6 +8,7 @@ export interface LibraryCopy {
     | 'readarr'
     | 'mylar'
     | 'kapowarr'
+    | 'backissue'
     | 'lazylibrarian';
   externalId: number | string;
   service: string;

@@ -148,8 +148,9 @@ private match.
 releases, comic issues, magazine issues, and requested PC games or emulation
 titles. Movies, series, music, and books come from configured Radarr, Sonarr,
 Lidarr, and Readarr-compatible Bookshelf services. Comic issues use dates from
-Mylar3 or Kapowarr; magazine issues use dates from LazyLibrarian. Issues without
-an exact day are omitted. Software release dates use the configured QuestarrNG
+Mylar3 or Kapowarr. BackIssue does not currently provide release-calendar
+issue entries; magazine issues use dates from LazyLibrarian. Issues without an
+exact day are omitted. Software release dates use the configured QuestarrNG
 or ROMarrNG catalog's exact IGDB date for the requested PC operating system or
 emulation platform. If a provider does not return platform-specific dates,
 SeerrNG omits those game entries and marks the source partial; update that

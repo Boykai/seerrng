@@ -1,3 +1,4 @@
+import BackIssueAPI from '@server/api/comics/backissue';
 import KapowarrAPI from '@server/api/comics/kapowarr';
 import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
@@ -351,6 +352,26 @@ class RequestWorkCleanupManager {
             })),
           deleteQueueItem: (queueId, options) =>
             kapowarr.removeQueueItem(queueId, options.blocklist),
+        };
+        matches = (item) => item.volumeId === externalId;
+      }
+    } else if (
+      request.type === MediaType.COMIC &&
+      media.comicServiceType === 'backissue'
+    ) {
+      const server = settings.backissue.find((item) => item.id === serviceId);
+      if (server) {
+        const backissue = new BackIssueAPI({
+          url: BackIssueAPI.buildUrl(server),
+          apiKey: server.apiKey,
+        });
+        api = {
+          getQueue: async () =>
+            (await backissue.getQueue()).map((item) => ({
+              id: item.id,
+              volumeId: item.seriesId,
+            })),
+          deleteQueueItem: (queueId) => backissue.cancelQueueItem(queueId),
         };
         matches = (item) => item.volumeId === externalId;
       }

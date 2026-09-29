@@ -208,7 +208,9 @@ const canRemoveRequestFromService = (
     case MediaType.COMIC:
       return media.comicServiceType === 'kapowarr'
         ? settings.kapowarr.some((server) => server.id === media.serviceId)
-        : settings.mylar.some((server) => server.id === media.serviceId);
+        : media.comicServiceType === 'backissue'
+          ? settings.backissue.some((server) => server.id === media.serviceId)
+          : settings.mylar.some((server) => server.id === media.serviceId);
     default:
       return false;
   }
@@ -1466,10 +1468,11 @@ const validateExternalServiceConfiguration = (
     if (serverId === undefined || serverId === null) {
       if (
         !settings.mylar.some((mylar) => mylar.isDefault) &&
-        !settings.kapowarr.some((kapowarr) => kapowarr.isDefault)
+        !settings.kapowarr.some((kapowarr) => kapowarr.isDefault) &&
+        !settings.backissue.some((backissue) => backissue.isDefault)
       ) {
         throw new ServiceConfigurationError(
-          'No default Mylar or Kapowarr server is configured for comic requests.'
+          'No default comic service is configured for comic requests.'
         );
       }
       return;
@@ -1477,7 +1480,8 @@ const validateExternalServiceConfiguration = (
 
     if (
       !settings.mylar.some((mylar) => mylar.id === serverId) &&
-      !settings.kapowarr.some((kapowarr) => kapowarr.id === serverId)
+      !settings.kapowarr.some((kapowarr) => kapowarr.id === serverId) &&
+      !settings.backissue.some((backissue) => backissue.id === serverId)
     ) {
       throw new ServiceConfigurationError(
         'The selected comics server no longer exists.'

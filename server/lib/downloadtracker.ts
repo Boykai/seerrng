@@ -1,3 +1,4 @@
+import BackIssueAPI from '@server/api/comics/backissue';
 import KapowarrAPI from '@server/api/comics/kapowarr';
 import type { QueueItem, ServarrHistoryItem } from '@server/api/servarr/base';
 import LidarrAPI from '@server/api/servarr/lidarr';
@@ -55,6 +56,7 @@ export interface DownloadingItem {
   estimatedCompletionTime: Date;
   title: string;
   downloadId: string;
+  percent?: number;
   trackedDownloadStatus?: string;
   trackedDownloadState?: string;
   episode?: EpisodeNumberResult;
@@ -93,6 +95,7 @@ export class DownloadTracker {
   private lidarrHistory: Record<number, ServarrHistoryItem[]> = {};
   private readarrServers: Record<number, DownloadingItem[]> = {};
   private kapowarrServers: Record<number, DownloadingItem[]> = {};
+  private backissueServers: Record<number, DownloadingItem[]> = {};
   private monitoredRefreshes = new Set<string>();
   private lastMonitoredRefresh = new Map<string, number>();
   private activeUpdate?: Promise<void>;
@@ -342,13 +345,10 @@ export class DownloadTracker {
     serverId: number,
     externalServiceId: number
   ): DownloadingItem[] {
-    if (!this.kapowarrServers[serverId]) {
-      return [];
-    }
-
-    return this.kapowarrServers[serverId].filter(
-      (item) => item.externalId === externalServiceId
-    );
+    return [
+      ...(this.kapowarrServers[serverId] ?? []),
+      ...(this.backissueServers[serverId] ?? []),
+    ].filter((item) => item.externalId === externalServiceId);
   }
 
   public async resetDownloadTracker() {
@@ -364,6 +364,7 @@ export class DownloadTracker {
     this.lidarrHistory = {};
     this.readarrServers = {};
     this.kapowarrServers = {};
+    this.backissueServers = {};
     this.lastMonitoredRefresh.clear();
   }
 
@@ -378,6 +379,7 @@ export class DownloadTracker {
       this.updateLidarrDownloads(),
       this.updateReadarrDownloads(),
       this.updateKapowarrDownloads(),
+      this.updateBackIssueDownloads(),
     ])
       .then(() => undefined)
       .finally(() => {
@@ -786,6 +788,73 @@ export class DownloadTracker {
               this.kapowarrServers[ms.id] = this.kapowarrServers[server.id];
             }
           });
+        }
+      }
+    );
+  }
+
+  private async updateBackIssueDownloads() {
+    const settings = getExternalRuntimeConfig();
+    const filteredServers = uniqWith(
+      settings.backissue.slice(0, MAX_SERVARR_INSTANCES_PER_TYPE),
+      (left, right) =>
+        left.hostname === right.hostname &&
+        left.port === right.port &&
+        left.baseUrl === right.baseUrl
+    );
+
+    await mapWithConcurrency(
+      filteredServers,
+      DOWNLOAD_TRACKER_SERVER_CONCURRENCY,
+      async (server) => {
+        if (!server.syncEnabled) return;
+        const api = new BackIssueAPI({
+          url: BackIssueAPI.buildUrl(server),
+          apiKey: server.apiKey,
+        });
+        try {
+          const queueItems = await this.runWithCurrentServarrDownloadServer(
+            'backissue',
+            server,
+            () => api.getQueue()
+          );
+          if (!queueItems) {
+            delete this.backissueServers[server.id];
+            return;
+          }
+          this.backissueServers[server.id] = queueItems.map((item) => ({
+            externalId: item.seriesId,
+            estimatedCompletionTime: new Date(Number.NaN),
+            mediaType: MediaType.COMIC,
+            size: 0,
+            sizeLeft: 0,
+            status: item.status,
+            timeLeft: 'unknown',
+            title: item.title,
+            downloadId: String(item.id),
+            ...(item.progress !== undefined ? { percent: item.progress } : {}),
+          }));
+        } catch (error) {
+          logger.error(
+            `Unable to get queue from BackIssue server: ${server.name}`,
+            {
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+              label: 'Download Tracker',
+            }
+          );
+        }
+
+        for (const matching of settings.backissue.filter(
+          (candidate) =>
+            candidate.id !== server.id &&
+            candidate.syncEnabled &&
+            candidate.hostname === server.hostname &&
+            candidate.port === server.port &&
+            candidate.baseUrl === server.baseUrl
+        )) {
+          this.backissueServers[matching.id] =
+            this.backissueServers[server.id] ?? [];
         }
       }
     );

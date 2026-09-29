@@ -203,6 +203,8 @@ export interface KapowarrSettings extends CollectorServiceSettings {
   rootFolder?: string;
 }
 
+export type BackIssueSettings = CollectorServiceSettings;
+
 export type LazyLibrarianSettings = CollectorServiceSettings;
 
 interface Quota {
@@ -221,7 +223,7 @@ export interface MetadataSettings {
 }
 
 export type DownloadPathService =
-  'radarr' | 'sonarr' | 'readarr' | 'lazylibrarian' | 'kapowarr';
+  'radarr' | 'sonarr' | 'readarr' | 'lazylibrarian' | 'kapowarr' | 'backissue';
 
 export interface DownloadPathMapping {
   serviceType: DownloadPathService;
@@ -509,6 +511,7 @@ export type JobId =
   | 'readarr-request-retry'
   | 'mylar-scan'
   | 'kapowarr-scan'
+  | 'backissue-scan'
   | 'magazine-scan'
   | 'download-sync'
   | 'software-request-reconciliation'
@@ -553,6 +556,7 @@ export interface AllSettings {
   readarr: ReadarrSettings[];
   mylar: MylarSettings[];
   kapowarr: KapowarrSettings[];
+  backissue: BackIssueSettings[];
   lazylibrarian: LazyLibrarianSettings[];
   softwareAcquisition: SoftwareAcquisitionSettings;
   prowlarr: ProwlarrSettings;
@@ -667,6 +671,7 @@ class Settings {
       readarr: [],
       mylar: [],
       kapowarr: [],
+      backissue: [],
       lazylibrarian: [],
       discoveryIntegrations: defaultDiscoveryIntegrations(),
       softwareAcquisition: {
@@ -839,6 +844,9 @@ class Settings {
         },
         'kapowarr-scan': {
           schedule: '0 15 5 * * *',
+        },
+        'backissue-scan': {
+          schedule: '0 30 5 * * *',
         },
         'magazine-scan': {
           schedule: '0 30 5 * * *',
@@ -1161,6 +1169,14 @@ class Settings {
     this.data.kapowarr = data;
   }
 
+  get backissue(): BackIssueSettings[] {
+    return this.data.backissue;
+  }
+
+  set backissue(data: BackIssueSettings[]) {
+    this.data.backissue = data;
+  }
+
   get lazylibrarian(): LazyLibrarianSettings[] {
     return this.data.lazylibrarian;
   }
@@ -1227,7 +1243,9 @@ class Settings {
         (service) => service.serviceType === 'audiobook'
       ),
       comicsEnabled:
-        this.data.mylar.length > 0 || this.data.kapowarr.length > 0,
+        this.data.mylar.length > 0 ||
+        this.data.kapowarr.length > 0 ||
+        this.data.backissue.length > 0,
       magazinesEnabled: this.data.lazylibrarian.length > 0,
       softwareEnabled: Boolean(
         this.data.softwareAcquisition.questarr.hostname &&
@@ -1526,6 +1544,7 @@ class Settings {
       readarr: [],
       mylar: [],
       kapowarr: [],
+      backissue: [],
       lazylibrarian: [],
       discoveryIntegrations: defaultDiscoveryIntegrations(),
       softwareAcquisition: {
@@ -1697,6 +1716,9 @@ class Settings {
         },
         'kapowarr-scan': {
           schedule: '0 15 5 * * *',
+        },
+        'backissue-scan': {
+          schedule: '0 30 5 * * *',
         },
         'magazine-scan': {
           schedule: '0 30 5 * * *',

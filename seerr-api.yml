@@ -1855,6 +1855,54 @@ components:
         - isDefault
         - syncEnabled
         - rootFolder
+    BackIssueSettings:
+      type: object
+      properties:
+        id:
+          type: number
+          example: 0
+          readOnly: true
+        name:
+          type: string
+          example: 'BackIssue'
+        hostname:
+          type: string
+          example: '127.0.0.1'
+        port:
+          type: number
+          example: 8787
+        apiKey:
+          type: string
+          example: 'exampleapikey'
+        useSsl:
+          type: boolean
+          example: false
+        baseUrl:
+          type: string
+        isDefault:
+          type: boolean
+          example: false
+        externalUrl:
+          type: string
+          example: http://backissue.example.com
+        tags:
+          type: array
+          items:
+            type: number
+        syncEnabled:
+          type: boolean
+          example: false
+        preventSearch:
+          type: boolean
+          example: false
+      required:
+        - name
+        - hostname
+        - port
+        - apiKey
+        - useSsl
+        - isDefault
+        - syncEnabled
     LazyLibrarianSettings:
       type: object
       properties:
@@ -2827,7 +2875,7 @@ components:
           type: boolean
         backendType:
           type: string
-          enum: [mylar, kapowarr]
+          enum: [mylar, kapowarr, backissue]
     MagazineServiceOption:
       type: object
       required:
@@ -12854,6 +12902,102 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/KapowarrSettings'
+  /settings/backissue:
+    get:
+      summary: Get BackIssue settings
+      description: Returns all BackIssue settings in a JSON array.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Values were returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BackIssueSettings'
+    post:
+      summary: Create BackIssue instance
+      description: Creates a new BackIssue instance from the request body.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackIssueSettings'
+      responses:
+        '201':
+          description: New BackIssue instance created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackIssueSettings'
+  /settings/backissue/test:
+    post:
+      summary: Test BackIssue configuration
+      description: Tests if the BackIssue configuration is valid.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServarrConnectionSettings'
+      responses:
+        '200':
+          description: Successfully connected to BackIssue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+  /settings/backissue/{id}:
+    put:
+      summary: Update BackIssue instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackIssueSettings'
+      responses:
+        '200':
+          description: BackIssue instance updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackIssueSettings'
+    delete:
+      summary: Delete BackIssue instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: BackIssue instance deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackIssueSettings'
   /settings/lazylibrarian:
     get:
       summary: Get LazyLibrarian settings

@@ -26,6 +26,7 @@ import {
 import type OverrideRule from '@server/entity/OverrideRule';
 import type { OverrideRuleResultsResponse } from '@server/interfaces/api/overrideRuleInterfaces';
 import type {
+  BackIssueSettings,
   KapowarrSettings,
   LazyLibrarianSettings,
   LidarrSettings,
@@ -42,6 +43,9 @@ import useSWR, { mutate } from 'swr';
 
 const KapowarrModal = dynamic(
   () => import('@app/components/Settings/KapowarrModal')
+);
+const BackIssueModal = dynamic(
+  () => import('@app/components/Settings/BackIssueModal')
 );
 const LazyLibrarianModal = dynamic(
   () => import('@app/components/Settings/LazyLibrarianModal')
@@ -100,6 +104,7 @@ const messages = defineMessages('components.Settings', {
   addreadarr: 'Add Bookshelf Server',
   addmylar: 'Add Mylar Server',
   addkapowarr: 'Add Kapowarr Server',
+  addbackissue: 'Add BackIssue Server',
   addlazylibrarian: 'Add LazyLibrarian Server',
   lazylibrariansettings: 'LazyLibrarian Settings',
   magazineServiceSettingsDescription:
@@ -107,8 +112,9 @@ const messages = defineMessages('components.Settings', {
   mediaTypeMagazine: 'magazine',
   mylarsettings: 'Mylar Settings',
   kapowarrsettings: 'Kapowarr Settings',
+  backissuesettings: 'BackIssue Settings',
   comicServiceSettingsDescription:
-    'Configure your {serverType} server(s) below. Mylar and Kapowarr instances share one pool of default selection: only one comics server across both can be marked as default.',
+    'Configure your {serverType} server(s) below. Mylar, Kapowarr, and BackIssue share one default: choose one comics destination for requests without a server selection.',
   mediaTypeComic: 'comic',
   noDefaultServer:
     'At least one {serverType} server must be marked as default in order for {mediaType} requests to be processed.',
@@ -342,6 +348,11 @@ const SettingsServices = () => {
     mutate: revalidateKapowarr,
   } = useSWR<KapowarrSettings[]>('/api/v1/settings/kapowarr');
   const {
+    data: backissueData,
+    error: backissueError,
+    mutate: revalidateBackIssue,
+  } = useSWR<BackIssueSettings[]>('/api/v1/settings/backissue');
+  const {
     data: lazyLibrarianData,
     error: lazyLibrarianError,
     mutate: revalidateLazyLibrarian,
@@ -392,6 +403,10 @@ const SettingsServices = () => {
     open: false,
     kapowarr: null,
   });
+  const [editBackIssueModal, setEditBackIssueModal] = useState<{
+    open: boolean;
+    backissue: BackIssueSettings | null;
+  }>({ open: false, backissue: null });
   const [editLazyLibrarianModal, setEditLazyLibrarianModal] = useState<{
     open: boolean;
     lazylibrarian: LazyLibrarianSettings | null;
@@ -408,6 +423,7 @@ const SettingsServices = () => {
       | 'readarr'
       | 'mylar'
       | 'kapowarr'
+      | 'backissue'
       | 'lazylibrarian';
     serverId: number | null;
   }>({
@@ -486,6 +502,7 @@ const SettingsServices = () => {
     revalidateReadarr();
     revalidateMylar();
     revalidateKapowarr();
+    revalidateBackIssue();
     revalidateLazyLibrarian();
     mutate('/api/v1/settings/public');
   };
@@ -567,6 +584,7 @@ const SettingsServices = () => {
           onSave={() => {
             revalidateMylar();
             revalidateKapowarr();
+            revalidateBackIssue();
             mutate('/api/v1/settings/public');
             setEditMylarModal({ open: false, mylar: null });
           }}
@@ -579,8 +597,24 @@ const SettingsServices = () => {
           onSave={() => {
             revalidateKapowarr();
             revalidateMylar();
+            revalidateBackIssue();
             mutate('/api/v1/settings/public');
             setEditKapowarrModal({ open: false, kapowarr: null });
+          }}
+        />
+      )}
+      {editBackIssueModal.open && (
+        <BackIssueModal
+          backissue={editBackIssueModal.backissue}
+          onClose={() =>
+            setEditBackIssueModal({ open: false, backissue: null })
+          }
+          onSave={() => {
+            revalidateBackIssue();
+            revalidateMylar();
+            revalidateKapowarr();
+            mutate('/api/v1/settings/public');
+            setEditBackIssueModal({ open: false, backissue: null });
           }}
         />
       )}
@@ -627,7 +661,9 @@ const SettingsServices = () => {
                   ? 'Sonarr'
                   : deleteServerModal.type === 'lidarr'
                     ? 'Lidarr'
-                    : 'Bookshelf',
+                    : deleteServerModal.type === 'backissue'
+                      ? 'BackIssue'
+                      : 'Bookshelf',
           })}
         >
           {intl.formatMessage(messages.deleteserverconfirm)}
@@ -1016,20 +1052,24 @@ const SettingsServices = () => {
           })}
         </p>
       </div>
+      {mylarData &&
+        kapowarrData &&
+        backissueData &&
+        mylarData.length + kapowarrData.length + backissueData.length > 0 &&
+        !mylarData.some((mylar) => mylar.isDefault) &&
+        !kapowarrData.some((kapowarr) => kapowarr.isDefault) &&
+        !backissueData.some((backissue) => backissue.isDefault) && (
+          <Alert
+            title={intl.formatMessage(messages.noDefaultServer, {
+              serverType: 'Mylar, Kapowarr, or BackIssue',
+              mediaType: intl.formatMessage(messages.mediaTypeComic),
+            })}
+          />
+        )}
       <div className="app-card-sub section settings-service-section">
         {!mylarData && !mylarError && <LoadingSpinner />}
         {mylarData && !mylarError && (
           <>
-            {mylarData.length > 0 &&
-              !mylarData.some((mylar) => mylar.isDefault) &&
-              !kapowarrData?.some((kapowarr) => kapowarr.isDefault) && (
-                <Alert
-                  title={intl.formatMessage(messages.noDefaultServer, {
-                    serverType: 'Mylar/Kapowarr',
-                    mediaType: intl.formatMessage(messages.mediaTypeComic),
-                  })}
-                />
-              )}
             <ul className="settings-service-grid">
               {mylarData.map((mylar) => (
                 <ServerInstance
@@ -1122,6 +1162,57 @@ const SettingsServices = () => {
               </li>
             </ul>
           </>
+        )}
+      </div>
+      <div className="mt-10 mb-6">
+        <h3 className="heading">
+          {intl.formatMessage(messages.backissuesettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.comicServiceSettingsDescription, {
+            serverType: 'BackIssue',
+          })}
+        </p>
+      </div>
+      <div className="app-card-sub section settings-service-section">
+        {!backissueData && !backissueError && <LoadingSpinner />}
+        {backissueData && !backissueError && (
+          <ul className="settings-service-grid">
+            {backissueData.map((backissue) => (
+              <ServerInstance
+                key={`backissue-config-${backissue.id}`}
+                name={backissue.name}
+                hostname={backissue.hostname}
+                port={backissue.port}
+                isSSL={backissue.useSsl}
+                isComics={true}
+                isDefault={backissue.isDefault}
+                externalUrl={backissue.externalUrl}
+                onEdit={() => setEditBackIssueModal({ open: true, backissue })}
+                onDelete={() =>
+                  setDeleteServerModal({
+                    open: true,
+                    serverId: backissue.id,
+                    type: 'backissue',
+                  })
+                }
+              />
+            ))}
+            <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+              <div className="flex h-full w-full items-center justify-center">
+                <Button
+                  buttonType="success"
+                  buttonSize="standard"
+                  onClick={() =>
+                    setEditBackIssueModal({ open: true, backissue: null })
+                  }
+                >
+                  <PlusIcon />
+                  <span>{intl.formatMessage(messages.addbackissue)}</span>
+                </Button>
+              </div>
+            </li>
+          </ul>
         )}
       </div>
       <div className="mt-10 mb-6">

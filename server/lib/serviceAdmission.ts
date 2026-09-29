@@ -1,6 +1,7 @@
 import requestAdmissionCoordinator from '@server/lib/requestAdmission';
 import {
   getSettings,
+  type BackIssueSettings,
   type DVRSettings,
   type KapowarrSettings,
   type LazyLibrarianSettings,
@@ -19,6 +20,7 @@ export type ServarrServiceType =
   | 'readarr'
   | 'mylar'
   | 'kapowarr'
+  | 'backissue'
   | 'lazylibrarian';
 export interface ServarrServiceSettingsByType {
   radarr: RadarrSettings;
@@ -27,10 +29,11 @@ export interface ServarrServiceSettingsByType {
   readarr: ReadarrSettings;
   mylar: MylarSettings;
   kapowarr: KapowarrSettings;
+  backissue: BackIssueSettings;
   lazylibrarian: LazyLibrarianSettings;
 }
 // Picked down to the fields Servarr-family services (which fully satisfy
-// DVRSettings) share with the non-Servarr comics backends (Mylar/Kapowarr,
+// DVRSettings) share with the non-Servarr comics backends (Mylar/Kapowarr/BackIssue,
 // which only satisfy the smaller CollectorServiceSettings) - is4k and
 // serviceType stay Partial so services with no such concept (comics have
 // neither) still satisfy this type.
@@ -125,6 +128,15 @@ export const runWithServarrServiceCollectionMutationAdmission = <Result>(
         serviceId: id,
       })),
       callback
+    )
+  );
+
+export const runWithComicServiceCollectionMutationAdmission = <Result>(
+  callback: () => Promise<Result>
+): Promise<Result> =>
+  runWithServarrServiceCollectionMutationAdmission('mylar', () =>
+    runWithServarrServiceCollectionMutationAdmission('kapowarr', () =>
+      runWithServarrServiceCollectionMutationAdmission('backissue', callback)
     )
   );
 

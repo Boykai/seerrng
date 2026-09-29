@@ -1,4 +1,5 @@
 import type {
+  BackIssueSettings,
   CollectorServiceSettings,
   DVRSettings,
   KapowarrSettings,
@@ -602,6 +603,14 @@ export const parseKapowarrSettings = (
   if ('error' in rootFolder) return rootFolder;
 
   return { value: { ...parsed.value, rootFolder: rootFolder.value } };
+};
+
+export const parseBackIssueSettings = (
+  body: unknown,
+  current?: BackIssueSettings
+): { value: BackIssueSettings } | { error: string } => {
+  const parsed = parseCollectorSettings(body, current);
+  return 'error' in parsed ? parsed : { value: parsed.value };
 };
 
 export const parseLazyLibrarianSettings = (
