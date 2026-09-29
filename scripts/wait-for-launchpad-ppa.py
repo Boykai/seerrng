@@ -1,24 +1,28 @@
 #!/usr/bin/env python3
-"""Wait for a PPA source and its binaries, retrying Launchpad's upload race."""
+"""Wait for a PPA source and binary publication using Launchpad's public API.
+
+Exit status 2 means the exact known source-publication race was found. The
+caller can recover by uploading the same payload under a fresh package version.
+"""
 
 from __future__ import annotations
 
 import argparse
 import gzip
-import io
-import os
 import sys
 import time
 from typing import Any
 from urllib.request import urlopen
 
-from launchpadlib.credentials import Credentials
 from launchpadlib.launchpad import Launchpad
 
 
 POLL_INTERVAL_SECONDS = 60
-MAX_UPLOAD_RETRIES = 2
 PUBLISHED = "Published"
+
+
+class FreshUploadRequired(RuntimeError):
+    """The known pre-publication upload race needs a fresh source version."""
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,18 +36,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def create_launchpad_client() -> Launchpad:
-    credential_text = os.environ.get("LAUNCHPAD_CREDENTIALS", "")
-    if not credential_text:
-        raise RuntimeError(
-            "LAUNCHPAD_CREDENTIALS is required so failed binary uploads can be retried."
-        )
-
-    credentials = Credentials()
-    credentials.load(io.StringIO(credential_text))
-    return Launchpad(
-        credentials=credentials,
+    # This client is deliberately anonymous and read-only. Upload authorization
+    # continues to come from the GPG-signed source package and PPA permissions.
+    return Launchpad.login_anonymously(
+        "seerrng-ppa-monitor",
         service_root="production",
-        version="devel",
+        version="1.0",
     )
 
 
@@ -69,25 +67,21 @@ def published_package_binaries(source_publication: Any) -> list[Any]:
     return [
         binary
         for binary in source_publication.getPublishedBinaries()
-        if binary.binary_package_name == "seerrng"
-        and binary.status == PUBLISHED
+        if binary.binary_package_name == "seerrng" and binary.status == PUBLISHED
     ]
 
 
-def retry_failed_upload(
-    launchpad: Launchpad,
+def classify_failed_upload(
     build: Any,
-    retry_counts: dict[str, int],
     archive_web: str,
     source_version: str,
     series: str,
-) -> bool:
-    build_url = build.web_link
+) -> None:
     upload_log_url = build.upload_log_url
     if not upload_log_url:
         raise RuntimeError(
-            f"Launchpad marked {build_url} as 'Failed to upload' without an upload "
-            "log; refusing to retry an unclassified failure."
+            f"Launchpad marked {build.web_link} as 'Failed to upload' without an "
+            "upload log; refusing to republish an unclassified failure."
         )
 
     with urlopen(upload_log_url, timeout=30) as response:
@@ -100,33 +94,16 @@ def retry_failed_upload(
     )
     if expected_error not in upload_log_text:
         raise RuntimeError(
-            f"Launchpad marked {build_url} as 'Failed to upload', but its log does "
-            f"not match the known source-publication race. Inspect {upload_log_url}."
+            f"Launchpad marked {build.web_link} as 'Failed to upload', but its log "
+            "does not match the known source-publication race. "
+            f"Inspect {upload_log_url}."
         )
 
-    retries = retry_counts.get(build_url, 0)
-    if retries >= MAX_UPLOAD_RETRIES:
-        raise RuntimeError(
-            f"Launchpad rejected the binary upload {retries} times; "
-            f"inspect {build.upload_log_url or build_url} and retry manually."
-        )
-
-    authenticated_build = launchpad.load(build.self_link)
-    if not authenticated_build.can_be_retried:
-        raise RuntimeError(
-            "Launchpad marked the failed upload as non-retryable. "
-            f"Inspect {build.upload_log_url or build_url}."
-        )
-
-    authenticated_build.retry()
-    retry_counts[build_url] = retries + 1
-    print(
-        f"Launchpad rejected a binary before source publication. Retried build "
-        f"{build_url} ({retry_counts[build_url]}/{MAX_UPLOAD_RETRIES}); "
-        f"archive: {archive_web}",
-        flush=True,
+    raise FreshUploadRequired(
+        f"Launchpad rejected the binary for {source_version} before its source "
+        f"publication was available. A fresh signed source version can be uploaded "
+        f"to {archive_web}. Build log: {upload_log_url}"
     )
-    return True
 
 
 def fail_for_build(build: Any) -> None:
@@ -139,17 +116,23 @@ def fail_for_build(build: Any) -> None:
 
 def main() -> int:
     args = parse_args()
+    if args.timeout_minutes < 1:
+        print("--timeout-minutes must be positive.", file=sys.stderr)
+        return 1
+
     try:
         launchpad = create_launchpad_client()
         archive = launchpad.load(args.archive_url)
         distribution = launchpad.distributions["ubuntu"]
         series = distribution.getSeries(name_or_version=args.series)
     except Exception as error:
-        print(f"Unable to authenticate to or load Launchpad: {error}", file=sys.stderr)
+        print(
+            f"Unable to read public Launchpad publication data: {error}",
+            file=sys.stderr,
+        )
         return 1
 
     deadline = time.monotonic() + args.timeout_minutes * 60
-    retry_counts: dict[str, int] = {}
     last_report = ""
 
     while time.monotonic() < deadline:
@@ -177,24 +160,22 @@ def main() -> int:
                     )
                 else:
                     builds = get_builds(publication)
-                    amd64_builds = [build for build in builds if build.arch_tag == "amd64"]
+                    amd64_builds = [
+                        build for build in builds if build.arch_tag == "amd64"
+                    ]
                     if not amd64_builds:
                         raise RuntimeError(
                             f"No amd64 build record exists for {publication.self_link}."
                         )
 
-                    retry_started = False
                     for build in amd64_builds:
                         if build.buildstate == "Failed to upload":
-                            retry_started = retry_failed_upload(
-                                launchpad,
+                            classify_failed_upload(
                                 build,
-                                retry_counts,
                                 args.archive_web,
                                 args.source_version,
                                 args.series,
                             )
-                            break
                         if build.buildstate in (
                             "Failed to build",
                             "Build for superseded Source",
@@ -202,39 +183,39 @@ def main() -> int:
                         ):
                             fail_for_build(build)
 
-                    if retry_started:
-                        report = "Waiting for retried Launchpad build to finish."
-                    else:
-                        completed = all(
-                            build.buildstate == "Successfully built"
-                            for build in amd64_builds
+                    completed = all(
+                        build.buildstate == "Successfully built"
+                        for build in amd64_builds
+                    )
+                    binaries = published_package_binaries(publication)
+                    if completed and binaries:
+                        print(
+                            f"Published {args.source_version} for {args.series}: "
+                            f"{publication.web_link}",
+                            flush=True,
                         )
-                        binaries = published_package_binaries(publication)
-                        if completed and binaries:
-                            print(
-                                f"Published {args.source_version} for {args.series}: "
-                                f"{publication.web_link}",
-                                flush=True,
-                            )
-                            for binary in binaries:
-                                print(f"Published binary: {binary.web_link}", flush=True)
-                            return 0
+                        for binary in binaries:
+                            print(f"Published binary: {binary.web_link}", flush=True)
+                        return 0
 
-                        states = ", ".join(
-                            f"{build.arch_tag}={build.buildstate}" for build in amd64_builds
-                        )
-                        binary_states = ", ".join(
-                            f"{binary.binary_package_name}={binary.status}"
-                            for binary in publication.getPublishedBinaries()
-                        ) or "no binary publication records"
-                        report = (
-                            f"Waiting for binary publication in {args.series}: "
-                            f"builds [{states}], binaries [{binary_states}]."
-                        )
+                    states = ", ".join(
+                        f"{build.arch_tag}={build.buildstate}" for build in amd64_builds
+                    )
+                    binary_states = ", ".join(
+                        f"{binary.binary_package_name}={binary.status}"
+                        for binary in publication.getPublishedBinaries()
+                    ) or "no binary publication records"
+                    report = (
+                        f"Waiting for binary publication in {args.series}: "
+                        f"builds [{states}], binaries [{binary_states}]."
+                    )
 
             if report != last_report:
                 print(report, flush=True)
                 last_report = report
+        except FreshUploadRequired as error:
+            print(error, file=sys.stderr)
+            return 2
         except Exception as error:
             print(f"Launchpad publication check failed: {error}", file=sys.stderr)
             return 1
