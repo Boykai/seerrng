@@ -516,31 +516,6 @@ const SettingsProwlarr = () => {
       <p className="mt-4 text-sm text-gray-300">
         {intl.formatMessage(messages.testHint)}
       </p>
-      <div className="mt-4 flex flex-wrap gap-3">
-        <button
-          type="button"
-          className="rounded bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={
-            testing ||
-            !form.hostname ||
-            form.clearApiKey ||
-            (!form.apiKey && !form.apiKeyConfigured) ||
-            !canSaveCategories
-          }
-          onClick={() => void testConnection()}
-        >
-          {intl.formatMessage(testing ? messages.testing : messages.test)}
-        </button>
-        <button
-          type="button"
-          className="rounded border border-gray-500 px-4 py-2 font-semibold text-gray-100 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={saving || !canSaveCategories}
-          onClick={() => void saveSettings()}
-        >
-          {intl.formatMessage(saving ? messages.saving : messages.save)}
-        </button>
-      </div>
-
       {connectionMessage && (
         <p className="mt-3 text-sm text-green-300" role="status">
           {connectionMessage}
@@ -604,49 +579,58 @@ const SettingsProwlarr = () => {
                   {intl.formatMessage(messages.noSearchableIndexers)}
                 </p>
               ) : (
-                <ul className="mt-3 divide-y divide-gray-700 rounded border border-gray-700">
-                  {inventory.diagnostics.map((item) => (
-                    <li
-                      key={item.id ?? item.name}
-                      className="flex flex-col gap-1 px-3 py-2 sm:flex-row sm:items-start sm:justify-between"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-gray-100">
-                          {item.name}
-                        </p>
-                        {item.error && (
-                          <p className="mt-0.5 text-xs break-words text-amber-200">
-                            {item.error}
-                          </p>
-                        )}
-                        <DiagnosticDate
-                          value={item.disabledTill}
-                          message="disabledUntil"
-                          intl={intl}
-                        />
-                        <DiagnosticDate
-                          value={item.mostRecentFailure}
-                          message="recentFailure"
-                          intl={intl}
-                        />
-                      </div>
-                      <span
-                        className={
-                          item.success
-                            ? 'shrink-0 text-xs font-medium text-green-300'
-                            : 'shrink-0 text-xs font-medium text-red-300'
-                        }
+                <div
+                  data-testid="prowlarr-diagnostics"
+                  role="region"
+                  aria-label={intl.formatMessage(messages.diagnosticTitle)}
+                  tabIndex={0}
+                  className="mt-3 overflow-y-auto overscroll-contain rounded border border-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400"
+                  style={{ maxHeight: '18rem' }}
+                >
+                  <ul className="divide-y divide-gray-700">
+                    {inventory.diagnostics.map((item) => (
+                      <li
+                        key={item.id ?? item.name}
+                        className="flex flex-col gap-1 px-3 py-2 sm:flex-row sm:items-start sm:justify-between"
                       >
-                        {intl.formatMessage(
-                          item.success
-                            ? messages.diagnosticOk
-                            : messages.diagnosticFailed
-                        )}
-                        {item.status ? ` · HTTP ${item.status}` : ''}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-gray-100">
+                            {item.name}
+                          </p>
+                          {item.error && (
+                            <p className="mt-0.5 text-xs break-words text-amber-200">
+                              {item.error}
+                            </p>
+                          )}
+                          <DiagnosticDate
+                            value={item.disabledTill}
+                            message="disabledUntil"
+                            intl={intl}
+                          />
+                          <DiagnosticDate
+                            value={item.mostRecentFailure}
+                            message="recentFailure"
+                            intl={intl}
+                          />
+                        </div>
+                        <span
+                          className={
+                            item.success
+                              ? 'shrink-0 text-xs font-medium text-green-300'
+                              : 'shrink-0 text-xs font-medium text-red-300'
+                          }
+                        >
+                          {intl.formatMessage(
+                            item.success
+                              ? messages.diagnosticOk
+                              : messages.diagnosticFailed
+                          )}
+                          {item.status ? ` · HTTP ${item.status}` : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           )}
@@ -667,6 +651,35 @@ const SettingsProwlarr = () => {
             {intl.formatMessage(messages.noSearchableIndexers)}
           </p>
         )}
+      <div
+        data-testid="prowlarr-actions"
+        className="-mx-4 mt-5 flex flex-wrap items-center gap-3 border-t border-gray-700 bg-gray-900/95 px-4 py-3 sm:-mx-6 sm:px-6"
+      >
+        <button
+          type="button"
+          className="rounded bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ minHeight: 48 }}
+          disabled={
+            testing ||
+            !form.hostname ||
+            form.clearApiKey ||
+            (!form.apiKey && !form.apiKeyConfigured) ||
+            !canSaveCategories
+          }
+          onClick={() => void testConnection()}
+        >
+          {intl.formatMessage(testing ? messages.testing : messages.test)}
+        </button>
+        <button
+          type="button"
+          className="rounded border border-gray-500 px-4 py-2 font-semibold text-gray-100 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ minHeight: 48 }}
+          disabled={saving || !canSaveCategories}
+          onClick={() => void saveSettings()}
+        >
+          {intl.formatMessage(saving ? messages.saving : messages.save)}
+        </button>
+      </div>
     </section>
   );
 };
