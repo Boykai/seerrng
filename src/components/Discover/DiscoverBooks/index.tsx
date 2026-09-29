@@ -21,6 +21,7 @@ import useSettings from '@app/hooks/useSettings';
 import { useBatchUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
 import defineMessages from '@app/utils/defineMessages';
 import { parseQueryFromPath } from '@app/utils/routeQuery';
+import { isOptionalCatalogPathEnabled } from '@app/utils/serviceAvailability';
 import { BarsArrowDownIcon, BarsArrowUpIcon } from '@heroicons/react/24/solid';
 import type { BookResult } from '@server/models/Book';
 import { useRouter } from 'next/router';
@@ -100,9 +101,14 @@ const DiscoverBooks = ({
     routeQuery.format === 'audiobook'
       ? routeQuery.format
       : undefined;
-  const ebookEnabled = currentSettings.enabledMediaCategories?.ebook !== false;
-  const audiobookEnabled =
-    currentSettings.enabledMediaCategories?.audiobook !== false;
+  const ebookEnabled = isOptionalCatalogPathEnabled(
+    '/discover/books',
+    currentSettings
+  );
+  const audiobookEnabled = isOptionalCatalogPathEnabled(
+    '/discover/audiobooks',
+    currentSettings
+  );
   const availableFormats: BookDiscoveryFormat[] = [
     ...(ebookEnabled && audiobookEnabled ? ['all' as const] : []),
     ...(ebookEnabled ? ['ebook' as const] : []),

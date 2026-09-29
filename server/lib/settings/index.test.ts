@@ -4,7 +4,11 @@ import { afterEach, describe, it } from 'node:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import Settings, { assertSettingsFileSize, MAX_SETTINGS_FILE_BYTES } from '.';
+import Settings, {
+  assertSettingsFileSize,
+  MAX_SETTINGS_FILE_BYTES,
+  type ReadarrSettings,
+} from '.';
 
 const temporaryDirectories: string[] = [];
 
@@ -41,6 +45,28 @@ describe('Settings reset', () => {
     settings.reset();
 
     assert.equal(settings.network.csrfProtection, false);
+  });
+});
+
+describe('Public settings', () => {
+  it('reports ebook and audiobook service availability separately', () => {
+    const settings = new Settings();
+    settings.readarr = [{ serviceType: 'audiobook' } as ReadarrSettings];
+
+    assert.strictEqual(settings.fullPublicSettings.booksEnabled, true);
+    assert.strictEqual(settings.fullPublicSettings.ebookServiceEnabled, false);
+    assert.strictEqual(
+      settings.fullPublicSettings.audiobookServiceEnabled,
+      true
+    );
+
+    settings.readarr = [{} as ReadarrSettings];
+
+    assert.strictEqual(settings.fullPublicSettings.ebookServiceEnabled, true);
+    assert.strictEqual(
+      settings.fullPublicSettings.audiobookServiceEnabled,
+      false
+    );
   });
 });
 

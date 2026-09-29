@@ -2383,6 +2383,14 @@ components:
           type: boolean
           description: Whether a LazyLibrarian instance is configured.
           example: true
+        ebookServiceEnabled:
+          type: boolean
+          description: Whether a Bookshelf-compatible ebook service is configured.
+          example: true
+        audiobookServiceEnabled:
+          type: boolean
+          description: Whether a Bookshelf-compatible audiobook service is configured.
+          example: false
         romarrEnabled:
           type: boolean
           description: Whether a ROMarrNG instance is configured.

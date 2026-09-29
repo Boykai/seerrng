@@ -327,6 +327,8 @@ interface FullPublicSettings extends PublicSettings {
   series4kEnabled: boolean;
   musicEnabled: boolean;
   booksEnabled: boolean;
+  ebookServiceEnabled: boolean;
+  audiobookServiceEnabled: boolean;
   comicsEnabled: boolean;
   magazinesEnabled: boolean;
   softwareEnabled: boolean;
@@ -1214,6 +1216,12 @@ class Settings {
       ),
       musicEnabled: this.data.lidarr.length > 0,
       booksEnabled: this.data.readarr.length > 0,
+      ebookServiceEnabled: this.data.readarr.some(
+        (service) => (service.serviceType ?? 'ebook') === 'ebook'
+      ),
+      audiobookServiceEnabled: this.data.readarr.some(
+        (service) => service.serviceType === 'audiobook'
+      ),
       comicsEnabled:
         this.data.mylar.length > 0 || this.data.kapowarr.length > 0,
       magazinesEnabled: this.data.lazylibrarian.length > 0,

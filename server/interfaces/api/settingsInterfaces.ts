@@ -40,6 +40,8 @@ export interface PublicSettingsResponse {
   series4kEnabled: boolean;
   musicEnabled: boolean;
   booksEnabled: boolean;
+  ebookServiceEnabled: boolean;
+  audiobookServiceEnabled: boolean;
   comicsEnabled: boolean;
   magazinesEnabled: boolean;
   softwareEnabled: boolean;

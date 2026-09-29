@@ -3,6 +3,8 @@ import type { MediaCategoryKey } from '@server/constants/mediaCategories';
 export interface OptionalServiceAvailability {
   musicEnabled: boolean;
   booksEnabled: boolean;
+  ebookServiceEnabled?: boolean;
+  audiobookServiceEnabled?: boolean;
   comicsEnabled: boolean;
   magazinesEnabled?: boolean;
   softwareEnabled?: boolean;
@@ -36,6 +38,21 @@ export const isConfiguredMediaCategoryEnabled = (
   availability: Pick<OptionalServiceAvailability, 'enabledMediaCategories'>
 ): boolean => availability.enabledMediaCategories?.[category] !== false;
 
+export const isBookFormatEnabled = (
+  format: 'ebook' | 'audiobook',
+  availability: OptionalServiceAvailability
+): boolean => {
+  const serviceEnabled =
+    format === 'ebook'
+      ? availability.ebookServiceEnabled
+      : availability.audiobookServiceEnabled;
+
+  return (
+    (serviceEnabled ?? availability.booksEnabled) &&
+    isConfiguredMediaCategoryEnabled(format, availability)
+  );
+};
+
 export const isDiscoverMediaTypeEnabled = (
   type: DiscoverMediaType,
   availability: OptionalServiceAvailability
@@ -51,15 +68,9 @@ export const isDiscoverMediaTypeEnabled = (
         isConfiguredMediaCategoryEnabled('music', availability)
       );
     case 'book':
-      return (
-        availability.booksEnabled &&
-        isConfiguredMediaCategoryEnabled('ebook', availability)
-      );
+      return isBookFormatEnabled('ebook', availability);
     case 'audiobook':
-      return (
-        availability.booksEnabled &&
-        isConfiguredMediaCategoryEnabled('audiobook', availability)
-      );
+      return isBookFormatEnabled('audiobook', availability);
   }
 };
 
@@ -153,24 +164,17 @@ export const isOptionalCatalogPathEnabled = (
   }
 
   if (path === '/discover/audiobooks') {
-    return (
-      availability.booksEnabled &&
-      isConfiguredMediaCategoryEnabled('audiobook', availability)
-    );
+    return isBookFormatEnabled('audiobook', availability);
   }
 
   if (path === '/discover/books') {
-    return (
-      availability.booksEnabled &&
-      isConfiguredMediaCategoryEnabled('ebook', availability)
-    );
+    return isBookFormatEnabled('ebook', availability);
   }
 
   if (path.startsWith('/book/') || path.startsWith('/author/')) {
     return (
-      availability.booksEnabled &&
-      (isConfiguredMediaCategoryEnabled('ebook', availability) ||
-        isConfiguredMediaCategoryEnabled('audiobook', availability))
+      isBookFormatEnabled('ebook', availability) ||
+      isBookFormatEnabled('audiobook', availability)
     );
   }
 

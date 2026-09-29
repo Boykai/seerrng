@@ -329,21 +329,14 @@ const Search = () => {
       case 'tv':
         return isConfiguredMediaCategoryEnabled('tv', currentSettings);
       case 'book':
-        return (
-          currentSettings.booksEnabled &&
-          isConfiguredMediaCategoryEnabled('ebook', currentSettings)
-        );
+        return isOptionalCatalogPathEnabled('/discover/books', currentSettings);
       case 'audiobook':
-        return (
-          currentSettings.booksEnabled &&
-          isConfiguredMediaCategoryEnabled('audiobook', currentSettings)
+        return isOptionalCatalogPathEnabled(
+          '/discover/audiobooks',
+          currentSettings
         );
       case 'author':
-        return (
-          currentSettings.booksEnabled &&
-          (isConfiguredMediaCategoryEnabled('ebook', currentSettings) ||
-            isConfiguredMediaCategoryEnabled('audiobook', currentSettings))
-        );
+        return isOptionalCatalogPathEnabled('/author/', currentSettings);
       case 'music':
         return isOptionalCatalogPathEnabled('/discover/music', currentSettings);
       case 'comic':

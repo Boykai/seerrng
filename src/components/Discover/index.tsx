@@ -12,7 +12,10 @@ import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
-import { isConfiguredMediaCategoryEnabled } from '@app/utils/serviceAvailability';
+import {
+  isConfiguredMediaCategoryEnabled,
+  isOptionalCatalogPathEnabled,
+} from '@app/utils/serviceAvailability';
 import { Transition } from '@headlessui/react';
 import {
   ArrowDownOnSquareIcon,
@@ -116,10 +119,7 @@ const isDiscoverSliderEnabled = (
       );
     case DiscoverSliderType.POPULAR_BOOKS:
     case DiscoverSliderType.OPENLIBRARY_BOOK_SUBJECT:
-      return (
-        availability.booksEnabled &&
-        isConfiguredMediaCategoryEnabled('ebook', availability)
-      );
+      return isOptionalCatalogPathEnabled('/discover/books', availability);
     default:
       return true;
   }

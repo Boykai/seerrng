@@ -124,6 +124,32 @@ describe('isOptionalCatalogPathEnabled', () => {
     strictEqual(isOptionalCatalogPathEnabled('/software', availability), true);
   });
 
+  it('requires the matching Bookshelf service and media category for each book format', () => {
+    const availability = {
+      musicEnabled: false,
+      booksEnabled: true,
+      ebookServiceEnabled: false,
+      audiobookServiceEnabled: true,
+      comicsEnabled: false,
+      enabledMediaCategories: {
+        ebook: true,
+        audiobook: true,
+      },
+    };
+
+    strictEqual(
+      isOptionalCatalogPathEnabled('/discover/books', availability),
+      false
+    );
+    strictEqual(
+      isOptionalCatalogPathEnabled('/discover/audiobooks', availability),
+      true
+    );
+    strictEqual(isOptionalCatalogPathEnabled('/author/', availability), true);
+    strictEqual(isDiscoverMediaTypeEnabled('book', availability), false);
+    strictEqual(isDiscoverMediaTypeEnabled('audiobook', availability), true);
+  });
+
   it('keeps software visible only for enabled categories with connected providers', () => {
     const availability = {
       musicEnabled: false,

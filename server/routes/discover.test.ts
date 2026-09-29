@@ -3455,6 +3455,66 @@ describe('GET /discover/books', () => {
     }
   });
 
+  it('searches audiobook keywords only in audiobook Bookshelf services', async () => {
+    getSettings().readarr = [
+      {
+        id: 0,
+        hostname: 'audiobookshelf.test',
+        port: 8787,
+        apiKey: 'audio-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'audiobook',
+      } as ReadarrSettings,
+      {
+        id: 1,
+        hostname: 'ebookshelf.test',
+        port: 8787,
+        apiKey: 'ebook-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'ebook',
+      } as ReadarrSettings,
+    ];
+    const searchOpenLibrary = mock.method(
+      OpenLibraryAPI.prototype,
+      'searchBooks'
+    );
+    const searchBookshelf = mock.method(
+      ReadarrAPI.prototype,
+      'lookupBook',
+      async () => [
+        {
+          id: 1,
+          title: 'The Da Vinci Code Audiobook',
+          foreignBookId: 'hardcover:da-vinci-code-audio',
+          author: { authorName: 'Dan Brown' },
+          narrators: ['Paul Michael'],
+        },
+      ]
+    );
+    const getBooks = mock.method(ReadarrAPI.prototype, 'getBooks');
+
+    try {
+      const agent = await login();
+      const result = await agent.get('/discover/books').query({
+        format: 'audiobook',
+        query: 'The Da Vinci Code',
+      });
+
+      assert.strictEqual(result.status, 200);
+      assert.deepStrictEqual(
+        result.body.results.map((book: { title: string }) => book.title),
+        ['The Da Vinci Code Audiobook']
+      );
+      assert.strictEqual(searchBookshelf.mock.callCount(), 1);
+      assert.strictEqual(searchOpenLibrary.mock.callCount(), 0);
+      assert.strictEqual(getBooks.mock.callCount(), 0);
+    } finally {
+      getSettings().readarr = [];
+    }
+  });
+
   it('limits narrator search to audiobook format', async () => {
     const searchOpenLibrary = mock.method(
       OpenLibraryAPI.prototype,

@@ -481,6 +481,49 @@ describe('GET /search', () => {
     assert.strictEqual(bookSearch.mock.callCount(), 0);
   });
 
+  it('queries only audiobook Bookshelf services for audiobook searches', async () => {
+    getSettings().readarr = [
+      {
+        id: 1,
+        hostname: 'ebookshelf.test',
+        port: 8787,
+        apiKey: 'ebook-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'ebook',
+      } as ReadarrSettings,
+      {
+        id: 2,
+        hostname: 'audiobookshelf.test',
+        port: 8787,
+        apiKey: 'audio-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'audiobook',
+      } as ReadarrSettings,
+    ];
+    const openLibrarySearch = mock.method(
+      OpenLibraryAPI.prototype,
+      'searchBooks'
+    );
+    const audiobookSearch = mock.method(
+      ReadarrAPI.prototype,
+      'lookupBook',
+      async () => []
+    );
+
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const res = await agent.get('/search').query({
+      query: 'The Da Vinci Code',
+      type: 'book',
+      format: 'audiobook',
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(openLibrarySearch.mock.callCount(), 0);
+    assert.strictEqual(audiobookSearch.mock.callCount(), 1);
+  });
+
   it('does not search an administrator-disabled book format', async () => {
     const settings = getSettings();
     const originalCategories = { ...settings.main.enabledMediaCategories };

@@ -23,6 +23,8 @@ const defaultSettings: PublicSettingsResponse = {
   series4kEnabled: false,
   musicEnabled: false,
   booksEnabled: false,
+  ebookServiceEnabled: false,
+  audiobookServiceEnabled: false,
   comicsEnabled: false,
   magazinesEnabled: false,
   softwareEnabled: false,
