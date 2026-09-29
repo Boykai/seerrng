@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { constants as fsConstants } from 'node:fs';
-import { lstat, open, unlink } from 'node:fs/promises';
+import { open, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -259,6 +259,22 @@ const validatePreviewFileHandle = (stats) => {
   }
 };
 
+export const getPreviewReadFlags = (
+  platform = process.platform,
+  constants = fsConstants
+) => {
+  if (
+    platform === 'win32' ||
+    !Number.isInteger(constants.O_NOFOLLOW) ||
+    constants.O_NOFOLLOW === 0
+  ) {
+    throw new Error(
+      'Applying a saved preview requires a platform with O_NOFOLLOW support, such as Linux or macOS.'
+    );
+  }
+  return constants.O_RDONLY | constants.O_NOFOLLOW;
+};
+
 export const savePreviewFile = async (file, previewRecord) => {
   const target = resolve(file);
   const handle = await open(target, 'wx', 0o600);
@@ -278,14 +294,10 @@ export const savePreviewFile = async (file, previewRecord) => {
 
 export const loadPreviewFile = async (file, expectedServerBase) => {
   const target = resolve(file);
-  if ((await lstat(target)).isSymbolicLink()) {
-    throw new Error('Preview file must be a regular file, not a symlink.');
-  }
-  const noFollow = process.platform === 'win32' ? 0 : fsConstants.O_NOFOLLOW;
   let handle;
   let record;
   try {
-    handle = await open(target, fsConstants.O_RDONLY | noFollow);
+    handle = await open(target, getPreviewReadFlags());
     validatePreviewFileHandle(await handle.stat());
     record = JSON.parse(await handle.readFile('utf8'));
   } catch (error) {

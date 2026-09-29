@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rm, stat, symlink } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { mkdtemp, open, rm, stat, symlink } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
 
 import {
+  getPreviewReadFlags,
   loadPreviewFile,
   normalizeServerBase,
   parseArgs,
@@ -21,6 +23,18 @@ const makeTempDirectory = async () => {
   return directory;
 };
 
+const readPreviewFile = async (path) => {
+  const handle = await open(
+    path,
+    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW
+  );
+  try {
+    return await handle.readFile('utf8');
+  } finally {
+    await handle.close();
+  }
+};
+
 afterEach(async () => {
   await Promise.all(
     tempDirectories
@@ -30,6 +44,13 @@ afterEach(async () => {
 });
 
 describe('Bookshelf media-move CLI', () => {
+  it('requires no-follow file opens before applying a saved preview', () => {
+    assert.throws(
+      () => getPreviewReadFlags('win32', { O_RDONLY: 0, O_NOFOLLOW: 0 }),
+      /platform with O_NOFOLLOW support/
+    );
+  });
+
   it('defaults to preview and validates batches before making a request', () => {
     const options = parseArgs([
       '--service-id',
@@ -135,7 +156,7 @@ describe('Bookshelf media-move CLI', () => {
       savePreviewFile(path, record),
       (error) => error.code === 'EEXIST'
     );
-    assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), record);
+    assert.deepEqual(await loadPreviewFile(path, record.serverBase), record);
   });
 
   it('rejects symlinked previews and credential fields before applying', async () => {
@@ -159,7 +180,7 @@ describe('Bookshelf media-move CLI', () => {
       /regular file, not a symlink/
     );
 
-    const credentialRecord = JSON.parse(await readFile(target, 'utf8'));
+    const credentialRecord = JSON.parse(await readPreviewFile(target));
     credentialRecord.apiKey = 'unexpected-secret';
     await rm(target);
     await savePreviewFile(target, credentialRecord);

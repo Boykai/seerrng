@@ -98,6 +98,10 @@ configured SeerrNG URL, and removes the file after BookshelfNG accepts the
 command. If the preview has conflicts, create a new preview after resolving
 them. Check progress using the command ID returned after apply:
 
+Applying a saved CLI preview requires Linux or macOS so SeerrNG can open the
+private preview without following a symbolic link. On Windows, use the web UI
+or administrator API to apply a move.
+
 ```bash
 pnpm bookshelf:move -- --service-id 1 --status 123
 ```
