@@ -38,6 +38,7 @@ const messages = defineMessages('calendar', {
   previous: 'Previous month',
   next: 'Next month',
   more: 'Show more releases',
+  dateChanged: 'Date changed from {previous} to {current} on {changedAt}.',
 });
 const dateMonth = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -51,6 +52,15 @@ export default function CalendarPage() {
   const [limit, setLimit] = useState(25);
   const [year, number] = month.split('-').map(Number);
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const formatReleaseDate = (value: string, allDay: boolean) => {
+    const date = intl.formatDate(value, {
+      dateStyle: 'medium',
+      ...(allDay ? { timeZone: 'UTC' } : {}),
+    });
+    return allDay
+      ? date
+      : `${date} · ${intl.formatTime(value, { timeStyle: 'short' })}`;
+  };
   const start = `${month}-01`;
   const end = `${dateMonth(new Date(year, number, 1))}-01`;
   const { data, error, isLoading, mutate } = useSWR<{
@@ -224,6 +234,24 @@ export default function CalendarPage() {
                     {item.episodeTitle ? ` · ${item.episodeTitle}` : ''}
                   </p>
                 )}
+              {item.dateChanges?.map((change) => (
+                <p
+                  key={`${change.changedAt}:${change.startsAt}`}
+                  className="mt-2 text-sm text-yellow-300"
+                >
+                  {intl.formatMessage(messages.dateChanged, {
+                    previous: formatReleaseDate(
+                      change.previousStartsAt,
+                      change.previousAllDay
+                    ),
+                    current: formatReleaseDate(change.startsAt, change.allDay),
+                    changedAt: intl.formatDate(change.changedAt, {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    }),
+                  })}
+                </p>
+              ))}
             </div>
             <span
               className={`text-sm ${item.available ? 'text-green-400' : 'text-gray-400'}`}

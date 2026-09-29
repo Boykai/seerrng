@@ -17089,6 +17089,32 @@ paths:
                           type: boolean
                         is4k:
                           type: boolean
+                        dateChanges:
+                          type: array
+                          maxItems: 3
+                          description: Recent provider date or air-time changes captured by the background calendar history job.
+                          items:
+                            type: object
+                            required:
+                              - previousStartsAt
+                              - startsAt
+                              - changedAt
+                              - previousAllDay
+                              - allDay
+                            properties:
+                              previousStartsAt:
+                                type: string
+                                format: date-time
+                              startsAt:
+                                type: string
+                                format: date-time
+                              changedAt:
+                                type: string
+                                format: date-time
+                              previousAllDay:
+                                type: boolean
+                              allDay:
+                                type: boolean
                   partialSources:
                     type: array
                     items:

@@ -13,6 +13,14 @@ export interface ReleaseCalendarItem {
   episodeTitle?: string;
   available: boolean;
   is4k: boolean;
+  dateChanges?: ReleaseCalendarDateChange[];
+}
+export interface ReleaseCalendarDateChange {
+  previousStartsAt: string;
+  startsAt: string;
+  changedAt: string;
+  previousAllDay: boolean;
+  allDay: boolean;
 }
 const record = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -69,7 +77,7 @@ export function normalizeCalendarRow(
       )
         continue;
       return {
-        id: `radarr:${serverId}:${id}:${dateType}`,
+        id: `radarr:${serverId}:${id}`,
         source,
         mediaType: 'movie',
         title,

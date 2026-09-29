@@ -143,3 +143,10 @@ Movie dates are displayed as calendar dates. Episode air times use your browser'
 time zone. If a service is unavailable, the calendar identifies the missing source
 and keeps results from successful services. Results and backend reads are bounded;
 narrow the month or media type when the result limit is reached.
+
+SeerrNG checks monitored Radarr and Sonarr releases daily and records date
+changes after the first snapshot. Calendar entries can show the three most
+recent changes from the last 180 days, including the old and new dates or air
+times. The history uses the same **My requests** or shared-calendar visibility
+as the release itself. Administrators can run or disable **Release Calendar
+History** under **Settings → Jobs & Cache**.

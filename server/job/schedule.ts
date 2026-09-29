@@ -8,6 +8,7 @@ import downloadTracker from '@server/lib/downloadtracker';
 import episodeWatchAhead from '@server/lib/episodeWatchAhead';
 import ImageProxy from '@server/lib/imageproxy';
 import refreshToken from '@server/lib/refreshToken';
+import { captureReleaseCalendarHistory } from '@server/lib/releaseCalendar/history';
 import { reconcileActiveRequests } from '@server/lib/requestStatus';
 import { kapowarrScanner } from '@server/lib/scanners/comics/kapowarr';
 import { mylarScanner } from '@server/lib/scanners/comics/mylar';
@@ -579,6 +580,24 @@ export const startJobs = (): void => {
           }
         },
         { scope: 'instance' }
+      );
+    }),
+  });
+
+  scheduledJobs.push({
+    id: 'release-calendar-history',
+    name: 'Release Calendar History',
+    type: 'process',
+    interval: 'fixed',
+    cronSchedule: jobs['release-calendar-history'].schedule,
+    job: schedule.scheduleJob(jobs['release-calendar-history'].schedule, () => {
+      logger.info('Starting scheduled job: Release Calendar History', {
+        label: 'Jobs',
+      });
+      return runTrackedJob(
+        'Release Calendar History',
+        () => captureReleaseCalendarHistory(),
+        { logCompletion: true }
       );
     }),
   });

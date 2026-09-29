@@ -514,6 +514,7 @@ export type JobId =
   | 'jellyfin-full-scan'
   | 'jellyfin-watch-ahead'
   | 'image-cache-cleanup'
+  | 'release-calendar-history'
   | 'availability-sync'
   | 'process-blocklisted-tags';
 
@@ -863,6 +864,9 @@ class Settings {
         },
         'image-cache-cleanup': {
           schedule: '0 0 5 * * *',
+        },
+        'release-calendar-history': {
+          schedule: '0 0 4 * * *',
         },
         'process-blocklisted-tags': {
           schedule: '0 30 1 */7 * *',
@@ -1710,6 +1714,9 @@ class Settings {
         },
         'image-cache-cleanup': {
           schedule: '0 0 5 * * *',
+        },
+        'release-calendar-history': {
+          schedule: '0 0 4 * * *',
         },
         'process-blocklisted-tags': {
           schedule: '0 30 1 */7 * *',

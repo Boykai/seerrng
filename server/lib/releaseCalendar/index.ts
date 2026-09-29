@@ -5,10 +5,12 @@ import { getRepository } from '@server/datasource';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { getSettings } from '@server/lib/settings';
+import logger from '@server/logger';
 import {
   BoundedTaskQueue,
   mapWithConcurrency,
 } from '@server/utils/concurrency';
+import { annotateReleaseCalendarHistory } from './historyStore';
 import { normalizeCalendarRow, type ReleaseCalendarItem } from './normalize';
 import type { CalendarQuery } from './query';
 
@@ -17,7 +19,8 @@ const calendarQueue = new BoundedTaskQueue(3, 32);
 export async function getReleaseCalendar(
   query: CalendarQuery,
   userId: number,
-  isAdmin: boolean
+  isAdmin: boolean,
+  options: { includeDateHistory?: boolean } = {}
 ) {
   const settings = getSettings();
   const sources = [
@@ -182,8 +185,25 @@ export async function getReleaseCalendar(
   results.sort(
     (a, b) => a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id)
   );
+  const visibleResults = results.slice(0, 5000);
+  if (visibleResults.length && options.includeDateHistory !== false) {
+    try {
+      return {
+        results: await annotateReleaseCalendarHistory(visibleResults),
+        partialSources,
+        truncated:
+          sourceTruncated || sources.length > 20 || results.length > 5000,
+      };
+    } catch (error) {
+      logger.warn('Release calendar date history could not be loaded.', {
+        label: 'Release Calendar',
+        errorMessage:
+          error instanceof Error ? error.message : 'Unknown database error',
+      });
+    }
+  }
   return {
-    results: results.slice(0, 5000),
+    results: visibleResults,
     partialSources,
     truncated: sourceTruncated || sources.length > 20 || results.length > 5000,
   };
