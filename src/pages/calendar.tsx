@@ -14,24 +14,25 @@ import useSWR from 'swr';
 const messages = defineMessages('calendar', {
   title: 'Release Calendar',
   description:
-    'Upcoming movie, series, music, and book releases from your acquisition services.',
+    'Upcoming movie, series, music, book, PC game, and emulation releases from your acquisition services.',
   month: 'Month',
   scope: 'Calendar scope',
   mine: 'My requests',
-  all: 'All monitored titles',
+  all: 'All monitored titles and game requests',
   mediaType: 'Media type',
-  allTypes: 'Movies, series, music, and books',
+  allTypes: 'Movies, series, music, books, PC games, and emulation',
   movies: 'Movies',
   series: 'Series',
   albums: 'Music albums',
   books: 'Books',
+  games: 'Games and emulation',
   unmonitored: 'Include unmonitored titles',
   loading: 'Loading releases…',
   empty: 'No releases match this month and scope.',
   failed: 'The calendar could not be loaded.',
   retry: 'Retry',
   partial:
-    'Some acquisition services could not be reached. Their releases may be missing.',
+    'Some acquisition services or game catalogs could not be reached. Their releases may be missing.',
   truncated:
     'This calendar reached its result limit. Narrow the media filter to see more releases.',
   available: 'Available',
@@ -42,6 +43,11 @@ const messages = defineMessages('calendar', {
   theatrical: 'Theatrical release',
   album: 'Album release',
   book: 'Book release',
+  game: 'Game release',
+  pcGame: 'PC game',
+  retroGame: 'Retro emulation',
+  modernGame: 'Modern emulation',
+  softwareTargets: 'Requested for {targets}',
   ebook: 'Book',
   audiobook: 'Audiobook',
   episode: 'Season {season}, episode {episode}',
@@ -148,6 +154,9 @@ export default function CalendarPage() {
             <option value="tv">{intl.formatMessage(messages.series)}</option>
             <option value="music">{intl.formatMessage(messages.albums)}</option>
             <option value="book">{intl.formatMessage(messages.books)}</option>
+            <option value="software">
+              {intl.formatMessage(messages.games)}
+            </option>
           </select>
         </label>
         {hasPermission(Permission.ADMIN) && (
@@ -222,7 +231,16 @@ export default function CalendarPage() {
             </div>
             <div className="min-w-0 flex-1 break-words">
               <h2 className="font-semibold text-gray-100">
-                {item.mediaType === 'music' && item.mbId ? (
+                {item.mediaType === 'software' &&
+                item.softwareCategory &&
+                item.igdbId ? (
+                  <Link
+                    href={`/software?category=${item.softwareCategory}&game=${item.igdbId}`}
+                    className="text-blue-300 hover:text-blue-200"
+                  >
+                    {item.title}
+                  </Link>
+                ) : item.mediaType === 'music' && item.mbId ? (
                   <Link
                     href={`/music/${encodeApiPathSegment(normalizeMusicBrainzId(item.mbId))}`}
                     className="text-blue-300 hover:text-blue-200"
@@ -256,6 +274,24 @@ export default function CalendarPage() {
               {item.bookFormat && (
                 <p className="mt-1 text-sm text-gray-400">
                   {intl.formatMessage(messages[item.bookFormat])}
+                </p>
+              )}
+              {item.softwareCategory && (
+                <p className="mt-1 text-sm text-gray-400">
+                  {intl.formatMessage(
+                    item.softwareCategory === 'game'
+                      ? messages.pcGame
+                      : item.softwareCategory === 'retro'
+                        ? messages.retroGame
+                        : messages.modernGame
+                  )}
+                </p>
+              )}
+              {item.platformName && (
+                <p className="mt-1 text-sm text-gray-400">
+                  {intl.formatMessage(messages.softwareTargets, {
+                    targets: item.platformName,
+                  })}
                 </p>
               )}
               {item.seasonNumber !== undefined &&

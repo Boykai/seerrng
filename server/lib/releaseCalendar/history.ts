@@ -23,7 +23,7 @@ export async function captureReleaseCalendarHistory(
     },
     0,
     true,
-    { includeDateHistory: false }
+    { includeDateHistory: false, includeSoftware: false }
   );
   const summary = await recordReleaseCalendarSnapshots(results, now);
   if (partialSources.length || truncated) {

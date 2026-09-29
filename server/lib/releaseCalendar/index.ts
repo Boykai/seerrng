@@ -27,6 +27,7 @@ import {
   type ReleaseCalendarItem,
 } from './normalize';
 import type { CalendarQuery } from './query';
+import { getSoftwareReleaseCalendar } from './software';
 
 const calendarQueue = new BoundedTaskQueue(3, 32);
 
@@ -34,7 +35,7 @@ export async function getReleaseCalendar(
   query: CalendarQuery,
   userId: number,
   isAdmin: boolean,
-  options: { includeDateHistory?: boolean } = {}
+  options: { includeDateHistory?: boolean; includeSoftware?: boolean } = {}
 ) {
   const settings = getSettings();
   const sources = [
@@ -76,6 +77,16 @@ export async function getReleaseCalendar(
   );
   let sourceTruncated = false;
   const partialSources: { source: string; serverId?: number }[] = [];
+  let softwareResults: ReleaseCalendarItem[] = [];
+  if (
+    options.includeSoftware !== false &&
+    (!query.mediaType || query.mediaType === 'software')
+  ) {
+    const software = await getSoftwareReleaseCalendar(query, userId);
+    softwareResults = software.results;
+    sourceTruncated ||= software.truncated;
+    partialSources.push(...software.partialSources);
+  }
   const batches = await mapWithConcurrency(
     sources.slice(0, 20),
     3,
@@ -202,7 +213,7 @@ export async function getReleaseCalendar(
       }
     }
   );
-  let results: ReleaseCalendarItem[] = batches.flat();
+  let results: ReleaseCalendarItem[] = [...batches.flat(), ...softwareResults];
   if (query.scope === 'mine') {
     const requests = await getRepository(MediaRequest)
       .createQueryBuilder('request')
@@ -307,6 +318,7 @@ export async function getReleaseCalendar(
       }
     }
     results = results.filter((item) => {
+      if (item.mediaType === 'software') return true;
       if (item.mediaType === 'music')
         return !!item.mbId && musicIds.has(normalizeMusicBrainzId(item.mbId));
       if (item.mediaType === 'book') {

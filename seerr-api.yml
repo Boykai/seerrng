@@ -17232,7 +17232,7 @@ paths:
 
   /calendar:
     get:
-      summary: Browse releases for your requests or shared acquisition services
+      summary: Browse releases for your requests and shared acquisition services
       tags:
         - discover
       parameters:
@@ -17263,6 +17263,7 @@ paths:
               - tv
               - music
               - book
+              - software
         - name: includeUnmonitored
           in: query
           schema:
@@ -17275,7 +17276,7 @@ paths:
             maxLength: 64
             default: UTC
           description: >-
-            IANA time zone for episode month boundaries; all-day movie, album, and book releases retain their calendar dates.
+            IANA time zone for episode month boundaries; all-day movie, album, book, and game releases retain their calendar dates.
       responses:
         '200':
           description: Release calendar with unavailable sources indicated
@@ -17313,6 +17314,8 @@ paths:
                             - sonarr
                             - lidarr
                             - readarr
+                            - questarr
+                            - romarr
                         mediaType:
                           type: string
                           enum:
@@ -17320,6 +17323,7 @@ paths:
                             - tv
                             - music
                             - book
+                            - software
                         title:
                           type: string
                         startsAt:
@@ -17334,6 +17338,7 @@ paths:
                             - theatrical
                             - album
                             - book
+                            - game
                         allDay:
                           type: boolean
                         tmdbId:
@@ -17366,6 +17371,17 @@ paths:
                             - audiobook
                         authorName:
                           type: string
+                        softwareCategory:
+                          type: string
+                          enum:
+                            - game
+                            - retro
+                            - modern
+                        igdbId:
+                          type: integer
+                        platformName:
+                          type: string
+                          description: Requested PC target or emulation system.
                         seasonNumber:
                           type: integer
                         episodeNumber:
