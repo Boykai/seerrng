@@ -26,6 +26,8 @@ const messages = defineMessages('components.SettingsSoftwareAcquisition', {
   basePath: 'Base path',
   useSsl: 'Use SSL',
   apiKey: 'API key',
+  apiKeyDescription:
+    'Use the API key configured in the corresponding ROMarrNG or QuestarrNG General settings. Leave blank to keep using the saved key.',
   apiKeySaved: 'A key is saved. Leave this blank to keep using it.',
   clearApiKey: 'Remove saved API key',
   testConnection: 'Test connection',
@@ -58,6 +60,12 @@ const messages = defineMessages('components.SettingsSoftwareAcquisition', {
   loadError: 'Software acquisition settings could not be loaded.',
   systemsError: 'Supported systems could not be loaded.',
   testError: 'Connection test failed.',
+  testRequestHttpError:
+    'SeerrNG could not complete the test request (HTTP {status}). Check SeerrNG access and server logs.',
+  testRequestUnavailable:
+    'SeerrNG could not complete the test request ({code}). Check SeerrNG access and server logs.',
+  testRequestFailed:
+    'SeerrNG could not complete the test request. Check SeerrNG access and server logs.',
   saveError: 'Settings could not be saved.',
   emulationCatalog: 'Emulation catalog source',
   emulationCatalogDescription:
@@ -224,11 +232,19 @@ const SettingsSoftwareAcquisition = () => {
         await mutate('/api/v1/request/software/catalog/systems');
       }
     } catch (error) {
-      const detail =
-        axios.isAxiosError(error) &&
-        typeof error.response?.data?.error === 'string'
+      const detail = axios.isAxiosError(error)
+        ? typeof error.response?.data?.error === 'string'
           ? error.response.data.error
-          : intl.formatMessage(messages.testError);
+          : error.response
+            ? intl.formatMessage(messages.testRequestHttpError, {
+                status: error.response.status,
+              })
+            : error.code
+              ? intl.formatMessage(messages.testRequestUnavailable, {
+                  code: error.code,
+                })
+              : intl.formatMessage(messages.testRequestFailed)
+        : intl.formatMessage(messages.testError);
       setTestState({
         provider,
         success: false,
@@ -350,6 +366,9 @@ const SettingsSoftwareAcquisition = () => {
               }
               autoComplete="new-password"
             />
+            <span className="mt-1 block text-xs text-gray-400">
+              {intl.formatMessage(messages.apiKeyDescription)}
+            </span>
           </label>
           {current.apiKeyConfigured && (
             <div className="flex items-center gap-2 text-sm text-gray-300 sm:col-span-2">
