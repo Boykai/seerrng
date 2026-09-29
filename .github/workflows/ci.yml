@@ -47,6 +47,11 @@ jobs:
           --configuration Release
           --output artifacts/seerrng-jellyfin-bridge
 
+      - name: Smoke test plugin in Jellyfin 10.11.11
+        run: >-
+          python3 integrations/jellyfin-plugin/smoke-test.py
+          --plugin-output artifacts/seerrng-jellyfin-bridge
+
   release-notes:
     name: Release-note contract
     timeout-minutes: 10
