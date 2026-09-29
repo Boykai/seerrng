@@ -2,7 +2,7 @@
 category: added
 audience: operators
 area: unraid
-action: Submit snapetech/chaptarrng to the Community Apps portal to make it searchable there.
+action: Wait for ChaptarrNG's first stable GHCR image before installing its template.
 breaking: false
 ---
-SeerrNG's guides explain how its maintained ChaptarrNG fork keeps ebook and audiobook requests separate, tracks imports that finish asynchronously, and installs from its Unraid template. ChaptarrNG v0.9.936 is publicly available from GHCR for amd64, arm64, and armv7, but the fork is not listed in Community Apps yet.
+SeerrNG's guides now explain the Snapetech-maintained ChaptarrNG fork, its format-aware pending-import integration, and its Unraid template. The template is published in the fork repository, but its first stable GHCR image is still pending, so wait for the image before installing.
