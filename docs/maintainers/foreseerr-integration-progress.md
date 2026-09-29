@@ -54,14 +54,16 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
 - Movie/series/music/book release calendar with personal/shared scopes, bounded
   cached backend reads, episode hydration and partial-source reporting across
   Radarr, Sonarr, Lidarr, and Readarr-compatible Bookshelf services. The
-  calendar also shows requested PC games and emulation titles from their IGDB
-  release dates, with at most 200 catalog lookups, three concurrent calls, and
-  existing 10-minute provider caching per interactive calendar query. The daily
-  date-history job skips these optional catalog lookups.
+  calendar also shows requested comic and magazine issues from Mylar3,
+  Kapowarr, and LazyLibrarian when the issue has an exact date, plus requested
+  PC games and emulation titles from their IGDB release dates. Issue and game
+  lookups are bounded, run with three concurrent calls, and use short provider
+  caches. The daily date-history job records comic and magazine date changes;
+  it skips the optional game catalog lookups.
 - Daily date-change snapshots for monitored Radarr, Sonarr, Lidarr, and
-  Readarr-compatible Bookshelf releases. The calendar shows up to three recent
-  moves per event; snapshots reset after long observation gaps to avoid
-  presenting stale dates as fresh changes.
+  Readarr-compatible Bookshelf, Mylar3, Kapowarr, and LazyLibrarian releases.
+  The calendar shows up to three recent moves per event; snapshots reset after
+  long observation gaps to avoid presenting stale dates as fresh changes.
 - Dedicated-permission download intervention inbox with durable warnings, explicit
   rejection options, existing-library matching and backend-specific manual-import
   previews for Radarr, Sonarr, Lidarr and Readarr, backend identity checks,
@@ -86,8 +88,6 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   live provider accounts.
 - Verify manual-import payloads and acquisition actions against live services,
   including the supported Readarr-compatible backend variants.
-- Comic issue and magazine release calendar sources remain to be evaluated; they
-  need a bounded publication-date source that preserves issue and title identity.
 - Additional provider-specific live resolvers beyond the exact IMDb/TVDB
   identifiers currently supported. AniList library entries do not expose either
   identifier in the current client contract, so its bulk scan does not infer

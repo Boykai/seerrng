@@ -215,24 +215,25 @@ class MylarAPI extends ExternalAPI {
     return this.runCommand('getVersion');
   }
 
-  public async getIndex(): Promise<MylarComic[]> {
-    const data = await this.runCommand<unknown>('getIndex');
+  public async getIndex(ttl = 0): Promise<MylarComic[]> {
+    const data = await this.runCommand<unknown>('getIndex', {}, ttl);
     return Array.isArray(data)
       ? data.map(sanitizeComic).filter((comic): comic is MylarComic => !!comic)
       : [];
   }
 
-  public async getComic(comicId: string): Promise<MylarComicDetail> {
+  public async getComic(comicId: string, ttl = 0): Promise<MylarComicDetail> {
     const data = await this.runCommand<{
       comic?: unknown[];
       issues?: unknown[];
-    }>('getComic', { id: comicId });
+    }>('getComic', { id: comicId }, ttl);
     return {
       comic: Array.isArray(data.comic)
         ? sanitizeComic(data.comic[0])
         : undefined,
       issues: Array.isArray(data.issues)
         ? data.issues
+            .slice(0, 10_000)
             .map(sanitizeIssue)
             .filter((issue): issue is MylarIssue => !!issue)
         : [],

@@ -145,32 +145,37 @@ private match.
 ## Release calendar
 
 **Calendar** displays movie releases, series episodes, album releases, book
-releases, and requested PC games or emulation titles. Movies, series, music, and
-books come from configured Radarr, Sonarr, Lidarr, and Readarr-compatible
-Bookshelf services. Software release dates use the configured QuestarrNG or
-ROMarrNG catalog's exact IGDB date for the requested PC operating system or
+releases, comic issues, magazine issues, and requested PC games or emulation
+titles. Movies, series, music, and books come from configured Radarr, Sonarr,
+Lidarr, and Readarr-compatible Bookshelf services. Comic issues use dates from
+Mylar3 or Kapowarr; magazine issues use dates from LazyLibrarian. Issues without
+an exact day are omitted. Software release dates use the configured QuestarrNG
+or ROMarrNG catalog's exact IGDB date for the requested PC operating system or
 emulation platform. If a provider does not return platform-specific dates,
 SeerrNG omits those game entries and marks the source partial; update that
 provider to a build with platform-release-date support. **My requests** is the
 default scope and follows the request's standard, 4K, ebook, audiobook, PC
-operating-system/architecture, or emulation-system target. Music entries
-match by MusicBrainz release-group ID; book entries match provider identities
-rather than titles. Users with request-view or management permissions can select
-the shared calendar. Only administrators can include unmonitored titles.
+operating-system/architecture, or emulation-system target. Music entries match
+by MusicBrainz release-group ID; book entries match provider identities rather
+than titles. Users with request-view or management permissions can select the
+shared calendar. Only administrators can include unmonitored titles.
 
-Movie, album, book, and game dates are displayed as calendar dates. Episode air
-times use your browser's time zone. Album entries link to their music details
-page and show the artist name when Lidarr provides it. Book entries link to the
-matching Bookshelf details page, show the author, and retain the configured
-ebook or audiobook format. Game entries link to the matching software catalog
-title. If a service is unavailable, the calendar identifies the missing source
-and keeps results from successful services. Results and backend reads are
-bounded; narrow the month or media type when the result limit is reached.
+Movie, album, book, comic issue, magazine issue, and game dates are displayed as
+calendar dates. Episode air times use your browser's time zone. Album entries
+link to their music details page and show the artist name when Lidarr provides
+it. Book entries link to the matching Bookshelf details page, show the author,
+and retain the configured ebook or audiobook format. Comic and magazine issue
+entries link to their title details page; game entries link to the matching
+software catalog title. If a service is unavailable, the calendar identifies
+the missing source and keeps results from successful services. Results and
+backend reads are bounded and briefly cached; narrow the month or media type
+when the result limit is reached.
 
-SeerrNG checks monitored Radarr, Sonarr, Lidarr, and Readarr-compatible Bookshelf
-releases daily and records date changes after the first snapshot. Calendar
-entries can show the three most recent changes from the last 180 days, including
-the old and new dates or air times. The history uses the same **My requests** or
-shared-calendar visibility as the release itself. Administrators can run or
-disable **Release Calendar History** under **Settings → Jobs & Cache**. Game
-catalog dates are not included in these daily snapshots.
+SeerrNG checks monitored Radarr, Sonarr, Lidarr, Readarr-compatible Bookshelf,
+Mylar3, Kapowarr, and LazyLibrarian releases daily and records date changes
+after the first snapshot. Calendar entries can show the three most recent
+changes from the last 180 days, including the old and new dates or air times.
+The history uses the same **My requests** or shared-calendar visibility as the
+release itself. Administrators can run or disable **Release Calendar History**
+under **Settings → Jobs & Cache**. Software catalog dates are not included in
+these daily snapshots.

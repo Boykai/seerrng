@@ -4,6 +4,58 @@ import { afterEach, describe, it, mock } from 'node:test';
 import LazyLibrarianAPI from '@server/api/lazylibrarian';
 import { MAX_SAFE_REMOTE_IMAGE_BYTES } from '@server/utils/safeRemoteImage';
 
+describe('LazyLibrarianAPI.getIssues', () => {
+  afterEach(() => mock.restoreAll());
+
+  it('reads issue dates from a LazyLibrarian magazine and caches the lookup', async () => {
+    const api = new LazyLibrarianAPI({
+      url: 'http://localhost:5299',
+      apiKey: 'key',
+    });
+    const mockableApi = api as unknown as {
+      get: (
+        endpoint: string,
+        options?: { params?: Record<string, unknown> },
+        ttl?: number
+      ) => Promise<unknown>;
+    };
+    const get = mock.method(
+      mockableApi,
+      'get',
+      async (
+        endpoint: string,
+        options?: { params?: Record<string, unknown> },
+        ttl?: number
+      ) => {
+        assert.equal(endpoint, '/api');
+        assert.equal(options?.params?.cmd, 'getIssues');
+        assert.equal(options?.params?.name, 'The Economist');
+        assert.equal(ttl, 60);
+        return {
+          Success: true,
+          Data: {
+            magazine: [{ Title: 'The Economist' }],
+            issues: [
+              {
+                IssueID: 'economist-2026-09-18',
+                Title: 'The Economist',
+                IssueNum: '18 Sep',
+                IssueDate: '2026-09-18',
+              },
+            ],
+          },
+        };
+      }
+    );
+
+    const result = await api.getIssues('The Economist', undefined, 60);
+
+    assert.equal(result.magazine?.title, 'The Economist');
+    assert.equal(result.issues[0].issueDate, '2026-09-18');
+    assert.equal(get.mock.calls[0].arguments[2], 60);
+  });
+});
+
 describe('LazyLibrarianAPI.getMagazineCover', () => {
   afterEach(() => mock.restoreAll());
 

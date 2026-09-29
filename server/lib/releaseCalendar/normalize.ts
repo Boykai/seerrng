@@ -9,12 +9,29 @@ export type ReleaseCalendarBookFormat = 'ebook' | 'audiobook';
 
 export interface ReleaseCalendarItem {
   id: string;
-  source: 'radarr' | 'sonarr' | 'lidarr' | 'readarr' | 'questarr' | 'romarr';
-  mediaType: 'movie' | 'tv' | 'music' | 'book' | 'software';
+  source:
+    | 'radarr'
+    | 'sonarr'
+    | 'lidarr'
+    | 'readarr'
+    | 'mylar'
+    | 'kapowarr'
+    | 'lazylibrarian'
+    | 'questarr'
+    | 'romarr';
+  mediaType:
+    'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'software';
   title: string;
   startsAt: string;
   dateType:
-    'digital' | 'physical' | 'theatrical' | 'air' | 'album' | 'book' | 'game';
+    | 'digital'
+    | 'physical'
+    | 'theatrical'
+    | 'air'
+    | 'album'
+    | 'book'
+    | 'issue'
+    | 'game';
   allDay: boolean;
   tmdbId?: number;
   tvdbId?: number;
@@ -29,6 +46,9 @@ export interface ReleaseCalendarItem {
   softwareCategory?: 'game' | 'retro' | 'modern';
   igdbId?: number;
   platformName?: string;
+  comicId?: string;
+  magazineTitle?: string;
+  issueNumber?: string;
   seasonNumber?: number;
   episodeNumber?: number;
   episodeTitle?: string;

@@ -14,17 +14,20 @@ import useSWR from 'swr';
 const messages = defineMessages('calendar', {
   title: 'Release Calendar',
   description:
-    'Upcoming movie, series, music, book, PC game, and emulation releases from your acquisition services.',
+    'Upcoming movie, series, music, book, comic, magazine, PC game, and emulation releases from your acquisition services.',
   month: 'Month',
   scope: 'Calendar scope',
   mine: 'My requests',
-  all: 'All monitored titles and game requests',
+  all: 'All monitored titles, issues, and software requests',
   mediaType: 'Media type',
-  allTypes: 'Movies, series, music, books, PC games, and emulation',
+  allTypes:
+    'Movies, series, music, books, comics, magazines, PC games, and emulation',
   movies: 'Movies',
   series: 'Series',
   albums: 'Music albums',
   books: 'Books',
+  comics: 'Comics',
+  magazines: 'Magazines',
   games: 'Games and emulation',
   unmonitored: 'Include unmonitored titles',
   loading: 'Loading releases…',
@@ -32,7 +35,7 @@ const messages = defineMessages('calendar', {
   failed: 'The calendar could not be loaded.',
   retry: 'Retry',
   partial:
-    'Some acquisition services or game catalogs could not be reached. Their releases may be missing.',
+    'Some acquisition services, issue sources, or game catalogs could not be reached. Their releases may be missing.',
   truncated:
     'This calendar reached its result limit. Narrow the media filter to see more releases.',
   available: 'Available',
@@ -43,6 +46,7 @@ const messages = defineMessages('calendar', {
   theatrical: 'Theatrical release',
   album: 'Album release',
   book: 'Book release',
+  issue: 'Issue release',
   game: 'Game release',
   pcGame: 'PC game',
   retroGame: 'Retro emulation',
@@ -154,6 +158,10 @@ export default function CalendarPage() {
             <option value="tv">{intl.formatMessage(messages.series)}</option>
             <option value="music">{intl.formatMessage(messages.albums)}</option>
             <option value="book">{intl.formatMessage(messages.books)}</option>
+            <option value="comic">{intl.formatMessage(messages.comics)}</option>
+            <option value="magazine">
+              {intl.formatMessage(messages.magazines)}
+            </option>
             <option value="software">
               {intl.formatMessage(messages.games)}
             </option>
@@ -250,6 +258,22 @@ export default function CalendarPage() {
                 ) : item.mediaType === 'book' && item.bookId ? (
                   <Link
                     href={`/book/${encodeApiPathSegment(item.bookId)}?format=${item.bookFormat ?? 'ebook'}&lookupTitle=${encodeURIComponent(item.title)}`}
+                    className="text-blue-300 hover:text-blue-200"
+                  >
+                    {item.title}
+                  </Link>
+                ) : item.mediaType === 'comic' && item.comicId ? (
+                  <Link
+                    href={'/comic/' + encodeApiPathSegment(item.comicId)}
+                    className="text-blue-300 hover:text-blue-200"
+                  >
+                    {item.title}
+                  </Link>
+                ) : item.mediaType === 'magazine' && item.magazineTitle ? (
+                  <Link
+                    href={
+                      '/magazine/' + encodeApiPathSegment(item.magazineTitle)
+                    }
                     className="text-blue-300 hover:text-blue-200"
                   >
                     {item.title}

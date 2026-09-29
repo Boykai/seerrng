@@ -79,7 +79,12 @@ describe('MylarAPI', () => {
       data: {
         comic: [{ id: '1234', name: 'Batman' }],
         issues: [
-          { id: '1', number: '1' },
+          {
+            id: '1',
+            number: '1',
+            releaseDate: '2026-09-10',
+            issueDate: '2026-09',
+          },
           { id: '2', number: '2' },
         ],
       },
@@ -90,6 +95,8 @@ describe('MylarAPI', () => {
 
     assert.strictEqual(detail.comic?.name, 'Batman');
     assert.strictEqual(detail.issues.length, 2);
+    assert.strictEqual(detail.issues[0].releaseDate, '2026-09-10');
+    assert.strictEqual(detail.issues[0].issueDate, '2026-09');
   });
 
   it('parses safe content-disposition filenames without backtracking on malformed headers', () => {

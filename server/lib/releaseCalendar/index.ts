@@ -21,6 +21,7 @@ import {
   mapWithConcurrency,
 } from '@server/utils/concurrency';
 import { annotateReleaseCalendarHistory } from './historyStore';
+import { getComicMagazineReleaseCalendar } from './issues';
 import {
   normalizeCalendarRow,
   type ReleaseCalendarBookFormat,
@@ -38,6 +39,21 @@ export async function getReleaseCalendar(
   options: { includeDateHistory?: boolean; includeSoftware?: boolean } = {}
 ) {
   const settings = getSettings();
+  const loadedRequests =
+    query.scope === 'mine'
+      ? await getRepository(MediaRequest)
+          .createQueryBuilder('request')
+          .innerJoinAndSelect('request.media', 'media')
+          .leftJoinAndSelect('media.identifiers', 'identifier')
+          .where('request.requestedById = :userId', { userId })
+          .andWhere('request.status != :declined', {
+            declined: MediaRequestStatus.DECLINED,
+          })
+          .orderBy('request.id', 'DESC')
+          .take(5_001)
+          .getMany()
+      : [];
+  const requests = loadedRequests.slice(0, 5_000);
   const sources = [
     ...settings.radarr.map((server) => ({
       source: 'radarr' as const,
@@ -75,9 +91,10 @@ export async function getReleaseCalendar(
       isMediaCategoryEnabled(item.category) &&
       (!query.mediaType || item.mediaType === query.mediaType)
   );
-  let sourceTruncated = false;
+  let sourceTruncated = loadedRequests.length > requests.length;
   const partialSources: { source: string; serverId?: number }[] = [];
   let softwareResults: ReleaseCalendarItem[] = [];
+  let issueResults: ReleaseCalendarItem[] = [];
   if (
     options.includeSoftware !== false &&
     (!query.mediaType || query.mediaType === 'software')
@@ -86,6 +103,16 @@ export async function getReleaseCalendar(
     softwareResults = software.results;
     sourceTruncated ||= software.truncated;
     partialSources.push(...software.partialSources);
+  }
+  if (
+    !query.mediaType ||
+    query.mediaType === 'comic' ||
+    query.mediaType === 'magazine'
+  ) {
+    const issues = await getComicMagazineReleaseCalendar(query, requests);
+    issueResults = issues.results;
+    sourceTruncated ||= issues.truncated;
+    partialSources.push(...issues.partialSources);
   }
   const batches = await mapWithConcurrency(
     sources.slice(0, 20),
@@ -213,17 +240,12 @@ export async function getReleaseCalendar(
       }
     }
   );
-  let results: ReleaseCalendarItem[] = [...batches.flat(), ...softwareResults];
+  let results: ReleaseCalendarItem[] = [
+    ...batches.flat(),
+    ...softwareResults,
+    ...issueResults,
+  ];
   if (query.scope === 'mine') {
-    const requests = await getRepository(MediaRequest)
-      .createQueryBuilder('request')
-      .innerJoinAndSelect('request.media', 'media')
-      .leftJoinAndSelect('media.identifiers', 'identifier')
-      .where('request.requestedById = :userId', { userId })
-      .andWhere('request.status != :declined', {
-        declined: MediaRequestStatus.DECLINED,
-      })
-      .getMany();
     const tmdbIds = new Set(
       requests.map(
         (request) =>
@@ -320,6 +342,10 @@ export async function getReleaseCalendar(
     results = results.filter((item) => {
       if (item.mediaType === 'software') {
         // The software-request query applied the user's scope before catalog lookup.
+        return true;
+      }
+      if (item.mediaType === 'comic' || item.mediaType === 'magazine') {
+        // Comic and magazine lookups were scoped to the user's requests above.
         return true;
       }
       if (item.mediaType === 'music')

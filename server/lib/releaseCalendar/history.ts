@@ -8,6 +8,7 @@ const observationWindow = 93 * 24 * 60 * 60 * 1000;
 export async function captureReleaseCalendarHistory(
   now = new Date()
 ): Promise<void> {
+  const settings = getSettings();
   const allDayStart = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
   );
@@ -30,10 +31,13 @@ export async function captureReleaseCalendarHistory(
     logger.warn('Release calendar history was only partially refreshed.', {
       label: 'Release Calendar',
       configuredSources:
-        getSettings().radarr.length +
-        getSettings().sonarr.length +
-        getSettings().lidarr.length +
-        getSettings().readarr.length,
+        settings.radarr.length +
+        settings.sonarr.length +
+        settings.lidarr.length +
+        settings.readarr.length +
+        settings.mylar.length +
+        settings.kapowarr.length +
+        settings.lazylibrarian.length,
       unavailableSources: partialSources.length,
       truncated,
       observedEvents: summary.observed,

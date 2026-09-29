@@ -95,6 +95,40 @@ describe('KapowarrAPI', () => {
     assert.strictEqual(volumes[0].issue_count, 0);
   });
 
+  it('preserves exact issue dates from volume details', async () => {
+    const getMock = mockGet(async () => ({
+      error: null,
+      result: {
+        id: 2,
+        comicvine_id: 2002,
+        title: 'Daredevil',
+        monitored: true,
+        issue_count: 1,
+        issues_downloaded: 0,
+        issues: [
+          {
+            id: 92,
+            volume_id: 2,
+            issue_number: '7',
+            title: 'The Red Fist',
+            date: '2026-09-22',
+            files: [],
+          },
+        ],
+      },
+    }));
+
+    const api = new KapowarrAPI({
+      url: 'http://localhost:5656',
+      apiKey: 'key',
+    });
+    const volume = await api.getVolume(2, 60);
+
+    assert.equal(getMock.mock.calls[0].arguments[0], '/api/volumes/2');
+    assert.equal(getMock.mock.calls[0].arguments[2], 60);
+    assert.equal(volume?.issues?.[0].releaseDate, '2026-09-22');
+  });
+
   it('resolveRootFolderId reuses an existing folder before creating one', async () => {
     mockGet(async () => ({
       error: null,

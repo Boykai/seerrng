@@ -1,8 +1,15 @@
+import KapowarrAPI from '@server/api/comics/kapowarr';
+import MylarAPI from '@server/api/comics/mylar';
+import LazyLibrarianAPI from '@server/api/lazylibrarian';
 import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
 import ReadarrAPI from '@server/api/servarr/readarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
-import { MediaRequestStatus, MediaType } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import MediaIdentifier, {
@@ -12,7 +19,10 @@ import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import {
   getSettings,
+  type KapowarrSettings,
+  type LazyLibrarianSettings,
   type LidarrSettings,
+  type MylarSettings,
   type RadarrSettings,
   type ReadarrSettings,
   type SonarrSettings,
@@ -70,6 +80,16 @@ it('validates real dates, bounded ranges, and shared calendar authority', () => 
     parseCalendarQuery({ ...range, mediaType: 'software' }, false, false)
       .mediaType,
     'software'
+  );
+  assert.equal(
+    parseCalendarQuery({ ...range, mediaType: 'comic' }, false, false)
+      .mediaType,
+    'comic'
+  );
+  assert.equal(
+    parseCalendarQuery({ ...range, mediaType: 'magazine' }, false, false)
+      .mediaType,
+    'magazine'
   );
   for (const query of [
     { start: '2026-02-30', end: '2026-03-10' },
@@ -652,4 +672,299 @@ it('handles a month boundary where daylight saving skips midnight', () => {
     true
   );
   assert.equal(query.start.toISOString(), '2014-07-31T22:00:00.000Z');
+});
+
+it('shows requested Mylar and LazyLibrarian issues only when they have exact dates', async () => {
+  getSettings().radarr = [];
+  getSettings().sonarr = [];
+  getSettings().lidarr = [];
+  getSettings().readarr = [];
+  getSettings().mylar = [{ ...server, port: 8090 } as MylarSettings];
+  getSettings().kapowarr = [];
+  getSettings().lazylibrarian = [
+    { ...server, id: 9, port: 5299 } as LazyLibrarianSettings,
+  ];
+  const user = await getRepository(User).findOneByOrFail({ id: 1 });
+  const comic = await getRepository(Media).save(
+    new Media({
+      mediaType: MediaType.COMIC,
+      tmdbId: 0,
+    })
+  );
+  await getRepository(MediaIdentifier).save(
+    new MediaIdentifier({
+      media: comic,
+      provider: MediaIdentifierProvider.COMICVINE,
+      value: '1234',
+      canonical: true,
+    })
+  );
+  const magazine = await getRepository(Media).save(
+    new Media({
+      mediaType: MediaType.MAGAZINE,
+      tmdbId: 0,
+      serviceId: 9,
+      externalServiceId: 0,
+      externalServiceSlug: 'The Economist',
+    })
+  );
+  await getRepository(MediaRequest).save([
+    {
+      media: comic,
+      type: MediaType.COMIC,
+      requestedBy: user,
+      is4k: false,
+      status: MediaRequestStatus.APPROVED,
+      serviceTargets: [
+        {
+          serviceType: 'mylar',
+          format: 'comic',
+          serverId: server.id,
+          status: MediaStatus.PENDING,
+        },
+      ],
+    },
+    {
+      media: magazine,
+      type: MediaType.MAGAZINE,
+      requestedBy: user,
+      is4k: false,
+      status: MediaRequestStatus.APPROVED,
+      serviceTargets: [
+        {
+          serviceType: 'lazylibrarian',
+          format: 'magazine',
+          serverId: 9,
+          status: MediaStatus.PENDING,
+        },
+      ],
+    },
+  ]);
+  const mylarLookups: string[] = [];
+  mock.method(
+    MylarAPI.prototype,
+    'getComic',
+    async (comicId: string, ttl?: number) => {
+      mylarLookups.push(comicId);
+      assert.equal(ttl, 60);
+      return {
+        comic: { id: comicId, name: 'Batman' },
+        issues: [
+          {
+            id: '701',
+            number: '1',
+            releaseDate: '2026-09',
+            issueDate: '2026-09-10',
+            status: 'Downloaded',
+          },
+          {
+            id: '702',
+            number: '2',
+            releaseDate: '2026-09-31',
+            issueDate: '2026-09',
+            status: 'Wanted',
+          },
+        ],
+      };
+    }
+  );
+  mock.method(
+    LazyLibrarianAPI.prototype,
+    'getIssues',
+    async (title: string, signal?: AbortSignal, ttl?: number) => {
+      assert.equal(title, 'The Economist');
+      assert.equal(signal, undefined);
+      assert.equal(ttl, 60);
+      return {
+        magazine: { title },
+        issues: [
+          {
+            issueId: 'economist-2026-09-18',
+            issueNumber: '18 Sep',
+            title: 'The Economist',
+            issueDate: '2026-09-18',
+            issueFile: undefined,
+          },
+        ],
+      };
+    }
+  );
+
+  const result = await getReleaseCalendar(
+    parseCalendarQuery(range, false, false),
+    user.id,
+    false,
+    { includeDateHistory: false }
+  );
+
+  assert.deepEqual(mylarLookups, ['1234']);
+  assert.deepEqual(
+    result.results.map((item) => [
+      item.mediaType,
+      item.title,
+      item.startsAt,
+      item.available,
+    ]),
+    [
+      ['comic', 'Batman #1', '2026-09-10T00:00:00.000Z', true],
+      ['magazine', 'The Economist #18 Sep', '2026-09-18T00:00:00.000Z', false],
+    ]
+  );
+  assert.equal(result.partialSources.length, 0);
+});
+
+it('uses Kapowarr issue dates for monitored titles in the shared calendar', async () => {
+  getSettings().radarr = [];
+  getSettings().sonarr = [];
+  getSettings().lidarr = [];
+  getSettings().readarr = [];
+  getSettings().mylar = [];
+  getSettings().kapowarr = [{ ...server, port: 5656 } as KapowarrSettings];
+  getSettings().lazylibrarian = [];
+  mock.method(KapowarrAPI.prototype, 'getVolumes', async () => [
+    {
+      id: 2,
+      comicvine_id: 2002,
+      title: 'Daredevil',
+      monitored: true,
+      issue_count: 1,
+      issues_downloaded: 0,
+    },
+  ]);
+  mock.method(
+    KapowarrAPI.prototype,
+    'getVolume',
+    async (id: number, ttl?: number) => {
+      assert.equal(id, 2);
+      assert.equal(ttl, 60);
+      return {
+        id,
+        comicvine_id: 2002,
+        title: 'Daredevil',
+        monitored: true,
+        issue_count: 1,
+        issues_downloaded: 0,
+        issues: [
+          {
+            id: 92,
+            volume_id: 2,
+            issue_number: '7',
+            title: 'The Red Fist',
+            releaseDate: '2026-09-22',
+            files: [],
+          },
+        ],
+      };
+    }
+  );
+
+  const result = await getReleaseCalendar(
+    parseCalendarQuery(
+      { ...range, scope: 'all', mediaType: 'comic' },
+      true,
+      false
+    ),
+    1,
+    false,
+    { includeDateHistory: false }
+  );
+
+  assert.deepEqual(
+    result.results.map((item) => [
+      item.source,
+      item.title,
+      item.comicId,
+      item.startsAt,
+    ]),
+    [['kapowarr', 'Daredevil #7', '2002', '2026-09-22T00:00:00.000Z']]
+  );
+  assert.equal(result.partialSources.length, 0);
+});
+
+it('resolves a requested Kapowarr volume by ComicVine ID without a library slug', async () => {
+  getSettings().radarr = [];
+  getSettings().sonarr = [];
+  getSettings().lidarr = [];
+  getSettings().readarr = [];
+  getSettings().mylar = [];
+  getSettings().kapowarr = [{ ...server, port: 5656 } as KapowarrSettings];
+  getSettings().lazylibrarian = [];
+  const user = await getRepository(User).findOneByOrFail({ id: 1 });
+  const comic = await getRepository(Media).save(
+    new Media({ mediaType: MediaType.COMIC, tmdbId: 0 })
+  );
+  await getRepository(MediaIdentifier).save(
+    new MediaIdentifier({
+      media: comic,
+      provider: MediaIdentifierProvider.COMICVINE,
+      value: '2002',
+      canonical: true,
+    })
+  );
+  await getRepository(MediaRequest).save({
+    media: comic,
+    type: MediaType.COMIC,
+    requestedBy: user,
+    is4k: false,
+    status: MediaRequestStatus.APPROVED,
+    serviceTargets: [
+      {
+        serviceType: 'kapowarr',
+        format: 'comic',
+        serverId: server.id,
+        status: MediaStatus.PENDING,
+      },
+    ],
+  });
+  const volumeLookupIds: number[] = [];
+  mock.method(KapowarrAPI.prototype, 'getVolumes', async () => [
+    {
+      id: 2,
+      comicvine_id: 2002,
+      title: 'Daredevil',
+      monitored: true,
+      issue_count: 1,
+      issues_downloaded: 0,
+    },
+  ]);
+  mock.method(
+    KapowarrAPI.prototype,
+    'getVolume',
+    async (id: number, ttl?: number) => {
+      volumeLookupIds.push(id);
+      assert.equal(ttl, 60);
+      return {
+        id,
+        comicvine_id: 2002,
+        title: 'Daredevil',
+        monitored: true,
+        issue_count: 1,
+        issues_downloaded: 0,
+        issues: [
+          {
+            id: 92,
+            volume_id: id,
+            issue_number: '7',
+            title: 'The Red Fist',
+            releaseDate: '2026-09-22',
+            files: [],
+          },
+        ],
+      };
+    }
+  );
+
+  const result = await getReleaseCalendar(
+    parseCalendarQuery({ ...range, mediaType: 'comic' }, false, false),
+    user.id,
+    false,
+    { includeDateHistory: false }
+  );
+
+  assert.deepEqual(volumeLookupIds, [2]);
+  assert.deepEqual(
+    result.results.map((item) => [item.id, item.title, item.startsAt]),
+    [['kapowarr:1:2002:92', 'Daredevil #7', '2026-09-22T00:00:00.000Z']]
+  );
+  assert.equal(result.partialSources.length, 0);
 });

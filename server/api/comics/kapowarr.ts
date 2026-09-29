@@ -29,6 +29,7 @@ export interface KapowarrIssue {
   volume_id: number;
   issue_number?: string;
   title?: string;
+  releaseDate?: string;
   files: KapowarrIssueFile[];
 }
 
@@ -112,6 +113,7 @@ const sanitizeIssue = (value: unknown): KapowarrIssue | undefined => {
     volume_id: volumeId,
     issue_number: boundedString(value.issue_number, 64),
     title: boundedString(value.title, 1_000),
+    releaseDate: boundedString(value.date, 32),
     files: (Array.isArray(value.files) ? value.files : [])
       .slice(0, 100)
       .flatMap((file) => {
@@ -236,11 +238,14 @@ class KapowarrAPI extends ExternalAPI {
       .filter((volume): volume is KapowarrVolume => !!volume);
   }
 
-  public async getVolume(id: number): Promise<KapowarrVolume | undefined> {
+  public async getVolume(
+    id: number,
+    ttl = 0
+  ): Promise<KapowarrVolume | undefined> {
     const response = await this.get<KapowarrEnvelope<unknown>>(
       `/api/volumes/${id}`,
       {},
-      0
+      ttl
     );
     return isRecord(response) ? sanitizeVolume(response.result) : undefined;
   }

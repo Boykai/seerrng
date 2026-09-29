@@ -188,14 +188,15 @@ class LazyLibrarianAPI extends ExternalAPI {
 
   public async getIssues(
     title: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    ttl = 0
   ): Promise<LazyLibrarianMagazineDetail> {
     const response = await this.runCommand<unknown>(
       'getIssues',
       {
         name: title,
       },
-      0,
+      ttl,
       { signal }
     );
     if (!isRecord(response)) {
@@ -208,6 +209,7 @@ class LazyLibrarianAPI extends ExternalAPI {
       magazine: sanitizeMagazine(magazineValue),
       issues: Array.isArray(response.issues)
         ? response.issues
+            .slice(0, 10_000)
             .map(sanitizeIssue)
             .filter((issue): issue is LazyLibrarianIssue => !!issue)
         : [],
