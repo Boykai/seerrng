@@ -12,6 +12,7 @@ import {
   formatCuratedNotes,
   hasExplicitNoReleaseNote,
   injectCuratedNotes,
+  isReleaseNoteShipped,
   parseReleaseNote,
   readReleaseNotes,
 } from './release-notes.mjs';
@@ -161,6 +162,7 @@ test('release-note range discovery distinguishes additions from edits', () => {
     runGit('add', '.');
     runGit('commit', '--quiet', '-m', 'chore: initialize test repository');
     const base = runGit('rev-parse', 'HEAD');
+    runGit('tag', 'v3.0.0', base);
 
     const fragment = path.join(repository, 'release-notes', 'books.md');
     fs.writeFileSync(fragment, validContent);
@@ -219,6 +221,65 @@ test('release-note range discovery distinguishes additions from edits', () => {
     assert.deepEqual(
       changedReleaseNoteFiles(firstHead, secondHead, repository),
       [{ status: 'M', file: 'release-notes/books.md' }]
+    );
+    assert.equal(
+      isReleaseNoteShipped('release-notes/books.md', secondHead, repository),
+      false
+    );
+
+    const updatedPreview = execFileSync(
+      process.execPath,
+      [previewScript, '--base', firstHead, '--head', secondHead],
+      { cwd: repository, encoding: 'utf8' }
+    );
+    assert.match(updatedPreview, /cached metadata/u);
+
+    execFileSync(
+      process.execPath,
+      [
+        checkScript,
+        '--base',
+        firstHead,
+        '--head',
+        secondHead,
+        '--pr-body',
+        bodyFile,
+      ],
+      { cwd: repository, encoding: 'utf8' }
+    );
+
+    runGit('tag', 'v3.0.1', secondHead);
+    fs.writeFileSync(
+      fragment,
+      validContent.replace('short upstream outage.', 'brief upstream outage.')
+    );
+    runGit('add', '.');
+    runGit('commit', '--quiet', '-m', 'fix: alter a shipped release note');
+    const thirdHead = runGit('rev-parse', 'HEAD');
+    assert.equal(
+      isReleaseNoteShipped('release-notes/books.md', thirdHead, repository),
+      true
+    );
+    assert.throws(
+      () =>
+        execFileSync(
+          process.execPath,
+          [
+            checkScript,
+            '--base',
+            secondHead,
+            '--head',
+            thirdHead,
+            '--pr-body',
+            bodyFile,
+          ],
+          { cwd: repository, encoding: 'utf8' }
+        ),
+      (error) =>
+        error.status === 1 &&
+        error.stderr
+          .toString()
+          .includes('release-note fragments are append-only')
     );
   } finally {
     fs.rmSync(repository, { recursive: true, force: true });

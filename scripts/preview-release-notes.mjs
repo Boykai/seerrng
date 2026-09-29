@@ -5,6 +5,7 @@ import process from 'node:process';
 import {
   changedReleaseNoteFiles,
   formatCuratedNotes,
+  isReleaseNoteShipped,
   readReleaseNotes,
 } from './release-notes.mjs';
 
@@ -29,10 +30,18 @@ if (!base || !head) {
 }
 
 const entries = changedReleaseNoteFiles(base, head);
-const modified = entries.filter((entry) => entry.status !== 'A');
-const { notes, errors } = readReleaseNotes(
-  entries.filter((entry) => entry.status === 'A')
+const modified = entries.filter(
+  (entry) => entry.status !== 'A' && isReleaseNoteShipped(entry.file, head)
 );
+const updatedUnshipped = entries
+  .filter(
+    (entry) => entry.status === 'M' && !isReleaseNoteShipped(entry.file, head)
+  )
+  .map((entry) => ({ ...entry, status: 'A' }));
+const { notes, errors } = readReleaseNotes([
+  ...entries.filter((entry) => entry.status === 'A'),
+  ...updatedUnshipped,
+]);
 
 if (modified.length > 0 || errors.length > 0) {
   console.error('Release-note preview failed validation:');

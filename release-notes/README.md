@@ -32,8 +32,9 @@ the audience. Keep it to 30-400 characters, start with a capitalized sentence,
 and end with punctuation. Do not paste commit messages, logs, issue fragments,
 or implementation-only details.
 
-Fragment files are append-only. Add a new file instead of rewriting a fragment
-that was already released. Preview the exact notes that will be published with:
+Released fragments are immutable. You may refine an upcoming release fragment
+before its version tag; after tagging, add a new file instead of rewriting the
+shipped history. Preview the exact notes that will be published with:
 
 ```bash
 pnpm release-notes:preview --base origin/main --head HEAD

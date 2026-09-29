@@ -173,6 +173,29 @@ export function changedReleaseNoteFiles(base, head, cwd = process.cwd()) {
     .filter(({ file }) => file && isReleaseNotePath(file));
 }
 
+export function isReleaseNoteShipped(file, head, cwd = process.cwd()) {
+  let latestTag;
+  try {
+    latestTag = execFileSync(
+      'git',
+      ['describe', '--tags', '--abbrev=0', '--match', 'v3.*', head],
+      { cwd, encoding: 'utf8' }
+    ).trim();
+  } catch {
+    return false;
+  }
+
+  try {
+    execFileSync('git', ['cat-file', '-e', `${latestTag}:${file}`], {
+      cwd,
+      stdio: 'ignore',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function readReleaseNotes(entries, cwd = process.cwd()) {
   const notes = [];
   const errors = [];
