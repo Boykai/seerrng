@@ -1,6 +1,6 @@
 # seerr-chart
 
-![Version: 1.0.69](https://img.shields.io/badge/Version-1.0.69-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v3.38.0](https://img.shields.io/badge/AppVersion-v3.38.0?style=flat-square)
+![Version: 1.0.70](https://img.shields.io/badge/Version-1.0.70-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v3.39.0](https://img.shields.io/badge/AppVersion-v3.39.0?style=flat-square)
 
 SeerrNG Helm chart for Kubernetes
 

@@ -122,6 +122,35 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.39.0](https://github.com/snapetech/seerrng/compare/v3.38.0..v3.39.0) - 2026-09-29
+
+### User-facing changes
+
+#### Added
+
+- **Playback:** Compatible Foreseer Desktop clients can open single-item Jellyfin playback in the same window. The optional handoff requires HTTPS; regular browser playback remains available for HTTP installs and when the desktop client is unavailable.
+  - **Action required:** enable HTTPS for native playback
+
+#### Fixed
+
+- **Playback:** SeerrNG ignores duplicate desktop recovery notices during active authentication, preserving the valid Jellyfin session. Playback help also links directly to Foreseer Desktop remote setup instructions.
+
+### 🚀 Features
+- *(desktop)* Add secure Jellyfin playback handoff - ([ddc04d0](https://github.com/snapetech/seerrng/commit/ddc04d0ba3684e83253c3bc5c50c8f8d3356be72))
+
+### 🐛 Bug Fixes
+- *(desktop)* Preserve native session on recovery events - ([54993ed](https://github.com/snapetech/seerrng/commit/54993ed834bf57dea442f078cc580ba840660290))
+- *(release-notes)* Allow updates to unshipped fragments - ([430a274](https://github.com/snapetech/seerrng/commit/430a2744fb40267ea6d1081952a88ac2301cf41e))
+
+### 📖 Documentation
+- *(release-notes)* Consolidate desktop recovery notes - ([9355996](https://github.com/snapetech/seerrng/commit/9355996f4f7bea9a577bdacc900cc97f859cbe85))
+
+### 🧪 Testing
+- *(desktop)* Cover native recovery events - ([a61fffa](https://github.com/snapetech/seerrng/commit/a61fffa48243b9350c5eef8b14030d1c87148de8))
+- *(desktop)* Use HTTPS for ticket redemption checks - ([eff3dee](https://github.com/snapetech/seerrng/commit/eff3dee75be6e355fb734511de7f5fd6f862c120))
+
 ## [3.38.0](https://github.com/snapetech/seerrng/compare/v3.37.0..v3.38.0) - 2026-09-29
 
 ### User-facing changes
