@@ -173,10 +173,13 @@ export class ROMarrNGAPI extends ExternalAPI {
     return this.get('/api/integration/seerrng/v1/catalog/platforms', {}, 600);
   }
 
-  public getCatalogGame(igdbId: number): Promise<SoftwareCatalogGame> {
+  public getCatalogGame(
+    igdbId: number,
+    platformId?: number
+  ): Promise<SoftwareCatalogGame> {
     return this.get(
       `/api/integration/seerrng/v1/catalog/games/${igdbId}`,
-      {},
+      { params: platformId === undefined ? undefined : { platformId } },
       600
     );
   }

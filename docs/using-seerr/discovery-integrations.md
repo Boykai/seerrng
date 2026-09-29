@@ -147,10 +147,13 @@ private match.
 **Calendar** displays movie releases, series episodes, album releases, book
 releases, and requested PC games or emulation titles. Movies, series, music, and
 books come from configured Radarr, Sonarr, Lidarr, and Readarr-compatible
-Bookshelf services. Software release dates come from the configured QuestarrNG
-or ROMarrNG game catalog when an IGDB release date is available. **My requests**
-is the default scope and follows the request's standard, 4K, ebook, audiobook,
-PC operating-system/architecture, or emulation-system target. Music entries
+Bookshelf services. Software release dates use the configured QuestarrNG or
+ROMarrNG catalog's exact IGDB date for the requested PC operating system or
+emulation platform. If a provider does not return platform-specific dates,
+SeerrNG omits those game entries and marks the source partial; update that
+provider to a build with platform-release-date support. **My requests** is the
+default scope and follows the request's standard, 4K, ebook, audiobook, PC
+operating-system/architecture, or emulation-system target. Music entries
 match by MusicBrainz release-group ID; book entries match provider identities
 rather than titles. Users with request-view or management permissions can select
 the shared calendar. Only administrators can include unmonitored titles.

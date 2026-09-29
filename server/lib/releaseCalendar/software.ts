@@ -15,6 +15,15 @@ import type { CalendarQuery } from './query';
 const MAX_SOFTWARE_CALENDAR_REQUESTS = 1000;
 const MAX_SOFTWARE_CALENDAR_LOOKUPS = 200;
 const SOFTWARE_CALENDAR_LOOKUP_CONCURRENCY = 3;
+// Stable IGDB platform IDs for the PC operating systems SeerrNG can request.
+const IGDB_PC_PLATFORM_IDS: Record<
+  NonNullable<SoftwareRequest['operatingSystem']>,
+  number
+> = {
+  windows: 6,
+  linux: 3,
+  macos: 14,
+};
 const SOFTWARE_CATEGORIES = ['game', 'retro', 'modern'] as const;
 
 type SoftwareCatalogLookup = Pick<QuestarrNGAPI, 'getCatalogGame'>;
@@ -28,6 +37,7 @@ interface SoftwareCalendarCategory {
 interface SoftwareCalendarLookup {
   provider: SoftwareRequestProvider;
   igdbId: number;
+  platformId: number;
   title: string;
   categories: Map<SoftwareRequestCategory, SoftwareCalendarCategory>;
 }
@@ -39,12 +49,10 @@ const catalogProviderFor = (
   category === 'game' ? 'questarr' : emulationCatalogProvider;
 
 const gameReleaseDate = (value: unknown): string | undefined => {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value))
-    return;
-  const datePart = value.slice(0, 10);
-  const parsed = new Date(`${datePart}T00:00:00.000Z`);
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(parsed.getTime()) &&
-    parsed.toISOString().slice(0, 10) === datePart
+    parsed.toISOString().slice(0, 10) === value
     ? parsed.toISOString()
     : undefined;
 };
@@ -96,6 +104,7 @@ export async function getSoftwareReleaseCalendar(
       'request.category',
       'request.status',
       'request.catalogId',
+      'request.platformId',
       'request.title',
       'request.platformName',
       'request.operatingSystem',
@@ -116,6 +125,7 @@ export async function getSoftwareReleaseCalendar(
   let truncated = requests.length > MAX_SOFTWARE_CALENDAR_REQUESTS;
   const settings = getSettings().softwareAcquisition;
   const lookups = new Map<string, SoftwareCalendarLookup>();
+  const failedProviders = new Set<SoftwareRequestProvider>();
   for (const request of requests.slice(0, MAX_SOFTWARE_CALENDAR_REQUESTS)) {
     if (
       !Number.isSafeInteger(request.catalogId) ||
@@ -126,18 +136,30 @@ export async function getSoftwareReleaseCalendar(
       request.category,
       settings.emulationCatalogProvider
     );
-    const igdbId = Number(request.catalogId);
-    const key = `${provider}:${igdbId}`;
-    let lookup = lookups.get(key);
-    if (!lookup) {
-      lookup = {
-        provider,
-        igdbId,
-        title: request.title.slice(0, 512),
-        categories: new Map(),
-      };
-      lookups.set(key, lookup);
+    const platformId =
+      request.category === 'game'
+        ? request.operatingSystem
+          ? IGDB_PC_PLATFORM_IDS[request.operatingSystem]
+          : undefined
+        : Number(request.platformId);
+    if (
+      typeof platformId !== 'number' ||
+      !Number.isSafeInteger(platformId) ||
+      platformId < 1
+    ) {
+      failedProviders.add(provider);
+      continue;
     }
+    const igdbId = Number(request.catalogId);
+    const key = `${provider}:${igdbId}:${platformId}`;
+    const lookup = lookups.get(key) ?? {
+      provider,
+      igdbId,
+      platformId,
+      title: request.title.slice(0, 512),
+      categories: new Map(),
+    };
+    lookups.set(key, lookup);
     let category = lookup.categories.get(request.category);
     if (!category) {
       category = {
@@ -154,7 +176,6 @@ export async function getSoftwareReleaseCalendar(
 
   const candidates = [...lookups.values()];
   if (candidates.length > MAX_SOFTWARE_CALENDAR_LOOKUPS) truncated = true;
-  const failedProviders = new Set<SoftwareRequestProvider>();
   const clients = new Map<
     SoftwareRequestProvider,
     SoftwareCatalogLookup | null
@@ -175,7 +196,7 @@ export async function getSoftwareReleaseCalendar(
             failedProviders.add(lookup.provider);
             return [];
           }
-          game = await api.getCatalogGame(lookup.igdbId);
+          game = await api.getCatalogGame(lookup.igdbId, lookup.platformId);
           if (
             !game ||
             typeof game !== 'object' ||
@@ -184,17 +205,23 @@ export async function getSoftwareReleaseCalendar(
             failedProviders.add(lookup.provider);
             return [];
           }
+          if (
+            !Object.prototype.hasOwnProperty.call(game, 'platformReleaseDate')
+          ) {
+            failedProviders.add(lookup.provider);
+            return [];
+          }
         } catch {
           failedProviders.add(lookup.provider);
           return [];
         }
-        const startsAt = gameReleaseDate(game.releaseDate);
+        const startsAt = gameReleaseDate(game.platformReleaseDate);
         if (!startsAt) return [];
         const releaseDate = new Date(startsAt);
         if (releaseDate < query.allDayStart || releaseDate >= query.allDayEnd)
           return [];
         return [...lookup.categories.values()].map((category) => ({
-          id: `software:${category.category}:${lookup.igdbId}`,
+          id: `software:${category.category}:${lookup.igdbId}:${lookup.platformId}`,
           source: lookup.provider,
           mediaType: 'software' as const,
           title:

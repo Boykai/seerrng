@@ -57,6 +57,7 @@ const addSoftwareRequest = async (options: {
   catalogId: number;
   status?: SoftwareRequestStatus;
   platformName?: string;
+  platformId?: number;
   operatingSystem?: SoftwareRequest['operatingSystem'];
   architecture?: SoftwareRequest['architecture'];
 }) => {
@@ -73,6 +74,7 @@ const addSoftwareRequest = async (options: {
       catalogId: options.catalogId,
       title: `Requested game ${options.catalogId}`,
       platformName: options.platformName ?? null,
+      platformId: options.platformId ?? null,
       operatingSystem: options.operatingSystem ?? null,
       architecture: options.architecture ?? null,
       attempt: 0,
@@ -82,14 +84,15 @@ const addSoftwareRequest = async (options: {
 
 const game = (
   igdbId: number,
-  releaseDate = '2026-09-15'
+  platformReleaseDate: string | null = '2026-09-15'
 ): SoftwareCatalogGame => ({
   id: `igdb-${igdbId}`,
   igdbId,
   title: `Catalog game ${igdbId}`,
   summary: '',
   coverUrl: '',
-  releaseDate,
+  releaseDate: '2025-01-01',
+  platformReleaseDate,
   platforms: [],
   platformOptions: [],
   genres: [],
@@ -114,10 +117,18 @@ it('keeps software releases in personal calendars and respects shared scope', as
     status: 'available',
   });
   await addSoftwareRequest({
+    requestedById: 2,
+    category: 'game',
+    catalogId: 42,
+    operatingSystem: 'macos',
+    architecture: 'universal',
+  });
+  await addSoftwareRequest({
     requestedById: 1,
     category: 'retro',
     catalogId: 42,
     platformName: 'Nintendo Entertainment System',
+    platformId: 130,
     status: 'downloading',
   });
   await addSoftwareRequest({
@@ -125,16 +136,26 @@ it('keeps software releases in personal calendars and respects shared scope', as
     category: 'modern',
     catalogId: 43,
     platformName: 'Steam Deck',
+    platformId: 167,
   });
   const questarrLookup = mock.method(
     QuestarrNGAPI.prototype,
     'getCatalogGame',
-    async (igdbId: number) => game(igdbId)
+    async (igdbId: number, platformId?: number) =>
+      game(
+        igdbId,
+        platformId === 3
+          ? '2026-09-15'
+          : platformId === 6
+            ? '2026-09-20'
+            : '2026-09-25'
+      )
   );
   const romarrLookup = mock.method(
     ROMarrNGAPI.prototype,
     'getCatalogGame',
-    async (igdbId: number) => game(igdbId)
+    async (igdbId: number, platformId?: number) =>
+      game(igdbId, platformId === 130 ? '2026-09-15' : '2026-09-20')
   );
 
   const personal = await getReleaseCalendar(
@@ -144,15 +165,13 @@ it('keeps software releases in personal calendars and respects shared scope', as
     { includeDateHistory: false }
   );
   assert.deepEqual(
-    personal.results.map((item) => [
-      item.id,
-      item.platformName,
-      item.available,
-    ]),
+    personal.results
+      .map((item) => [item.id, item.platformName, item.available])
+      .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
     [
-      ['software:game:42', 'Linux · x64', false],
-      ['software:retro:42', 'Nintendo Entertainment System', false],
-    ]
+      ['software:game:42:3', 'Linux · x64', false],
+      ['software:retro:42:130', 'Nintendo Entertainment System', false],
+    ].sort((left, right) => String(left[0]).localeCompare(String(right[0])))
   );
 
   const shared = await getReleaseCalendar(
@@ -166,25 +185,46 @@ it('keeps software releases in personal calendars and respects shared scope', as
     { includeDateHistory: false }
   );
   assert.deepEqual(
-    shared.results.map((item) => [
-      item.id,
-      item.source,
-      item.platformName,
-      item.available,
-    ]),
+    shared.results
+      .map((item) => [item.id, item.source, item.platformName, item.available])
+      .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
     [
-      ['software:game:42', 'questarr', 'Linux · x64, Windows · x64', true],
-      ['software:modern:43', 'romarr', 'Steam Deck', false],
-      ['software:retro:42', 'romarr', 'Nintendo Entertainment System', false],
+      ['software:game:42:3', 'questarr', 'Linux · x64', false],
+      ['software:game:42:6', 'questarr', 'Windows · x64', true],
+      ['software:game:42:14', 'questarr', 'macOS · universal', false],
+      ['software:modern:43:167', 'romarr', 'Steam Deck', false],
+      [
+        'software:retro:42:130',
+        'romarr',
+        'Nintendo Entertainment System',
+        false,
+      ],
+    ].sort((left, right) => String(left[0]).localeCompare(String(right[0])))
+  );
+  assert.deepEqual(
+    questarrLookup.mock.calls
+      .map((call) => call.arguments)
+      .sort((left, right) => Number(left[1]) - Number(right[1])),
+    [
+      [42, 3],
+      [42, 3],
+      [42, 6],
+      [42, 14],
     ]
   );
   assert.deepEqual(
-    questarrLookup.mock.calls.map((call) => call.arguments[0]),
-    [42, 42]
-  );
-  assert.deepEqual(
-    romarrLookup.mock.calls.map((call) => call.arguments[0]),
-    [42, 42, 43]
+    romarrLookup.mock.calls
+      .map((call) => call.arguments)
+      .sort(
+        (left, right) =>
+          Number(left[0]) - Number(right[0]) ||
+          Number(left[1]) - Number(right[1])
+      ),
+    [
+      [42, 130],
+      [42, 130],
+      [43, 167],
+    ]
   );
 });
 
@@ -195,12 +235,14 @@ it('omits invalid dates and reports an unavailable software catalog without leak
     category: 'retro',
     catalogId: 44,
     platformName: 'NES',
+    platformId: 130,
   });
   await addSoftwareRequest({
     requestedById: 1,
     category: 'modern',
     catalogId: 45,
     platformName: 'Steam Deck',
+    platformId: 167,
   });
   mock.method(
     ROMarrNGAPI.prototype,
@@ -224,4 +266,38 @@ it('omits invalid dates and reports an unavailable software catalog without leak
   assert.deepEqual(result.results, []);
   assert.deepEqual(result.partialSources, [{ source: 'romarr' }]);
   assert.equal(JSON.stringify(result).includes('private-api-key'), false);
+});
+
+it('reports providers that have not implemented exact platform release dates', async () => {
+  configureProviders();
+  await addSoftwareRequest({
+    requestedById: 1,
+    category: 'retro',
+    catalogId: 46,
+    platformName: 'PlayStation 4',
+    platformId: 48,
+  });
+  mock.method(
+    ROMarrNGAPI.prototype,
+    'getCatalogGame',
+    async (igdbId: number) => {
+      const legacyGame = game(igdbId);
+      delete legacyGame.platformReleaseDate;
+      return legacyGame;
+    }
+  );
+
+  const result = await getReleaseCalendar(
+    parseCalendarQuery(
+      { ...range, scope: 'all', mediaType: 'software' },
+      true,
+      false
+    ),
+    1,
+    false,
+    { includeDateHistory: false }
+  );
+
+  assert.deepEqual(result.results, []);
+  assert.deepEqual(result.partialSources, [{ source: 'romarr' }]);
 });

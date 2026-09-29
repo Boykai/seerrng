@@ -75,6 +75,7 @@ it('uses the versioned SeerrNG catalog contract and preserves IGDB identity', as
     );
     const platforms = await api.getCatalogPlatforms();
     const game = await api.getCatalogGame(42);
+    const platformGame = await api.getCatalogGame(42, 130);
     await api.createRequest('request-42', 'Example game', 'nes', 42, 130);
 
     assert.equal(handshake.requestContractVersion, 1);
@@ -82,6 +83,7 @@ it('uses the versioned SeerrNG catalog contract and preserves IGDB identity', as
     assert.equal(popular.nextOffset, 40);
     assert.deepEqual(platforms, []);
     assert.equal(game.igdbId, 42);
+    assert.equal(platformGame.igdbId, 42);
     assert.deepEqual(
       requests.map(({ method, path }) => `${method} ${path.split('?')[0]}`),
       [
@@ -90,11 +92,18 @@ it('uses the versioned SeerrNG catalog contract and preserves IGDB identity', as
         'GET /romarr/api/integration/seerrng/v1/catalog/popular-page',
         'GET /romarr/api/integration/seerrng/v1/catalog/platforms',
         'GET /romarr/api/integration/seerrng/v1/catalog/games/42',
+        'GET /romarr/api/integration/seerrng/v1/catalog/games/42',
         'POST /romarr/api/integration/seerrng/v1/requests',
       ]
     );
     assert.deepEqual(requests[1].path.includes('cursor=cursor%2B%2F%3D'), true);
-    assert.deepEqual(requests[5].body, {
+    assert.equal(
+      new URL(requests[5].path, 'http://localhost').searchParams.get(
+        'platformId'
+      ),
+      '130'
+    );
+    assert.deepEqual(requests[6].body, {
       externalRequestId: 'request-42',
       game: 'Example game',
       platform: 'nes',

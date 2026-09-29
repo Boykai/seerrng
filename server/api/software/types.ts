@@ -31,6 +31,8 @@ export interface SoftwareCatalogGame {
   summary: string;
   coverUrl: string;
   releaseDate: string;
+  /** Exact day-precision release for the requested IGDB platform, when asked. */
+  platformReleaseDate?: string | null;
   platforms: string[];
   platformOptions: { id: number; name: string }[];
   genres: string[];
