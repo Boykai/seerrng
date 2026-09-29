@@ -61,6 +61,7 @@ export class BookRequestSearch {
   public state:
     | 'searching'
     | 'pending'
+    | 'monitoring'
     | 'settling'
     | 'grabbed'
     | 'importing'

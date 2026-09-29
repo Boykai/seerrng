@@ -819,6 +819,15 @@ const getStageFromRequest = (
       message: 'Waiting for Bookshelf to prepare the requested book.',
     };
   }
+  if (options.bookSearchState === 'monitoring') {
+    return {
+      stage: RequestStatusStage.SEARCHING,
+      queueFailure: false,
+      downloads,
+      message:
+        'Bookshelf is monitoring this title. Availability will update after the next library scan.',
+    };
+  }
 
   if (
     request.type === MediaType.MUSIC &&
@@ -1055,6 +1064,8 @@ const getBookSearchState = async (
     return 'searching';
   }
   if (records.some((record) => record.state === 'pending')) return 'pending';
+  if (records.some((record) => record.state === 'monitoring'))
+    return 'monitoring';
   return undefined;
 };
 
@@ -1393,13 +1404,18 @@ const getBookSearchStates = async (
     const nextState =
       record.state === 'settling' ? ('searching' as const) : record.state;
     const current = states.get(record.requestId);
-    if (
-      !current ||
-      nextState === 'importing' ||
-      (nextState === 'grabbed' &&
-        (current === 'searching' || current === 'pending')) ||
-      (nextState === 'searching' && current === 'pending')
-    ) {
+    const statePriority: Record<BookRequestSearch['state'], number> = {
+      monitoring: 1,
+      pending: 2,
+      searching: 3,
+      settling: 3,
+      grabbed: 4,
+      importing: 5,
+      available: 6,
+      unavailable: 6,
+      failed: 6,
+    };
+    if (!current || statePriority[nextState] > statePriority[current]) {
       states.set(record.requestId, nextState);
     }
   }

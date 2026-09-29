@@ -48,6 +48,7 @@ const createTrackedRequest = async (options: {
   createdAuthor: boolean;
   pendingId?: number;
   providerBookId?: string;
+  monitoring?: boolean;
 }) => {
   const pending = options.pendingId !== undefined;
   const requestedBy = await getRepository(User).findOneByOrFail({
@@ -83,10 +84,14 @@ const createTrackedRequest = async (options: {
       providerBookId: options.providerBookId ?? 'hc:book-55',
       pendingId: options.pendingId ?? null,
       authorId: 77,
-      commandId: pending ? null : 901,
+      commandId: pending || options.monitoring ? null : 901,
       createdBook: options.createdBook,
       createdAuthor: options.createdAuthor,
-      state: pending ? 'pending' : 'searching',
+      state: pending
+        ? 'pending'
+        : options.monitoring
+          ? 'monitoring'
+          : 'searching',
     })
   );
   return { media, request };
@@ -169,7 +174,7 @@ describe('BookRequestSearchManager', () => {
     assert.equal(lookupMock.mock.calls.length, 0);
   });
 
-  it('starts a tracked book search after Chaptarr finishes preparing the book', async () => {
+  it('monitors a prepared Chaptarr book without starting a Seerr search', async () => {
     const { media, request } = await createTrackedRequest({
       createdBook: false,
       createdAuthor: false,
@@ -201,26 +206,91 @@ describe('BookRequestSearchManager', () => {
       createdBook: true,
       createdAuthor: false,
     }));
-    mock.method(ReadarrAPI.prototype, 'startBookSearch', async () => ({
-      id: 903,
-      name: 'BookSearch',
-      status: 'started',
-    }));
+    const startBookSearch = mock.method(
+      ReadarrAPI.prototype,
+      'startBookSearch',
+      async () => ({ id: 903, name: 'BookSearch', status: 'started' })
+    );
 
     await bookRequestSearchManager.run();
 
     const operation = await getRepository(BookRequestSearch).findOneByOrFail({
       requestId: request.id,
     });
-    assert.equal(operation.state, 'searching');
+    assert.equal(operation.state, 'monitoring');
     assert.equal(operation.pendingId, null);
     assert.equal(operation.bookId, 56);
-    assert.equal(operation.commandId, 903);
+    assert.equal(operation.commandId, null);
+    assert.equal(startBookSearch.mock.callCount(), 0);
     const updatedMedia = await getRepository(Media).findOneByOrFail({
       id: media.id,
     });
     assert.equal(updatedMedia.externalServiceId, 56);
     assert.equal(updatedMedia.externalServiceSlug, 'prepared-book');
+  });
+
+  it('keeps a monitored book pending until its library scan finds a file', async () => {
+    const { media, request } = await createTrackedRequest({
+      createdBook: true,
+      createdAuthor: true,
+      monitoring: true,
+    });
+    let fileCount = 0;
+    const currentBook = mock.method(
+      ReadarrAPI.prototype,
+      'getBookIfExists',
+      async (bookId: number) => ({
+        id: bookId,
+        title: 'Tracked Book',
+        foreignBookId: 'hc:book-55',
+        statistics: { bookFileCount: fileCount },
+      })
+    );
+    const getCommand = mock.method(
+      ReadarrAPI.prototype,
+      'getCommand',
+      async () => {
+        throw new Error('Monitoring must not poll a search command.');
+      }
+    );
+    const startBookSearch = mock.method(
+      ReadarrAPI.prototype,
+      'startBookSearch',
+      async () => {
+        throw new Error('Monitoring must not start an immediate search.');
+      }
+    );
+    const removeBook = mock.method(
+      ReadarrAPI.prototype,
+      'removeBook',
+      async () => undefined
+    );
+
+    await bookRequestSearchManager.run();
+
+    const operation = await getRepository(BookRequestSearch).findOneByOrFail({
+      requestId: request.id,
+    });
+    assert.equal(operation.state, 'monitoring');
+    assert.equal(currentBook.mock.callCount(), 1);
+    assert.equal(getCommand.mock.callCount(), 0);
+    assert.equal(startBookSearch.mock.callCount(), 0);
+    assert.equal(removeBook.mock.callCount(), 0);
+
+    fileCount = 1;
+    await bookRequestSearchManager.run();
+
+    assert.equal(
+      await getRepository(BookRequestSearch).countBy({ requestId: request.id }),
+      0
+    );
+    const updatedMedia = await getRepository(Media).findOneByOrFail({
+      id: media.id,
+    });
+    assert.equal(updatedMedia.status, MediaStatus.AVAILABLE);
+    assert.equal(getCommand.mock.callCount(), 0);
+    assert.equal(startBookSearch.mock.callCount(), 0);
+    assert.equal(removeBook.mock.callCount(), 0);
   });
 
   it('reports no release and removes only records it created', async () => {

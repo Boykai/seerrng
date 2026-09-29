@@ -2080,9 +2080,8 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
           editions: bookEditions,
           useRequestedEdition: !!(preferredEditionId || preferredIsbn),
           addOptions: {
-            // Seerr starts and tracks BookSearch explicitly after the add.
-            // The Bookshelf convenience flag depends on a later metadata
-            // refresh and does not expose the resulting command to Seerr.
+            // Let Bookshelf's normal monitored-book workflow acquire this
+            // title; Seerr follows availability through library sync.
             searchForNewBook: false,
           },
         });
@@ -2104,9 +2103,6 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
           );
         }
 
-        const searchCommand = hasLocalBookId
-          ? await readarr.startBookSearch(localBookId as number)
-          : undefined;
         await getRepository(BookRequestSearch).save(
           new BookRequestSearch({
             requestId: entity.id,
@@ -2117,10 +2113,10 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
             providerEditionId: providerEditionId ?? null,
             pendingId: result.pendingId ?? null,
             authorId: result.authorId ?? result.author?.id ?? null,
-            commandId: searchCommand?.id ?? null,
+            commandId: null,
             createdBook: result.createdBook,
             createdAuthor: result.createdAuthor,
-            state: result.pending ? 'pending' : 'searching',
+            state: result.pending ? 'pending' : 'monitoring',
           })
         );
 

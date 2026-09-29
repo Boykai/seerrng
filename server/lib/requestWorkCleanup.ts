@@ -153,7 +153,10 @@ class RequestWorkCleanupManager {
           'Bookshelf has not finished its search command and cannot confirm cancellation yet.'
         );
       }
-    } else if (operation.state !== 'pending') {
+    } else if (
+      operation.state !== 'pending' &&
+      operation.state !== 'monitoring'
+    ) {
       throw new RequestWorkCleanupError(
         'Bookshelf request tracking is incomplete, so Seerr cannot confirm cancellation yet.'
       );

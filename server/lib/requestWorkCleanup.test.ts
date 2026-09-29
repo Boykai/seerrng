@@ -355,6 +355,45 @@ describe('RequestWorkCleanupManager', () => {
     assert.equal(media.externalServiceId, null);
   });
 
+  it('cancels a monitored book without waiting for a search command', async () => {
+    const request = await createActiveBookRequest();
+    const operation = await getRepository(BookRequestSearch).findOneByOrFail({
+      requestId: request.id,
+    });
+    await getRepository(BookRequestSearch).update(operation.id, {
+      state: 'monitoring',
+      commandId: null,
+    });
+    const getCommand = mock.method(
+      ReadarrAPI.prototype,
+      'getCommand',
+      async () => {
+        throw new Error('Monitoring should not have a search command.');
+      }
+    );
+    mock.method(ReadarrAPI.prototype, 'getQueue', async () => []);
+    mock.method(ReadarrAPI.prototype, 'getBookIfExists', async () => ({
+      id: 55,
+      title: 'Cleanup Book',
+      statistics: { bookFileCount: 0 },
+    }));
+    const removedBooks: number[] = [];
+    mock.method(ReadarrAPI.prototype, 'removeBook', async (bookId: number) => {
+      removedBooks.push(bookId);
+    });
+    mock.method(ReadarrAPI.prototype, 'getBooksByAuthor', async () => []);
+    mock.method(ReadarrAPI.prototype, 'removeAuthor', async () => undefined);
+
+    await requestWorkCleanupManager.cleanup(request, true);
+
+    assert.equal(getCommand.mock.callCount(), 0);
+    assert.deepEqual(removedBooks, [55]);
+    assert.equal(
+      await getRepository(BookRequestSearch).countBy({ requestId: request.id }),
+      0
+    );
+  });
+
   it('keeps the request intact when Bookshelf cannot confirm cancellation', async () => {
     const request = await createActiveBookRequest();
     mock.method(ReadarrAPI.prototype, 'getCommand', async () => ({

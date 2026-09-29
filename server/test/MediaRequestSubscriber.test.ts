@@ -97,6 +97,8 @@ const waitForSavedMedia = async (
   return getRepository(Media).findOneByOrFail({ id: mediaId });
 };
 
+let startedBookSearches = 0;
+
 describe('MediaRequestSubscriber service dispatch', () => {
   let enqueuedRequestIds: number[];
 
@@ -107,11 +109,11 @@ describe('MediaRequestSubscriber service dispatch', () => {
   beforeEach(async () => {
     await resetTestDb();
     enqueuedRequestIds = [];
-    mock.method(ReadarrAPI.prototype, 'startBookSearch', async () => ({
-      id: 901,
-      name: 'BookSearch',
-      status: 'queued',
-    }));
+    startedBookSearches = 0;
+    mock.method(ReadarrAPI.prototype, 'startBookSearch', async () => {
+      startedBookSearches += 1;
+      return { id: 901, name: 'BookSearch', status: 'queued' };
+    });
     mock.method(
       requestDispatchManager,
       'enqueue',
@@ -892,6 +894,7 @@ describe('MediaRequestSubscriber service dispatch', () => {
     assert.equal(addPayload?.metadataProfileId, 0);
     assert.equal(addPayload?.rootFolderPath, '/books');
     assert.deepStrictEqual(addPayload?.tags, [4]);
+    assert.equal(addPayload?.addOptions?.searchForNewBook, false);
     assert.equal(addPayload?.author?.monitorNewItems, 'none');
     assert.deepStrictEqual(addPayload?.author?.addOptions?.booksToMonitor, [
       'readarr-work-id',
@@ -910,8 +913,9 @@ describe('MediaRequestSubscriber service dispatch', () => {
     });
     assert.equal(savedSearch.serviceId, 20);
     assert.equal(savedSearch.bookId, 55);
-    assert.equal(savedSearch.commandId, 901);
-    assert.equal(savedSearch.state, 'searching');
+    assert.equal(savedSearch.commandId, null);
+    assert.equal(savedSearch.state, 'monitoring');
+    assert.equal(startedBookSearches, 0);
 
     const savedRequest = await getRepository(MediaRequest).findOneByOrFail({
       id: request.id,

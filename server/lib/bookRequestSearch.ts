@@ -128,6 +128,11 @@ class BookRequestSearchManager {
       mediaType: operation.format,
     });
 
+    if (operation.state === 'monitoring') {
+      await this.reconcileMonitoringOperation(operation, readarr);
+      return;
+    }
+
     if (
       operation.state === 'pending' ||
       operation.bookId == null ||
@@ -241,6 +246,28 @@ class BookRequestSearchManager {
       RequestStatusStage.UNAVAILABLE,
       'No release found.'
     );
+  }
+
+  private async reconcileMonitoringOperation(
+    operation: BookRequestSearch,
+    readarr: ReadarrAPI
+  ): Promise<void> {
+    const providerBookId = await this.getProviderBookId(operation);
+    const providerEditionId =
+      operation.providerEditionId ??
+      operation.request.preferredEditionId ??
+      undefined;
+    const book = await this.getBookAfterSearch(
+      operation,
+      readarr,
+      providerBookId,
+      providerEditionId
+    );
+
+    if (!book || (book.statistics?.bookFileCount ?? 0) === 0) return;
+
+    await this.setState(operation, 'available');
+    await this.finalizeRequest(operation.requestId);
   }
 
   private async reconcilePendingOperation(
@@ -364,21 +391,14 @@ class BookRequestSearchManager {
     operation.authorId = result.authorId ?? result.author?.id ?? null;
     operation.createdBook = result.createdBook;
     operation.createdAuthor = result.createdAuthor;
-    operation.state = 'pending';
+    operation.state = 'monitoring';
     await this.storeBookServiceLink(operation, result);
-
-    const command = await readarr.startBookSearch(bookId);
-    const searchStartedAt = new Date();
     await getRepository(BookRequestSearch).update(operation.id, {
-      commandId: command.id,
-      state: 'searching',
-      createdAt: searchStartedAt,
-      updatedAt: searchStartedAt,
+      commandId: null,
+      state: 'monitoring',
+      updatedAt: new Date(),
     });
-    operation.commandId = command.id;
-    operation.state = 'searching';
-    operation.createdAt = searchStartedAt;
-    operation.updatedAt = searchStartedAt;
+    operation.commandId = null;
   }
 
   private getPendingFormatStatus(
