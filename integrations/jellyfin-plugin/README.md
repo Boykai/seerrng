@@ -15,7 +15,8 @@ connection settings, or the user unlinks the Jellyfin account.
 
 1. Configure the Jellyfin server in SeerrNG and link each user's Jellyfin
    account in SeerrNG profile settings.
-2. In SeerrNG **Settings → Jellyfin**, enable **SeerrNG sign-in from Jellyfin**.
+2. Set Jellyfin as SeerrNG's active media server, enable media-server sign-in,
+   then enable **SeerrNG sign-in from Jellyfin** in **Settings → Jellyfin**.
 3. Install this plugin in Jellyfin and enter the SeerrNG URL on the plugin's
    settings page. Keep a reverse-proxy path prefix if the app uses one.
 4. A Jellyfin administrator opens **SeerrNG** from the Jellyfin dashboard and

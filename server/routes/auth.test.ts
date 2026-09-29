@@ -1226,17 +1226,22 @@ describe('POST /auth/jellyfin/bridge', () => {
     }
   });
 
-  it('rejects bridge login from an origin other than configured Jellyfin', async () => {
+  it('rejects missing and untrusted Jellyfin bridge origins', async () => {
     const { restoreUser } = await configureBridge();
     const getUser = mock.method(JellyfinAPI.prototype, 'getUser');
 
     try {
+      const missingOrigin = await request(app)
+        .post('/auth/jellyfin/bridge')
+        .type('form')
+        .send({ token: 'current-jellyfin-session-token' });
       const response = await request(app)
         .post('/auth/jellyfin/bridge')
         .set('Origin', 'https://attacker.example')
         .type('form')
         .send({ token: 'current-jellyfin-session-token' });
 
+      assert.strictEqual(missingOrigin.status, 403);
       assert.strictEqual(response.status, 403);
       assert.strictEqual(getUser.mock.callCount(), 0);
     } finally {

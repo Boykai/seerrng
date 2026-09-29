@@ -5972,7 +5972,7 @@ paths:
                   bridgeLoginEnabled:
                     type: boolean
         '400':
-          description: Invalid setting value, or Jellyfin is not connected when enabling bridge login.
+          description: Invalid setting value, or Jellyfin is not connected and active with media-server sign-in enabled.
         '403':
           description: An administrator account is required.
   /settings/jellyfin/library:

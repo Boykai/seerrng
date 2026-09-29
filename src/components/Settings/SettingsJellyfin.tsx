@@ -43,7 +43,7 @@ const messages = defineMessages('components.Settings', {
     'Optionally configure the internal and external endpoints for your {mediaServerName} server. In most cases, the external URL is different to the internal URL. A custom password reset URL can also be set for {mediaServerName} login, in case you would like to redirect to a different password reset page. You can also change the Jellyfin API key, which was automatically generated previously.',
   seerrngBridgeLogin: 'Enable SeerrNG sign-in from Jellyfin',
   seerrngBridgeLoginDescription:
-    'Allow users with an already linked Jellyfin account to sign in to this SeerrNG instance from the optional Jellyfin plugin page in the administrator dashboard. The current Jellyfin session is checked during sign-in. Disabling this or unlinking the account revokes bridge-created sessions.',
+    'Allow Jellyfin administrators to open SeerrNG from the Jellyfin dashboard and sign in with an already linked account while Jellyfin is active and media-server sign-in is enabled. Regular users should sign in on SeerrNG with Jellyfin. Disabling the bridge revokes its sessions; turning it back on does not restore them.',
   seerrngBridgeLoginSuccess: 'SeerrNG Jellyfin sign-in setting saved.',
   seerrngBridgeLoginFailure:
     'Unable to save the SeerrNG Jellyfin sign-in setting.',
@@ -749,7 +749,11 @@ const SettingsJellyfin: React.FC<SettingsJellyfinProps> = ({
                   disabled={
                     !data ||
                     isSavingBridgeLogin ||
-                    (!data.serverId && !data.bridgeLoginEnabled)
+                    ((!data.serverId ||
+                      settings.currentSettings.mediaServerType !==
+                        MediaServerType.JELLYFIN ||
+                      settings.currentSettings.mediaServerLogin === false) &&
+                      !data.bridgeLoginEnabled)
                   }
                   onChange={(event) =>
                     void updateBridgeLogin(event.currentTarget.checked)

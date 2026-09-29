@@ -6,6 +6,7 @@ import JellyfinAPI from '@server/api/jellyfin';
 import PlexAPI from '@server/api/plexapi';
 import PlexTvAPI, { MAX_PLEX_SHARED_USERS } from '@server/api/plextv';
 import TautulliAPI from '@server/api/tautulli';
+import { MediaServerType } from '@server/constants/server';
 import { getRepository } from '@server/datasource';
 import { ScheduledJobLease } from '@server/entity/ScheduledJobLease';
 import { User } from '@server/entity/User';
@@ -1495,6 +1496,31 @@ describe('Settings route input validation', () => {
     settings.jellyfin.serverId = 'test-jellyfin-server';
     settings.jellyfin.bridgeLoginEnabled = false;
     settings.jellyfin.bridgeLoginGeneration = 4;
+    settings.main.mediaServerType = MediaServerType.PLEX;
+    settings.main.mediaServerLogin = true;
+
+    const wrongMediaServer = await request(createOpenApiValidatedApp())
+      .post('/api/v1/settings/jellyfin/bridge-login')
+      .send({ enabled: true });
+    assert.strictEqual(wrongMediaServer.status, 400);
+    assert.strictEqual(settings.jellyfin.bridgeLoginEnabled, false);
+    assert.strictEqual(settings.jellyfin.bridgeLoginGeneration, 4);
+
+    settings.main.mediaServerType = MediaServerType.JELLYFIN;
+    settings.main.mediaServerLogin = false;
+
+    const mediaServerLoginDisabled = await request(createOpenApiValidatedApp())
+      .post('/api/v1/settings/jellyfin/bridge-login')
+      .send({ enabled: true });
+    assert.strictEqual(mediaServerLoginDisabled.status, 400);
+    assert.match(
+      mediaServerLoginDisabled.body.message,
+      /enable media-server sign-in/i
+    );
+    assert.strictEqual(settings.jellyfin.bridgeLoginEnabled, false);
+    assert.strictEqual(settings.jellyfin.bridgeLoginGeneration, 4);
+
+    settings.main.mediaServerLogin = true;
 
     const res = await request(createOpenApiValidatedApp())
       .post('/api/v1/settings/jellyfin/bridge-login')

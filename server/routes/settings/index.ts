@@ -1817,14 +1817,26 @@ settingsRoutes.post(
       return res.status(400).json({ message: 'enabled must be a boolean.' });
     }
 
-    const settings = getSettings();
-    if (enabled.value && !settings.jellyfin.serverId) {
-      return res.status(400).json({
-        message: 'Connect a Jellyfin server before enabling bridge sign-in.',
-      });
-    }
-    const jellyfin = await runWithConfigurationAdmission('jellyfin', () =>
-      settings.persistSection('jellyfin', (current) => {
+    const result = await runWithConfigurationAdmission('jellyfin', async () => {
+      const settings = getSettings();
+      if (enabled.value) {
+        if (!settings.jellyfin.serverId) {
+          return {
+            error: 'Connect a Jellyfin server before enabling bridge sign-in.',
+          };
+        }
+        if (
+          settings.main.mediaServerType !== MediaServerType.JELLYFIN ||
+          settings.main.mediaServerLogin === false
+        ) {
+          return {
+            error:
+              'Set Jellyfin as the active media server and enable media-server sign-in before enabling bridge sign-in.',
+          };
+        }
+      }
+
+      const jellyfin = await settings.persistSection('jellyfin', (current) => {
         const generation = current.bridgeLoginGeneration;
         const previousGeneration =
           Number.isSafeInteger(generation) && (generation ?? -1) >= 0
@@ -1840,11 +1852,16 @@ settingsRoutes.post(
               ? previousGeneration
               : previousGeneration + 1,
         };
-      })
-    );
+      });
+      return { jellyfin };
+    });
+
+    if ('error' in result) {
+      return res.status(400).json({ message: result.error });
+    }
 
     return res.status(200).json({
-      bridgeLoginEnabled: jellyfin.bridgeLoginEnabled ?? false,
+      bridgeLoginEnabled: result.jellyfin.bridgeLoginEnabled ?? false,
     });
   })
 );
