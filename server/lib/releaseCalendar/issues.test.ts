@@ -192,6 +192,72 @@ it('keeps personal comic and magazine issue lookups on each saved request target
   assert.equal(magazineLookup.mock.calls[0].arguments[0], 'The Economist');
 });
 
+it('omits provider server identifiers from non-admin personal issue status', async () => {
+  const comic = new Media({
+    mediaType: MediaType.COMIC,
+    tmdbId: 0,
+    comicServiceType: 'mylar',
+  });
+  const request = requestedMedia(comic, 'mylar', 17);
+
+  const userResult = await getComicMagazineReleaseCalendar(query('mine'), [
+    request,
+  ]);
+  const adminResult = await getComicMagazineReleaseCalendar(
+    query('mine'),
+    [request],
+    true
+  );
+
+  assert.deepEqual(userResult.partialSources, [{ source: 'mylar' }]);
+  assert.deepEqual(adminResult.partialSources, [
+    { source: 'mylar', serverId: 17 },
+  ]);
+});
+
+it('stops reading issue details at the event cap and marks the result truncated', async () => {
+  const mylar = mylarServer(18);
+  getSettings().mylar = [mylar];
+  const comic = new Media({
+    mediaType: MediaType.COMIC,
+    tmdbId: 0,
+    comicServiceType: 'mylar',
+    identifiers: [
+      new MediaIdentifier({
+        provider: MediaIdentifierProvider.COMICVINE,
+        value: '1800',
+        canonical: true,
+      }),
+    ],
+  });
+  const issues = Array.from({ length: 6_000 }, (_, index) => ({
+    id: `issue-${index}`,
+    number: String(index + 1),
+    releaseDate: '2026-09-15',
+  }));
+  let issueReads = 0;
+  const boundedIssues = new Proxy(issues, {
+    get(target, property, receiver) {
+      if (typeof property === 'string' && /^\d+$/.test(property))
+        issueReads += 1;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  mock.method(MylarAPI.prototype, 'getComic', async (comicId: string) => ({
+    comic: { id: comicId, name: 'Bounded Comic' },
+    issues: boundedIssues,
+  }));
+
+  const result = await getComicMagazineReleaseCalendar(query('mine'), [
+    requestedMedia(comic, 'mylar', mylar.id),
+  ]);
+
+  assert.equal(result.results.length, 5_000);
+  assert.equal(result.results.at(-1)?.title, 'Bounded Comic #5000');
+  assert.equal(result.truncated, true);
+  assert.equal(issueReads, 5_001);
+});
+
 it('shows monitored Mylar, Kapowarr and LazyLibrarian issue dates in shared scope', async () => {
   const mylar = mylarServer(14);
   const kapowarr = kapowarrServer(15);
@@ -279,4 +345,57 @@ it('shows monitored Mylar, Kapowarr and LazyLibrarian issue dates in shared scop
   );
   assert.equal(result.truncated, false);
   assert.deepEqual(result.partialSources, []);
+});
+
+it('keeps issue event order stable when provider responses complete out of order', async () => {
+  const first = mylarServer(81);
+  const second = mylarServer(82);
+  getSettings().mylar = [first, second];
+  getSettings().kapowarr = [];
+  getSettings().lazylibrarian = [];
+
+  mock.method(MylarAPI.prototype, 'getComic', async (comicId: string) => {
+    if (comicId === '8100')
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    return {
+      comic: { id: comicId, name: `Comic ${comicId}` },
+      issues: [
+        {
+          id: `issue-${comicId}`,
+          number: '1',
+          releaseDate: '2026-09-12',
+        },
+      ],
+    };
+  });
+
+  const requests = [
+    requestedMedia(
+      new Media({
+        mediaType: MediaType.COMIC,
+        tmdbId: 0,
+        comicServiceType: 'mylar',
+        externalServiceSlug: '8100',
+      }),
+      'mylar',
+      first.id
+    ),
+    requestedMedia(
+      new Media({
+        mediaType: MediaType.COMIC,
+        tmdbId: 0,
+        comicServiceType: 'mylar',
+        externalServiceSlug: '8200',
+      }),
+      'mylar',
+      second.id
+    ),
+  ];
+
+  const result = await getComicMagazineReleaseCalendar(query('mine'), requests);
+
+  assert.deepEqual(
+    result.results.map((item) => item.title),
+    ['Comic 8100 #1', 'Comic 8200 #1']
+  );
 });
