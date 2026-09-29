@@ -353,13 +353,12 @@ export default class SimklAPI extends ExternalAPI {
   }
 
   /**
-   * Write one episode's watch state using explicit ids and numbers.
+   * Write one episode's watch state using the catalog IDs and coordinates
+   * returned to the caller.
    *
-   * `use_tvdb_anime_seasons` is deliberately not sent: it asks Simkl to
-   * reinterpret the season numbers server-side, which silently disagrees with
-   * whatever numbering the caller read the episode under. The mapping layer
-   * translates the coordinates before the call instead, so what is written is
-   * what was resolved.
+   * Simkl uses `use_tvdb_anime_seasons` to map TVDB/TMDB-shaped coordinates to
+   * split or absolute-numbered anime entries. Set it only when the supplied
+   * coordinates came from TVDB; TMDB coordinates must keep their own numbering.
    */
   public async setEpisodeHistory(
     ids: {
@@ -370,7 +369,8 @@ export default class SimklAPI extends ExternalAPI {
     },
     season: number,
     episode: number,
-    watched: boolean
+    watched: boolean,
+    useTvdbAnimeSeasons = false
   ): Promise<unknown> {
     const identifiers = Object.fromEntries(
       Object.entries(ids).filter(([, value]) => Boolean(value))
@@ -385,6 +385,7 @@ export default class SimklAPI extends ExternalAPI {
         shows: [
           {
             ids: identifiers,
+            ...(useTvdbAnimeSeasons ? { use_tvdb_anime_seasons: true } : {}),
             seasons: [{ number: season, episodes: [{ number: episode }] }],
           },
         ],

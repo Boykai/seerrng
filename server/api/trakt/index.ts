@@ -591,11 +591,17 @@ class TraktAPI extends ExternalAPI {
   public async addEpisodeToHistory(
     tmdbShowId: number,
     seasonNumber: number,
-    episodeNumber: number
+    episodeNumber: number,
+    tvdbShowId?: number
   ): Promise<unknown> {
     const result = await this.postAuthenticated(
       '/sync/history',
-      TraktAPI.episodeHistoryPayload(tmdbShowId, seasonNumber, episodeNumber)
+      TraktAPI.episodeHistoryPayload(
+        tmdbShowId,
+        seasonNumber,
+        episodeNumber,
+        tvdbShowId
+      )
     );
     try {
       await this.removeEpisodePlaybackProgress(
@@ -669,23 +675,33 @@ class TraktAPI extends ExternalAPI {
   public async removeEpisodeFromHistory(
     tmdbShowId: number,
     seasonNumber: number,
-    episodeNumber: number
+    episodeNumber: number,
+    tvdbShowId?: number
   ): Promise<unknown> {
     return this.postAuthenticated(
       '/sync/history/remove',
-      TraktAPI.episodeHistoryPayload(tmdbShowId, seasonNumber, episodeNumber)
+      TraktAPI.episodeHistoryPayload(
+        tmdbShowId,
+        seasonNumber,
+        episodeNumber,
+        tvdbShowId
+      )
     );
   }
 
   public static episodeHistoryPayload(
     tmdbShowId: number,
     seasonNumber: number,
-    episodeNumber: number
+    episodeNumber: number,
+    tvdbShowId?: number
   ): Record<string, unknown> {
     return {
       shows: [
         {
-          ids: { tmdb: Number(tmdbShowId) },
+          ids: {
+            tmdb: Number(tmdbShowId),
+            ...(tvdbShowId ? { tvdb: Number(tvdbShowId) } : {}),
+          },
           seasons: [
             { number: seasonNumber, episodes: [{ number: episodeNumber }] },
           ],

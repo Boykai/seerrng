@@ -1,12 +1,14 @@
 import AnilistAPI from '@server/api/anilist';
 import SimklAPI from '@server/api/simkl';
+import TheMovieDb from '@server/api/themoviedb';
+import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
 import TraktAPI from '@server/api/trakt';
 import { getRepository } from '@server/datasource';
 import type { DiscoveryAccountProvider } from '@server/entity/DiscoveryAccount';
 import ProviderTrackingAction from '@server/entity/ProviderTrackingAction';
 import { runWithConfigurationAdmission } from '@server/lib/configurationAdmission';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
-import { getSettings } from '@server/lib/settings';
+import { getSettings, MetadataProviderType } from '@server/lib/settings';
 import { createHash } from 'node:crypto';
 import {
   DiscoveryIntegrationError,
@@ -257,10 +259,41 @@ export async function applyTrackingIntent(
         'A previous matching action has an uncertain outcome. Check your provider account before making this change again.'
       );
 
-    // Validate native AniList identity, category, and episode bounds before
-    // recording a pending mutation. Failed reads never become unknown writes.
+    // Resolve external series identity and validate native AniList metadata
+    // before recording a pending mutation. Failed reads never become unknown writes.
     let anilistApi: AnilistAPI | undefined;
     let anilistMedia: Awaited<ReturnType<AnilistAPI['getMedia']>>;
+    let tvdbShowId: number | undefined;
+    let useTvdbAnimeSeasons = false;
+    if (intent.episode) {
+      let show: Awaited<ReturnType<TheMovieDb['getTvShow']>>;
+      try {
+        show = await new TheMovieDb().getTvShow({ tvId: intent.tmdbId! });
+      } catch {
+        throw new DiscoveryIntegrationError(
+          502,
+          'The series identity could not be confirmed. Try the episode update again.'
+        );
+      }
+      if (show.id !== intent.tmdbId)
+        throw new DiscoveryIntegrationError(
+          409,
+          'The series identity changed. Refresh the library before updating an episode.'
+        );
+      tvdbShowId = id(show.external_ids?.tvdb_id)
+        ? Number(show.external_ids.tvdb_id)
+        : undefined;
+      const isAnime = show.keywords.results.some(
+        (keyword) => keyword.id === ANIME_KEYWORD_ID
+      );
+      const settings = getSettings();
+      const metadataProvider = isAnime
+        ? settings.metadataSettings.anime
+        : settings.metadataSettings.tv;
+      useTvdbAnimeSeasons =
+        tvdbShowId !== undefined &&
+        metadataProvider === MetadataProviderType.TVDB;
+    }
     if (provider === 'anilist') {
       anilistApi = new AnilistAPI({ accessToken: account.accessToken });
       anilistMedia = await anilistApi.getMedia(intent.anilistId!);
@@ -365,18 +398,24 @@ export async function applyTrackingIntent(
                 ? await api.addEpisodeToHistory(
                     intent.tmdbId!,
                     intent.episode.season,
-                    intent.episode.episode
+                    intent.episode.episode,
+                    tvdbShowId
                   )
                 : await api.removeEpisodeFromHistory(
                     intent.tmdbId!,
                     intent.episode.season,
-                    intent.episode.episode
+                    intent.episode.episode,
+                    tvdbShowId
                   )
               : await api.setEpisodeHistory(
-                  { tmdb: intent.tmdbId! },
+                  {
+                    tmdb: intent.tmdbId!,
+                    ...(tvdbShowId ? { tvdb: tvdbShowId } : {}),
+                  },
                   intent.episode.season,
                   intent.episode.episode,
-                  Boolean(intent.value)
+                  Boolean(intent.value),
+                  useTvdbAnimeSeasons
                 );
         else
           response =
