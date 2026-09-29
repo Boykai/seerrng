@@ -20,6 +20,8 @@ SeerrNG continues to work in a regular browser without it.
 - SeerrNG configured to use Jellyfin, with your Jellyfin account linked in your
   SeerrNG user profile.
 - The desktop client configured in remote mode to open your SeerrNG address.
+  Follow the [Foreseer Desktop setup guide](https://selmant.github.io/foreseerr/using-seerr/native-desktop/)
+  for its remote-mode setup.
 
 Foreseer Desktop is a third-party project, not a SeerrNG fork or bundled
 component. SeerrNG implements its public

@@ -250,6 +250,7 @@ export const NativeRuntimeProvider = ({
         return;
       }
       if (detail.type === 'runtime-recovered') {
+        if (authInFlight || authReady) return;
         authInFlight = false;
         authReady = false;
         ticketRequestPending = false;
