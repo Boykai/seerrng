@@ -134,17 +134,20 @@ private match.
 
 ## Release calendar
 
-**Calendar** displays movie releases and series episodes from configured Radarr
-and Sonarr services. **My requests** is the default scope and follows the
-request's standard or 4K format. Users with request-view or management permissions
+**Calendar** displays movie releases, series episodes, and album releases from
+configured Radarr, Sonarr, and Lidarr services. **My requests** is the default
+scope and follows the request's standard or 4K format; music entries match by
+MusicBrainz release-group ID. Users with request-view or management permissions
 can select the shared calendar. Only administrators can include unmonitored titles.
 
-Movie dates are displayed as calendar dates. Episode air times use your browser's
-time zone. If a service is unavailable, the calendar identifies the missing source
-and keeps results from successful services. Results and backend reads are bounded;
-narrow the month or media type when the result limit is reached.
+Movie and album dates are displayed as calendar dates. Episode air times use your
+browser's time zone. Album entries link to their music details page and show the
+artist name when Lidarr provides it. If a service is unavailable, the calendar
+identifies the missing source and keeps results from successful services. Results
+and backend reads are bounded; narrow the month or media type when the result limit
+is reached.
 
-SeerrNG checks monitored Radarr and Sonarr releases daily and records date
+SeerrNG checks monitored Radarr, Sonarr, and Lidarr releases daily and records date
 changes after the first snapshot. Calendar entries can show the three most
 recent changes from the last 180 days, including the old and new dates or air
 times. The history uses the same **My requests** or shared-calendar visibility

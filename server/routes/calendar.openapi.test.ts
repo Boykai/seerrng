@@ -35,6 +35,10 @@ it('allows calendar dates and coerced boolean filters through the contract and p
   );
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, { scope: 'all', unmonitored: true });
+  const musicCalendar = await request(app()).get(
+    '/api/v1/calendar?start=2026-09-01&end=2026-10-01&mediaType=music'
+  );
+  assert.equal(musicCalendar.status, 200);
 });
 it('rejects unknown calendar types and malformed booleans at the contract', async () => {
   assert.equal(

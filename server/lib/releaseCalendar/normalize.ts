@@ -70,7 +70,9 @@ export function normalizeCalendarRow(
   if (!id) return undefined;
   if (source === 'lidarr') {
     const title = text(row.title);
-    const startsAt = timestamp(row.releaseDate);
+    const releaseDate =
+      typeof row.releaseDate === 'string' ? row.releaseDate.slice(0, 10) : '';
+    const startsAt = timestamp(releaseDate);
     const rawMbId = text(row.foreignAlbumId);
     const normalizedMbId = rawMbId
       ? normalizeMusicBrainzId(rawMbId)

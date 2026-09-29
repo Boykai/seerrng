@@ -20,7 +20,7 @@ const messages = defineMessages('calendar', {
   mine: 'My requests',
   all: 'All monitored titles',
   mediaType: 'Media type',
-  allTypes: 'Movies and series',
+  allTypes: 'Movies, series, and music',
   movies: 'Movies',
   series: 'Series',
   albums: 'Music albums',

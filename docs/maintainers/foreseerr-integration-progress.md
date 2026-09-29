@@ -45,9 +45,10 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   under the parent approval to maintain a buffer of up to five missing episodes.
   Disabling watch-ahead stops future additions and leaves already-created child
   requests in place.
-- Movie/series release calendar with personal/shared scopes, bounded cached
-  backend reads, episode hydration and partial-source reporting.
-- Daily date-change snapshots for monitored Radarr and Sonarr releases. The
+- Movie/series/music release calendar with personal/shared scopes, bounded cached
+  backend reads, episode hydration and partial-source reporting across Radarr,
+  Sonarr, and Lidarr.
+- Daily date-change snapshots for monitored Radarr, Sonarr, and Lidarr releases. The
   calendar shows up to three recent moves per event; snapshots reset after long
   observation gaps to avoid presenting stale dates as fresh changes.
 - Dedicated-permission download intervention inbox with durable warnings, explicit
@@ -67,7 +68,7 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   live provider accounts.
 - Verify manual-import payloads and acquisition actions against live services,
   including the supported Readarr-compatible backend variants.
-- Additional calendar media sources beyond Radarr and Sonarr.
+- Additional calendar media sources beyond Radarr, Sonarr, and Lidarr.
 - Additional provider-specific live resolvers and bulk gap repair across sources
   beyond per-title, current-page, and pack import.
 - Richer episode-level identity reconciliation and watched-state display across

@@ -1,3 +1,4 @@
+import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import { MediaRequestStatus, MediaType } from '@server/constants/media';
@@ -7,6 +8,7 @@ import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import {
   getSettings,
+  type LidarrSettings,
   type RadarrSettings,
   type SonarrSettings,
 } from '@server/lib/settings';
@@ -48,6 +50,11 @@ it('validates real dates, bounded ranges, and shared calendar authority', () => 
     parseCalendarQuery({ ...range, includeUnmonitored: false }, false, false)
       .includeUnmonitored,
     false
+  );
+  assert.equal(
+    parseCalendarQuery({ ...range, mediaType: 'music' }, false, false)
+      .mediaType,
+    'music'
   );
   for (const query of [
     { start: '2026-02-30', end: '2026-03-10' },
@@ -208,6 +215,68 @@ it('retains Sonarr episode identity and air time while rejecting malformed episo
     undefined
   );
 });
+it('normalizes Lidarr album releases with stable MusicBrainz identity and all-day dates', () => {
+  const album = normalizeCalendarRow(
+    'lidarr',
+    9,
+    true,
+    {
+      id: 41,
+      title: 'Album',
+      foreignAlbumId: 'F5074A43-2E70-4C17-9DFE-21A8980D89A3',
+      releaseDate: '2026-09-12T23:00:00-05:00',
+      artist: { artistName: 'Artist' },
+      statistics: { trackFileCount: 10, totalTrackCount: 10 },
+    },
+    new Date('2026-09-01T00:00:00.000Z'),
+    new Date('2026-10-01T00:00:00.000Z')
+  );
+  assert.equal(album?.id, 'lidarr:9:41');
+  assert.equal(album?.mbId, 'f5074a43-2e70-4c17-9dfe-21a8980d89a3');
+  assert.equal(album?.artistName, 'Artist');
+  assert.equal(album?.startsAt, '2026-09-12T00:00:00.000Z');
+  assert.equal(album?.allDay, true);
+  assert.equal(album?.available, true);
+  assert.equal(album?.is4k, false);
+  assert.equal(
+    normalizeCalendarRow('lidarr', 9, false, {
+      id: 41,
+      title: 'Album',
+      releaseDate: 'not-a-date',
+    }),
+    undefined
+  );
+});
+it('records date changes for Lidarr albums under a stable event identity', async () => {
+  const first = normalizeCalendarRow('lidarr', 2, false, {
+    id: 41,
+    title: 'Album',
+    foreignAlbumId: 'f5074a43-2e70-4c17-9dfe-21a8980d89a3',
+    releaseDate: '2026-09-12',
+  })!;
+  const next = normalizeCalendarRow('lidarr', 2, false, {
+    id: 41,
+    title: 'Album',
+    foreignAlbumId: 'f5074a43-2e70-4c17-9dfe-21a8980d89a3',
+    releaseDate: '2026-09-16',
+  })!;
+  const observed = new Date('2026-09-01T04:00:00.000Z');
+  assert.deepEqual(await recordReleaseCalendarSnapshots([first], observed), {
+    observed: 1,
+    changed: 0,
+    expired: 0,
+  });
+  const changedAt = new Date(observed.getTime() + 24 * 60 * 60 * 1000);
+  assert.deepEqual(await recordReleaseCalendarSnapshots([next], changedAt), {
+    observed: 1,
+    changed: 1,
+    expired: 0,
+  });
+  const [annotated] = await annotateReleaseCalendarHistory([next], changedAt);
+  assert.equal(annotated.id, 'lidarr:2:41');
+  assert.equal(annotated.dateChanges?.[0]?.previousStartsAt, first.startsAt);
+  assert.equal(annotated.dateChanges?.[0]?.startsAt, next.startsAt);
+});
 it('keeps successful sources when another fails without exposing service identifiers to ordinary users', async () => {
   getSettings().radarr = [
     { ...server, minimumAvailability: 'released' } as RadarrSettings,
@@ -222,6 +291,7 @@ it('keeps successful sources when another fails without exposing service identif
       monitorNewItems: 'all',
     } satisfies SonarrSettings,
   ];
+  getSettings().lidarr = [{ ...server, port: 8686 } as LidarrSettings];
   mock.method(RadarrAPI.prototype, 'getReleaseCalendar', async () => [
     {
       id: 1,
@@ -234,12 +304,50 @@ it('keeps successful sources when another fails without exposing service identif
   mock.method(SonarrAPI.prototype, 'getReleaseCalendar', async () => {
     throw new Error('Private upstream error with credential');
   });
+  mock.method(
+    LidarrAPI.prototype,
+    'getReleaseCalendar',
+    async (
+      _start: string,
+      _end: string,
+      _unmonitored?: boolean,
+      includeArtist?: boolean
+    ) => {
+      assert.equal(includeArtist, true);
+      return [
+        {
+          id: 3,
+          title: 'Album',
+          foreignAlbumId: 'f5074a43-2e70-4c17-9dfe-21a8980d89a3',
+          releaseDate: '2026-09-18',
+          artist: { artistName: 'Artist' },
+          statistics: { trackFileCount: 0, totalTrackCount: 10 },
+        },
+      ];
+    }
+  );
   const result = await getReleaseCalendar(
     parseCalendarQuery({ ...range, scope: 'all' }, true, false),
     1,
     false
   );
-  assert.equal(result.results.length, 1);
+  assert.equal(result.results.length, 2);
+  assert.deepEqual(
+    result.results.find((item) => item.mediaType === 'music'),
+    {
+      id: 'lidarr:1:3',
+      source: 'lidarr',
+      mediaType: 'music',
+      title: 'Album',
+      startsAt: '2026-09-18T00:00:00.000Z',
+      dateType: 'album',
+      allDay: true,
+      mbId: 'f5074a43-2e70-4c17-9dfe-21a8980d89a3',
+      artistName: 'Artist',
+      available: false,
+      is4k: false,
+    }
+  );
   assert.deepEqual(result.partialSources, [{ source: 'sonarr' }]);
   assert.equal(JSON.stringify(result).includes('credential'), false);
 });
@@ -248,6 +356,7 @@ it('limits the personal calendar to the current user’s requested titles and qu
     { ...server, minimumAvailability: 'released' } as RadarrSettings,
   ];
   getSettings().sonarr = [];
+  getSettings().lidarr = [{ ...server, port: 8686 } as LidarrSettings];
   const user = await getRepository(User).findOneByOrFail({ id: 1 });
   const media = await getRepository(Media).save(
     new Media({ mediaType: MediaType.MOVIE, tmdbId: 2 })
@@ -255,6 +364,21 @@ it('limits the personal calendar to the current user’s requested titles and qu
   await getRepository(MediaRequest).save({
     media,
     type: MediaType.MOVIE,
+    requestedBy: user,
+    is4k: false,
+    status: MediaRequestStatus.APPROVED,
+  });
+  const requestedAlbumId = 'dedcf1bc-c9a5-4b9a-8b27-17218aade001';
+  const album = await getRepository(Media).save(
+    new Media({
+      mediaType: MediaType.MUSIC,
+      tmdbId: 0,
+      mbId: requestedAlbumId,
+    })
+  );
+  await getRepository(MediaRequest).save({
+    media: album,
+    type: MediaType.MUSIC,
     requestedBy: user,
     is4k: false,
     status: MediaRequestStatus.APPROVED,
@@ -268,6 +392,20 @@ it('limits the personal calendar to the current user’s requested titles and qu
     },
     { id: 2, title: 'Other movie', tmdbId: 3, digitalRelease: '2026-09-13' },
   ]);
+  mock.method(LidarrAPI.prototype, 'getReleaseCalendar', async () => [
+    {
+      id: 4,
+      title: 'Requested album',
+      foreignAlbumId: requestedAlbumId.toUpperCase(),
+      releaseDate: '2026-09-14',
+    },
+    {
+      id: 5,
+      title: 'Other album',
+      foreignAlbumId: 'e3b5db15-194a-4a95-a8bb-d5a314140002',
+      releaseDate: '2026-09-15',
+    },
+  ]);
   const result = await getReleaseCalendar(
     parseCalendarQuery(range, false, false),
     1,
@@ -275,7 +413,7 @@ it('limits the personal calendar to the current user’s requested titles and qu
   );
   assert.deepEqual(
     result.results.map((item) => item.title),
-    ['Requested movie']
+    ['Requested movie', 'Requested album']
   );
 });
 
