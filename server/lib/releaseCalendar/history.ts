@@ -30,7 +30,9 @@ export async function captureReleaseCalendarHistory(
     logger.warn('Release calendar history was only partially refreshed.', {
       label: 'Release Calendar',
       configuredSources:
-        getSettings().radarr.length + getSettings().sonarr.length,
+        getSettings().radarr.length +
+        getSettings().sonarr.length +
+        getSettings().lidarr.length,
       unavailableSources: partialSources.length,
       truncated,
       observedEvents: summary.observed,
