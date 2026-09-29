@@ -132,6 +132,45 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.41.0](https://github.com/snapetech/seerrng/compare/v3.40.0..v3.41.0) - 2026-09-29
+
+### User-facing changes
+
+#### Added
+
+- **Comics:** Administrators can connect BackIssue through Settings, the administrator API, or the CLI. Comic requests can use it as their default destination, while SeerrNG syncs its collection and shows active queue status and progress when BackIssue reports it.
+
+#### Fixed
+
+- **Discovery:** Audiobook discovery now accepts the current response contract while retaining compatibility with existing clients, so Open Library and Bookshelf results load instead of failing with HTTP 400.
+- **Comics:** The BackIssue collection scan now has a named task in Settings > Jobs and can be started from the API or CLI, so operators can refresh synced comic availability on demand.
+- **Comics:** ComicVine volume descriptions now show paragraphs and lists as readable formatted text instead of exposing source HTML tags.
+- **Release Pipeline:** PPA publishing uses the existing GPG signing key and PPA target; it no longer requires a separate Launchpad OAuth credential. Publication verification reads Launchpad's public API anonymously.
+- **Settings:** Prowlarr diagnostics now use a bounded scrollable report, with larger Save and Test buttons after the report so operators can reach them on smaller screens.
+- **Release Pipeline:** PPA publishing now recovers from Launchpad's source-publication race or a binary upload stalled for 45 minutes by signing a fresh package version, then waits for its Ubuntu binaries to publish. No Launchpad OAuth secret is needed.
+- **Comics:** Comic detail pages now report when ComicVine rejects an issue-page request instead of showing a misleading empty issue list. Users can retry after fixing a connection problem or waiting for ComicVine to recover.
+- **Bookshelf:** Book requests now start a tracked search after Bookshelf accepts the book. If the search command temporarily fails, SeerrNG retries it and keeps the request in progress until a library scan finds the book.
+- **Release Pipeline:** PPA releases now wait for Launchpad to publish the matching Ubuntu source and binary packages, and retry binary uploads rejected before source publication.
+  - **Action required:** configure LAUNCHPAD_CREDENTIALS for PPA publishing
+
+### 🚀 Features
+- *(comics)* Expose BackIssue collection scan task - ([cd745f3](https://github.com/snapetech/seerrng/commit/cd745f3b41e44efa972e0d5a99ced72d944250eb))
+
+### 🐛 Bug Fixes
+- *(bookshelf)* Retry book search preparation - ([6a04ad8](https://github.com/snapetech/seerrng/commit/6a04ad8188107a033f735a78440e75b597021783))
+- *(comics)* Render sanitized ComicVine descriptions - ([6035ad4](https://github.com/snapetech/seerrng/commit/6035ad49437b02d4ec646dff6e914eec05a46453))
+- *(discovery)* Accept audiobook response version 3 - ([9fa20e1](https://github.com/snapetech/seerrng/commit/9fa20e1a2cf1189cc5836450f25323aa1913bcea))
+- *(release)* Retry stalled PPA binary uploads - ([d65fbf3](https://github.com/snapetech/seerrng/commit/d65fbf33a576741a202b4082b8dc069903a7485d))
+- *(release)* Inspect pending PPA build failures - ([61d4a46](https://github.com/snapetech/seerrng/commit/61d4a46cc33a01afb5a828119a1049dca47d13f6))
+- *(release)* Preserve symlinks in PPA package copy - ([13c0a6b](https://github.com/snapetech/seerrng/commit/13c0a6bdd386ef5136f0358eb9a5783badee29a9))
+- *(release)* Recover PPA upload race without OAuth - ([b30cf18](https://github.com/snapetech/seerrng/commit/b30cf18f44b4a6594fdcb9504e7a080a69bd9c0a))
+- *(settings)* Keep Prowlarr actions reachable on mobile - ([47a7d3f](https://github.com/snapetech/seerrng/commit/47a7d3f8f0a11c3d7cc70f2a5cd246770c532247))
+
+### 📖 Documentation
+- *(release)* Clarify PPA upload credentials - ([8e8f22d](https://github.com/snapetech/seerrng/commit/8e8f22d0c30dc5aa41191eb9001feb91ce414323))
+
 ## [3.40.0](https://github.com/snapetech/seerrng/compare/v3.39.3..v3.40.0) - 2026-09-29
 
 ### User-facing changes
