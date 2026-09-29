@@ -75,6 +75,12 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   It has now been installed and exercised against the official Jellyfin 10.11.11
   container: plugin loading, authenticated settings persistence, the bridge
   configuration endpoint, administrator shortcut, and settings page pass.
+- Optional native desktop playback implements Foreseer Desktop protocol v1 for
+  single-item Jellyfin handoff. Browser playback remains the fallback. Bootstrap
+  tickets are short-lived, single-use, PKCE-bound, reject browser-originated
+  redemption, and tied to the active browser session, credentials, Jellyfin user
+  identity, and configured server authority. The native session is reset when a
+  SeerrNG account logs out or changes.
 - Selectable QuestarrNG or ROMarrNG IGDB catalog for emulation, with QuestarrNG
   retained for PC games and ROMarrNG for ROM acquisition. Provider actions and
   game/platform identity use the versioned SeerrNG integration contract.
@@ -99,7 +105,9 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   release, then verify the linked-user login against a live SeerrNG/Jellyfin pair.
   CI now smoke-tests plugin loading, settings persistence, auth requirements, and
   dashboard page registration against Jellyfin 10.11.11 on every push and PR.
-- Optional desktop playback with browser fallback.
+- Verify same-window playback, browser fallback and session reset with a running
+  Foreseer Desktop client and live Jellyfin server. Local protocol and ticket
+  tests do not replace that desktop/runtime verification.
 - Finish end-to-end UI and deployment verification before describing parity as
   complete. A provider client or an account link alone is not parity.
 

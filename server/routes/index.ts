@@ -61,6 +61,7 @@ import calendarRoutes from './calendar';
 import collectionRoutes from './collection';
 import collectionCatalogRoutes from './collectionCatalog';
 import comicRoutes from './comic';
+import desktopRoutes from './desktop';
 import discoverRoutes, { createTmdbWithRegionLanguage } from './discover';
 import discoveryIntegrationRoutes from './discoveryIntegrations';
 import { imageCacheWarmRateLimit, warmImageCache } from './imageproxy';
@@ -454,6 +455,7 @@ router.use(
 );
 router.use('/playlist', isAuthenticated(), playlistRoutes);
 router.use('/playback', isAuthenticated(), playbackRoutes);
+router.use('/desktop', desktopRoutes);
 router.use('/watchlist', isAuthenticated(), watchlistRoutes);
 router.use('/blocklist', isAuthenticated(), blocklistRoutes);
 router.use(

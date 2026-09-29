@@ -5,12 +5,14 @@ import MediaServerIcon, {
 import PlayButton, {
   type PlayButtonLink,
 } from '@app/components/Common/PlayButton';
+import { useNativeRuntime } from '@app/context/NativeRuntimeContext';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { createBrowserActionId } from '@app/utils/browserActionId';
 import defineMessages from '@app/utils/defineMessages';
 import { getSafeHref } from '@app/utils/safeUrl';
+import { MediaServerType } from '@server/constants/server';
 import type { PlaybackPlaylistResponse } from '@server/models/Playback';
 import axios from 'axios';
 import { useRef, useState } from 'react';
@@ -60,6 +62,7 @@ const MediaServerPlayButton = ({
 }: MediaServerPlayButtonProps) => {
   const intl = useIntl();
   const settings = useSettings();
+  const nativeRuntime = useNativeRuntime();
   const { addToast } = useToasts();
   const [isOpening, setIsOpening] = useState(false);
   const isOpeningRef = useRef(false);
@@ -73,6 +76,14 @@ const MediaServerPlayButton = ({
   );
   const hasPlaylistRequest =
     (!!mediaId && selectedItemIds.length > 0) || selectedMediaIds.length > 0;
+  const nativeJellyfinItemId =
+    mediaServerType === MediaServerType.JELLYFIN &&
+    !defaultIs4k &&
+    !!mediaId &&
+    selectedMediaIds.length === 0 &&
+    selectedItemIds.length === 1
+      ? selectedItemIds[0]
+      : undefined;
 
   if (!mediaServerName) {
     return null;
@@ -132,6 +143,16 @@ const MediaServerPlayButton = ({
 
   if (hasPlaylistRequest || disabled) {
     const effectiveDisabled = disabled || isOpening || !hasPlaylistRequest;
+    const handlePlayback = (is4k: boolean) => {
+      if (
+        !is4k &&
+        nativeJellyfinItemId &&
+        nativeRuntime.playItem(nativeJellyfinItemId)
+      ) {
+        return;
+      }
+      void replacePlaylistAndOpen(is4k);
+    };
     return (
       <ButtonWithDropdown
         title={intl.formatMessage(
@@ -150,7 +171,7 @@ const MediaServerPlayButton = ({
           disabledReason ??
           intl.formatMessage(messages.unavailable, { mediaServerName })
         }
-        onClick={() => void replacePlaylistAndOpen(defaultIs4k)}
+        onClick={() => handlePlayback(defaultIs4k)}
       />
     );
   }

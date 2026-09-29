@@ -29,6 +29,7 @@ connects to.
 - [See where indexer searches run by media category](/using-seerr/indexer-searches/)
 - [Download verified files from Request Status](/using-seerr/request-status/)
 - [Media details and playback controls](/using-seerr/media-details-and-playback/)
+- [Optional native desktop playback](/using-seerr/native-desktop-playback/)
 - [Import a playlist as music requests](/using-seerr/playlist-requests/)
 - [Manage users and request preferences](/using-seerr/users/editing-users/)
 - [Configure notifications](/using-seerr/notifications/)

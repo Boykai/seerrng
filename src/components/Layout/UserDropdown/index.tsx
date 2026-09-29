@@ -1,5 +1,6 @@
 import CachedImage from '@app/components/Common/CachedImage';
 import MiniQuotaDisplay from '@app/components/Layout/UserDropdown/MiniQuotaDisplay';
+import { useNativeRuntime } from '@app/context/NativeRuntimeContext';
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { unsubscribeToPushNotifications } from '@app/utils/pushSubscriptionHelpers';
@@ -44,6 +45,7 @@ ForwardedLink.displayName = 'ForwardedLink';
 const UserDropdown = () => {
   const intl = useIntl();
   const { user, revalidate } = useUser();
+  const { clearSession } = useNativeRuntime();
 
   const logout = async () => {
     const cleanUpPushSubscription = async () => {
@@ -81,6 +83,7 @@ const UserDropdown = () => {
     const response = await axios.post('/api/v1/auth/logout');
 
     if (response.data?.status === 'ok') {
+      clearSession();
       revalidate();
     }
   };
