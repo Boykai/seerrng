@@ -70,9 +70,9 @@ describe('Magazine discovery sources', () => {
       'science'
     );
     cy.wait('@trackedMagazineCatalog')
-      .its('request.url')
-      .should('include', 'query=science')
-      .and('not.include', 'catalog=public');
+      .its('request.query')
+      .should('deep.include', { query: 'science' })
+      .and('not.have.property', 'catalog');
     cy.then(() =>
       expect(requestedCatalogs).to.deep.equal(['public', 'tracked'])
     );

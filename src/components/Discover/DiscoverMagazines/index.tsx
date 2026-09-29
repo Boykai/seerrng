@@ -62,7 +62,7 @@ const DiscoverMagazines = () => {
 
   const discover = useDiscover<MagazineResult>(
     '/api/v1/discover/magazines',
-    { query, catalog },
+    { query, catalog: catalog === 'public' ? 'public' : undefined },
     {
       enabled: isRouteReady,
       showErrorToast: false,
