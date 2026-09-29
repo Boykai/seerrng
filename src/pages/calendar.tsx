@@ -1,6 +1,10 @@
 import Button from '@app/components/Common/Button';
 import PageTitle from '@app/components/Common/PageTitle';
 import { Permission, useUser } from '@app/hooks/useUser';
+import {
+  encodeApiPathSegment,
+  normalizeMusicBrainzId,
+} from '@app/utils/apiPath';
 import defineMessages from '@app/utils/defineMessages';
 import type { ReleaseCalendarItem } from '@server/lib/releaseCalendar/normalize';
 import Link from 'next/link';
@@ -10,7 +14,7 @@ import useSWR from 'swr';
 const messages = defineMessages('calendar', {
   title: 'Release Calendar',
   description:
-    'Upcoming movie releases and series episodes from your acquisition services.',
+    'Upcoming movie releases, series episodes, and album releases from your acquisition services.',
   month: 'Month',
   scope: 'Calendar scope',
   mine: 'My requests',
@@ -19,6 +23,7 @@ const messages = defineMessages('calendar', {
   allTypes: 'Movies and series',
   movies: 'Movies',
   series: 'Series',
+  albums: 'Music albums',
   unmonitored: 'Include unmonitored titles',
   loading: 'Loading releases…',
   empty: 'No releases match this month and scope.',
@@ -34,6 +39,7 @@ const messages = defineMessages('calendar', {
   digital: 'Digital release',
   physical: 'Physical release',
   theatrical: 'Theatrical release',
+  album: 'Album release',
   episode: 'Season {season}, episode {episode}',
   previous: 'Previous month',
   next: 'Next month',
@@ -136,6 +142,7 @@ export default function CalendarPage() {
             <option value="">{intl.formatMessage(messages.allTypes)}</option>
             <option value="movie">{intl.formatMessage(messages.movies)}</option>
             <option value="tv">{intl.formatMessage(messages.series)}</option>
+            <option value="music">{intl.formatMessage(messages.albums)}</option>
           </select>
         </label>
         {hasPermission(Permission.ADMIN) && (
@@ -210,7 +217,14 @@ export default function CalendarPage() {
             </div>
             <div className="min-w-0 flex-1 break-words">
               <h2 className="font-semibold text-gray-100">
-                {item.tmdbId ? (
+                {item.mediaType === 'music' && item.mbId ? (
+                  <Link
+                    href={`/music/${encodeApiPathSegment(normalizeMusicBrainzId(item.mbId))}`}
+                    className="text-blue-300 hover:text-blue-200"
+                  >
+                    {item.title}
+                  </Link>
+                ) : item.tmdbId ? (
                   <Link
                     href={`/${item.mediaType}/${item.tmdbId}`}
                     className="text-blue-300 hover:text-blue-200"
@@ -221,6 +235,9 @@ export default function CalendarPage() {
                   item.title
                 )}
               </h2>
+              {item.artistName && (
+                <p className="mt-1 text-sm text-gray-400">{item.artistName}</p>
+              )}
               {item.seasonNumber !== undefined &&
                 item.episodeNumber !== undefined && (
                   <p className="mt-1 text-sm text-gray-400">

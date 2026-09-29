@@ -1,13 +1,20 @@
+import {
+  isValidMusicBrainzResourceId,
+  normalizeMusicBrainzId,
+} from '@server/lib/externalIds';
+
 export interface ReleaseCalendarItem {
   id: string;
-  source: 'radarr' | 'sonarr';
-  mediaType: 'movie' | 'tv';
+  source: 'radarr' | 'sonarr' | 'lidarr';
+  mediaType: 'movie' | 'tv' | 'music';
   title: string;
   startsAt: string;
-  dateType: 'digital' | 'physical' | 'theatrical' | 'air';
+  dateType: 'digital' | 'physical' | 'theatrical' | 'air' | 'album';
   allDay: boolean;
   tmdbId?: number;
   tvdbId?: number;
+  mbId?: string;
+  artistName?: string;
   seasonNumber?: number;
   episodeNumber?: number;
   episodeTitle?: string;
@@ -50,7 +57,7 @@ function timestamp(value: unknown): string | undefined {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : undefined;
 }
 export function normalizeCalendarRow(
-  source: 'radarr' | 'sonarr',
+  source: 'radarr' | 'sonarr' | 'lidarr',
   serverId: number,
   is4k: boolean,
   value: unknown,
@@ -61,6 +68,41 @@ export function normalizeCalendarRow(
   if (!row) return undefined;
   const id = positive(row.id);
   if (!id) return undefined;
+  if (source === 'lidarr') {
+    const title = text(row.title);
+    const startsAt = timestamp(row.releaseDate);
+    const rawMbId = text(row.foreignAlbumId);
+    const normalizedMbId = rawMbId
+      ? normalizeMusicBrainzId(rawMbId)
+      : undefined;
+    const mbId =
+      normalizedMbId && isValidMusicBrainzResourceId(normalizedMbId)
+        ? normalizedMbId
+        : undefined;
+    const artist = record(row.artist);
+    const artistName = text(artist?.artistName ?? row.artistName);
+    const statistics = record(row.statistics);
+    const totalTrackCount = positive(statistics?.totalTrackCount);
+    const trackFileCount = positive(statistics?.trackFileCount);
+    if (!title || !startsAt) return undefined;
+    return {
+      id: `lidarr:${serverId}:${id}`,
+      source,
+      mediaType: 'music',
+      title,
+      startsAt,
+      dateType: 'album',
+      allDay: true,
+      ...(mbId ? { mbId } : {}),
+      ...(artistName ? { artistName } : {}),
+      available:
+        row.hasFile === true ||
+        (!!totalTrackCount &&
+          trackFileCount !== undefined &&
+          trackFileCount >= totalTrackCount),
+      is4k: false,
+    };
+  }
   if (source === 'radarr') {
     const title = text(row.title);
     if (!title) return undefined;

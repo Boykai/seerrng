@@ -17007,6 +17007,7 @@ paths:
             enum:
               - movie
               - tv
+              - music
         - name: includeUnmonitored
           in: query
           schema:
@@ -17056,11 +17057,13 @@ paths:
                           enum:
                             - radarr
                             - sonarr
+                            - lidarr
                         mediaType:
                           type: string
                           enum:
                             - movie
                             - tv
+                            - music
                         title:
                           type: string
                         startsAt:
@@ -17073,12 +17076,17 @@ paths:
                             - digital
                             - physical
                             - theatrical
+                            - album
                         allDay:
                           type: boolean
                         tmdbId:
                           type: integer
                         tvdbId:
                           type: integer
+                        mbId:
+                          type: string
+                        artistName:
+                          type: string
                         seasonNumber:
                           type: integer
                         episodeNumber:

@@ -461,12 +461,18 @@ class ServarrBase<QueueItemAppendT> extends ExternalAPI {
   public async getReleaseCalendar(
     start: string,
     end: string,
-    includeUnmonitored = false
+    includeUnmonitored = false,
+    includeArtist = false
   ): Promise<unknown[]> {
     const results = await this.get<unknown>(
       '/calendar',
       {
-        params: { start, end, unmonitored: includeUnmonitored },
+        params: {
+          start,
+          end,
+          unmonitored: includeUnmonitored,
+          ...(includeArtist ? { includeArtist: true } : {}),
+        },
       },
       300
     );

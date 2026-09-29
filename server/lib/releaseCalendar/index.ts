@@ -1,8 +1,10 @@
+import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
-import { MediaRequestStatus } from '@server/constants/media';
+import { MediaRequestStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import { MediaRequest } from '@server/entity/MediaRequest';
+import { normalizeMusicBrainzId } from '@server/lib/externalIds';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -34,6 +36,11 @@ export async function getReleaseCalendar(
       mediaType: 'tv' as const,
       server,
     })),
+    ...settings.lidarr.map((server) => ({
+      source: 'lidarr' as const,
+      mediaType: 'music' as const,
+      server,
+    })),
   ].filter(
     (item) =>
       isMediaCategoryEnabled(item.mediaType) &&
@@ -52,10 +59,15 @@ export async function getReleaseCalendar(
                 url: RadarrAPI.buildUrl(server, '/api/v3'),
                 apiKey: server.apiKey,
               })
-            : new SonarrAPI({
-                url: SonarrAPI.buildUrl(server, '/api/v3'),
-                apiKey: server.apiKey,
-              });
+            : source === 'sonarr'
+              ? new SonarrAPI({
+                  url: SonarrAPI.buildUrl(server, '/api/v3'),
+                  apiKey: server.apiKey,
+                })
+              : new LidarrAPI({
+                  url: LidarrAPI.buildUrl(server, '/api/v1'),
+                  apiKey: server.apiKey,
+                });
         const rows = await calendarQueue.run(() =>
           api.getReleaseCalendar(
             new Date(
@@ -64,7 +76,8 @@ export async function getReleaseCalendar(
             new Date(
               Math.max(query.end.getTime(), query.allDayEnd.getTime())
             ).toISOString(),
-            query.includeUnmonitored
+            query.includeUnmonitored,
+            source === 'lidarr'
           )
         );
         if (api instanceof SonarrAPI) {
@@ -174,13 +187,22 @@ export async function getReleaseCalendar(
         .filter((request) => request.media.tvdbId)
         .map((request) => `${request.media.tvdbId}:${request.is4k}`)
     );
-    results = results.filter((item) =>
-      item.tmdbId
+    const musicIds = new Set(
+      requests
+        .filter((request) => request.media.mediaType === MediaType.MUSIC)
+        .flatMap((request) =>
+          request.media.mbId ? [normalizeMusicBrainzId(request.media.mbId)] : []
+        )
+    );
+    results = results.filter((item) => {
+      if (item.mediaType === 'music')
+        return !!item.mbId && musicIds.has(normalizeMusicBrainzId(item.mbId));
+      return item.tmdbId
         ? tmdbIds.has(`${item.mediaType}:${item.tmdbId}:${item.is4k}`)
         : item.mediaType === 'tv' &&
-          !!item.tvdbId &&
-          tvdbIds.has(`${item.tvdbId}:${item.is4k}`)
-    );
+            !!item.tvdbId &&
+            tvdbIds.has(`${item.tvdbId}:${item.is4k}`);
+    });
   }
   results.sort(
     (a, b) => a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id)

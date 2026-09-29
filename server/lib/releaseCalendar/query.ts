@@ -14,7 +14,7 @@ export interface CalendarQuery {
   allDayEnd: Date;
   scope: 'mine' | 'all';
   includeUnmonitored: boolean;
-  mediaType?: 'movie' | 'tv';
+  mediaType?: 'movie' | 'tv' | 'music';
 }
 function date(value: unknown, fallback: Date): Date {
   if (value === undefined) return fallback;
@@ -95,7 +95,12 @@ export function parseCalendarQuery(
   if (scope === 'all' && !canViewAll)
     throw new CalendarQueryError(403, 'You cannot view all release calendars.');
   const mediaType = query.mediaType;
-  if (mediaType !== undefined && mediaType !== 'movie' && mediaType !== 'tv')
+  if (
+    mediaType !== undefined &&
+    mediaType !== 'movie' &&
+    mediaType !== 'tv' &&
+    mediaType !== 'music'
+  )
     throw new CalendarQueryError(400, 'Unknown calendar media type.');
   const parsedUnmonitored = parseOptionalQueryBoolean(
     query.includeUnmonitored,
