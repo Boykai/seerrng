@@ -93,9 +93,9 @@ For Trakt and Simkl TV titles, open **Episode-level tracking**, choose a season
 and episode, then mark that episode watched. Removing one episode's watched
 status asks for confirmation. SeerrNG sends the selected catalog coordinates
 and uses the linked TMDB and TVDB series IDs when available; Simkl's anime
-season mapping is enabled when the configured metadata provider supplies TVDB
-coordinates. The episode list follows the configured TV metadata provider, so
-use the same season order that your provider account recognizes.
+season mapping is enabled only for anime when its configured metadata provider
+supplies TVDB coordinates. The episode list follows the configured TV metadata
+provider, so use the same season order that your provider account recognizes.
 
 When a provider does not confirm a write, SeerrNG records the outcome as
 uncertain and will not automatically repeat that action. Check the provider

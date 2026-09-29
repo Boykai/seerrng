@@ -23,10 +23,10 @@ const externalApiPrototype = ExternalAPI.prototype as unknown as {
   get: (endpoint: string, ...args: unknown[]) => Promise<unknown>;
 };
 
-function tmdbShow(isAnime: boolean) {
+function tmdbShow(isAnime: boolean, tmdbId = 42) {
   return {
-    id: 42,
-    external_ids: { tvdb_id: 1399 },
+    id: tmdbId,
+    external_ids: { tvdb_id: tmdbId + 1357 },
     keywords: {
       results: isAnime ? [{ id: ANIME_KEYWORD_ID, name: 'Anime' }] : [],
     },
@@ -255,14 +255,20 @@ it('uses TVDB anime numbering only for anime configured with TVDB metadata', asy
     anime: MetadataProviderType.TVDB,
   };
   let lookupCount = 0;
-  mock.method(externalApiPrototype, 'get', async () =>
-    tmdbShow(lookupCount++ === 0)
-  );
+  mock.method(externalApiPrototype, 'get', async (endpoint: string) => {
+    lookupCount++;
+    const tmdbId = Number(endpoint.split('/').at(-1));
+    return tmdbShow(tmdbId === 42, tmdbId);
+  });
   const write = mock.method(
     SimklAPI.prototype,
     'setEpisodeHistory',
-    async (_ids, _season, _episode, watched) =>
-      watched ? { added: { episodes: 1 } } : ''
+    async (
+      _ids: Parameters<SimklAPI['setEpisodeHistory']>[0],
+      _season: number,
+      _episode: number,
+      watched: boolean
+    ) => (watched ? { added: { episodes: 1 } } : '')
   );
 
   try {
@@ -287,7 +293,7 @@ it('uses TVDB anime numbering only for anime configured with TVDB metadata', asy
         action: 'watched',
         value: false,
         mediaType: 'tv',
-        tmdbId: 42,
+        tmdbId: 43,
         episode: { season: 2, episode: 4 },
       }),
       'credential'
@@ -303,7 +309,7 @@ it('uses TVDB anime numbering only for anime configured with TVDB metadata', asy
       true,
     ]);
     assert.deepEqual(write.mock.calls[1].arguments, [
-      { tmdb: 42, tvdb: 1399 },
+      { tmdb: 43, tvdb: 1400 },
       2,
       4,
       false,

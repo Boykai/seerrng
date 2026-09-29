@@ -291,6 +291,7 @@ export async function applyTrackingIntent(
         ? settings.metadataSettings.anime
         : settings.metadataSettings.tv;
       useTvdbAnimeSeasons =
+        isAnime &&
         tvdbShowId !== undefined &&
         metadataProvider === MetadataProviderType.TVDB;
     }

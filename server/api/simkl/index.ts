@@ -363,9 +363,9 @@ export default class SimklAPI extends ExternalAPI {
    * Write one episode's watch state using the catalog IDs and coordinates
    * returned to the caller.
    *
-   * Simkl uses `use_tvdb_anime_seasons` to map TVDB/TMDB-shaped coordinates to
-   * split or absolute-numbered anime entries. Set it only when the supplied
-   * coordinates came from TVDB; TMDB coordinates must keep their own numbering.
+   * Simkl's anime-only `use_tvdb_anime_seasons` flag interprets episode
+   * coordinates as TVDB seasons. Set it only when the configured anime
+   * metadata provider supplied those coordinates; TMDB ordering stays intact.
    */
   public async setEpisodeHistory(
     ids: SimklEpisodeIds,
