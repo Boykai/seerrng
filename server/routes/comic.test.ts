@@ -88,6 +88,7 @@ function mockComicVolume() {
     resource_type: 'volume',
     publisher: { id: 1, name: 'Test Publisher' },
     count_of_issues: 12,
+    description: '<p>Volume description.</p>',
   }));
 }
 
@@ -111,6 +112,7 @@ describe('GET /comic/:id', () => {
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.id, '4567');
     assert.strictEqual(res.body.title, 'Test Comic');
+    assert.strictEqual(res.body.description, '<p>Volume description.</p>');
     assert.strictEqual(res.body.onUserWatchlist, false);
   });
 

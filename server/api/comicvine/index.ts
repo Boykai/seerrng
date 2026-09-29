@@ -1,5 +1,7 @@
 import ExternalAPI from '@server/api/externalapi';
 import cacheManager from '@server/lib/cache';
+import DOMPurify from 'dompurify';
+import { JSDOM } from 'jsdom';
 
 const MAX_COMICVINE_TEXT_LENGTH = 512;
 const MAX_COMICVINE_DESCRIPTION_LENGTH = 20_000;
@@ -37,6 +39,36 @@ const boundedString = (
   typeof value === 'string' && value.length > 0
     ? value.slice(0, maxLength)
     : undefined;
+
+const comicVineDescriptionPurify = DOMPurify(new JSDOM('').window);
+const sanitizeComicVineDescription = (value: unknown): string | undefined => {
+  const description = boundedString(value, MAX_COMICVINE_DESCRIPTION_LENGTH);
+  if (!description) return undefined;
+  return comicVineDescriptionPurify.sanitize(description, {
+    ALLOWED_TAGS: [
+      'a',
+      'b',
+      'blockquote',
+      'br',
+      'div',
+      'em',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'i',
+      'li',
+      'ol',
+      'p',
+      'span',
+      'strong',
+      'u',
+      'ul',
+    ],
+    ALLOWED_ATTR: ['href', 'title'],
+    ALLOW_DATA_ATTR: false,
+  });
+};
 
 const boundedInteger = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
@@ -208,11 +240,8 @@ const sanitizeVolumeResult = (
     count_of_issues: boundedInteger(value.count_of_issues),
     publisher: sanitizePublisher(value.publisher),
     image: sanitizeImage(value.image),
-    deck: boundedString(value.deck, MAX_COMICVINE_DESCRIPTION_LENGTH),
-    description: boundedString(
-      value.description,
-      MAX_COMICVINE_DESCRIPTION_LENGTH
-    ),
+    deck: sanitizeComicVineDescription(value.deck),
+    description: sanitizeComicVineDescription(value.description),
     site_detail_url: sanitizeSiteDetailUrl(value.site_detail_url),
     resource_type: 'volume',
   };

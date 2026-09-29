@@ -233,6 +233,31 @@ describe('ComicVineAPI.getVolume', () => {
     assert.strictEqual(volume?.issues?.[0].issue_number, '1');
   });
 
+  it('keeps safe overview formatting and removes executable ComicVine markup', async () => {
+    mockGet(async () => ({
+      error: 'OK',
+      status_code: 1,
+      results: {
+        id: 1234,
+        name: 'Batman',
+        resource_type: 'volume',
+        description:
+          '<p>Written by <strong>Test Author</strong>.</p><script>alert(1)</script><img src=x onerror=alert(2)><a href="javascript:alert(3)">unsafe link</a>',
+      },
+    }));
+
+    const volume = await new ComicVineAPI('key').getVolume(1234);
+
+    assert.strictEqual(
+      volume?.description,
+      '<p>Written by <strong>Test Author</strong>.</p><a>unsafe link</a>'
+    );
+    assert.doesNotMatch(
+      volume?.description ?? '',
+      /script|onerror|javascript:/i
+    );
+  });
+
   it('rejects a non-positive-integer volume id', async () => {
     const api = new ComicVineAPI('key');
     await assert.rejects(() => api.getVolume(-1));

@@ -578,11 +578,21 @@ const ComicDetails = () => {
               <h2 className="media-inset-heading">
                 {intl.formatMessage(messages.overview)}
               </h2>
-              <p className="refreshed-detail-text-muted mt-4 max-w-none text-sm leading-5">
-                {data.description ||
-                  data.deck ||
-                  intl.formatMessage(messages.overviewUnavailable)}
-              </p>
+              {data.description || data.deck ? (
+                <div
+                  data-testid="comic-description"
+                  className="prose prose-sm prose-invert refreshed-detail-text-muted mt-4 max-w-none leading-5 break-words"
+                  // ComicVine descriptions are sanitized by the server API
+                  // adapter before they enter the detail response.
+                  dangerouslySetInnerHTML={{
+                    __html: data.description || data.deck || '',
+                  }}
+                />
+              ) : (
+                <p className="refreshed-detail-text-muted mt-4 max-w-none text-sm leading-5">
+                  {intl.formatMessage(messages.overviewUnavailable)}
+                </p>
+              )}
             </section>
             {(data.issueCount ?? 0) > 0 && (
               <section
