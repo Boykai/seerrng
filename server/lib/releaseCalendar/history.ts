@@ -32,7 +32,8 @@ export async function captureReleaseCalendarHistory(
       configuredSources:
         getSettings().radarr.length +
         getSettings().sonarr.length +
-        getSettings().lidarr.length,
+        getSettings().lidarr.length +
+        getSettings().readarr.length,
       unavailableSources: partialSources.length,
       truncated,
       observedEvents: summary.observed,

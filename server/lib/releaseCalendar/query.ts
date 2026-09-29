@@ -14,7 +14,7 @@ export interface CalendarQuery {
   allDayEnd: Date;
   scope: 'mine' | 'all';
   includeUnmonitored: boolean;
-  mediaType?: 'movie' | 'tv' | 'music';
+  mediaType?: 'movie' | 'tv' | 'music' | 'book';
 }
 function date(value: unknown, fallback: Date): Date {
   if (value === undefined) return fallback;
@@ -99,7 +99,8 @@ export function parseCalendarQuery(
     mediaType !== undefined &&
     mediaType !== 'movie' &&
     mediaType !== 'tv' &&
-    mediaType !== 'music'
+    mediaType !== 'music' &&
+    mediaType !== 'book'
   )
     throw new CalendarQueryError(400, 'Unknown calendar media type.');
   const parsedUnmonitored = parseOptionalQueryBoolean(

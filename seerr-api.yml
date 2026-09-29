@@ -17016,6 +17016,7 @@ paths:
               - movie
               - tv
               - music
+              - book
         - name: includeUnmonitored
           in: query
           schema:
@@ -17028,7 +17029,7 @@ paths:
             maxLength: 64
             default: UTC
           description: >-
-            IANA time zone for episode month boundaries; all-day movie and album releases retain their calendar dates.
+            IANA time zone for episode month boundaries; all-day movie, album, and book releases retain their calendar dates.
       responses:
         '200':
           description: Release calendar with unavailable sources indicated
@@ -17065,12 +17066,14 @@ paths:
                             - radarr
                             - sonarr
                             - lidarr
+                            - readarr
                         mediaType:
                           type: string
                           enum:
                             - movie
                             - tv
                             - music
+                            - book
                         title:
                           type: string
                         startsAt:
@@ -17084,6 +17087,7 @@ paths:
                             - physical
                             - theatrical
                             - album
+                            - book
                         allDay:
                           type: boolean
                         tmdbId:
@@ -17093,6 +17097,28 @@ paths:
                         mbId:
                           type: string
                         artistName:
+                          type: string
+                        bookId:
+                          type: string
+                          description: Service-scoped Bookshelf ID suitable for the book details route.
+                        foreignBookId:
+                          type: string
+                          description: Provider-native Readarr-compatible book identity used for personal request matching.
+                        foreignEditionId:
+                          type: string
+                          description: Provider-native edition identity used for personal request matching.
+                        isbnCandidates:
+                          type: array
+                          maxItems: 24
+                          items:
+                            type: string
+                          description: Public ISBN identities available from Readarr book editions, used for matching personal requests.
+                        bookFormat:
+                          type: string
+                          enum:
+                            - ebook
+                            - audiobook
+                        authorName:
                           type: string
                         seasonNumber:
                           type: integer

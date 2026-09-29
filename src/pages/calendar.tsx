@@ -14,16 +14,17 @@ import useSWR from 'swr';
 const messages = defineMessages('calendar', {
   title: 'Release Calendar',
   description:
-    'Upcoming movie releases, series episodes, and album releases from your acquisition services.',
+    'Upcoming movie, series, music, and book releases from your acquisition services.',
   month: 'Month',
   scope: 'Calendar scope',
   mine: 'My requests',
   all: 'All monitored titles',
   mediaType: 'Media type',
-  allTypes: 'Movies, series, and music',
+  allTypes: 'Movies, series, music, and books',
   movies: 'Movies',
   series: 'Series',
   albums: 'Music albums',
+  books: 'Books',
   unmonitored: 'Include unmonitored titles',
   loading: 'Loading releases…',
   empty: 'No releases match this month and scope.',
@@ -40,6 +41,9 @@ const messages = defineMessages('calendar', {
   physical: 'Physical release',
   theatrical: 'Theatrical release',
   album: 'Album release',
+  book: 'Book release',
+  ebook: 'Book',
+  audiobook: 'Audiobook',
   episode: 'Season {season}, episode {episode}',
   previous: 'Previous month',
   next: 'Next month',
@@ -143,6 +147,7 @@ export default function CalendarPage() {
             <option value="movie">{intl.formatMessage(messages.movies)}</option>
             <option value="tv">{intl.formatMessage(messages.series)}</option>
             <option value="music">{intl.formatMessage(messages.albums)}</option>
+            <option value="book">{intl.formatMessage(messages.books)}</option>
           </select>
         </label>
         {hasPermission(Permission.ADMIN) && (
@@ -224,6 +229,13 @@ export default function CalendarPage() {
                   >
                     {item.title}
                   </Link>
+                ) : item.mediaType === 'book' && item.bookId ? (
+                  <Link
+                    href={`/book/${encodeApiPathSegment(item.bookId)}?format=${item.bookFormat ?? 'ebook'}&lookupTitle=${encodeURIComponent(item.title)}`}
+                    className="text-blue-300 hover:text-blue-200"
+                  >
+                    {item.title}
+                  </Link>
                 ) : item.tmdbId ? (
                   <Link
                     href={`/${item.mediaType}/${item.tmdbId}`}
@@ -237,6 +249,14 @@ export default function CalendarPage() {
               </h2>
               {item.artistName && (
                 <p className="mt-1 text-sm text-gray-400">{item.artistName}</p>
+              )}
+              {item.authorName && (
+                <p className="mt-1 text-sm text-gray-400">{item.authorName}</p>
+              )}
+              {item.bookFormat && (
+                <p className="mt-1 text-sm text-gray-400">
+                  {intl.formatMessage(messages[item.bookFormat])}
+                </p>
               )}
               {item.seasonNumber !== undefined &&
                 item.episodeNumber !== undefined && (

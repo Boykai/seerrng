@@ -2,19 +2,29 @@ import {
   isValidMusicBrainzResourceId,
   normalizeMusicBrainzId,
 } from '@server/lib/externalIds';
+import { normalizeValidIsbn } from '@server/lib/isbn';
+import { makeBookshelfBookId } from '@server/utils/bookshelfCatalog';
+
+export type ReleaseCalendarBookFormat = 'ebook' | 'audiobook';
 
 export interface ReleaseCalendarItem {
   id: string;
-  source: 'radarr' | 'sonarr' | 'lidarr';
-  mediaType: 'movie' | 'tv' | 'music';
+  source: 'radarr' | 'sonarr' | 'lidarr' | 'readarr';
+  mediaType: 'movie' | 'tv' | 'music' | 'book';
   title: string;
   startsAt: string;
-  dateType: 'digital' | 'physical' | 'theatrical' | 'air' | 'album';
+  dateType: 'digital' | 'physical' | 'theatrical' | 'air' | 'album' | 'book';
   allDay: boolean;
   tmdbId?: number;
   tvdbId?: number;
   mbId?: string;
   artistName?: string;
+  bookId?: string;
+  foreignBookId?: string;
+  foreignEditionId?: string;
+  isbnCandidates?: string[];
+  bookFormat?: ReleaseCalendarBookFormat;
+  authorName?: string;
   seasonNumber?: number;
   episodeNumber?: number;
   episodeTitle?: string;
@@ -57,17 +67,64 @@ function timestamp(value: unknown): string | undefined {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : undefined;
 }
 export function normalizeCalendarRow(
-  source: 'radarr' | 'sonarr' | 'lidarr',
+  source: 'radarr' | 'sonarr' | 'lidarr' | 'readarr',
   serverId: number,
   is4k: boolean,
   value: unknown,
   start?: Date,
-  end?: Date
+  end?: Date,
+  bookFormat: ReleaseCalendarBookFormat = 'ebook'
 ): ReleaseCalendarItem | undefined {
   const row = record(value);
   if (!row) return undefined;
   const id = positive(row.id);
   if (!id) return undefined;
+  if (source === 'readarr') {
+    const title = text(row.title);
+    const releaseDate =
+      typeof row.releaseDate === 'string' ? row.releaseDate.slice(0, 10) : '';
+    const startsAt = timestamp(releaseDate);
+    const foreignBookId = text(row.foreignBookId);
+    const foreignEditionId = text(row.foreignEditionId);
+    const editions = Array.isArray(row.editions) ? row.editions : [];
+    const isbnCandidates = [
+      ...new Set(
+        editions.slice(0, 100).flatMap((value) => {
+          const edition = record(value);
+          return [
+            normalizeValidIsbn(text(edition?.isbn13)),
+            normalizeValidIsbn(text(edition?.isbn10)),
+          ].filter((isbn): isbn is string => !!isbn);
+        })
+      ),
+    ].slice(0, 24);
+    const author = record(row.author);
+    const authorName = text(author?.authorName ?? row.authorName);
+    const statistics = record(row.statistics);
+    const bookFileCount = positive(statistics?.bookFileCount);
+    if (!title || !startsAt) return undefined;
+    return {
+      id: `readarr:${serverId}:${id}`,
+      source,
+      mediaType: 'book',
+      title,
+      startsAt,
+      dateType: 'book',
+      allDay: true,
+      ...(foreignBookId
+        ? {
+            foreignBookId,
+            bookId: makeBookshelfBookId(serverId, foreignBookId),
+          }
+        : {}),
+      ...(foreignEditionId ? { foreignEditionId } : {}),
+      ...(isbnCandidates.length ? { isbnCandidates } : {}),
+      ...(authorName ? { authorName } : {}),
+      bookFormat,
+      available: row.hasFile === true || bookFileCount !== undefined,
+      is4k: false,
+    };
+  }
   if (source === 'lidarr') {
     const title = text(row.title);
     const releaseDate =

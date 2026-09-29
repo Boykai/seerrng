@@ -45,12 +45,13 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   under the parent approval to maintain a buffer of up to five missing episodes.
   Disabling watch-ahead stops future additions and leaves already-created child
   requests in place.
-- Movie/series/music release calendar with personal/shared scopes, bounded cached
-  backend reads, episode hydration and partial-source reporting across Radarr,
-  Sonarr, and Lidarr.
-- Daily date-change snapshots for monitored Radarr, Sonarr, and Lidarr releases. The
-  calendar shows up to three recent moves per event; snapshots reset after long
-  observation gaps to avoid presenting stale dates as fresh changes.
+- Movie/series/music/book release calendar with personal/shared scopes, bounded
+  cached backend reads, episode hydration and partial-source reporting across
+  Radarr, Sonarr, Lidarr, and Readarr-compatible Bookshelf services.
+- Daily date-change snapshots for monitored Radarr, Sonarr, Lidarr, and
+  Readarr-compatible Bookshelf releases. The calendar shows up to three recent
+  moves per event; snapshots reset after long observation gaps to avoid
+  presenting stale dates as fresh changes.
 - Dedicated-permission download intervention inbox with durable warnings, explicit
   rejection options, existing-library matching and backend-specific manual-import
   previews for Radarr, Sonarr, Lidarr and Readarr, backend identity checks,
@@ -68,7 +69,8 @@ Jellyfin bridge to a separate SeerrNG server, and optional native playback.
   live provider accounts.
 - Verify manual-import payloads and acquisition actions against live services,
   including the supported Readarr-compatible backend variants.
-- Additional calendar media sources beyond Radarr, Sonarr, and Lidarr.
+- Additional calendar media sources beyond Radarr, Sonarr, Lidarr, and
+  Readarr-compatible Bookshelf services.
 - Additional provider-specific live resolvers and bulk gap repair across sources
   beyond per-title, current-page, and pack import.
 - Richer episode-level identity reconciliation and watched-state display across

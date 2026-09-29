@@ -134,22 +134,26 @@ private match.
 
 ## Release calendar
 
-**Calendar** displays movie releases, series episodes, and album releases from
-configured Radarr, Sonarr, and Lidarr services. **My requests** is the default
-scope and follows the request's standard or 4K format; music entries match by
-MusicBrainz release-group ID. Users with request-view or management permissions
-can select the shared calendar. Only administrators can include unmonitored titles.
+**Calendar** displays movie releases, series episodes, album releases, and book
+releases from configured Radarr, Sonarr, Lidarr, and Readarr-compatible
+Bookshelf services. **My requests** is the default scope and follows the
+request's standard, 4K, ebook, or audiobook format. Music entries match by
+MusicBrainz release-group ID; book entries match provider identities rather than
+titles. Users with request-view or management permissions can select the shared
+calendar. Only administrators can include unmonitored titles.
 
-Movie and album dates are displayed as calendar dates. Episode air times use your
-browser's time zone. Album entries link to their music details page and show the
-artist name when Lidarr provides it. If a service is unavailable, the calendar
-identifies the missing source and keeps results from successful services. Results
-and backend reads are bounded; narrow the month or media type when the result limit
-is reached.
+Movie, album, and book dates are displayed as calendar dates. Episode air times
+use your browser's time zone. Album entries link to their music details page and
+show the artist name when Lidarr provides it. Book entries link to the matching
+Bookshelf details page, show the author, and retain the configured ebook or
+audiobook format. If a service is unavailable, the calendar identifies the
+missing source and keeps results from successful services. Results and backend
+reads are bounded; narrow the month or media type when the result limit is
+reached.
 
-SeerrNG checks monitored Radarr, Sonarr, and Lidarr releases daily and records date
-changes after the first snapshot. Calendar entries can show the three most
-recent changes from the last 180 days, including the old and new dates or air
-times. The history uses the same **My requests** or shared-calendar visibility
-as the release itself. Administrators can run or disable **Release Calendar
-History** under **Settings → Jobs & Cache**.
+SeerrNG checks monitored Radarr, Sonarr, Lidarr, and Readarr-compatible Bookshelf
+releases daily and records date changes after the first snapshot. Calendar
+entries can show the three most recent changes from the last 180 days, including
+the old and new dates or air times. The history uses the same **My requests** or
+shared-calendar visibility as the release itself. Administrators can run or
+disable **Release Calendar History** under **Settings → Jobs & Cache**.

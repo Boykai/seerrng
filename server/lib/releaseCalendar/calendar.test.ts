@@ -1,18 +1,24 @@
 import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
+import ReadarrAPI from '@server/api/servarr/readarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import { MediaRequestStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
+import MediaIdentifier, {
+  MediaIdentifierProvider,
+} from '@server/entity/MediaIdentifier';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import {
   getSettings,
   type LidarrSettings,
   type RadarrSettings,
+  type ReadarrSettings,
   type SonarrSettings,
 } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
+import { makeBookshelfBookId } from '@server/utils/bookshelfCatalog';
 import assert from 'node:assert/strict';
 import { afterEach, it, mock } from 'node:test';
 import {
@@ -55,6 +61,10 @@ it('validates real dates, bounded ranges, and shared calendar authority', () => 
     parseCalendarQuery({ ...range, mediaType: 'music' }, false, false)
       .mediaType,
     'music'
+  );
+  assert.equal(
+    parseCalendarQuery({ ...range, mediaType: 'book' }, false, false).mediaType,
+    'book'
   );
   for (const query of [
     { start: '2026-02-30', end: '2026-03-10' },
@@ -277,6 +287,71 @@ it('records date changes for Lidarr albums under a stable event identity', async
   assert.equal(annotated.dateChanges?.[0]?.previousStartsAt, first.startsAt);
   assert.equal(annotated.dateChanges?.[0]?.startsAt, next.startsAt);
 });
+it('normalizes Readarr book releases with service links, author, format, and provider date', () => {
+  const book = normalizeCalendarRow(
+    'readarr',
+    7,
+    false,
+    {
+      id: 41,
+      title: 'Book',
+      foreignBookId: 'readarr-native-id',
+      releaseDate: '2026-09-12T23:00:00-05:00',
+      author: { authorName: 'Author' },
+      statistics: { bookFileCount: 1, totalBookCount: 2 },
+    },
+    new Date('2026-09-01T00:00:00.000Z'),
+    new Date('2026-10-01T00:00:00.000Z'),
+    'audiobook'
+  );
+  assert.equal(book?.id, 'readarr:7:41');
+  assert.equal(book?.bookId, makeBookshelfBookId(7, 'readarr-native-id'));
+  assert.equal(book?.foreignBookId, 'readarr-native-id');
+  assert.equal(book?.authorName, 'Author');
+  assert.equal(book?.bookFormat, 'audiobook');
+  assert.equal(book?.startsAt, '2026-09-12T00:00:00.000Z');
+  assert.equal(book?.allDay, true);
+  assert.equal(book?.available, true);
+  assert.equal(book?.is4k, false);
+  assert.equal(
+    normalizeCalendarRow('readarr', 7, false, {
+      id: 41,
+      title: 'Book',
+      releaseDate: 'not-a-date',
+    }),
+    undefined
+  );
+});
+it('records Readarr book date changes under a stable provider event identity', async () => {
+  const first = normalizeCalendarRow('readarr', 8, false, {
+    id: 41,
+    title: 'Book',
+    foreignBookId: 'readarr-native-id',
+    releaseDate: '2026-09-12',
+  })!;
+  const next = normalizeCalendarRow('readarr', 8, false, {
+    id: 41,
+    title: 'Book',
+    foreignBookId: 'readarr-native-id',
+    releaseDate: '2026-09-16',
+  })!;
+  const observed = new Date('2026-09-01T04:00:00.000Z');
+  assert.deepEqual(await recordReleaseCalendarSnapshots([first], observed), {
+    observed: 1,
+    changed: 0,
+    expired: 0,
+  });
+  const changedAt = new Date(observed.getTime() + 24 * 60 * 60 * 1000);
+  assert.deepEqual(await recordReleaseCalendarSnapshots([next], changedAt), {
+    observed: 1,
+    changed: 1,
+    expired: 0,
+  });
+  const [annotated] = await annotateReleaseCalendarHistory([next], changedAt);
+  assert.equal(annotated.id, 'readarr:8:41');
+  assert.equal(annotated.dateChanges?.[0]?.previousStartsAt, first.startsAt);
+  assert.equal(annotated.dateChanges?.[0]?.startsAt, next.startsAt);
+});
 it('keeps successful sources when another fails without exposing service identifiers to ordinary users', async () => {
   getSettings().radarr = [
     { ...server, minimumAvailability: 'released' } as RadarrSettings,
@@ -414,6 +489,127 @@ it('limits the personal calendar to the current user’s requested titles and qu
   assert.deepEqual(
     result.results.map((item) => item.title),
     ['Requested movie', 'Requested album']
+  );
+});
+
+it('matches personal Readarr releases by provider identity and requested format', async () => {
+  getSettings().radarr = [];
+  getSettings().sonarr = [];
+  getSettings().lidarr = [];
+  getSettings().readarr = [
+    { ...server, id: 10, serviceType: 'ebook' } as ReadarrSettings,
+    { ...server, id: 11, serviceType: 'audiobook' } as ReadarrSettings,
+  ];
+  const user = await getRepository(User).findOneByOrFail({ id: 1 });
+  const media = await getRepository(Media).save(
+    new Media({ mediaType: MediaType.BOOK, tmdbId: 0 })
+  );
+  await getRepository(MediaIdentifier).save([
+    new MediaIdentifier({
+      media,
+      provider: MediaIdentifierProvider.READARR,
+      value: 'readarr-native-id',
+      canonical: true,
+    }),
+    new MediaIdentifier({
+      media,
+      provider: MediaIdentifierProvider.OPENLIBRARY_EDITION,
+      value: 'OL123M',
+    }),
+    new MediaIdentifier({
+      media,
+      provider: MediaIdentifierProvider.ISBN,
+      value: '9780306406157',
+    }),
+  ]);
+  const request = await getRepository(MediaRequest).save({
+    media,
+    type: MediaType.BOOK,
+    requestedBy: user,
+    is4k: false,
+    bookFormat: 'audiobook',
+    serviceTargets: [
+      {
+        serviceType: 'readarr',
+        format: 'audiobook',
+        serverId: 11,
+      },
+    ],
+    status: MediaRequestStatus.APPROVED,
+  });
+  mock.method(
+    ReadarrAPI.prototype,
+    'getReleaseCalendar',
+    async (
+      _start: string,
+      _end: string,
+      _unmonitored?: boolean,
+      _includeArtist?: boolean,
+      includeAuthor?: boolean
+    ) => {
+      assert.equal(includeAuthor, true);
+      return [
+        {
+          id: 41,
+          title: 'Requested book',
+          foreignBookId: 'readarr-native-id',
+          releaseDate: '2026-09-12',
+          author: { authorName: 'Author' },
+        },
+        {
+          id: 42,
+          title: 'Requested book',
+          foreignBookId: 'unrelated-provider-id',
+          releaseDate: '2026-09-13',
+        },
+        {
+          id: 43,
+          title: 'Requested edition',
+          foreignBookId: 'another-provider-id',
+          foreignEditionId: 'OL123M',
+          releaseDate: '2026-09-14',
+        },
+        {
+          id: 44,
+          title: 'Requested ISBN edition',
+          foreignBookId: 'yet-another-provider-id',
+          editions: [{ isbn13: '9780306406157' }],
+          releaseDate: '2026-09-15',
+        },
+      ];
+    }
+  );
+
+  const query = parseCalendarQuery(range, false, false);
+  const audiobookCalendar = await getReleaseCalendar(query, user.id, false, {
+    includeDateHistory: false,
+  });
+  assert.deepEqual(
+    audiobookCalendar.results.map((item) => [item.id, item.bookFormat]),
+    [
+      ['readarr:11:41', 'audiobook'],
+      ['readarr:11:43', 'audiobook'],
+      ['readarr:11:44', 'audiobook'],
+    ]
+  );
+
+  await getRepository(MediaRequest).update(request.id, {
+    bookFormat: 'both',
+    serviceTargets: [],
+  });
+  const bothFormatsCalendar = await getReleaseCalendar(query, user.id, false, {
+    includeDateHistory: false,
+  });
+  assert.deepEqual(
+    bothFormatsCalendar.results.map((item) => [item.id, item.bookFormat]),
+    [
+      ['readarr:10:41', 'ebook'],
+      ['readarr:11:41', 'audiobook'],
+      ['readarr:10:43', 'ebook'],
+      ['readarr:11:43', 'audiobook'],
+      ['readarr:10:44', 'ebook'],
+      ['readarr:11:44', 'audiobook'],
+    ]
   );
 });
 

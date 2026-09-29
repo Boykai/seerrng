@@ -1,19 +1,31 @@
 import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
+import ReadarrAPI from '@server/api/servarr/readarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import { MediaRequestStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import { MediaIdentifierProvider } from '@server/entity/MediaIdentifier';
 import { MediaRequest } from '@server/entity/MediaRequest';
-import { normalizeMusicBrainzId } from '@server/lib/externalIds';
+import {
+  normalizeMusicBrainzId,
+  normalizeOpenLibraryEditionId,
+  normalizeOpenLibraryWorkId,
+} from '@server/lib/externalIds';
+import { normalizeValidIsbn } from '@server/lib/isbn';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { parseBookshelfBookId } from '@server/utils/bookshelfCatalog';
 import {
   BoundedTaskQueue,
   mapWithConcurrency,
 } from '@server/utils/concurrency';
 import { annotateReleaseCalendarHistory } from './historyStore';
-import { normalizeCalendarRow, type ReleaseCalendarItem } from './normalize';
+import {
+  normalizeCalendarRow,
+  type ReleaseCalendarBookFormat,
+  type ReleaseCalendarItem,
+} from './normalize';
 import type { CalendarQuery } from './query';
 
 const calendarQueue = new BoundedTaskQueue(3, 32);
@@ -29,21 +41,37 @@ export async function getReleaseCalendar(
     ...settings.radarr.map((server) => ({
       source: 'radarr' as const,
       mediaType: 'movie' as const,
+      category: 'movie' as const,
+      bookFormat: undefined,
       server,
     })),
     ...settings.sonarr.map((server) => ({
       source: 'sonarr' as const,
       mediaType: 'tv' as const,
+      category: 'tv' as const,
+      bookFormat: undefined,
       server,
     })),
     ...settings.lidarr.map((server) => ({
       source: 'lidarr' as const,
       mediaType: 'music' as const,
+      category: 'music' as const,
+      bookFormat: undefined,
       server,
     })),
+    ...settings.readarr.map((server) => {
+      const bookFormat = server.serviceType ?? 'ebook';
+      return {
+        source: 'readarr' as const,
+        mediaType: 'book' as const,
+        category: bookFormat,
+        bookFormat,
+        server,
+      };
+    }),
   ].filter(
     (item) =>
-      isMediaCategoryEnabled(item.mediaType) &&
+      isMediaCategoryEnabled(item.category) &&
       (!query.mediaType || item.mediaType === query.mediaType)
   );
   let sourceTruncated = false;
@@ -51,7 +79,7 @@ export async function getReleaseCalendar(
   const batches = await mapWithConcurrency(
     sources.slice(0, 20),
     3,
-    async ({ source, server }) => {
+    async ({ source, server, bookFormat }) => {
       try {
         const api =
           source === 'radarr'
@@ -64,10 +92,16 @@ export async function getReleaseCalendar(
                   url: SonarrAPI.buildUrl(server, '/api/v3'),
                   apiKey: server.apiKey,
                 })
-              : new LidarrAPI({
-                  url: LidarrAPI.buildUrl(server, '/api/v1'),
-                  apiKey: server.apiKey,
-                });
+              : source === 'lidarr'
+                ? new LidarrAPI({
+                    url: LidarrAPI.buildUrl(server, '/api/v1'),
+                    apiKey: server.apiKey,
+                  })
+                : new ReadarrAPI({
+                    url: ReadarrAPI.buildUrl(server, '/api/v1'),
+                    apiKey: server.apiKey,
+                    mediaType: bookFormat ?? 'ebook',
+                  });
         const rows = await calendarQueue.run(() =>
           api.getReleaseCalendar(
             new Date(
@@ -77,7 +111,8 @@ export async function getReleaseCalendar(
               Math.max(query.end.getTime(), query.allDayEnd.getTime())
             ).toISOString(),
             query.includeUnmonitored,
-            source === 'lidarr'
+            source === 'lidarr',
+            source === 'readarr'
           )
         );
         if (api instanceof SonarrAPI) {
@@ -147,7 +182,8 @@ export async function getReleaseCalendar(
             server.is4k,
             row,
             query.allDayStart,
-            query.allDayEnd
+            query.allDayEnd,
+            source === 'readarr' ? bookFormat : undefined
           );
           return item &&
             new Date(item.startsAt) >=
@@ -171,6 +207,7 @@ export async function getReleaseCalendar(
     const requests = await getRepository(MediaRequest)
       .createQueryBuilder('request')
       .innerJoinAndSelect('request.media', 'media')
+      .leftJoinAndSelect('media.identifiers', 'identifier')
       .where('request.requestedById = :userId', { userId })
       .andWhere('request.status != :declined', {
         declined: MediaRequestStatus.DECLINED,
@@ -194,9 +231,114 @@ export async function getReleaseCalendar(
           request.media.mbId ? [normalizeMusicBrainzId(request.media.mbId)] : []
         )
     );
+    const bookFormatsByIdentity = new Map<
+      string,
+      Set<ReleaseCalendarBookFormat>
+    >();
+    const addBookIdentity = (
+      identity: string,
+      formats: Set<ReleaseCalendarBookFormat>
+    ) => {
+      const existing = bookFormatsByIdentity.get(identity) ?? new Set();
+      for (const format of formats) existing.add(format);
+      bookFormatsByIdentity.set(identity, existing);
+    };
+    for (const request of requests) {
+      if (request.media.mediaType !== MediaType.BOOK) continue;
+      const targetedFormats = (request.serviceTargets ?? [])
+        .filter((target) => target.serviceType === 'readarr')
+        .map((target) => target.format)
+        .filter(
+          (format): format is ReleaseCalendarBookFormat =>
+            format === 'ebook' || format === 'audiobook'
+        );
+      const requestedFormats = new Set<ReleaseCalendarBookFormat>(
+        targetedFormats.length
+          ? targetedFormats
+          : request.bookFormat === 'both'
+            ? ['ebook', 'audiobook']
+            : [request.bookFormat === 'audiobook' ? 'audiobook' : 'ebook']
+      );
+      const requestedIsbn = normalizeValidIsbn(
+        request.preferredIsbn13 ?? undefined
+      );
+      if (requestedIsbn)
+        addBookIdentity(`isbn:${requestedIsbn}`, requestedFormats);
+      const preferredEditionId = request.preferredEditionId?.trim();
+      if (preferredEditionId)
+        addBookIdentity(
+          `openlibrary-edition:${normalizeOpenLibraryEditionId(preferredEditionId).toLowerCase()}`,
+          requestedFormats
+        );
+      for (const identifier of request.media.identifiers ?? []) {
+        const value = identifier.value.trim();
+        if (!value) continue;
+        if (identifier.provider === MediaIdentifierProvider.READARR) {
+          addBookIdentity(`readarr:${value.toLowerCase()}`, requestedFormats);
+        } else if (
+          identifier.provider === MediaIdentifierProvider.BOOKSHELF ||
+          identifier.provider === MediaIdentifierProvider.AUDIOBOOKSHELF
+        ) {
+          const bookshelfId = parseBookshelfBookId(value);
+          addBookIdentity(
+            `${identifier.provider}:${(bookshelfId?.foreignBookId ?? value).toLowerCase()}`,
+            requestedFormats
+          );
+        } else if (
+          identifier.provider === MediaIdentifierProvider.OPENLIBRARY
+        ) {
+          addBookIdentity(
+            `openlibrary:${normalizeOpenLibraryWorkId(value)}`,
+            requestedFormats
+          );
+        } else if (
+          identifier.provider === MediaIdentifierProvider.OPENLIBRARY_EDITION
+        ) {
+          addBookIdentity(
+            `openlibrary-edition:${normalizeOpenLibraryEditionId(value).toLowerCase()}`,
+            requestedFormats
+          );
+        } else if (identifier.provider === MediaIdentifierProvider.ISBN) {
+          addBookIdentity(
+            `isbn:${normalizeValidIsbn(value) ?? value}`,
+            requestedFormats
+          );
+        }
+      }
+    }
     results = results.filter((item) => {
       if (item.mediaType === 'music')
         return !!item.mbId && musicIds.has(normalizeMusicBrainzId(item.mbId));
+      if (item.mediaType === 'book') {
+        if (!item.foreignBookId || !item.bookFormat) return false;
+        const foreignBookId = item.foreignBookId.trim();
+        const identities = [
+          `readarr:${foreignBookId.toLowerCase()}`,
+          `bookshelf:${foreignBookId.toLowerCase()}`,
+          `audiobookshelf:${foreignBookId.toLowerCase()}`,
+        ];
+        const openLibraryId = foreignBookId.match(
+          /^(?:openlibrary:)?(?:\/?works\/)?(OL\d+W)$/i
+        )?.[1];
+        if (openLibraryId)
+          identities.push(
+            `openlibrary:${normalizeOpenLibraryWorkId(openLibraryId)}`
+          );
+        if (item.foreignEditionId)
+          identities.push(
+            `openlibrary-edition:${normalizeOpenLibraryEditionId(item.foreignEditionId).toLowerCase()}`
+          );
+        for (const isbn of item.isbnCandidates ?? [])
+          identities.push(`isbn:${isbn}`);
+        const prefixedIsbn = foreignBookId.match(/^isbn:(.+)$/i)?.[1];
+        if (prefixedIsbn)
+          identities.push(
+            `isbn:${normalizeValidIsbn(prefixedIsbn) ?? prefixedIsbn.trim()}`
+          );
+        return identities.some((identity) =>
+          bookFormatsByIdentity.get(identity)?.has(item.bookFormat!)
+        );
+      }
       return item.tmdbId
         ? tmdbIds.has(`${item.mediaType}:${item.tmdbId}:${item.is4k}`)
         : item.mediaType === 'tv' &&

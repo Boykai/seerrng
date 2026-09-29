@@ -29,6 +29,45 @@ type MockableReadarr = {
   ) => Promise<ReadarrBook>;
 };
 
+describe('ReadarrAPI.getReleaseCalendar', () => {
+  afterEach(() => {
+    mock.restoreAll();
+  });
+
+  it('keeps the configured book format and requests author details', async () => {
+    const api = new ReadarrAPI({
+      url: 'http://localhost:8787/api/v1',
+      apiKey: 'key',
+      mediaType: 'audiobook',
+    });
+    const getMock = mock.method(
+      ReadarrAPI.prototype as unknown as MockableReadarr,
+      'get',
+      async () => []
+    );
+
+    await api.getReleaseCalendar(
+      '2026-09-01T00:00:00.000Z',
+      '2026-10-01T00:00:00.000Z',
+      false,
+      false,
+      true
+    );
+
+    assert.strictEqual(getMock.mock.calls[0].arguments[0], '/calendar');
+    assert.deepStrictEqual(getMock.mock.calls[0].arguments[1], {
+      params: {
+        mediaType: 'audiobook',
+        start: '2026-09-01T00:00:00.000Z',
+        end: '2026-10-01T00:00:00.000Z',
+        unmonitored: false,
+        includeAuthor: true,
+      },
+    });
+    assert.strictEqual(getMock.mock.calls[0].arguments[2], 300);
+  });
+});
+
 const bookOptions: ReadarrBookOptions = {
   title: 'Test Book',
   foreignBookId: 'book-foreign-id',
