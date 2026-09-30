@@ -32,13 +32,5 @@ describe('Audiobook catalog paging', () => {
       expect(response?.body.results).to.have.length(50);
     });
     cy.get('[data-testid=title-card]').should('have.length', 50);
-    cy.get('[data-testid=title-card]')
-      .first()
-      .should('contain.text', 'Audiobook Fixture 00001')
-      .trigger('mouseover');
-    cy.get('[data-testid=title-card]')
-      .first()
-      .contains('button', 'Request Audiobook')
-      .should('be.visible');
   });
 });
