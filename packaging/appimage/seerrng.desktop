@@ -3,5 +3,5 @@ Type=Application
 Name=SeerrNG
 Exec=seerrng
 Icon=seerrng
-Categories=Network;AudioVideo;
-Terminal=false
+Categories=Network;
+Terminal=true

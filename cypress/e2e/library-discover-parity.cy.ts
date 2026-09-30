@@ -1383,6 +1383,7 @@ describe('Books and Music discover parity', () => {
   });
 
   it('marks a missing dual-format book side as partial when its service ID is zero', () => {
+    cy.viewport(1440, 1600);
     const requestedBy = {
       id: 1,
       displayName: 'Admin',

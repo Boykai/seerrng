@@ -1,4 +1,3 @@
-import { seedTestDb } from '@server/utils/seedTestDb';
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'fs';
 import path from 'path';
 
@@ -13,6 +12,9 @@ const defaultTestConfigDirectory = path.join(
 );
 const configDirectory =
   process.env.CONFIG_DIRECTORY || defaultTestConfigDirectory;
+// The data source reads CONFIG_DIRECTORY when it is imported. Set it before
+// loading seedTestDb so the default Cypress prep path cannot target config/.
+process.env.CONFIG_DIRECTORY = configDirectory;
 const targetSettingsPath = path.join(configDirectory, 'settings.json');
 const liveSettingsPath = path.join(repoRoot, 'config/settings.json');
 
@@ -49,6 +51,7 @@ const prepareDb = async () => {
   // Copy over test settings.json
   copyFileSync(sourceSettingsPath, targetSettingsPath);
 
+  const { seedTestDb } = await import('@server/utils/seedTestDb');
   await seedTestDb({
     preserveDb: process.env.PRESERVE_DB === 'true',
     withMigrations: process.env.WITH_MIGRATIONS === 'true',

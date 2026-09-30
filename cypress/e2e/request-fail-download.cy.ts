@@ -141,6 +141,7 @@ describe('manual fail and search from request status', () => {
         id: 8811,
         mediaType: 'movie',
         title: 'Owned Movie',
+        originalTitle: 'Owned Movie',
         releaseDate: '2024-01-01',
         posterPath: null,
         voteAverage: 7,
@@ -149,6 +150,7 @@ describe('manual fail and search from request status', () => {
         id: 8812,
         mediaType: 'movie',
         title: 'Someone Else’s Movie',
+        originalTitle: 'Someone Else’s Movie',
         releaseDate: '2024-01-01',
         posterPath: null,
         voteAverage: 7,
@@ -212,11 +214,8 @@ describe('manual fail and search from request status', () => {
         .parents('[data-testid=request-card]')
         .scrollIntoView()
         .within(() => {
-          cy.get('[data-app-tooltip-owned="true"]')
-            .contains('Processing')
-            .click();
+          cy.contains('Processing').click();
         });
-
       cy.get('.app-tooltip')
         .contains('button', 'Fail this download and search again')
         .should('be.visible')
@@ -233,9 +232,14 @@ describe('manual fail and search from request status', () => {
       cy.wait('@failOwnedDownload')
         .its('request.url')
         .should('include', '/api/v1/request/811/fail-download');
-      cy.contains(
-        'The release was failed and a new search was started.'
-      ).should('be.visible');
+      cy.contains('The release was failed and a new search was started.')
+        .should('be.visible')
+        .and(($message) => {
+          expect($message.closest('.pointer-events-auto')).to.have.css(
+            'opacity',
+            '1'
+          );
+        });
       cy.contains('Someone Else’s Movie')
         .parents('[data-testid=request-card]')
         .should('not.contain', 'Fail this download and search again');

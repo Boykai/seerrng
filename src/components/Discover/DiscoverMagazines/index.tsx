@@ -216,7 +216,7 @@ const DiscoverMagazines = () => {
                 <button
                   key={suggestion}
                   type="button"
-                  className="min-h-11 rounded-full border border-gray-700 bg-gray-900/70 px-3 text-xs font-medium text-gray-200 transition-colors hover:border-indigo-400 hover:bg-gray-800"
+                  className="min-h-12 rounded-full border border-gray-700 bg-gray-900/70 px-3 text-xs font-medium text-gray-200 transition-colors hover:border-indigo-400 hover:bg-gray-800"
                   onClick={() => setSearch(suggestion)}
                 >
                   {suggestion}

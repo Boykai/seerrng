@@ -204,10 +204,22 @@ jobs:
           appimagetool_url='https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage'
           curl -fsSL --retry 5 "$appimagetool_url" -o appimagetool
           echo 'a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0  appimagetool' | sha256sum -c -
+          node_version='22.22.2'
+          node_archive="node-v${node_version}-linux-x64.tar.xz"
+          node_base_url="https://nodejs.org/dist/v${node_version}"
+          curl -fsSL --retry 5 "${node_base_url}/${node_archive}" -o "$node_archive"
+          curl -fsSL --retry 5 "${node_base_url}/SHASUMS256.txt" \
+            | awk -v archive="$node_archive" '$2 == archive { print; found = 1 } END { if (!found) exit 1 }' \
+            > node.sha256
+          sha256sum --check node.sha256
+          mkdir -p node-runtime
+          tar -xJf "$node_archive" -C node-runtime --strip-components=1 \
+            "node-v${node_version}-linux-x64/bin/node"
           chmod +x appimagetool packaging/appimage/AppRun
-          mkdir -p SeerrNG.AppDir/usr/bin SeerrNG.AppDir/usr/lib/seerrng SeerrNG.AppDir/usr/share/applications SeerrNG.AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p SeerrNG.AppDir/usr/bin SeerrNG.AppDir/usr/lib/seerrng SeerrNG.AppDir/usr/share/applications SeerrNG.AppDir/usr/share/icons/hicolor/256x256/apps SeerrNG.AppDir/usr/share/licenses/nodejs
           tar -xzf "seerrng-${{ steps.version.outputs.tag }}-linux-x64.tar.gz" --strip-components=1 -C SeerrNG.AppDir/usr/lib/seerrng
-          cp "$(command -v node)" SeerrNG.AppDir/usr/bin/node
+          cp node-runtime/bin/node SeerrNG.AppDir/usr/bin/node
+          cp node-runtime/LICENSE SeerrNG.AppDir/usr/share/licenses/nodejs/LICENSE
           cp packaging/appimage/AppRun SeerrNG.AppDir/
           cp packaging/appimage/seerrng.desktop SeerrNG.AppDir/
           cp packaging/appimage/seerrng.desktop SeerrNG.AppDir/usr/share/applications/
