@@ -75,7 +75,7 @@
     "country-flag-icons": "1.6.20",
     "cronstrue": "3.26.0",
     "dns-caching": "^0.2.9",
-    "dompurify": "3.4.15",
+    "dompurify": "3.4.16",
     "email-templates": "13.0.1",
     "express": "5.2.1",
     "express-openapi-validator": "5.6.2",
