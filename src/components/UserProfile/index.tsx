@@ -510,6 +510,7 @@ const UserProfile = () => {
             </div>
             <Slider
               sliderKey="requests"
+              disableItemContentVisibility
               isLoading={!requests}
               items={(requests?.results ?? []).map((request) => (
                 <RequestCard

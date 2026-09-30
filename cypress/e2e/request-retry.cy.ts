@@ -144,7 +144,14 @@ describe('failed request retry', () => {
         .parents('[data-testid=request-card]')
         .scrollIntoView()
         .within(() => {
-          cy.contains('button', 'Search Again').should('be.visible').click();
+          cy.contains('button', 'Search Again')
+            .should('be.visible')
+            .and(($button) => {
+              expect($button[0].getBoundingClientRect().height).to.be.at.least(
+                44
+              );
+            })
+            .click();
         });
       cy.wait('@retryOwnedRequest')
         .its('request.url')

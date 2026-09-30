@@ -291,7 +291,7 @@ const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
 
   return (
     <div
-      className="relative flex w-72 overflow-hidden rounded-xl bg-gray-800 p-4 text-gray-400 shadow ring-1 ring-red-500 sm:w-96"
+      className="request-card relative flex w-72 overflow-hidden rounded-xl bg-gray-800 p-4 text-gray-400 shadow ring-1 ring-red-500 sm:w-96"
       data-testid="request-card"
     >
       <div className="w-20 sm:w-28">
@@ -624,7 +624,7 @@ const RequestCard = ({
         />
       )}
       <div
-        className={`app-card-main relative flex w-72 overflow-hidden rounded-xl bg-gray-800 bg-cover bg-center p-4 text-gray-400 shadow ring-1 ring-gray-700 sm:w-96 ${
+        className={`request-card app-card-main relative flex w-72 overflow-hidden rounded-xl bg-gray-800 bg-cover bg-center p-4 text-gray-400 shadow ring-1 ring-gray-700 sm:w-96 ${
           compact ? 'min-h-0' : 'min-h-[17rem]'
         }`}
         data-testid="request-card"
@@ -886,7 +886,7 @@ const RequestCard = ({
             {requestData.status === MediaRequestStatus.FAILED && canRetry && (
               <Button
                 buttonType="primary"
-                buttonSize="sm"
+                buttonSize="lg"
                 disabled={isRetrying}
                 onClick={() => retryRequest()}
               >

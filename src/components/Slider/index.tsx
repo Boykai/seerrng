@@ -2,7 +2,14 @@ import Button from '@app/components/Common/Button';
 import TitleCard from '@app/components/TitleCard';
 import globalMessages from '@app/i18n/globalMessages';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+} from 'react';
 import { useIntl } from 'react-intl';
 
 interface SliderProps {
@@ -13,6 +20,7 @@ interface SliderProps {
   emptyMessage?: React.ReactNode;
   placeholder?: React.ReactNode;
   compact?: boolean;
+  disableItemContentVisibility?: boolean;
 }
 
 enum Direction {
@@ -28,6 +36,7 @@ const Slider = ({
   emptyMessage,
   placeholder = <TitleCard.Placeholder />,
   compact = false,
+  disableItemContentVisibility = false,
 }: SliderProps) => {
   const intl = useIntl();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -98,6 +107,10 @@ const Slider = ({
   const onScroll = () => {
     debouncedScroll();
   };
+
+  const itemStyle: CSSProperties | undefined = disableItemContentVisibility
+    ? { contain: 'none', contentVisibility: 'visible', overflow: 'visible' }
+    : undefined;
 
   const slide = (direction: Direction) => {
     const clientWidth =
@@ -183,6 +196,7 @@ const Slider = ({
           <div
             key={`${sliderKey}-${index}`}
             className={`slider-item inline-block px-2 align-top ${compact ? 'slider-item-compact' : ''}`}
+            style={itemStyle}
           >
             {item}
           </div>
@@ -192,6 +206,7 @@ const Slider = ({
             <div
               key={`placeholder-${i}`}
               className={`slider-item inline-block px-2 align-top ${compact ? 'slider-item-compact' : ''}`}
+              style={itemStyle}
             >
               {placeholder}
             </div>
