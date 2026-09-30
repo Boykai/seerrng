@@ -12193,98 +12193,6 @@
     font-weight: var(--font-weight-semibold);
     color: rgb(var(--theme-heading-text));
   }
-  .brushed-metal-image-title,
-  .brushed-metal-diagonal-title,
-  .colored-metal-diagonal-title {
-    position: relative;
-    width: -moz-fit-content;
-    width: fit-content;
-    background-clip: text;
-    color: transparent;
-    paint-order: stroke fill;
-    text-rendering: geometricPrecision;
-    text-shadow: none;
-    -webkit-background-clip: text;
-    -webkit-font-smoothing: none;
-    -webkit-text-fill-color: transparent;
-  }
-  .brushed-metal-image-title {
-    isolation: isolate;
-    --metal-title-border-width: 2px;
-    --metal-title-fill-image: url('/visual-lab/brushed-steel-title-fill.png');
-    --metal-title-fill-position: center;
-    --metal-title-fill-size: 100% 100%;
-  }
-  .brushed-metal-image-title,
-  .brushed-metal-diagonal-title {
-    background: linear-gradient(
-      180deg,
-      #ffffff 0%,
-      #eef0f2 18%,
-      #b9bec3 42%,
-      #747a80 68%,
-      #2b3036 100%
-    );
-    background-clip: text;
-    filter: drop-shadow(1px 2px 1px rgb(0 0 0 / 0.85));
-    -webkit-background-clip: text;
-    -webkit-text-stroke: var(--metal-title-border-width) transparent;
-  }
-  .brushed-metal-image-title::after,
-  .brushed-metal-diagonal-title::after {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background-image: var(--metal-title-fill-image);
-    background-position: var(--metal-title-fill-position);
-    background-size: var(--metal-title-fill-size);
-    background-clip: text;
-    color: transparent;
-    content: attr(data-text);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    -webkit-text-stroke: 0;
-    pointer-events: none;
-  }
-  .brushed-metal-diagonal-title {
-    isolation: isolate;
-    --metal-title-border-width: 2px;
-    --metal-title-fill-image: url('/visual-lab/brushed-steel-diagonal-title-fill.png');
-    --metal-title-fill-position: center;
-    --metal-title-fill-size: cover;
-  }
-  .colored-metal-diagonal-title {
-    width: -moz-fit-content;
-    width: fit-content;
-    background-image: url('/visual-lab/colored-metal-diagonal-title-fill.png');
-    background-position: center;
-    background-size: cover;
-    background-clip: text;
-    color: transparent;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  .colored-metal-diagonal-title.visual-lab-squashed-fill {
-    background-size: 100% 100%;
-  }
-  .svg-metal-title {
-    display: block;
-    width: 220px;
-    max-width: 100%;
-    height: 34px;
-    overflow: visible;
-    shape-rendering: crispEdges;
-  }
-  .svg-metal-title-halo {
-    filter: drop-shadow(0 0 3px rgb(0 0 0 / 0.9));
-  }
-  .svg-metal-title-text {
-    font-family: inherit;
-    font-size: 24px;
-    font-weight: 700;
-    letter-spacing: normal;
-    text-rendering: optimizeSpeed;
-  }
 }
 @layer utilities {
   .absolute-top-shift {
@@ -13534,6 +13442,23 @@
   color: var(--solid-color);
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.8);
 }
+.gradiant-text {
+  width: -moz-fit-content;
+  width: fit-content;
+  background-image: linear-gradient(
+    45deg,
+    var(--gradient-start) 0%,
+    color-mix(in hsl, var(--gradient-start) 58%, var(--gradient-end)) 42%,
+    color-mix(in hsl, var(--gradient-start) 12%, var(--gradient-end)) 68%,
+    var(--gradient-end) 84%,
+    color-mix(in hsl, var(--gradient-start) 2%, white) 100%
+  );
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 3px rgb(0 0 0 / 0.9));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 .solid-steel {
   --solid-color: #cccccc;
 }
@@ -13652,6 +13577,19 @@
   --solid-color: #d4f75a;
 }
 .metalic-text {
+  --metalic-gradient: linear-gradient(
+    45deg,
+    var(--metal-dark) 0%,
+    var(--metal-middle) 14%,
+    var(--metal-light) 24%,
+    #ffffff 32%,
+    var(--metal-light) 40%,
+    var(--metal-dark) 52%,
+    var(--metal-middle) 65%,
+    #ffffff 76%,
+    var(--metal-light) 84%,
+    var(--metal-dark) 100%
+  );
   width: -moz-fit-content;
   width: fit-content;
   background-image: var(--metalic-gradient);

@@ -71,6 +71,12 @@ test('current shared owners pass their checks and functional mutations fail', ()
       '.media-request-submit-action {\n    @apply flex min-w-0 items-center justify-start;',
       'detail Request controls must remain right-justified opposite Search Prowlarr',
     ],
+    [
+      'src/styles/visual-lab.css',
+      '.gradiant-text {\n  width: fit-content;\n  background-image: linear-gradient(',
+      ".gradiant-text {\n  width: fit-content;\n  background-image: url('/visual-lab/legacy-title-fill.png');\n  background: linear-gradient(",
+      'Visual Lab treatments must remain CSS-only without image-backed fills',
+    ],
   ];
   for (const [fileName, original, replacement, reason] of cases) {
     const source = readFileSync(

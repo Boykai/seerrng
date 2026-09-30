@@ -6,8 +6,6 @@ const messages = defineMessages('components.VisualLab', {
   title: 'Visual Lab',
 });
 
-type MetalTextVariant = 'page-title' | 'card-title' | 'card-heading1';
-
 const formatTreatmentLabel = (treatmentClass: string) =>
   treatmentClass
     .replace(/^css-/, '')
@@ -56,86 +54,27 @@ const paletteFilterScript = `
     })();
   </script>`;
 
-const svgGradientLine = (
-  id: string,
-  text: string,
-  variant: MetalTextVariant = 'page-title',
-  treatmentClass = ''
-) => {
-  const svgHeight =
-    variant === 'page-title' ? 34 : variant === 'card-title' ? 26 : 22;
-  const svgWidth =
-    variant === 'page-title' ? 240 : variant === 'card-title' ? 205 : 78;
-  const textY =
-    variant === 'page-title' ? 26 : variant === 'card-title' ? 20 : 17;
-  const roleClass = variant === 'card-heading1' ? 'card-heading' : variant;
-  const namedTreatmentClass = `${roleClass}-${treatmentClass}`;
-
-  return `
-  <svg
-    class="svg-metal-title svg-metal-title-${variant} svg-metal-title-halo ${treatmentClass}"
-    viewBox="0 0 ${svgWidth} ${svgHeight}"
-    style="width: ${svgWidth}px; overflow: visible"
-    role="img"
-    aria-label="${text}"
-  >
-    <defs>
-      <linearGradient id="smooth-gradient-${id}" x1="0" y1="1" x2="1" y2="0">
-        <stop offset="0" stop-color="var(--gradient-start)" />
-        <stop
-          offset="0.42"
-          stop-color="color-mix(in hsl, var(--gradient-start) 58%, var(--gradient-end))"
-        />
-        <stop
-          offset="0.68"
-          stop-color="color-mix(in hsl, var(--gradient-start) 12%, var(--gradient-end))"
-        />
-        <stop offset="0.84" stop-color="var(--gradient-end)" />
-        <stop
-          offset="1"
-          stop-color="color-mix(in hsl, var(--gradient-start) 2%, white)"
-        />
-      </linearGradient>
-    </defs>
-    <text
-      class="svg-metal-title-text ${variant} ${namedTreatmentClass}"
-      x="3"
-      y="${textY}"
-      fill="url(#smooth-gradient-${id})"
-      shape-rendering="crispEdges"
-    >
-      ${text}
-    </text>
-  </svg>`;
-};
-
-const svgGradientTitle = (id: string, text: string, treatmentClass: string) => {
+const gradiantTitle = (treatmentClass: string) => {
   const label = formatTreatmentLabel(treatmentClass);
 
   return `
   <div class="visual-lab-title-group">
     <div class="visual-lab-style-name">${label}</div>
-    ${svgGradientLine(id, 'Page Title', 'page-title', treatmentClass)}
-    ${svgGradientLine(`${id}-card-title`, 'Card Title', 'card-title', treatmentClass)}
-    ${svgGradientLine(
-      `${id}-card-heading1`,
-      'Card Heading',
-      'card-heading1',
-      treatmentClass
-    )}
+    <div class="page-title gradiant-text ${treatmentClass}">Page Title</div>
+    <div class="card-title gradiant-text ${treatmentClass}">Card Title</div>
+    <div class="card-heading1 gradiant-text ${treatmentClass}">Card Heading</div>
   </div>`;
 };
 
 const metalicTitle = (treatmentClass: string) => {
   const label = formatTreatmentLabel(treatmentClass);
-  const gradient = `linear-gradient(45deg, var(--metal-dark) 0%, var(--metal-middle) 14%, var(--metal-light) 24%, #ffffff 32%, var(--metal-light) 40%, var(--metal-dark) 52%, var(--metal-middle) 65%, #ffffff 76%, var(--metal-light) 84%, var(--metal-dark) 100%)`;
 
   return `
   <div class="visual-lab-title-group">
     <div class="visual-lab-style-name">${label}</div>
-    <div class="page-title metalic-text ${treatmentClass} page-title-${treatmentClass}" style="--metalic-gradient: ${gradient}">Page Title</div>
-    <div class="card-title metalic-text ${treatmentClass} card-title-${treatmentClass}" style="--metalic-gradient: ${gradient}">Card Title</div>
-    <div class="card-heading1 metalic-text ${treatmentClass} card-heading-${treatmentClass}" style="--metalic-gradient: ${gradient}">Card Heading</div>
+    <div class="page-title metalic-text ${treatmentClass} page-title-${treatmentClass}">Page Title</div>
+    <div class="card-title metalic-text ${treatmentClass} card-title-${treatmentClass}">Card Title</div>
+    <div class="card-heading1 metalic-text ${treatmentClass} card-heading-${treatmentClass}">Card Heading</div>
   </div>`;
 };
 
@@ -254,16 +193,10 @@ const metalicTitlePaletteGrid = () =>
     .map((color) => metalicTitle(`metalic-${color}`))
     .join('');
 
-const gradientTitlePaletteGrid = (idPrefix: string) =>
+const gradiantTitlePaletteGrid = () =>
   titlePaletteClasses
     .flat()
-    .map((color) =>
-      svgGradientTitle(
-        `${idPrefix}-gradiant-${color}`,
-        'Report an Issue',
-        `gradiant-${color}`
-      )
-    )
+    .map((color) => gradiantTitle(`gradiant-${color}`))
     .join('');
 
 const solidTitlePaletteGrid = () =>
@@ -272,7 +205,7 @@ const solidTitlePaletteGrid = () =>
     .map((color) => solidTitle(`solid-${color}`))
     .join('');
 
-const titleTextSections = (idPrefix: string) => `
+const titleTextSections = () => `
   <section class="visual-lab-title-section" data-palette-family="solid">
     <h2 class="media-slider-title">Solid Title</h2>
     <div class="visual-lab-title-grid">
@@ -288,22 +221,10 @@ const titleTextSections = (idPrefix: string) => `
     <h2 class="media-slider-title">Gradiant Title</h2>
     <div class="visual-lab-title-grid">
       ${borderColumnHeadings}
-      ${svgGradientTitle(
-        `${idPrefix}-gradiant-steel`,
-        'Report an Issue',
-        'gradiant-steel'
-      )}
-      ${svgGradientTitle(
-        `${idPrefix}-gradiant-metalic-chrome`,
-        'Report an Issue',
-        'gradiant-metalic-chrome'
-      )}
-      ${svgGradientTitle(
-        `${idPrefix}-gradiant-liquid-chrome`,
-        'Report an Issue',
-        'gradiant-liquid-chrome'
-      )}
-      ${gradientTitlePaletteGrid(idPrefix)}
+      ${gradiantTitle('gradiant-steel')}
+      ${gradiantTitle('gradiant-metalic-chrome')}
+      ${gradiantTitle('gradiant-liquid-chrome')}
+      ${gradiantTitlePaletteGrid()}
     </div>
   </section>
 
@@ -331,9 +252,9 @@ const titleTextDocument = `<!doctype html>
       <section class="relative z-10 mx-auto w-full max-w-6xl space-y-8">
         <h1 class="page-title">Title Text</h1>
         ${paletteFilterControls}
-        ${titleTextSections('page')}
+        ${titleTextSections()}
         <section class="settings-main-card app-card-main visual-lab-title-card">
-          ${titleTextSections('card')}
+          ${titleTextSections()}
         </section>
       </section>
     </main>

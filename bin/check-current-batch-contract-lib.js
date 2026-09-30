@@ -1184,6 +1184,32 @@ const validateCurrentBatchContract = (files) => {
     '.visual-lab-button-gradiant {',
     'the generated Visual Lab stylesheet must include the gradiant button treatment'
   );
+  for (const fileName of [
+    'src/styles/visual-lab.css',
+    'public/visual-lab/visual-lab.css',
+  ]) {
+    requireText(
+      fileName,
+      '.gradiant-text {',
+      'Visual Lab title treatments must keep the CSS-only gradiant text recipe'
+    );
+    rejectText(
+      fileName,
+      "url('/visual-lab/",
+      'Visual Lab treatments must remain CSS-only without image-backed fills'
+    );
+  }
+  for (const forbiddenPattern of [
+    '<linearGradient',
+    'fill="url(',
+    'style="--metalic-gradient',
+  ]) {
+    rejectText(
+      'src/components/VisualLab/index.tsx',
+      forbiddenPattern,
+      'Visual Lab examples must use shared CSS recipes instead of inline presentation'
+    );
+  }
   requireText(
     globals,
     '.media-availability-cell {\n    @apply flex w-full items-center justify-center justify-self-stretch;',
