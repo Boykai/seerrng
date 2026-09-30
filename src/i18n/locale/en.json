@@ -1477,6 +1477,7 @@
   "components.RequestCard.failedretry": "Something went wrong while retrying the request.",
   "components.RequestCard.mediaerror": "{mediaType} Not Found",
   "components.RequestCard.partialBookService": "Partial Bookshelf link",
+  "components.RequestCard.searchAgain": "Search Again",
   "components.RequestCard.seasons": "{seasonCount, plural, one {Season} other {Seasons}}",
   "components.RequestCard.tmdbid": "TMDB ID",
   "components.RequestCard.tvdbid": "TheTVDB ID",
