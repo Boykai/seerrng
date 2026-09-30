@@ -9,6 +9,7 @@ const portableTests = [
   'bin/check-refreshed-ui-style-lib.test.mjs',
   'bin/duplicate-detector/index.test.mjs',
   'bin/duplicate-detector/triage.test.mjs',
+  'scripts/brace-expansion.security.test.mjs',
   'scripts/chart-workflow.test.mjs',
   'scripts/check-container-security.test.mjs',
   'scripts/bookshelf-media-move.test.mjs',
