@@ -345,7 +345,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
       )
     : undefined;
 
-  const primaryActions = (
+  const indexerCompanionActions = (
     <>
       {canUseBlocklist && (
         <Tooltip
@@ -393,6 +393,11 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
           </Button>
         </Tooltip>
       )}
+    </>
+  );
+
+  const reportIssueAction = (
+    <>
       {canUseReportIssue && (
         <Tooltip
           content={intl.formatMessage(
@@ -416,6 +421,11 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
           </Button>
         </Tooltip>
       )}
+    </>
+  );
+
+  const primaryActions = (
+    <>
       {safeTrailerUrl && (
         <Button
           as="a"
@@ -430,19 +440,25 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
         </Button>
       )}
       <AssociationBadge mediaType="tv" id={data.id} variant="button" />
-      <RequestButton
-        buttonSize="sm"
-        buttonType="detailRequest"
-        className="ml-0"
-        mediaType="tv"
-        onUpdate={() => revalidate()}
-        tmdbId={data.id}
-        media={data.mediaInfo}
-        isShowComplete={isComplete}
-        is4kShowComplete={is4kComplete}
-      />
-      <IndexerSearchLink category="tv" title={data.name} />
     </>
+  );
+
+  const requestAction = (
+    <RequestButton
+      buttonSize="sm"
+      buttonType="detailRequest"
+      className="ml-0"
+      mediaType="tv"
+      onUpdate={() => revalidate()}
+      tmdbId={data.id}
+      media={data.mediaInfo}
+      isShowComplete={isComplete}
+      is4kShowComplete={is4kComplete}
+    />
+  );
+
+  const indexerSearchAction = (
+    <IndexerSearchLink category="tv" title={data.name} />
   );
 
   const secondaryActions = (
@@ -537,6 +553,10 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
         }
         primaryActions={primaryActions}
         secondaryActions={secondaryActions}
+        indexerSearchAction={indexerSearchAction}
+        indexerCompanionActions={indexerCompanionActions}
+        reportIssueAction={reportIssueAction}
+        requestAction={requestAction}
         playbackActions={playbackActions}
       />
     </>

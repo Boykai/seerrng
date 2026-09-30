@@ -413,6 +413,8 @@ export const hydrateNotificationOutboxPayload = async (
       (untyped as StoredNotificationIntent).intent
     );
     validateIntentType(record.type as Notification, intent);
+    // Keep intent hydration lazy: it imports the notification enum from the
+    // notification manager, which itself imports this outbox module.
     const { hydrateNotificationIntent } = await import('./intents');
     const payload = await hydrateNotificationIntent(
       record.type as Notification,

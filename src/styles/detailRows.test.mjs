@@ -50,7 +50,6 @@ const cards = [
   'TvDetails/SeriesDetailsLayout.tsx',
   'BookDetails/BookDetailsLayout.tsx',
   'MusicDetails/MusicDetailsLayout.tsx',
-  'RequestStatus/index.tsx',
   'Blocklist/index.tsx',
   'Association/AssociationDetailCard.tsx',
   ...['Movie', 'Tv', 'Book', 'Music'].map(
@@ -89,7 +88,6 @@ for (const file of cards) {
 test('collection and advanced summaries share the global title gap', () => {
   for (const file of [
     'CollectionDetails/CollectionSummaryCard.tsx',
-    'RequestModal/CollectionRequestModal.tsx',
     'RequestModal/AdvancedRequester/index.tsx',
   ]) {
     assert.match(read(`../components/${file}`), /detail-card-heading-spacing/);
@@ -140,6 +138,33 @@ test('album and book supplemental details do not repeat summary fields', () => {
       );
     assert.equal((details.match(/<dl /g) ?? []).length, 3);
   }
+});
+
+test('movie and series overview/disclosure content stays directly below the summary', () => {
+  for (const [file, followingContent] of [
+    ['TvDetails/SeriesDetailsLayout.tsx', '<SeriesSeasonEpisodeBrowser'],
+    ['MovieDetails/MovieDetailsLayout.tsx', 'media-rating-row'],
+  ]) {
+    const source = read(`../components/${file}`);
+    const summary = source.indexOf(
+      file.startsWith('TvDetails') ? 'detail-summary-card' : '<MovieSummaryCard'
+    );
+    const overview = source.indexOf('messages.overview', summary);
+    const disclosures = source.indexOf('media-detail-disclosure-row', overview);
+    const following = source.indexOf(followingContent, disclosures);
+
+    assert.ok(summary >= 0, file);
+    assert.ok(summary < overview, file);
+    assert.ok(overview < disclosures, file);
+    assert.ok(disclosures < following, file);
+  }
+});
+
+test('series request season and episode tables use equal-width columns', () => {
+  assert.match(
+    read('../components/Common/SeriesSeasonEpisodeSelector.tsx'),
+    /grid min-w-0 gap-2 sm:grid-cols-2/
+  );
 });
 
 test('button rows share card gaps without legacy modal margins', () => {

@@ -82,6 +82,10 @@ interface MovieDetailsLayoutProps {
   show4kAvailability: boolean;
   primaryActions: ReactNode;
   secondaryActions: ReactNode;
+  indexerSearchAction: ReactNode;
+  indexerCompanionActions: ReactNode;
+  reportIssueAction: ReactNode;
+  requestAction: ReactNode;
   playbackActions?: (is4k: boolean) => ReactNode;
 }
 
@@ -98,6 +102,10 @@ const MovieDetailsLayout = ({
   show4kAvailability,
   primaryActions,
   secondaryActions,
+  indexerSearchAction,
+  indexerCompanionActions,
+  reportIssueAction,
+  requestAction,
   playbackActions,
 }: MovieDetailsLayoutProps) => {
   const intl = useIntl();
@@ -109,6 +117,12 @@ const MovieDetailsLayout = ({
     Boolean(data.mediaInfo)
   );
   const { pins, togglePinned } = useDetailDisclosurePins('movie');
+  const [showRatingsReview, setShowRatingsReview] = useState(false);
+  useEffect(() => {
+    setShowRatingsReview(
+      new URLSearchParams(window.location.search).has('ratingsReview')
+    );
+  }, []);
   const [showDetails, setShowDetails] = useState(false);
   useEffect(() => {
     setShowDetails(pins.details);
@@ -215,123 +229,6 @@ const MovieDetailsLayout = ({
             show4kAvailability={show4kAvailability}
             watchedStatus={watchedStatus}
           />
-
-          <div className="media-rating-row">
-            <MediaQualitySelect
-              value={selectedQuality}
-              options={[
-                {
-                  label: 'HD',
-                  value: 'hd',
-                  disabled: !availableFormats.includes('HD'),
-                },
-                ...(show4kAvailability
-                  ? ([
-                      {
-                        label: '4K',
-                        value: '4k',
-                        disabled: !availableFormats.includes('4K'),
-                      },
-                    ] as const)
-                  : []),
-              ]}
-              onChange={setSelectedQuality}
-              label={intl.formatMessage(messages.quality)}
-            />
-            {playbackActions?.(selectedQuality === '4k')}
-            {effectiveRatings.rtCriticsRating !== undefined &&
-              effectiveRatings.rtCriticsScore !== undefined && (
-                <Tooltip content={intl.formatMessage(messages.rtCriticsScore)}>
-                  <a
-                    href={getSafeHref(effectiveRatings.rtUrl)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="media-rating-link"
-                  >
-                    {effectiveRatings.rtCriticsRating === 'Rotten' ? (
-                      <RTRotten className="media-rating-icon" />
-                    ) : (
-                      <RTFresh className="media-rating-icon" />
-                    )}
-                    <span className="media-rating-value">
-                      {effectiveRatings.rtCriticsScore}%
-                    </span>
-                  </a>
-                </Tooltip>
-              )}
-            {effectiveRatings.rtAudienceRating !== undefined &&
-              effectiveRatings.rtAudienceScore !== undefined && (
-                <Tooltip content={intl.formatMessage(messages.rtAudienceScore)}>
-                  <a
-                    href={getSafeHref(effectiveRatings.rtUrl)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="media-rating-link"
-                  >
-                    {effectiveRatings.rtAudienceRating === 'Spilled' ? (
-                      <RTAudRotten className="media-rating-icon media-rating-icon-audience" />
-                    ) : (
-                      <RTAudFresh className="media-rating-icon media-rating-icon-audience" />
-                    )}
-                    <span className="media-rating-value">
-                      {effectiveRatings.rtAudienceScore}%
-                    </span>
-                  </a>
-                </Tooltip>
-              )}
-            {effectiveRatings.imdbScore !== undefined && (
-              <Tooltip
-                content={
-                  effectiveRatings.imdbVotes
-                    ? intl.formatMessage(messages.imdbUserScore, {
-                        formattedCount: intl.formatNumber(
-                          effectiveRatings.imdbVotes,
-                          {
-                            notation: 'compact',
-                            compactDisplay: 'short',
-                            maximumFractionDigits: 1,
-                          }
-                        ),
-                      })
-                    : intl.formatMessage(messages.imdbScore)
-                }
-              >
-                <a
-                  href={getSafeHref(effectiveRatings.imdbUrl)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="media-rating-link"
-                >
-                  <ImdbLogo className="media-rating-wordmark" />
-                  <span className="media-rating-value">
-                    {effectiveRatings.imdbScore.toFixed(1)}
-                  </span>
-                </a>
-              </Tooltip>
-            )}
-            <MdblistRatingBadges ratings={ratingData?.mdblist} />
-            {data.voteCount > 0 && (
-              <Tooltip content={intl.formatMessage(messages.tmdbUserScore)}>
-                <a
-                  href={`https://www.themoviedb.org/movie/${data.id}?language=${locale}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="media-rating-link"
-                >
-                  <TmdbLogo className="media-rating-wordmark" />
-                  <span className="media-rating-value">
-                    {Math.round(data.voteAverage * 10)}%
-                  </span>
-                </a>
-              </Tooltip>
-            )}
-          </div>
-
-          <div className="media-primary-action-row">
-            {primaryActions}
-            {secondaryActions}
-          </div>
-
           <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
             <h2 className="media-inset-heading">
               {intl.formatMessage(messages.overview)}
@@ -376,7 +273,6 @@ const MovieDetailsLayout = ({
               </div>
             )}
           </section>
-
           <div className="media-detail-disclosure-row">
             {data.collection && (
               <DetailDisclosureButton
@@ -417,14 +313,12 @@ const MovieDetailsLayout = ({
               controls="movie-additional-details"
             />
           </div>
-
           {data.collection && showCollection && (
             <CollectionSummaryCard
               key={data.collection.id}
               collection={data.collection}
             />
           )}
-
           {showCast && (
             <ExpandableCreditList
               title={intl.formatMessage(messages.fullCastList)}
@@ -463,7 +357,6 @@ const MovieDetailsLayout = ({
               )}
             </section>
           )}
-
           {showDetails && (
             <section
               id="movie-additional-details"
@@ -569,6 +462,141 @@ const MovieDetailsLayout = ({
               </div>
             </section>
           )}
+          +{' '}
+          <div className="media-rating-row">
+            <MediaQualitySelect
+              value={selectedQuality}
+              options={[
+                {
+                  label: 'HD',
+                  value: 'hd',
+                  disabled: !availableFormats.includes('HD'),
+                },
+                ...(show4kAvailability
+                  ? ([
+                      {
+                        label: '4K',
+                        value: '4k',
+                        disabled: !availableFormats.includes('4K'),
+                      },
+                    ] as const)
+                  : []),
+              ]}
+              onChange={setSelectedQuality}
+              label={intl.formatMessage(messages.quality)}
+            />
+            {effectiveRatings.rtCriticsRating !== undefined &&
+              effectiveRatings.rtCriticsScore !== undefined && (
+                <Tooltip content={intl.formatMessage(messages.rtCriticsScore)}>
+                  <a
+                    href={getSafeHref(effectiveRatings.rtUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="media-rating-link"
+                  >
+                    {effectiveRatings.rtCriticsRating === 'Rotten' ? (
+                      <RTRotten className="media-rating-icon" />
+                    ) : (
+                      <RTFresh className="media-rating-icon" />
+                    )}
+                    <span className="media-rating-value">
+                      {effectiveRatings.rtCriticsScore}%
+                    </span>
+                  </a>
+                </Tooltip>
+              )}
+            {effectiveRatings.rtAudienceRating !== undefined &&
+              effectiveRatings.rtAudienceScore !== undefined && (
+                <Tooltip content={intl.formatMessage(messages.rtAudienceScore)}>
+                  <a
+                    href={getSafeHref(effectiveRatings.rtUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="media-rating-link"
+                  >
+                    {effectiveRatings.rtAudienceRating === 'Spilled' ? (
+                      <RTAudRotten className="media-rating-icon media-rating-icon-audience" />
+                    ) : (
+                      <RTAudFresh className="media-rating-icon media-rating-icon-audience" />
+                    )}
+                    <span className="media-rating-value">
+                      {effectiveRatings.rtAudienceScore}%
+                    </span>
+                  </a>
+                </Tooltip>
+              )}
+            {effectiveRatings.imdbScore !== undefined && (
+              <Tooltip
+                content={
+                  effectiveRatings.imdbVotes
+                    ? intl.formatMessage(messages.imdbUserScore, {
+                        formattedCount: intl.formatNumber(
+                          effectiveRatings.imdbVotes,
+                          {
+                            notation: 'compact',
+                            compactDisplay: 'short',
+                            maximumFractionDigits: 1,
+                          }
+                        ),
+                      })
+                    : intl.formatMessage(messages.imdbScore)
+                }
+              >
+                <a
+                  href={getSafeHref(effectiveRatings.imdbUrl)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="media-rating-link"
+                >
+                  <ImdbLogo className="media-rating-wordmark" />
+                  <span className="media-rating-value">
+                    {effectiveRatings.imdbScore.toFixed(1)}
+                  </span>
+                </a>
+              </Tooltip>
+            )}
+            <MdblistRatingBadges
+              ratings={
+                showRatingsReview
+                  ? {
+                      ...ratingData?.mdblist,
+                      metacriticRating: 68,
+                      traktRating: 8.3,
+                    }
+                  : ratingData?.mdblist
+              }
+            />
+            {data.voteCount > 0 && (
+              <Tooltip content={intl.formatMessage(messages.tmdbUserScore)}>
+                <a
+                  href={`https://www.themoviedb.org/movie/${data.id}?language=${locale}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="media-rating-link"
+                >
+                  <TmdbLogo className="media-rating-wordmark" />
+                  <span className="media-rating-value">
+                    {Math.round(data.voteAverage * 10)}%
+                  </span>
+                </a>
+              </Tooltip>
+            )}
+          </div>
+          <div className="media-primary-action-row">
+            {playbackActions?.(selectedQuality === '4k')}
+            {primaryActions}
+            {secondaryActions}
+            <div className="media-primary-report-action">
+              {reportIssueAction}
+            </div>
+          </div>
+          <div className="media-request-action-row">
+            <div className="media-request-search-action">
+              {indexerSearchAction}
+              {indexerCompanionActions}
+            </div>
+            <div className="media-request-submit-action">{requestAction}</div>
+          </div>
         </div>
       </article>
 

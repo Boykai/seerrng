@@ -25,7 +25,7 @@ const MdblistRatingBadges = ({
         metacritic >= 0 &&
         metacritic <= 100 && (
           <Tooltip content={intl.formatMessage(messages.metacritic)}>
-            <span className="media-rating-link">
+            <span className="media-rating-link media-rating-provider-link">
               <span
                 aria-hidden="true"
                 className="media-rating-brand media-rating-brand-metacritic"
@@ -43,7 +43,7 @@ const MdblistRatingBadges = ({
         trakt >= 0 &&
         trakt <= 10 && (
           <Tooltip content={intl.formatMessage(messages.trakt)}>
-            <span className="media-rating-link">
+            <span className="media-rating-link media-rating-provider-link">
               <TraktLogo aria-hidden="true" className="media-rating-wordmark" />
               <span className="media-rating-value">{trakt.toFixed(1)}</span>
             </span>

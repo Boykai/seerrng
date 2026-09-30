@@ -18,6 +18,7 @@ export type ButtonType =
   | 'manage'
   | 'reportIssue'
   | 'association'
+  | 'prowlarr'
   | 'bulkRequest'
   | 'detailRequest'
   | 'trailer'
@@ -65,6 +66,7 @@ const buttonTypeStyles: Record<ButtonType, string> = {
   manage: 'app-button-manage',
   reportIssue: 'app-button-report-issue',
   association: 'app-button-association',
+  prowlarr: 'app-button-prowlarr',
   bulkRequest: 'app-button-bulk-request',
   detailRequest: 'app-button-detail-request',
   trailer: 'app-button-trailer',

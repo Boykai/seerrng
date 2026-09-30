@@ -734,6 +734,28 @@ asks for the work to start.
   different permission/automatic-approval combinations on desktop and narrow
   layouts.
 
+## Deferred Request Status history actor attribution
+
+> “add a column to the right of the time stamp for the username of the person
+> making the changes in history. so say test user makes the request, then my
+> username approves the request etc”
+
+- Status: Future feature, explicitly deferred by the user.
+- Add a `Changed By` column immediately to the right of the hours-and-minutes
+  timestamp in the expanded Request Status history card.
+- Record the actual actor for user-driven events, including the requester who
+  created the request, the administrator who approved or declined it, and the
+  owner who changed the Episode Queue value. Do not repeat the request owner for
+  unrelated actions.
+- Identify automated lifecycle transitions as `System` rather than attributing
+  them to the last human who modified the request.
+- Persist an actor-name snapshot with each new history event so the audit trail
+  remains readable if a username changes or an account is later removed. Add the
+  required SQLite and PostgreSQL migration, API field, route plumbing, and
+  focused tests before exposing the column.
+- Treat older events without reliable actor evidence as legacy/unknown unless a
+  deterministic backfill is possible; do not invent attribution.
+
 ## Deferred requested-Movie View Request refresh
 
 > “feature: on a movie detail page for a movie that has been requested the view request page needs a refresh.”
@@ -742,6 +764,35 @@ asks for the work to start.
 - Inventory the requested-title entry point and every status, approval, retry,
   history, cancel, delete, service, format, permission, and return-navigation
   behavior before proposing the refreshed layout.
+
+## Deferred Comic detail-page refresh
+
+> “the comic details page needs a lot of work, even the buttons are screwed up. i'm going to defer it for later so the current state is approved”
+
+- Status: Current merged state accepted as the baseline; full visual correction
+  explicitly deferred by the user.
+- Preserve the current Comic detail capabilities, including the volume issue
+  list and conditional Indexer Search action, while inventorying every visible
+  card, button, metadata field, artwork treatment, raw-markup rendering defect,
+  loading state, permission state, and responsive layout before redesign.
+- Reapply the shared card, action-button, spacing, typography, and rendering
+  standards without removing uncertain Comic behavior.
+
+## Deferred Software catalog and detail-page refresh
+
+> “i don't have that setup on my system yet so i won't be able to see it. as it's a new page just accept it for now we can fix it later”
+
+- Status: Current merged functionality accepted as the baseline; full visual
+  correction explicitly deferred until a representative software acquisition
+  service is configured for rendered review.
+- Preserve the Retro, Modern, and PC Games categories; system or platform,
+  genre, and release-year filters; catalog pagination; availability states;
+  detail metadata and media; direct-link and Back behavior; Indexer Search;
+  request routing; and Global Search integration.
+- When representative data is available, inventory every default, loading,
+  empty, error, filtered, detail, request, availability, and responsive state
+  before applying the shared cards, compact filters, controls, typography,
+  spacing, and palette.
 
 ## Deferred media-detail action-row redesign
 

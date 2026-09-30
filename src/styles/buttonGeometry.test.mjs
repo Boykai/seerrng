@@ -69,7 +69,7 @@ test('poster badges keep the shared compact poster geometry', () => {
   assert.match(css, /--poster-control-gap: 0\.125rem;/);
   assert.match(
     css,
-    /\.poster-control\s*\{[^}]*border-radius: var\(--control-corner-radius\);[^}]*padding-inline: var\(--poster-control-padding-x\);[^}]*column-gap: var\(--poster-control-gap\);/s
+    /\.poster-control\s*\{[^}]*rounded-md[^}]*height: var\(--action-control-height\);[^}]*padding-inline: var\(--action-control-padding-x\);[^}]*column-gap: var\(--poster-control-gap\);/s
   );
   assert.match(
     css,
@@ -85,11 +85,11 @@ test('poster badges keep the shared compact poster geometry', () => {
   }
   assert.match(
     component('Association/AssociationBadge.tsx'),
-    /poster-control poster-control-icon poster-control-association/
+    /poster-control poster-control-association app-control-shadow-exempt/
   );
   assert.match(
     component('TitleCard/index.tsx'),
-    /poster-control poster-control-icon poster-control-blocklist/
+    /poster-control poster-control-blocklist app-control-shadow-exempt/
   );
 });
 
@@ -98,9 +98,10 @@ test('poster availability and watched badges share a translucent poster surface'
     css,
     /\.poster-control\s*\{[^}]*background-color: transparent;/s
   );
+  assert.match(css, /--poster-control-background-opacity: 0\.7;/);
   assert.match(
     css,
-    /\.poster-control\.poster-control-available\s*\{[^}]*bg-green-950\/35/s
+    /\.poster-control\.poster-control-available\s*\{[^}]*background-color: hsl\([^)]*var\(--poster-control-background-opacity\)/s
   );
   assert.doesNotMatch(
     css.match(/\.watched-status-badge\s*\{([^}]+)\}/)?.[1] ?? '',
@@ -108,7 +109,7 @@ test('poster availability and watched badges share a translucent poster surface'
   );
   assert.match(
     css.match(/\.watched-status-badge\s*\{([^}]+)\}/)?.[1] ?? '',
-    /bg-black\/35/
+    /background-color: rgb\(0 0 0 \/ var\(--poster-control-background-opacity\)\)/
   );
   assert.match(
     component('Common/WatchedBadge/index.tsx'),
@@ -152,7 +153,7 @@ test('Blocklist source and Issues status badges use the standard radius', () => 
   assert.match(component('IssueList/IssueItem/index.tsx'), /shape="standard"/);
 });
 
-test('unselected controls use Manage opacity while selected filters stay solid', () => {
+test('page buttons and filters retain their approved opacity levels', () => {
   const rule = (selector) => {
     const start = css.indexOf(`\n  ${selector} {`);
     const combinedStart = css.indexOf(`\n  ${selector},`);
@@ -167,14 +168,13 @@ test('unselected controls use Manage opacity while selected filters stay solid',
   for (const selector of [
     '.app-button-manage',
     '.app-button-bulk-request',
-    '.app-button-playback',
     '.app-button-ghost',
   ]) {
     const declaration = rule(selector);
-    assert.match(declaration, /bg-[\w-]+\/35/, selector);
-    assert.match(declaration, /hover:bg-[\w-]+\/55/, selector);
-    assert.match(declaration, /active:bg-[\w-]+\/70/, selector);
+    assert.match(declaration, /(?:\/ 0\.55\)|bg-[\w-]+\/55)/, selector);
   }
+
+  assert.match(rule('.app-button-playback'), /\/ 0\.7\)/);
 
   for (const selector of [
     '.app-filter-button-idle',
@@ -186,7 +186,26 @@ test('unselected controls use Manage opacity while selected filters stay solid',
   }
 
   assert.match(rule('.app-filter-button-active'), /bg-indigo-500\b/);
-  assert.match(rule('.watched-status-badge'), /bg-black\/35/);
+  assert.match(
+    rule('.watched-status-badge'),
+    /var\(--poster-control-background-opacity\)/
+  );
+});
+
+test('Episode Queue keeps its dropdown label and compact generated-request badge', () => {
+  for (const path of [
+    'Requests/index.tsx',
+    'RequestList/RequestItem/index.tsx',
+  ]) {
+    const source = component(path);
+    assert.match(source, /watchAheadEpisodeBadge: 'Auto-Queued'/, path);
+    assert.match(source, /Automatically requested by the Episode Queue/, path);
+  }
+  assert.match(
+    component('Requests/index.tsx'),
+    /watchAheadLabel: 'Episode Queue'/
+  );
+  assert.match(component('Requests/index.tsx'), /RequestListboxControl/);
 });
 
 test('segmented filters keep the outward focus ring', () => {

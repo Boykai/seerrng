@@ -53,6 +53,30 @@ test('current shared owners pass their checks and functional mutations fail', ()
       '() => true',
       'Collection playback must preserve oldest-first ordering and an intentionally empty selection',
     ],
+    [
+      'src/styles/globals.css',
+      '--app-card-frame-background: var(--palette-blue, #0051d4);',
+      '--app-card-frame-background: conic-gradient(#252a30, #f8fafb);',
+      'card borders must preserve the shared rounded silhouette and solid blue ring',
+    ],
+    [
+      'src/styles/globals.css',
+      '.app-button-playback:hover {\n    border-color: rgb(var(--color-gray-200));',
+      '.app-button-playback:hover {\n    border-color: rgb(var(--color-gray-600));',
+      'playback buttons must restore the bright hover border without changing their black surface',
+    ],
+    [
+      'src/styles/globals.css',
+      '.media-request-submit-action {\n    @apply ml-auto flex min-w-0 items-center justify-end;',
+      '.media-request-submit-action {\n    @apply flex min-w-0 items-center justify-start;',
+      'detail Request controls must remain right-justified opposite Search Prowlarr',
+    ],
+    [
+      'src/styles/visual-lab.css',
+      '.gradiant-text {\n  width: fit-content;\n  background-image: linear-gradient(',
+      ".gradiant-text {\n  width: fit-content;\n  background-image: url('/visual-lab/legacy-title-fill.png');\n  background: linear-gradient(",
+      'Visual Lab treatments must remain CSS-only without image-backed fills',
+    ],
   ];
   for (const [fileName, original, replacement, reason] of cases) {
     const source = readFileSync(
@@ -474,7 +498,7 @@ test('reports poster Associations style drift', () => {
   assert.ok(
     errors.some((error) =>
       error.includes(
-        'the poster Associations action must reuse the shared association button style'
+        'the poster Associations action must use the independent poster-control style'
       )
     )
   );
@@ -537,7 +561,7 @@ test('reports poster availability control drift', () => {
     'poster quality states must use the shared rounded status badge',
     'poster quality states must match the rounded media-type badge silhouette',
     'available poster qualities must place the outlined availability icon after the green quality label',
-    'poster overlays must keep primary status on row one, Associations on row two left, and secondary status on row two right',
+    'poster overlays must use independent full-width rows with primary status on row one, Associations on row two left, and secondary status on row two right',
     'music posters must preserve separate MP3 and FLAC request states',
     'pending bell and processing timer badges must explain their meaning in tooltips',
   ]) {
@@ -606,9 +630,9 @@ test('reports request-card contrast and Advanced Options contract drift', () => 
     'request-edit Close actions must use the shared red danger treatment',
     'the Series request-edit Close action must use the shared red danger treatment',
     'request cards must resolve wrapping action alignment through the shared global style',
-    'every wrapped request action line must stay right-justified',
+    'request action rows must remain fully justified',
     'the style standard must require Root Folder to reuse the shared request listbox',
-    'the style standard must preserve right alignment when request actions wrap',
+    'the style standard must preserve full justification when request actions wrap',
   ]) {
     assert.ok(
       errors.some((error) => error.includes(expected)),
@@ -750,12 +774,12 @@ test('shared CSS checks accept grouped selectors but reject unrelated declaratio
   const reason = 'manage button must turn white on hover';
   assert.ok(
     !validate(
-      '.app-button-manage, .detail-disclosure-control { @apply hover:text-white; }'
+      '.app-button-manage:hover, .detail-disclosure-control:hover { color: #fff; }'
     ).some((error) => error.includes(reason))
   );
   assert.ok(
     validate(
-      '.app-button-manage { @apply text-violet-300; } .unrelated { @apply hover:text-white; }'
+      '.app-button-manage:hover { color: hsl(258 90% 83%); } .unrelated:hover { color: #fff; }'
     ).some((error) => error.includes(reason))
   );
   const spacing =
@@ -793,10 +817,10 @@ test('reports related-media controls, inset-heading, and duplicate icon-gap regr
     'linked Recommendations and Similar pages must apply their visible filters and sorts',
     'media inset and table headings must use their shared mode-aware typography',
     'detail action labels must not duplicate the shared button icon gap',
-    'playback actions and ratings must use the compact full-width shared row',
+    'quality selection and ratings must use the compact full-width shared row',
     'rating image and value pairs must use only the shared five-pixel internal gap',
     'playback controls must not be nested in a group that defeats full-row justification',
-    'Movie quality selection must be a directly justified row item immediately before playback controls',
+    'Movie quality selection and ratings must precede playback in the primary action row',
   ]) {
     assert.ok(
       errors.some((error) => error.includes(expected)),
@@ -821,6 +845,9 @@ test('reports Discover media tabs, compact filters, button shadows, and scoped p
     'Trending media choices must render the corresponding complete discovery controls',
     'every Trending media destination must place the shared media filters above its own Filters controls',
     'filter buttons must resolve through the shared 20-pixel height',
+    'filter button focus emphasis must render outside the fixed control box',
+    'selected filter emphasis must render outside the fixed control box',
+    'pinned filter section icons must use the shared dark-blue selected surface',
     'the title visibility filter must consume the shared compact filter button',
     'non-filter buttons must retain the shared ratings-style black readability shadow',
     'filter and sort buttons must remain exempt from the shared action-button shadow',

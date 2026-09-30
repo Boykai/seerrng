@@ -16,16 +16,21 @@ const login = readFileSync(
   'utf8'
 );
 
-test('title cards use the two-pixel CSS brushed-steel frame', () => {
+test('title cards use the two-pixel solid blue frame', () => {
   const block = css.match(/\.app-card-poster\s*\{([\s\S]*?)\n\s*\}/)?.[1];
 
   assert.ok(block);
   assert.match(block, /--app-card-frame-width:\s*2px/);
   assert.match(block, /border:\s*var\(--app-card-frame-width\)/);
   assert.match(css, /\.app-card-poster,[\s\S]*?\.app-card-inset/);
-  assert.match(css, /--app-card-frame-background:\s*conic-gradient\(/);
-  assert.match(css, /#24292f/);
-  assert.match(css, /#f8fafb/);
+  assert.match(
+    css,
+    /--app-card-frame-background:\s*var\(--palette-blue,\s*#0051d4\)/
+  );
+  assert.doesNotMatch(
+    css,
+    /--app-card-frame-background:\s*(?:conic|linear)-gradient\(/
+  );
   assert.doesNotMatch(
     css,
     /brushed-steel-conical-gradient-full-bleed-4096x4096\.png/
@@ -51,11 +56,12 @@ test('embedded detail posters use the same CSS frame at one pixel', () => {
   assert.match(css, /\.app-card-poster,[\s\S]*?\.collection-summary-poster/);
 });
 
-test('the CSS brushed-steel frame covers shared content card surfaces', () => {
+test('the solid blue frame covers shared content card surfaces', () => {
   assert.match(css, /\.app-card-main/);
   assert.match(css, /\.app-card-sub/);
   assert.match(css, /\.app-card-inset/);
-  assert.doesNotMatch(css, /mask-composite:\s*exclude/);
+  assert.match(css, /background:\s*var\(--app-card-frame-background\)/);
+  assert.match(css, /mask-composite:\s*exclude/);
   assert.match(css, /--tw-ring-shadow:\s*0 0 #0000 !important/);
   assert.match(
     css,
@@ -65,22 +71,7 @@ test('the CSS brushed-steel frame covers shared content card surfaces', () => {
     css,
     /\.app-card-inset\)::after,\s*\.manage-media-card-sections > div::after\s*\{/
   );
-  assert.match(
-    css,
-    /var\(--app-card-frame-top\) top \/ 100% var\(--app-card-frame-width\) no-repeat/
-  );
-  assert.match(
-    css,
-    /var\(--app-card-frame-right\) right \/ var\(--app-card-frame-width\) 100%/
-  );
-  assert.match(
-    css,
-    /var\(--app-card-frame-bottom\) bottom \/ 100% var\(--app-card-frame-width\)/
-  );
-  assert.match(
-    css,
-    /var\(--app-card-frame-left\) left \/ var\(--app-card-frame-width\) 100%/
-  );
+  assert.doesNotMatch(css, /--app-card-frame-(?:top|right|bottom|left):/);
   assert.doesNotMatch(css, /--app-card-surface-background/);
   assert.doesNotMatch(
     css,
@@ -91,7 +82,7 @@ test('the CSS brushed-steel frame covers shared content card surfaces', () => {
   assert.doesNotMatch(requestCard, /request-card-brushed-steel-frame/);
 });
 
-test('sub and inset cards share the silver CSS gradient with a one-pixel frame', () => {
+test('sub and inset cards share the solid blue frame at one pixel', () => {
   assert.doesNotMatch(css, /blue-violet-conical-gradient-card-border\.png/);
   assert.match(
     css,

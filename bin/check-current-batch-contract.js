@@ -36,6 +36,8 @@ const fileNames = [
   'scripts/check-container-security.test.mjs',
   'seerr-api.yml',
   'src/styles/globals.css',
+  'src/styles/visual-lab.css',
+  'public/visual-lab/visual-lab.css',
   'src/components/Common/Button/index.tsx',
   'src/components/Common/ButtonWithDropdown/index.tsx',
   'src/components/RequestButton/index.tsx',
