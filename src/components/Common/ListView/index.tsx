@@ -329,6 +329,7 @@ const ListView = ({
                 year={title.firstPublishYear?.toString()}
                 mediaType={title.mediaType}
                 requestable={title.requestable}
+                providerTracked={title.provider === 'lazylibrarian'}
                 canExpand
               />
             );

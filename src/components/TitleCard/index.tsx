@@ -74,6 +74,7 @@ interface TitleCardProps {
   status4k?: MediaStatus;
   canExpand?: boolean;
   requestable?: boolean;
+  providerTracked?: boolean;
   inProgress?: boolean;
   inProgress4k?: boolean;
   canRequestAdditionalFormat?: boolean;
@@ -98,6 +99,12 @@ const messages = defineMessages('components.TitleCard', {
   watchlistCancel: 'watchlist for <strong>{title}</strong> canceled.',
   watchlistError: 'Something went wrong. Please try again.',
   requestBookFormat: 'Request {format}',
+  magazineTracked: 'Tracked',
+  magazineTrackedReason: 'This title is already tracked by LazyLibrarian.',
+  magazineRequestedReason: 'This magazine already has an active request.',
+  magazineAvailableReason: 'This magazine is already available.',
+  magazinePartiallyAvailableReason:
+    'Some issues of this magazine are already available.',
 });
 
 const TitleCard = ({
@@ -120,6 +127,7 @@ const TitleCard = ({
   canRequestAdditionalFormat = false,
   canExpand = false,
   requestable = true,
+  providerTracked = false,
   mutateParent,
   showText = false,
   hideAssociationWhenEmpty = false,
@@ -598,6 +606,37 @@ const TitleCard = ({
             ? globalMessages.request4k
             : globalMessages.request
         );
+  const magazineRequestState = (() => {
+    if (!isMagazine) return undefined;
+    if (
+      currentStatus === MediaStatus.PENDING ||
+      currentStatus === MediaStatus.PROCESSING
+    ) {
+      return {
+        label: intl.formatMessage(globalMessages.requested),
+        reason: intl.formatMessage(messages.magazineRequestedReason),
+      };
+    }
+    if (currentStatus === MediaStatus.AVAILABLE) {
+      return {
+        label: intl.formatMessage(globalMessages.available),
+        reason: intl.formatMessage(messages.magazineAvailableReason),
+      };
+    }
+    if (currentStatus === MediaStatus.PARTIALLY_AVAILABLE) {
+      return {
+        label: intl.formatMessage(globalMessages.partiallyavailable),
+        reason: intl.formatMessage(messages.magazinePartiallyAvailableReason),
+      };
+    }
+    if (providerTracked) {
+      return {
+        label: intl.formatMessage(messages.magazineTracked),
+        reason: intl.formatMessage(messages.magazineTrackedReason),
+      };
+    }
+    return undefined;
+  })();
   const canShowBlocklistAction =
     showDetail &&
     showHideButton &&
@@ -937,7 +976,18 @@ const TitleCard = ({
               </Link>
 
               <div className="absolute right-0 bottom-0 left-0 flex justify-between px-2 py-2">
-                {canShowRequestButton && showFullDetailOverlay && (
+                {magazineRequestState && showFullDetailOverlay ? (
+                  <Button
+                    buttonType="default"
+                    buttonSize="sm"
+                    disabled
+                    disabledReason={magazineRequestState.reason}
+                    className="h-7 w-full"
+                    aria-label={magazineRequestState.label}
+                  >
+                    <span>{magazineRequestState.label}</span>
+                  </Button>
+                ) : canShowRequestButton && showFullDetailOverlay ? (
                   <Button
                     buttonType="primary"
                     buttonSize="sm"
@@ -965,7 +1015,7 @@ const TitleCard = ({
                     <ArrowDownTrayIcon />
                     <span>{requestLabel}</span>
                   </Button>
-                )}
+                ) : null}
               </div>
             </div>
           </Transition>
