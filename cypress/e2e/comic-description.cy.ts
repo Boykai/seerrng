@@ -16,14 +16,11 @@ describe('ComicVine overview formatting', () => {
         onUserWatchlist: false,
       },
     }).as('comicDetails');
-    cy.intercept(
-      {
-        method: 'GET',
-        pathname: '/api/v1/comic/4567/issues',
-        query: { page: '1' },
-      },
-      {
-        body: {
+    cy.intercept('GET', '/api/v1/comic/4567/issues*', (request) => {
+      const page = new URL(request.url).searchParams.get('page');
+      if (page === '1') {
+        request.alias = 'firstIssuePage';
+        request.reply({
           page: 1,
           totalPages: 2,
           totalResults: 21,
@@ -36,17 +33,10 @@ describe('ComicVine overview formatting', () => {
               coverUrl: null,
             },
           ],
-        },
-      }
-    ).as('firstIssuePage');
-    cy.intercept(
-      {
-        method: 'GET',
-        pathname: '/api/v1/comic/4567/issues',
-        query: { page: '2' },
-      },
-      {
-        body: {
+        });
+      } else if (page === '2') {
+        request.alias = 'secondIssuePage';
+        request.reply({
           page: 2,
           totalPages: 2,
           totalResults: 21,
@@ -59,9 +49,14 @@ describe('ComicVine overview formatting', () => {
               coverUrl: null,
             },
           ],
-        },
+        });
+      } else {
+        request.reply({
+          statusCode: 400,
+          body: { message: `Unexpected issue page ${page}.` },
+        });
       }
-    ).as('secondIssuePage');
+    });
   });
 
   it('renders safe ComicVine description markup as formatted content', () => {
@@ -75,28 +70,22 @@ describe('ComicVine overview formatting', () => {
       .find('li')
       .should('contain.text', 'First arc');
     cy.get('[data-testid=comic-description]').should('not.contain.text', '<p>');
-    cy.screenshot('comicvine-formatted-description');
   });
 
   it('loads the next ComicVine issue page when requested', () => {
     cy.visit('/comic/4567');
     cy.wait('@comicDetails');
-    cy.contains('h2', 'Issues in this volume').scrollIntoView();
     cy.wait('@firstIssuePage');
+    cy.contains('h2', 'Issues in this volume').scrollIntoView();
     cy.get('[data-testid=comic-description]')
       .parent()
       .next()
       .contains('li', '#1 · First Issue')
       .should('be.visible');
 
-    cy.contains('button', 'Load more issues')
-      .should('be.visible')
-      .then(($button) => {
-        $button[0].click();
-      });
+    cy.contains('button', 'Load more issues').should('be.visible').click();
     cy.wait('@secondIssuePage');
     cy.location('pathname').should('eq', '/comic/4567');
     cy.get('ol').contains('li', '#21 · Final Issue').should('be.visible');
-    cy.screenshot('comicvine-issue-browser-pagination');
   });
 });

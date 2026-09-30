@@ -44,7 +44,6 @@ import axios from 'axios';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
-import { useInView } from 'react-intersection-observer';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
@@ -116,10 +115,6 @@ const ComicDetails = () => {
   } = useSWR<ComicDetailsType>(
     comicId ? `/api/v1/comic/${encodeApiPathSegment(comicId)}` : null
   );
-  const { ref: volumeIssuesRef, inView: volumeIssuesInView } = useInView({
-    rootMargin: '400px',
-    triggerOnce: true,
-  });
   const {
     data: issuePages,
     error: issueListError,
@@ -130,7 +125,7 @@ const ComicDetails = () => {
     mutate: mutateIssuePages,
   } = useSWRInfinite<ComicIssuePage>(
     (pageIndex, previousPage) => {
-      if (!comicId || !volumeIssuesInView || !data?.issueCount) return null;
+      if (!comicId || !data?.issueCount) return null;
       if (pageIndex >= MAX_COMIC_ISSUE_PAGES) return null;
       if (previousPage && pageIndex + 1 > previousPage.totalPages) return null;
       return `/api/v1/comic/${encodeApiPathSegment(comicId)}/issues?page=${pageIndex + 1}`;
@@ -595,10 +590,7 @@ const ComicDetails = () => {
               )}
             </section>
             {(data.issueCount ?? 0) > 0 && (
-              <section
-                ref={volumeIssuesRef}
-                className="app-card-inset refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3"
-              >
+              <section className="app-card-inset refreshed-inset-surface mt-[5px] rounded-lg border border-gray-700 p-3">
                 <h2 className="media-inset-heading">
                   {intl.formatMessage(messages.volumeIssues)}
                 </h2>
