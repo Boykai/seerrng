@@ -232,9 +232,14 @@ describe('manual fail and search from request status', () => {
       cy.wait('@failOwnedDownload')
         .its('request.url')
         .should('include', '/api/v1/request/811/fail-download');
-      cy.contains(
-        'The release was failed and a new search was started.'
-      ).should('be.visible');
+      cy.contains('The release was failed and a new search was started.')
+        .should('be.visible')
+        .and(($message) => {
+          expect($message.closest('.pointer-events-auto')).to.have.css(
+            'opacity',
+            '1'
+          );
+        });
       cy.contains('Someone Else’s Movie')
         .parents('[data-testid=request-card]')
         .should('not.contain', 'Fail this download and search again');
