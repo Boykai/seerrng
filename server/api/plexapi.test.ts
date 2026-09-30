@@ -2,10 +2,58 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it, mock } from 'node:test';
 
 import { getSettings } from '@server/lib/settings';
-import PlexAPI, { sanitizePlexClients, sanitizePlexMetadata } from './plexapi';
+import PlexAPI, {
+  sanitizePlexClients,
+  sanitizePlexMetadata,
+  sanitizePlexPlaybackSession,
+} from './plexapi';
 
 afterEach(() => {
   mock.restoreAll();
+});
+
+describe('Plex playback sessions', () => {
+  it('normalizes bounded episode progress and linked-user identity', () => {
+    assert.deepEqual(
+      sanitizePlexPlaybackSession({
+        ratingKey: '42',
+        grandparentRatingKey: '7',
+        type: 'episode',
+        index: 4,
+        parentIndex: 2,
+        viewOffset: 2_160_000,
+        duration: 2_400_000,
+        User: { id: '12', title: 'viewer' },
+        Player: { state: 'playing' },
+      }),
+      {
+        ratingKey: '42',
+        grandparentRatingKey: '7',
+        type: 'episode',
+        index: 4,
+        parentIndex: 2,
+        viewOffset: 2_160_000,
+        duration: 2_400_000,
+        userId: '12',
+        username: 'viewer',
+        state: 'playing',
+      }
+    );
+  });
+
+  it('rejects sessions without valid episode timing', () => {
+    assert.equal(
+      sanitizePlexPlaybackSession({
+        ratingKey: '42',
+        type: 'episode',
+        index: 4,
+        parentIndex: 2,
+        viewOffset: 100,
+        duration: 0,
+      }),
+      undefined
+    );
+  });
 });
 
 describe('Plex library synchronization', () => {

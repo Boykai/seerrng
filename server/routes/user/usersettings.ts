@@ -49,6 +49,7 @@ import { isAuthenticated } from '@server/middleware/auth';
 import { quickConnectSecret } from '@server/routes/auth';
 import { ApiError } from '@server/types/error';
 import { isAvailableLocale } from '@server/types/languages';
+import { validateAdvancedThemeOverrides } from '@server/utils/advancedThemeOverrides';
 import AsyncLock from '@server/utils/asyncLock';
 import { normalizeDiscordSnowflake } from '@server/utils/discord';
 import { getHostname } from '@server/utils/getHostname';
@@ -174,6 +175,52 @@ userSettingsRoutes.post<{ id: string; scope: string }>(
     }
   }
 );
+
+userSettingsRoutes.post<{ id: string }>(
+  '/advanced-theme',
+  isOwnProfile(),
+  async (req, res, next) => {
+    if (
+      !req.body ||
+      Array.isArray(req.body) ||
+      Object.keys(req.body).some((key) => key !== 'overrides') ||
+      !hasOwn(req.body, 'overrides')
+    ) {
+      return next({ status: 400, message: 'Invalid advanced theme settings.' });
+    }
+
+    const validation = validateAdvancedThemeOverrides(req.body.overrides);
+    if ('error' in validation) {
+      return next({ status: 400, message: validation.error });
+    }
+
+    const userId = parseUserSettingsRouteId(req.params.id);
+    if (!userId) return next({ status: 404, message: 'User not found.' });
+
+    try {
+      const repository = getRepository(User);
+      const user = await repository.findOne({
+        where: { id: userId },
+        relations: { settings: true },
+      });
+      if (!user) return next({ status: 404, message: 'User not found.' });
+
+      if (!user.settings) user.settings = new UserSettings({ user });
+      user.settings.advancedThemeOverrides = validation.value;
+      await repository.save(user);
+
+      return res.status(200).json({
+        advancedThemeOverrides: validation.value,
+      });
+    } catch {
+      return next({
+        status: 500,
+        message: 'Could not save advanced theme settings.',
+      });
+    }
+  }
+);
+
 const MAX_USER_SETTINGS_ID_VALUE = 1_000_000_000;
 const MAX_LINKED_ACCOUNT_TOKEN_LENGTH = 4096;
 const MAX_LINKED_ACCOUNT_USERNAME_LENGTH = 512;

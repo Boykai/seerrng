@@ -8,6 +8,7 @@ import type {
 import { Notification, hasNotificationType } from '@server/lib/notifications';
 import { NotificationAgentKey } from '@server/lib/settings';
 import { DbAwareColumn } from '@server/utils/DbColumnHelper';
+import type { AdvancedThemeOverrides } from '@server/utils/advancedThemeOverrides';
 import {
   Column,
   Entity,
@@ -226,6 +227,9 @@ export class UserSettings {
   @Column({ type: 'simple-json', nullable: true })
   public mediaFilterPins?: UserMediaFilterPins;
 
+  @Column({ type: 'simple-json', nullable: true })
+  public advancedThemeOverrides?: AdvancedThemeOverrides | null;
+
   @Column({
     type: 'text',
     nullable: true,
@@ -276,6 +280,7 @@ export class UserSettings {
       detailDisclosureSubjectTagsPinned: this.detailDisclosureSubjectTagsPinned,
       detailDisclosurePins: this.detailDisclosurePins,
       mediaFilterPins: this.mediaFilterPins,
+      advancedThemeOverrides: this.advancedThemeOverrides,
     };
   }
 

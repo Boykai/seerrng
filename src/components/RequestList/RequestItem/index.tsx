@@ -23,6 +23,7 @@ import {
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
 import { refreshIntervalHelper } from '@app/utils/refreshIntervalHelper';
+import { hasLinkedWatchAheadAccount } from '@app/utils/watchAhead';
 import {
   ArrowPathIcon,
   CheckIcon,
@@ -31,7 +32,6 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/solid';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
-import { MediaServerType } from '@server/constants/server';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { RequestResultsResponse } from '@server/interfaces/api/requestInterfaces';
@@ -79,16 +79,16 @@ const messages = defineMessages('components.RequestList.RequestItem', {
   audiobook: 'Audiobook',
   both: 'Both',
   partialBookService: 'Partial Bookshelf link',
-  watchAheadTitle: 'Jellyfin watch-ahead',
+  watchAheadTitle: 'Episode Queue',
   watchAheadDescription:
-    'After this TV request is approved, SeerrNG checks your linked Jellyfin playback every 30 seconds and keeps up to {count} upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
+    'After this TV request is approved, SeerrNG follows your linked media server playback and keeps up to {count} upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
   watchAheadOff: 'Off',
   watchAheadEpisodes: '{count, plural, one {# episode} other {# episodes}}',
   saveWatchAhead: 'Save',
   stopWatchAhead: 'Stop',
-  watchAheadSaved: 'Jellyfin watch-ahead updated.',
+  watchAheadSaved: 'Requested episode queue updated.',
   watchAheadSaveError:
-    'Could not update watch-ahead. Check that Jellyfin and Sonarr are connected.',
+    'Could not update the requested episode queue. Check that your media server and Sonarr are connected.',
   watchAheadEpisodeBadge: 'Requested ahead of playback',
 });
 
@@ -628,8 +628,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
           (server) => server.isDefault && server.is4k === requestData?.is4k
         );
   const canEnableWatchAhead =
-    currentSettings.mediaServerType === MediaServerType.JELLYFIN &&
-    Boolean(user?.jellyfinUsername) &&
+    hasLinkedWatchAheadAccount(user, currentSettings.mediaServerType) &&
     Number.isSafeInteger(Number(requestData?.media.tvdbId)) &&
     Number(requestData?.media.tvdbId) > 0 &&
     Boolean(matchingSonarr) &&

@@ -2,6 +2,10 @@ import JellyfinAPI, {
   type JellyfinLibraryItemExtended,
   type JellyfinSession,
 } from '@server/api/jellyfin';
+import PlexAPI, {
+  type PlexMetadata,
+  type PlexPlaybackSession,
+} from '@server/api/plexapi';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import {
   MediaRequestStatus,
@@ -21,6 +25,10 @@ import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import { runWithCurrentServarrService } from '@server/lib/serviceAdmission';
 import type { SonarrSettings } from '@server/lib/settings';
 import { runUserSecurityMutation } from '@server/lib/userSecurityMutation';
+import {
+  isPlexPlaybackSessionForUser,
+  isWatchAheadMediaServer,
+} from '@server/lib/watchAheadEligibility';
 import logger from '@server/logger';
 import { getHostname } from '@server/utils/getHostname';
 import { normalizeJellyfinGuid } from '@server/utils/jellyfin';
@@ -152,6 +160,40 @@ export const getCompletedWatchAheadProgress = (
   return isValidProgress(progress) ? progress : undefined;
 };
 
+export const getCompletedPlexWatchAheadProgress = (
+  session: PlexPlaybackSession
+): WatchAheadProgress | undefined => {
+  if (
+    session.type !== 'episode' ||
+    session.state !== 'playing' ||
+    session.duration <= 0 ||
+    session.viewOffset < session.duration * 0.9
+  ) {
+    return undefined;
+  }
+
+  const progress = {
+    seasonNumber: session.parentIndex,
+    episodeNumber: session.index,
+  };
+  return isValidProgress(progress) ? progress : undefined;
+};
+
+export const getPlexTvdbId = (
+  series: Pick<PlexMetadata, 'guid' | 'Guid'>
+): number | undefined => {
+  for (const guid of [
+    series.guid,
+    ...(series.Guid ?? []).map(({ id }) => id),
+  ]) {
+    const match = /^tvdb:\/\/(\d+)$/.exec(guid);
+    if (!match) continue;
+    const tvdbId = Number(match[1]);
+    if (Number.isSafeInteger(tvdbId) && tvdbId > 0) return tvdbId;
+  }
+  return undefined;
+};
+
 const enrollmentStatuses = [
   MediaRequestStatus.PENDING,
   MediaRequestStatus.APPROVED,
@@ -250,92 +292,19 @@ class EpisodeWatchAhead {
 
     try {
       const settings = getExternalRuntimeConfig();
-      if (
-        settings.main.mediaServerType !== MediaServerType.JELLYFIN ||
-        !settings.jellyfin.apiKey
-      ) {
+      if (!isWatchAheadMediaServer(settings.main.mediaServerType)) {
         return;
       }
 
       const enrollments = await this.getEnrollments();
       if (enrollments.length === 0) return;
 
-      const jellyfin = new JellyfinAPI(
-        getHostname(settings.jellyfin),
-        settings.jellyfin.apiKey
-      );
-      const sessions = await jellyfin.getPlaybackSessions();
-      const byUser = new Map<string, MediaRequest[]>();
-      for (const enrollment of enrollments) {
-        const jellyfinUserId = normalizeJellyfinGuid(
-          enrollment.requestedBy.jellyfinUserId
-        );
-        if (!jellyfinUserId || enrollment.media.tvdbId == null) continue;
-        const userEnrollments = byUser.get(jellyfinUserId) ?? [];
-        userEnrollments.push(enrollment);
-        byUser.set(jellyfinUserId, userEnrollments);
-      }
-
-      const seriesCache = new Map<
-        string,
-        JellyfinLibraryItemExtended | undefined
-      >();
-      const advancedParents = new Set<number>();
-      for (const session of sessions.slice(0, 100)) {
-        try {
-          const jellyfinUserId = normalizeJellyfinGuid(session.UserId);
-          const userEnrollments = jellyfinUserId
-            ? byUser.get(jellyfinUserId)
-            : undefined;
-          const playingEpisode = session.NowPlayingItem;
-          if (
-            !jellyfinUserId ||
-            !userEnrollments?.length ||
-            !playingEpisode ||
-            playingEpisode.Type !== 'Episode' ||
-            !playingEpisode.SeriesId
-          ) {
-            continue;
-          }
-
-          const userItem = await jellyfin.getUserPlaybackItem(
-            session.UserId!,
-            playingEpisode.Id
-          );
-          if (!userItem) continue;
-          const progress = getCompletedWatchAheadProgress(session, userItem);
-          if (!progress) continue;
-
-          const seriesCacheKey = `${jellyfinUserId}:${playingEpisode.SeriesId}`;
-          let jellyfinSeries = seriesCache.get(seriesCacheKey);
-          if (!jellyfinSeries) {
-            jellyfinSeries = await jellyfin.getUserPlaybackItem(
-              session.UserId!,
-              playingEpisode.SeriesId
-            );
-            seriesCache.set(seriesCacheKey, jellyfinSeries);
-          }
-          if (jellyfinSeries?.Type !== 'Series') continue;
-          const jellyfinTvdbId = Number(jellyfinSeries.ProviderIds.Tvdb);
-          if (!Number.isSafeInteger(jellyfinTvdbId) || jellyfinTvdbId <= 0) {
-            continue;
-          }
-
-          const matches = userEnrollments.filter(
-            (enrollment) => enrollment.media.tvdbId === jellyfinTvdbId
-          );
-          for (const enrollment of matches) {
-            await this.reconcileEnrollment(enrollment.id, progress, settings);
-            advancedParents.add(enrollment.id);
-          }
-        } catch (error) {
-          logger.warn('Unable to reconcile a Jellyfin playback session', {
-            label: 'Jellyfin Watch-Ahead',
-            errorMessage:
-              error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+      const advancedParents =
+        settings.main.mediaServerType === MediaServerType.PLEX
+          ? await this.reconcilePlexPlayback(enrollments, settings)
+          : settings.jellyfin.apiKey
+            ? await this.reconcileJellyfinPlayback(enrollments, settings)
+            : new Set<number>();
 
       const now = Math.floor(Date.now() / 1_000);
       for (const enrollment of enrollments) {
@@ -354,8 +323,8 @@ class EpisodeWatchAhead {
         await this.reconcileEnrollment(enrollment.id, undefined, settings);
       }
     } catch (error) {
-      logger.error('Jellyfin episode watch-ahead job failed', {
-        label: 'Jellyfin Watch-Ahead',
+      logger.error('Media server episode queue job failed', {
+        label: 'Episode Queue',
         errorMessage: error instanceof Error ? error.message : String(error),
       });
     } finally {
@@ -383,6 +352,9 @@ class EpisodeWatchAhead {
           'media.id',
           'media.tvdbId',
           'requestedBy.id',
+          'requestedBy.plexId',
+          'requestedBy.plexUsername',
+          'requestedBy.plexToken',
           'requestedBy.jellyfinUserId',
         ])
         .where('request.type = :type', { type: MediaType.TV })
@@ -403,6 +375,154 @@ class EpisodeWatchAhead {
       this.enrollmentCursor = enrollments[enrollments.length - 1].id;
     }
     return enrollments;
+  }
+
+  private async reconcileJellyfinPlayback(
+    enrollments: MediaRequest[],
+    settings: ReturnType<typeof getExternalRuntimeConfig>
+  ): Promise<Set<number>> {
+    const jellyfin = new JellyfinAPI(
+      getHostname(settings.jellyfin),
+      settings.jellyfin.apiKey
+    );
+    const sessions = await jellyfin.getPlaybackSessions();
+    const byUser = new Map<string, MediaRequest[]>();
+    for (const enrollment of enrollments) {
+      const jellyfinUserId = normalizeJellyfinGuid(
+        enrollment.requestedBy.jellyfinUserId
+      );
+      if (!jellyfinUserId || enrollment.media.tvdbId == null) continue;
+      const userEnrollments = byUser.get(jellyfinUserId) ?? [];
+      userEnrollments.push(enrollment);
+      byUser.set(jellyfinUserId, userEnrollments);
+    }
+
+    const seriesCache = new Map<
+      string,
+      JellyfinLibraryItemExtended | undefined
+    >();
+    const advancedParents = new Set<number>();
+    for (const session of sessions.slice(0, 100)) {
+      try {
+        const jellyfinUserId = normalizeJellyfinGuid(session.UserId);
+        const userEnrollments = jellyfinUserId
+          ? byUser.get(jellyfinUserId)
+          : undefined;
+        const playingEpisode = session.NowPlayingItem;
+        if (
+          !jellyfinUserId ||
+          !userEnrollments?.length ||
+          !playingEpisode ||
+          playingEpisode.Type !== 'Episode' ||
+          !playingEpisode.SeriesId
+        ) {
+          continue;
+        }
+
+        const userItem = await jellyfin.getUserPlaybackItem(
+          session.UserId!,
+          playingEpisode.Id
+        );
+        if (!userItem) continue;
+        const progress = getCompletedWatchAheadProgress(session, userItem);
+        if (!progress) continue;
+
+        const seriesCacheKey = `${jellyfinUserId}:${playingEpisode.SeriesId}`;
+        let jellyfinSeries = seriesCache.get(seriesCacheKey);
+        if (!jellyfinSeries) {
+          jellyfinSeries = await jellyfin.getUserPlaybackItem(
+            session.UserId!,
+            playingEpisode.SeriesId
+          );
+          seriesCache.set(seriesCacheKey, jellyfinSeries);
+        }
+        if (jellyfinSeries?.Type !== 'Series') continue;
+        const jellyfinTvdbId = Number(jellyfinSeries.ProviderIds.Tvdb);
+        if (!Number.isSafeInteger(jellyfinTvdbId) || jellyfinTvdbId <= 0) {
+          continue;
+        }
+
+        for (const enrollment of userEnrollments.filter(
+          (candidate) => candidate.media.tvdbId === jellyfinTvdbId
+        )) {
+          await this.reconcileEnrollment(enrollment.id, progress, settings);
+          advancedParents.add(enrollment.id);
+        }
+      } catch (error) {
+        logger.warn('Unable to reconcile a media server playback session', {
+          label: 'Episode Queue',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return advancedParents;
+  }
+
+  private async reconcilePlexPlayback(
+    enrollments: MediaRequest[],
+    settings: ReturnType<typeof getExternalRuntimeConfig>
+  ): Promise<Set<number>> {
+    const byUser = new Map<number, MediaRequest[]>();
+    for (const enrollment of enrollments) {
+      if (
+        !enrollment.requestedBy.plexToken ||
+        enrollment.media.tvdbId == null
+      ) {
+        continue;
+      }
+      const userEnrollments = byUser.get(enrollment.requestedBy.id) ?? [];
+      userEnrollments.push(enrollment);
+      byUser.set(enrollment.requestedBy.id, userEnrollments);
+    }
+
+    const advancedParents = new Set<number>();
+    for (const userEnrollments of byUser.values()) {
+      const linkedUser = userEnrollments[0].requestedBy;
+      try {
+        const plex = new PlexAPI({
+          plexToken: linkedUser.plexToken,
+          plexSettings: settings.plex,
+        });
+        const sessions = await plex.getPlaybackSessions();
+        const seriesCache = new Map<string, PlexMetadata>();
+        for (const session of sessions) {
+          const belongsToLinkedUser = isPlexPlaybackSessionForUser(
+            session,
+            linkedUser
+          );
+          const progress = getCompletedPlexWatchAheadProgress(session);
+          if (
+            !belongsToLinkedUser ||
+            !progress ||
+            !session.grandparentRatingKey
+          ) {
+            continue;
+          }
+
+          let series = seriesCache.get(session.grandparentRatingKey);
+          if (!series) {
+            series = await plex.getMetadata(session.grandparentRatingKey);
+            seriesCache.set(session.grandparentRatingKey, series);
+          }
+          const plexTvdbId = getPlexTvdbId(series);
+          if (!plexTvdbId) continue;
+
+          for (const enrollment of userEnrollments.filter(
+            (candidate) => candidate.media.tvdbId === plexTvdbId
+          )) {
+            await this.reconcileEnrollment(enrollment.id, progress, settings);
+            advancedParents.add(enrollment.id);
+          }
+        }
+      } catch (error) {
+        logger.warn('Unable to reconcile a Plex playback session', {
+          label: 'Episode Queue',
+          userId: linkedUser.id,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return advancedParents;
   }
 
   private async reconcileEnrollment(
@@ -511,7 +631,7 @@ class EpisodeWatchAhead {
               now
             );
             logger.warn('Sonarr watch-ahead reconciliation failed', {
-              label: 'Jellyfin Watch-Ahead',
+              label: 'Episode Queue',
               requestId,
               sonarrServerId: sonarrSettings.id,
               errorMessage:

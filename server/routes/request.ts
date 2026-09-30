@@ -8,7 +8,6 @@ import {
   MediaType,
 } from '@server/constants/media';
 import type { MediaCategoryKey } from '@server/constants/mediaCategories';
-import { MediaServerType } from '@server/constants/server';
 import dataSource, { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import MediaIdentifier, {
@@ -85,6 +84,7 @@ import {
   runUserSecurityReadWithActor,
   type AuthorizedUserSecurityMutationLease,
 } from '@server/lib/userSecurityMutation';
+import { hasWatchAheadMediaServerLink } from '@server/lib/watchAheadEligibility';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { parseBookshelfBookId } from '@server/utils/bookshelfCatalog';
@@ -406,17 +406,16 @@ const getWatchAheadEligibilityError = (
   serverId: number | undefined
 ): string | undefined => {
   if (requestUser.id !== actorId) {
-    return 'Only the request owner can enable Jellyfin watch-ahead.';
+    return 'Only the request owner can enable the requested episode queue.';
   }
   if (!hasMediaRequestPermission(requestUser, MediaType.TV, is4k)) {
     return 'Your account does not have permission to request TV.';
   }
   const settings = getExternalRuntimeConfig();
   if (
-    settings.main.mediaServerType !== MediaServerType.JELLYFIN ||
-    !requestUser.jellyfinUserId
+    !hasWatchAheadMediaServerLink(requestUser, settings.main.mediaServerType)
   ) {
-    return 'Link a Jellyfin account to enable watch-ahead.';
+    return 'Link an account for the configured media server to enable the requested episode queue.';
   }
   const sonarrServer =
     serverId === undefined
@@ -433,6 +432,11 @@ const getWatchAheadEligibilityError = (
 
 const hasWatchAheadTvdbIdentity = (tvdbId: unknown): boolean =>
   Number.isSafeInteger(Number(tvdbId)) && Number(tvdbId) > 0;
+
+const formatEpisodeQueueSetting = (episodeCount: number): string =>
+  episodeCount === 0
+    ? 'Off'
+    : `${episodeCount} ${episodeCount === 1 ? 'episode' : 'episodes'}`;
 
 const parseRequestStatusAction = (
   status: unknown
@@ -2300,7 +2304,8 @@ requestRoutes.post<never, MediaRequest, MediaRequestBody>(
         ) {
           return next({
             status: 403,
-            message: 'Only the request owner can enable Jellyfin watch-ahead.',
+            message:
+              'Only the request owner can enable the requested episode queue.',
           });
         }
         const eligibilityError = getWatchAheadEligibilityError(
@@ -3315,7 +3320,7 @@ requestRoutes.put<{ requestId: string }>(
             return next({
               status: 403,
               message:
-                'Only the request owner can change Jellyfin watch-ahead.',
+                'Only the request owner can change the requested episode queue.',
             });
           }
 
@@ -3382,15 +3387,16 @@ requestRoutes.put<{ requestId: string }>(
                     if (!hasWatchAheadTvdbIdentity(current.media.tvdbId)) {
                       throw Object.assign(
                         new Error(
-                          'Jellyfin watch-ahead requires a valid TVDB identity for this series.'
+                          'The requested episode queue requires a valid TVDB identity for this series.'
                         ),
                         { status: 409 }
                       );
                     }
                   }
 
-                  const changed =
-                    current.watchAheadEpisodeCount !== parsedEpisodeCount;
+                  const previousEpisodeCount =
+                    current.watchAheadEpisodeCount ?? 0;
+                  const changed = previousEpisodeCount !== parsedEpisodeCount;
                   await repository.update(current.id, {
                     watchAheadEpisodeCount: parsedEpisodeCount,
                     ...(changed
@@ -3401,6 +3407,61 @@ requestRoutes.put<{ requestId: string }>(
                         }
                       : {}),
                   });
+
+                  if (changed) {
+                    const statusEventRepository = manager.getRepository(
+                      MediaRequestStatusEvent
+                    );
+                    const latestStatusEvent =
+                      await statusEventRepository.findOne({
+                        where: { requestId: current.id },
+                        order: { id: 'DESC' },
+                      });
+                    const fallbackStage =
+                      current.status === MediaRequestStatus.PENDING
+                        ? RequestStatusStage.REQUESTED
+                        : current.status === MediaRequestStatus.FAILED
+                          ? RequestStatusStage.FAILED
+                          : current.status === MediaRequestStatus.DECLINED
+                            ? RequestStatusStage.DECLINED
+                            : current.status === MediaRequestStatus.COMPLETED
+                              ? RequestStatusStage.AVAILABLE
+                              : RequestStatusStage.APPROVED;
+                    const historyMessage = `Episode queue changed from ${formatEpisodeQueueSetting(
+                      previousEpisodeCount
+                    )} to ${formatEpisodeQueueSetting(parsedEpisodeCount)}.`;
+
+                    await statusEventRepository.insert(
+                      new MediaRequestStatusEvent({
+                        requestId: current.id,
+                        requestedById: current.requestedBy.id,
+                        mediaId: current.media.id,
+                        mediaType: current.type,
+                        stage: latestStatusEvent?.stage ?? fallbackStage,
+                        attempt: latestStatusEvent?.attempt ?? 0,
+                        format: current.bookFormat ?? null,
+                        service: latestStatusEvent?.service ?? null,
+                        message: historyMessage,
+                        percent: latestStatusEvent?.percent ?? null,
+                        size: latestStatusEvent?.size ?? null,
+                        sizeLeft: latestStatusEvent?.sizeLeft ?? null,
+                        estimatedCompletionTime:
+                          latestStatusEvent?.estimatedCompletionTime ?? null,
+                        downloadCount: latestStatusEvent?.downloadCount ?? 0,
+                        downloadId: latestStatusEvent?.downloadId ?? null,
+                        fingerprint: [
+                          'episode-queue',
+                          current.id,
+                          previousEpisodeCount,
+                          parsedEpisodeCount,
+                          Date.now(),
+                        ]
+                          .join(':')
+                          .slice(0, 255),
+                      })
+                    );
+                  }
+
                   return repository.findOne({
                     where: { id: current.id },
                     relations: { media: true, requestedBy: true },
@@ -3434,7 +3495,7 @@ requestRoutes.put<{ requestId: string }>(
           message: error instanceof Error ? error.message : 'Invalid request.',
         });
       }
-      logger.error('Failed to update Jellyfin watch-ahead setting', {
+      logger.error('Failed to update requested episode queue setting', {
         label: 'Request',
         requestId: req.params.requestId,
         ...getErrorLogFields(error),
@@ -3634,7 +3695,7 @@ requestRoutes.put<{ requestId: string }>(
                         return next({
                           status: 403,
                           message:
-                            'Only the request owner can change Jellyfin watch-ahead.',
+                            'Only the request owner can change the requested episode queue.',
                         });
                       }
                       if (body.watchAheadEpisodeCount > 0) {
@@ -3658,7 +3719,7 @@ requestRoutes.put<{ requestId: string }>(
                           return next({
                             status: 409,
                             message:
-                              'Jellyfin watch-ahead requires a valid TVDB identity for this series.',
+                              'The requested episode queue requires a valid TVDB identity for this series.',
                           });
                         }
                       }

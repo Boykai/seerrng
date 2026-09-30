@@ -9820,6 +9820,50 @@ paths:
                 type: object
                 additionalProperties:
                   type: string
+  /user/{userId}/settings/advanced-theme:
+    post:
+      summary: Save or clear a user's advanced theme overrides
+      description: Stores supported visual theme token overrides for the signed-in user. Send null to clear the overrides.
+      tags: [users]
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [overrides]
+              properties:
+                overrides:
+                  nullable: true
+                  type: object
+                  additionalProperties:
+                    oneOf:
+                      - type: string
+                      - type: number
+      responses:
+        '200':
+          description: Saved theme overrides returned
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [advancedThemeOverrides]
+                properties:
+                  advancedThemeOverrides:
+                    nullable: true
+                    type: object
+                    additionalProperties:
+                      oneOf:
+                        - type: string
+                        - type: number
   /user/{userId}/settings/password:
     get:
       summary: Get password page informatiom

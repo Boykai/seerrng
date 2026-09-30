@@ -33,10 +33,10 @@ import {
   getRequestableTvSelections,
   mergeEpisodeNumbersBySeason,
 } from '@app/utils/tvRequestSelection';
+import { hasLinkedWatchAheadAccount } from '@app/utils/watchAhead';
 import { ArrowDownTrayIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
-import { MediaServerType } from '@server/constants/server';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { SeasonEpisodeSelection } from '@server/interfaces/api/seasonInterfaces';
@@ -89,9 +89,9 @@ const messages = defineMessages('components.RequestModal', {
   notAvailable: 'Not Available',
   advancedOptions: 'Advanced Options',
   quality: 'Quality',
-  watchAheadLabel: 'Keep upcoming episodes requested',
+  watchAheadLabel: 'Requested Episode Queue',
   watchAheadDescription:
-    'After this TV request is approved, SeerrNG checks your linked Jellyfin playback every 30 seconds and keeps this many upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
+    'After this TV request is approved, SeerrNG follows your linked media server playback and keeps this many upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
   watchAheadOff: 'Off',
   watchAheadEpisodeOption:
     '{count, plural, one {# episode} other {# episodes}}',
@@ -197,8 +197,10 @@ const TvRequestModal = ({
     ? editRequest.media.tvdbId
     : (tvdbId ?? data?.externalIds.tvdbId);
   const canConfigureWatchAhead =
-    settings.currentSettings.mediaServerType === MediaServerType.JELLYFIN &&
-    Boolean(user?.jellyfinUsername) &&
+    hasLinkedWatchAheadAccount(
+      user,
+      settings.currentSettings.mediaServerType
+    ) &&
     Number.isSafeInteger(Number(watchAheadTvdbId)) &&
     Number(watchAheadTvdbId) > 0 &&
     hasPermission(

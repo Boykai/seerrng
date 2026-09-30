@@ -40,6 +40,19 @@ export interface PlexLibraryItem {
   Media: Media[];
 }
 
+export interface PlexPlaybackSession {
+  ratingKey: string;
+  grandparentRatingKey?: string;
+  type: 'episode';
+  index: number;
+  parentIndex: number;
+  viewOffset: number;
+  duration: number;
+  userId?: string;
+  username?: string;
+  state?: string;
+}
+
 export interface PlexLibrary {
   type: 'show' | 'movie' | 'artist';
   key: string;
@@ -307,6 +320,47 @@ export const sanitizePlexLibraryItem = (
   };
 };
 
+export const sanitizePlexPlaybackSession = (
+  value: unknown
+): PlexPlaybackSession | undefined => {
+  if (!isRecord(value) || value.type !== 'episode') return undefined;
+
+  const ratingKey = boundedPlexText(value.ratingKey, 128);
+  const user = isRecord(value.User) ? value.User : undefined;
+  const player = isRecord(value.Player) ? value.Player : undefined;
+  const index = plexInteger(value.index);
+  const parentIndex = plexInteger(value.parentIndex);
+  const viewOffset = plexInteger(value.viewOffset);
+  const duration = plexInteger(value.duration);
+  if (
+    !ratingKey ||
+    !Number.isSafeInteger(index) ||
+    index < 0 ||
+    !Number.isSafeInteger(parentIndex) ||
+    parentIndex < 0 ||
+    !Number.isSafeInteger(viewOffset) ||
+    viewOffset < 0 ||
+    !Number.isSafeInteger(duration) ||
+    duration <= 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    ratingKey,
+    grandparentRatingKey:
+      boundedPlexText(value.grandparentRatingKey, 128) || undefined,
+    type: 'episode',
+    index,
+    parentIndex,
+    viewOffset,
+    duration,
+    userId: boundedPlexText(user?.id, 128) || undefined,
+    username: boundedPlexText(user?.title, 512) || undefined,
+    state: boundedPlexText(player?.state, 64) || undefined,
+  };
+};
+
 export const sanitizePlexMetadata = (
   value: unknown,
   includeChildren = true
@@ -460,6 +514,25 @@ class PlexAPI extends ExternalAPI {
       return isLoopback
         ? { ...client, connectionUri: this.configuredServerUrl }
         : client;
+    });
+  }
+
+  public async getPlaybackSessions(): Promise<PlexPlaybackSession[]> {
+    const response = await this.get<unknown>('/status/sessions', undefined, 0);
+    const mediaContainer =
+      isRecord(response) && isRecord(response.MediaContainer)
+        ? response.MediaContainer
+        : {};
+    const sessions = [
+      ...(Array.isArray(mediaContainer.Metadata)
+        ? mediaContainer.Metadata
+        : []),
+      ...(Array.isArray(mediaContainer.Video) ? mediaContainer.Video : []),
+    ];
+
+    return sessions.slice(0, 100).flatMap((session) => {
+      const normalized = sanitizePlexPlaybackSession(session);
+      return normalized ? [normalized] : [];
     });
   }
 

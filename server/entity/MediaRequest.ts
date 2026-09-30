@@ -12,7 +12,6 @@ import {
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
-import { MediaServerType } from '@server/constants/server';
 import dataSource, { getRepository } from '@server/datasource';
 import { Blocklist } from '@server/entity/Blocklist';
 import MediaIdentifier, {
@@ -69,6 +68,7 @@ import {
   isUserCredentialVersionCurrent,
   runUserSecurityMutation,
 } from '@server/lib/userSecurityMutation';
+import { hasWatchAheadMediaServerLink } from '@server/lib/watchAheadEligibility';
 import logger from '@server/logger';
 import AsyncLock from '@server/utils/asyncLock';
 import { parseBookshelfBookId } from '@server/utils/bookshelfCatalog';
@@ -483,18 +483,20 @@ export class MediaRequest {
       watchAheadEpisodeCount > 5
     ) {
       throw new RequestPermissionError(
-        'Jellyfin watch-ahead must be between 0 and 5 episodes.'
+        'The requested episode queue must be between 0 and 5 episodes.'
       );
     }
     if (watchAheadEpisodeCount > 0) {
       if (
         requestBody.mediaType !== MediaType.TV ||
         requestUser.id !== user.id ||
-        settings.main.mediaServerType !== MediaServerType.JELLYFIN ||
-        !requestUser.jellyfinUserId
+        !hasWatchAheadMediaServerLink(
+          requestUser,
+          settings.main.mediaServerType
+        )
       ) {
         throw new RequestPermissionError(
-          'Jellyfin watch-ahead can only be enabled by the linked owner of a TV request.'
+          'The requested episode queue can only be enabled by the linked owner of a TV request.'
         );
       }
     }
@@ -1969,7 +1971,7 @@ export class MediaRequest {
         Number(resolvedTvdbId) <= 0)
     ) {
       throw new ServiceConfigurationError(
-        'Jellyfin watch-ahead requires a valid TVDB identity for this series.'
+        'The requested episode queue requires a valid TVDB identity for this series.'
       );
     }
 
