@@ -227,7 +227,7 @@ def main() -> int:
                     if completed and binaries:
                         print(
                             f"Published {args.source_version} for {args.series}: "
-                            f"{publication.web_link}",
+                            f"{publication.self_link}",
                             flush=True,
                         )
                         for binary in binaries:
