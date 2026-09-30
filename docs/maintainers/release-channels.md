@@ -188,10 +188,9 @@ source upload and `LAUNCHPAD_PPA` to select the destination. A successful
 until the exact source publication and Jammy/Noble `seerrng` binaries are
 Published. No Launchpad OAuth secret is required.
 
-If Launchpad reports the known source-publication race in a binary upload log,
-or leaves a successfully built package in `Uploading build` for 45 minutes
-without publishing its binary, the workflow retries the same payload as a new,
-higher source-package version and continues monitoring. It makes at most three
-signed uploads per Ubuntu series. Other build failures, or repeated upload
-failures after the limit, keep the package channel red and point to the relevant
-Launchpad logs.
+The workflow retries only the classified source-publication race, with at most
+two signed uploads per Ubuntu series. A long-running nonterminal build or a
+missing source-publication record is not by itself evidence that an upload
+failed, so the workflow keeps waiting until its monitoring timeout instead of
+creating a duplicate source version. If that timeout expires, the package
+channel stays red and points to the Launchpad logs for operator review.

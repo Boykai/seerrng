@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Wait for a PPA source and binary publication using Launchpad's public API.
 
-Exit status 2 means a fresh source version is needed to recover from the known
-publication race or a stalled binary upload.
+Exit status 2 means a fresh source version is needed to recover from the
+classified source-publication race. Time spent in a nonterminal Launchpad state
+is never treated as evidence that an upload failed.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import argparse
 import gzip
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Any
 from urllib.request import urlopen
 
@@ -19,7 +20,6 @@ from launchpadlib.launchpad import Launchpad
 
 
 POLL_INTERVAL_SECONDS = 60
-STALE_UPLOAD_TIMEOUT = timedelta(minutes=45)
 PUBLISHED = "Published"
 
 
@@ -100,45 +100,6 @@ def classify_failed_upload(
     )
 
 
-def classify_stalled_upload(
-    build: Any,
-    binary_publications: list[Any],
-    publication_status: str,
-    source_version: str,
-    archive_web: str,
-) -> None:
-    if build.buildstate not in (
-        "Uploading build",
-        "Successfully built",
-        "Currently building",
-    ):
-        return
-    if any(binary.binary_package_name == "seerrng" for binary in binary_publications):
-        return
-    if not build.datebuilt:
-        return
-
-    build_finished = build.datebuilt
-    if not isinstance(build_finished, datetime):
-        build_finished = datetime.fromisoformat(
-            str(build_finished).replace("Z", "+00:00")
-        )
-    if build_finished.tzinfo is None:
-        build_finished = build_finished.replace(tzinfo=timezone.utc)
-
-    stalled_for = datetime.now(timezone.utc) - build_finished.astimezone(timezone.utc)
-    if stalled_for < STALE_UPLOAD_TIMEOUT:
-        return
-
-    minutes = int(stalled_for.total_seconds() // 60)
-    raise FreshUploadRequired(
-        f"Launchpad finished the amd64 build for {source_version} at {build.web_link}, "
-        f"but produced no seerrng binary publication record for {minutes} minutes "
-        f"(build state: {build.buildstate}; source state: {publication_status}). "
-        f"Republishing a fresh signed source version to {archive_web}."
-    )
-
-
 def fail_for_build(build: Any) -> None:
     state = build.buildstate
     log_url = build.upload_log_url or build.build_log_url or build.web_link
@@ -167,32 +128,17 @@ def main() -> int:
 
     deadline = time.monotonic() + args.timeout_minutes * 60
     last_report = ""
-    missing_source_since: float | None = None
-
     while time.monotonic() < deadline:
         try:
             publications = matching_source_publications(
                 archive, series, args.source_version
             )
             if not publications:
-                now = time.monotonic()
-                if missing_source_since is None:
-                    missing_source_since = now
-                missing_for = now - missing_source_since
-                if missing_for >= STALE_UPLOAD_TIMEOUT.total_seconds():
-                    minutes = int(missing_for // 60)
-                    raise FreshUploadRequired(
-                        f"Launchpad has no source publication record for "
-                        f"{args.source_version} in {args.series} after {minutes} "
-                        f"minutes of successful checks. Republishing a fresh "
-                        f"signed source version to {args.archive_web}."
-                    )
                 report = (
                     f"Waiting for {args.source_version} source publication in "
                     f"{args.series} ({args.archive_web})."
                 )
             else:
-                missing_source_since = None
                 publication = max(publications, key=lambda item: item.date_created)
                 publication_status = publication.status
                 builds = get_builds(publication)
@@ -221,13 +167,6 @@ def main() -> int:
                         "Cancelled build",
                     ):
                         fail_for_build(build)
-                    classify_stalled_upload(
-                        build,
-                        binary_publications,
-                        publication_status,
-                        args.source_version,
-                        args.archive_web,
-                    )
 
                 if publication_status != PUBLISHED:
                     if publication_status in ("Superseded", "Deleted", "Obsolete"):
