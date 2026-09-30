@@ -142,17 +142,9 @@ describe('failed request retry', () => {
       cy.wait('@ownedBook');
       cy.contains('Owned Failed Audiobook')
         .parents('[data-testid=request-card]')
-        .contains('button', 'Search Again')
-        .then(($button) => {
-          const button = $button[0];
-          const card = button.closest('[data-testid=request-card]');
-          throw new Error(
-            JSON.stringify({
-              button: button.getBoundingClientRect().toJSON(),
-              card: card?.getBoundingClientRect().toJSON(),
-              visible: Cypress.dom.isVisible(button),
-            })
-          );
+        .scrollIntoView()
+        .within(() => {
+          cy.contains('button', 'Search Again').should('be.visible').click();
         });
       cy.wait('@retryOwnedRequest')
         .its('request.url')
