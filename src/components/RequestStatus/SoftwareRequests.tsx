@@ -187,10 +187,12 @@ const DownloadCopies = ({
 
 const SoftwareRequests = ({
   enabled,
+  filter,
   requestedById,
   softwareRequestId,
 }: {
   enabled: boolean;
+  filter: string;
   requestedById?: number;
   softwareRequestId?: number;
 }) => {
@@ -206,16 +208,18 @@ const SoftwareRequests = ({
       take: '20',
       skip: String((page - 1) * 20),
     });
+    if (filter !== 'all') params.set('filter', filter);
     if (requestedById !== undefined)
       params.set('requestedBy', String(requestedById));
     if (softwareRequestId !== undefined) {
       params.set('requestId', String(softwareRequestId));
     }
     return `/api/v1/request/software/status?${params.toString()}`;
-  }, [enabled, page, requestedById, softwareRequestId]);
+  }, [enabled, filter, page, requestedById, softwareRequestId]);
   const { data, error, mutate } = useSWR<SoftwareRequestsResponse>(endpoint, {
     refreshInterval: 30_000,
     revalidateOnFocus: true,
+    keepPreviousData: false,
   });
   const [workingId, setWorkingId] = useState<number | null>(null);
   const [historyRequestId, setHistoryRequestId] = useState<number | null>(null);
@@ -232,7 +236,7 @@ const SoftwareRequests = ({
   useEffect(() => {
     setPage(1);
     setHistoryRequestId(null);
-  }, [enabled, requestedById, softwareRequestId]);
+  }, [enabled, filter, requestedById, softwareRequestId]);
 
   useEffect(() => {
     if (data && data.pageInfo.pages > 0 && page > data.pageInfo.pages) {
@@ -290,7 +294,14 @@ const SoftwareRequests = ({
     }
   };
 
-  if (!enabled) return null;
+  if (
+    !enabled ||
+    filter === 'incomplete' ||
+    filter === 'unavailable' ||
+    filter === 'library'
+  ) {
+    return null;
+  }
   if (!data && !error) return <LoadingSpinner />;
   if (error) {
     return (

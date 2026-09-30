@@ -70,6 +70,60 @@ const ACTIVE_STATUSES: SoftwareRequestStatus[] = [
   'downloading',
   'importing',
 ];
+const softwareStatusFilters = [
+  'all',
+  'pending',
+  'approved',
+  'processing',
+  'active',
+  'incomplete',
+  'attention',
+  'completed',
+  'unavailable',
+  'requested',
+  'searching',
+  'downloading',
+  'importing',
+  'library',
+  'available',
+  'failed',
+  'declined',
+  'cancelled',
+] as const;
+
+const getStatusesForFilter = (
+  filter: (typeof softwareStatusFilters)[number]
+): SoftwareRequestStatus[] | undefined => {
+  switch (filter) {
+    case 'all':
+      return undefined;
+    case 'active':
+      return ACTIVE_STATUSES;
+    case 'attention':
+      return ['failed', 'declined', 'cancelled'];
+    case 'processing':
+      return ['searching', 'downloading', 'importing'];
+    case 'pending':
+    case 'requested':
+      return ['pending'];
+    case 'approved':
+      return ['approved'];
+    case 'completed':
+    case 'available':
+      return ['available'];
+    case 'searching':
+    case 'downloading':
+    case 'importing':
+    case 'failed':
+    case 'declined':
+    case 'cancelled':
+      return [filter];
+    case 'incomplete':
+    case 'unavailable':
+    case 'library':
+      return [];
+  }
+};
 
 const isSoftwareCategoryEnabled = (
   category: SoftwareRequestCategory
@@ -1192,6 +1246,18 @@ softwareRoutes.get('/status', async (req, res) => {
       : Number(req.query.requestedBy);
   const requestId =
     req.query.requestId === undefined ? undefined : Number(req.query.requestId);
+  const rawFilter = req.query.filter;
+  if (
+    rawFilter !== undefined &&
+    (typeof rawFilter !== 'string' ||
+      !softwareStatusFilters.includes(
+        rawFilter as (typeof softwareStatusFilters)[number]
+      ))
+  ) {
+    return res.status(400).json({ error: 'Invalid software status filter.' });
+  }
+  const filter = (rawFilter ?? 'all') as (typeof softwareStatusFilters)[number];
+  const statuses = getStatusesForFilter(filter);
   if (
     requestedBy !== undefined &&
     (!Number.isSafeInteger(requestedBy) || requestedBy <= 0)
@@ -1223,8 +1289,16 @@ softwareRoutes.get('/status', async (req, res) => {
   if (requestId !== undefined) {
     query.andWhere('request.id = :requestId', { requestId });
   }
+  if (statuses?.length) {
+    query.andWhere('request.status IN (:...statuses)', { statuses });
+  } else if (statuses) {
+    query.andWhere('1 = 0');
+  }
   const [requests, total] = await query.getManyAndCount();
-  const views = await refreshSoftwareRequests(requests);
+  const refreshedViews = await refreshSoftwareRequests(requests);
+  const views = statuses
+    ? refreshedViews.filter(({ status }) => statuses.includes(status))
+    : refreshedViews;
   return res.status(200).json({
     results: views.map(({ request, status, message, assets, actions }) => ({
       request: serializeRequest(request, actions),

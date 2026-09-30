@@ -2855,6 +2855,7 @@ const Requests = () => {
 
       <SoftwareRequests
         enabled={mediaFilter === 'all'}
+        filter={filter}
         requestedById={selectedOwnerId}
         softwareRequestId={focusedSoftwareRequestId}
       />
