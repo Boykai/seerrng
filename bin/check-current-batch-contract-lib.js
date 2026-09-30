@@ -4395,6 +4395,7 @@ const validateCurrentBatchContract = (files) => {
   );
   for (const token of [
     ':is(.app-card-sub, .app-card-inset),',
+    '--app-card-frame-background: var(--palette-blue, #0051d4);',
     '--app-card-frame-width: 1px;',
     'border-radius: 0.5rem;',
     'background: var(--app-card-frame-background);',
@@ -4403,7 +4404,7 @@ const validateCurrentBatchContract = (files) => {
     requireText(
       globals,
       token,
-      'card borders must preserve the shared rounded silhouette and masked gradient ring'
+      'card borders must preserve the shared rounded silhouette and solid blue ring'
     );
   }
   for (const token of ["label: 'HD'", "label: '4K'"]) {

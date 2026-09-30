@@ -53,6 +53,12 @@ test('current shared owners pass their checks and functional mutations fail', ()
       '() => true',
       'Collection playback must preserve oldest-first ordering and an intentionally empty selection',
     ],
+    [
+      'src/styles/globals.css',
+      '--app-card-frame-background: var(--palette-blue, #0051d4);',
+      '--app-card-frame-background: conic-gradient(#252a30, #f8fafb);',
+      'card borders must preserve the shared rounded silhouette and solid blue ring',
+    ],
   ];
   for (const [fileName, original, replacement, reason] of cases) {
     const source = readFileSync(
