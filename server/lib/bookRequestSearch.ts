@@ -128,6 +128,11 @@ class BookRequestSearchManager {
       mediaType: operation.format,
     });
 
+    if (operation.providerManagedSearch) {
+      await this.reconcileProviderManagedSearch(operation, readarr);
+      return;
+    }
+
     if (operation.state === 'monitoring') {
       await this.reconcileMonitoringOperation(operation, readarr);
       return;
@@ -299,6 +304,31 @@ class BookRequestSearchManager {
     operation.updatedAt = updatedAt;
   }
 
+  private async reconcileProviderManagedSearch(
+    operation: BookRequestSearch,
+    readarr: ReadarrAPI
+  ): Promise<void> {
+    const providerBookId = await this.getProviderBookId(operation);
+    const providerEditionId =
+      operation.providerEditionId ??
+      operation.request.preferredEditionId ??
+      undefined;
+    const book = await this.getBookAfterSearch(
+      operation,
+      readarr,
+      providerBookId,
+      providerEditionId
+    );
+
+    if ((book?.statistics?.bookFileCount ?? 0) > 0) {
+      await this.setState(operation, 'available');
+      await this.finalizeRequest(operation.requestId);
+      return;
+    }
+
+    await this.setState(operation, 'monitoring');
+  }
+
   private async reconcilePendingOperation(
     operation: BookRequestSearch,
     readarr: ReadarrAPI,
@@ -378,6 +408,7 @@ class BookRequestSearchManager {
         createdBook: false,
         createdAuthor: false,
         state: 'pending',
+        providerManagedSearch: false,
         updatedAt: new Date(),
       });
       operation.bookId = null;
@@ -409,7 +440,8 @@ class BookRequestSearchManager {
       authorId: result.authorId ?? result.author?.id ?? null,
       createdBook: result.createdBook,
       createdAuthor: result.createdAuthor,
-      state: 'pending',
+      providerManagedSearch: true,
+      state: 'monitoring',
       updatedAt: new Date(),
     });
     operation.bookId = bookId;
@@ -420,14 +452,9 @@ class BookRequestSearchManager {
     operation.authorId = result.authorId ?? result.author?.id ?? null;
     operation.createdBook = result.createdBook;
     operation.createdAuthor = result.createdAuthor;
+    operation.providerManagedSearch = true;
     operation.state = 'monitoring';
     await this.storeBookServiceLink(operation, result);
-    await getRepository(BookRequestSearch).update(operation.id, {
-      commandId: null,
-      state: 'monitoring',
-      updatedAt: new Date(),
-    });
-    operation.commandId = null;
   }
 
   private getPendingFormatStatus(
@@ -507,7 +534,7 @@ class BookRequestSearchManager {
           : edition.monitored,
       })),
       useRequestedEdition: !!requestedEdition,
-      addOptions: { searchForNewBook: false },
+      addOptions: { searchForNewBook: true },
     };
   }
 

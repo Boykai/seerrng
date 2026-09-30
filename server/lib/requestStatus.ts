@@ -1079,19 +1079,27 @@ const getBookSearchState = async (
   const records = await (
     manager?.getRepository(BookRequestSearch) ??
     getRepository(BookRequestSearch)
-  ).find({ where: { requestId }, select: { state: true } });
-  if (records.some((record) => record.state === 'importing'))
+  ).find({
+    where: { requestId },
+    select: { state: true, providerManagedSearch: true },
+  });
+  const trackedSearches = records.filter(
+    (record) => !record.providerManagedSearch
+  );
+  if (trackedSearches.some((record) => record.state === 'importing'))
     return 'importing';
-  if (records.some((record) => record.state === 'grabbed')) return 'grabbed';
+  if (trackedSearches.some((record) => record.state === 'grabbed'))
+    return 'grabbed';
   if (
-    records.some(
+    trackedSearches.some(
       (record) => record.state === 'searching' || record.state === 'settling'
     )
   ) {
     return 'searching';
   }
-  if (records.some((record) => record.state === 'pending')) return 'pending';
-  if (records.some((record) => record.state === 'monitoring'))
+  if (trackedSearches.some((record) => record.state === 'pending'))
+    return 'pending';
+  if (trackedSearches.some((record) => record.state === 'monitoring'))
     return 'monitoring';
   return undefined;
 };
@@ -1417,10 +1425,15 @@ const getBookSearchStates = async (
   if (requestIds.length === 0) return new Map();
   const records = await getRepository(BookRequestSearch).find({
     where: { requestId: In(requestIds) },
-    select: { requestId: true, state: true },
+    select: {
+      requestId: true,
+      state: true,
+      providerManagedSearch: true,
+    },
   });
   const states = new Map<number, BookRequestSearch['state']>();
   for (const record of records) {
+    if (record.providerManagedSearch) continue;
     if (
       record.state === 'available' ||
       record.state === 'unavailable' ||
