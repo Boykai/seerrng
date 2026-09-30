@@ -214,13 +214,7 @@ describe('manual fail and search from request status', () => {
         .parents('[data-testid=request-card]')
         .scrollIntoView()
         .within(() => {
-          cy.get('[data-app-tooltip-owned="true"]').last().click();
-        });
-
-      cy.get('.app-tooltip')
-        .invoke('text')
-        .then((text) => {
-          throw new Error(`Observed download tooltip text: ${text}`);
+          cy.contains('Processing').click();
         });
       cy.get('.app-tooltip')
         .contains('button', 'Fail this download and search again')
