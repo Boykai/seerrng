@@ -116,7 +116,10 @@ test('Chocolatey packages only verified Windows release archives', () => {
 
   assert.equal(workflow.on.workflow_dispatch.inputs.tag.required, true);
   assert.equal(job['runs-on'], 'windows-latest');
-  assert.match(steps, /merge-base --is-ancestor HEAD refs\/remotes\/origin\/main/u);
+  assert.match(
+    steps,
+    /merge-base --is-ancestor HEAD refs\/remotes\/origin\/main/u
+  );
   assert.match(steps, /Get-FileHash[\s\S]*SHA-256 mismatch/u);
   assert.match(steps, /CHOCOLATEY_API_KEY/u);
   assert.match(steps, /choco push/u);
