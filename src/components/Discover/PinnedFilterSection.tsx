@@ -19,7 +19,7 @@ export default function PinnedFilterSection({
   const sectionPinned = Boolean(pins[section]);
   useEffect(() => setOpen(sectionPinned), [sectionPinned]);
   return (
-    <section className="mt-4 mb-4">
+    <section className="pinned-filter-section mt-4 mb-4">
       <div className="media-detail-disclosure-row">
         <DetailDisclosureButton
           label={label}

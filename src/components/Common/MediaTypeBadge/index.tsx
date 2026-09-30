@@ -59,7 +59,7 @@ export const getMediaTypeBadgeType = (
 
 interface MediaTypeBadgeProps {
   mediaType: MediaTypeBadgeType;
-  variant?: 'card' | 'compact' | 'inline';
+  variant?: 'card' | 'compact' | 'inline' | 'button';
   className?: string;
   showIcon?: boolean;
   /**
@@ -125,6 +125,7 @@ const variantClasses = {
   card: 'poster-control shadow-md',
   compact: 'px-2 py-1 text-[11px]',
   inline: 'px-2 py-1 text-xs',
+  button: 'app-button button-sm',
 } as const;
 
 const posterToneClass: Record<MediaTypeBadgeType, string> = {
@@ -136,6 +137,17 @@ const posterToneClass: Record<MediaTypeBadgeType, string> = {
   book: 'poster-control-type-book',
   comic: 'poster-control-type-comic',
   magazine: 'poster-control-type-magazine',
+};
+
+const buttonToneClass: Record<MediaTypeBadgeType, string> = {
+  movie: 'app-button-media-type-movie',
+  tv: 'app-button-media-type-tv',
+  collection: 'app-button-media-type-collection',
+  album: 'app-button-media-type-album',
+  artist: 'app-button-media-type-artist',
+  book: 'app-button-media-type-book',
+  comic: 'app-button-media-type-comic',
+  magazine: 'app-button-media-type-magazine',
 };
 
 const MediaTypeBadge = ({
@@ -153,11 +165,15 @@ const MediaTypeBadge = ({
   const badge = (
     <span
       className={twMerge(
-        variant === 'card'
+        variant === 'card' || variant === 'button'
           ? 'max-w-full'
           : 'inline-flex max-w-full items-center gap-1 rounded-full border leading-none font-semibold',
         variantClasses[variant],
-        variant === 'card' ? posterToneClass[mediaType] : config.tone,
+        variant === 'card'
+          ? posterToneClass[mediaType]
+          : variant === 'button'
+            ? buttonToneClass[mediaType]
+            : config.tone,
         className
       )}
     >

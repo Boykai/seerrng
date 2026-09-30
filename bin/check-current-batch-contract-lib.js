@@ -699,11 +699,20 @@ const validateCurrentBatchContract = (files) => {
     'trailer',
   ]) {
     requireCssRule(
-      `.app-button-${variant}`,
-      ['hover:text-white'],
+      `.app-button-${variant}:hover`,
+      ['color: #fff;'],
       `${variant} button must turn white on hover`
     );
   }
+  requireCssRule(
+    '.app-button-playback:hover',
+    [
+      'border-color: rgb(var(--color-gray-200));',
+      'background-color: rgb(0 0 0 / 0.7);',
+      'color: #fff;',
+    ],
+    'playback buttons must restore the bright hover border without changing their black surface'
+  );
   requireText(
     globals,
     '--action-control-height: 1rem;',
@@ -714,25 +723,42 @@ const validateCurrentBatchContract = (files) => {
     '.app-button.button-md,\n  .app-button.button-standard,\n  .app-button.button-sm,\n  .button-md,\n  .button-standard,\n  .button-sm {\n    @apply px-2.5 text-xs;\n    box-sizing: border-box;\n    height: var(--action-control-height);\n    min-height: var(--action-control-height);\n    max-height: var(--action-control-height);\n    padding-top: 0;\n    padding-bottom: 0;',
     'standard, medium, and small action buttons must enforce the 30-pixel border-box geometry in the final cascade'
   );
-  requireText(
-    globals,
-    '.app-button-report-issue {\n    @apply border-yellow',
-    'Report an Issue must use true yellow styling'
+  requireCssRule(
+    '.app-button-report-issue',
+    [
+      'border-color: color-mix(in srgb, var(--palette-yellow) 90%, transparent);',
+      'background-color: hsl(53 100% 10% / 0.55);',
+      'color: hsl(53 100% 72%);',
+    ],
+    'Report an Issue must use the approved true-yellow palette'
   );
-  requireText(
-    globals,
-    '.app-button-trailer {\n    @apply border-orange',
-    'Watch Trailer must use orange styling'
+  requireCssRule(
+    '.app-button-trailer',
+    [
+      'border-color: color-mix(in srgb, #f97316 90%, transparent);',
+      'background-color: hsl(25 95% 10% / 0.55);',
+      'color: hsl(25 95% 77%);',
+    ],
+    'Watch Trailer must use the approved orange palette'
   );
-  requireText(
-    globals,
-    '.app-button-association {\n    @apply border-cyan',
-    'Associations must use aqua styling'
+  requireCssRule(
+    '.app-button-association',
+    [
+      'border-color: color-mix(in srgb, var(--palette-aqua) 90%, transparent);',
+      'background-color: hsl(191 77% 10% / 0.55);',
+      'color: hsl(191 77% 75%);',
+    ],
+    'Associations must use the approved aqua palette'
   );
   requireText(
     'src/components/Association/AssociationBadge.tsx',
-    "'app-button poster-control poster-control-icon poster-control-association",
-    'the poster Associations action must reuse the shared association button style'
+    "'poster-control poster-control-association app-control-shadow-exempt",
+    'the poster Associations action must use the independent poster-control style'
+  );
+  rejectText(
+    'src/components/Association/AssociationBadge.tsx',
+    "'app-button poster-control",
+    'poster Associations must remain independent from standard application buttons'
   );
   requireOrder(
     'src/components/Association/AssociationBadge.tsx',
@@ -866,18 +892,27 @@ const validateCurrentBatchContract = (files) => {
   );
   requireCssRule(
     '.poster-control.poster-control-processing',
-    ['bg-indigo-950/35'],
-    'processing timer badges must preserve the translucent poster surface'
+    [
+      'border-color: color-mix(in srgb, var(--palette-blue) 90%, transparent);',
+      'var(--poster-control-background-opacity)',
+    ],
+    'processing timer badges must preserve the shared poster opacity and blue palette'
   );
   requireCssRule(
     '.poster-control.poster-control-pending',
-    ['bg-yellow-950/35'],
-    'pending bell badges must preserve the translucent poster surface'
+    [
+      'border-color: color-mix(in srgb, var(--palette-yellow) 90%, transparent);',
+      'var(--poster-control-background-opacity)',
+    ],
+    'pending bell badges must preserve the shared poster opacity and yellow palette'
   );
   requireCssRule(
     '.poster-control.poster-control-available',
-    ['bg-green-950/35'],
-    'available quality badges must use the same resting transparency as buttons'
+    [
+      'border-color: color-mix(in srgb, var(--palette-green) 90%, transparent);',
+      'var(--poster-control-background-opacity)',
+    ],
+    'available quality badges must use the shared poster opacity and green palette'
   );
   rejectText(
     'src/components/Common/StatusBadgeMini/index.tsx',
@@ -915,12 +950,13 @@ const validateCurrentBatchContract = (files) => {
   requireOrder(
     'src/components/TitleCard/index.tsx',
     [
-      'grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto]',
+      'flex w-full min-w-0 items-start justify-between gap-1',
       '{primaryStatusBadge && (',
+      'flex w-full min-w-0 items-center justify-between gap-1',
       '<AssociationBadge',
       '{secondaryStatusBadge && (',
     ],
-    'poster overlays must keep primary status on row one, Associations on row two left, and secondary status on row two right'
+    'poster overlays must use independent full-width rows with primary status on row one, Associations on row two left, and secondary status on row two right'
   );
   requireOrder(
     'src/components/TitleCard/index.tsx',
@@ -1032,15 +1068,67 @@ const validateCurrentBatchContract = (files) => {
     '0 0 6px rgb(0 0 0 / 0.9);',
     'rating values must retain the visible black readability shadow'
   );
+  requireCssRule(
+    '.poster-rating-popover',
+    ['position: fixed;', 'width: max-content;', 'box-sizing: border-box;'],
+    'poster rating popovers must expand to their single-line content width'
+  );
+  requireCssRule(
+    '.poster-rating-values',
+    ['display: flex;', 'flex-wrap: nowrap;'],
+    'poster hover ratings must remain on one horizontal line'
+  );
+  requireText(
+    'src/components/TitleCard/PosterRatingPopover.tsx',
+    'new ResizeObserver(updatePosition)',
+    'poster rating placement must react to the rendered panel size'
+  );
+  requireText(
+    'src/components/TitleCard/PosterRatingPopover.tsx',
+    'const height = measuredPopover?.height ?? 40;',
+    'poster rating placement must use the measured panel height instead of a fixed estimate'
+  );
+  requireCount(
+    'src/components/MediaSlider/index.tsx',
+    'voteCount={title.voteCount}',
+    2,
+    'Movie and Series sliders must pass TMDB vote counts to poster ratings'
+  );
+  requireCount(
+    'src/components/TitleCard/TmdbTitleCard.tsx',
+    'voteCount={title.voteCount}',
+    2,
+    'Movie and Series fetched title cards must pass TMDB vote counts to poster ratings'
+  );
+  requireText(
+    'src/components/TitleCard/PosterRatingPopover.tsx',
+    "mediaType === 'album'\n        ? '/api/v1/music/' + encodeURIComponent(id) + '/rating'",
+    'Music poster ratings must retain their independent album-rating feed'
+  );
   requireText(
     globals,
     '.media-rating-row {\n    @apply flex flex-nowrap items-center justify-between;\n    padding-top: var(--card-spacing);\n    min-height: calc(var(--action-control-height) + var(--card-spacing));',
-    'playback actions and ratings must use the compact full-width shared row'
+    'quality selection and ratings must use the compact full-width shared row'
   );
   requireText(
     globals,
     '.media-rating-link {\n    @apply inline-flex flex-none items-center gap-[5px] text-xs text-gray-300 hover:text-white;\n    height: var(--action-control-height);',
     'rating image and value pairs must use only the shared five-pixel internal gap'
+  );
+  requireCssRule(
+    '.media-rating-provider-link',
+    ['column-gap: 5px;'],
+    'Metacritic and Trakt must preserve the shared five-pixel logo-to-value gap'
+  );
+  requireCssRule(
+    '.media-request-action-row',
+    ['flex w-full flex-nowrap items-center'],
+    'detail Search Prowlarr and Request controls must share one non-wrapping row'
+  );
+  requireCssRule(
+    '.media-request-submit-action',
+    ['ml-auto', 'justify-end'],
+    'detail Request controls must remain right-justified opposite Search Prowlarr'
   );
   rejectText(
     globals,
@@ -1066,6 +1154,35 @@ const validateCurrentBatchContract = (files) => {
     '.media-primary-action-row',
     ['margin-top: var(--card-spacing);'],
     'ratings and primary actions must retain the shared card-spacing gap'
+  );
+  for (const filter of ['all', 'solid', 'gradiant', 'metalic']) {
+    requireText(
+      'src/components/VisualLab/index.tsx',
+      `data-palette-filter="${filter}"`,
+      `Visual Lab pages must expose the ${filter} treatment filter`
+    );
+  }
+  for (const family of ['solid', 'gradiant', 'metalic']) {
+    requireText(
+      'src/components/VisualLab/index.tsx',
+      `data-palette-family="${family}"`,
+      `Visual Lab pages must label the ${family} treatment sections`
+    );
+  }
+  requireText(
+    'src/components/VisualLab/index.tsx',
+    'Gradiant Palette Buttons',
+    'the Buttons lab must include the complete gradiant palette set'
+  );
+  requireText(
+    'src/styles/visual-lab.css',
+    '.visual-lab-button-gradiant {\n  --visual-lab-button-gradiant: linear-gradient(\n    45deg,',
+    'Visual Lab gradiant buttons must use the canonical bottom-left-to-top-right direction'
+  );
+  requireText(
+    'public/visual-lab/visual-lab.css',
+    '.visual-lab-button-gradiant {',
+    'the generated Visual Lab stylesheet must include the gradiant button treatment'
   );
   requireText(
     globals,
@@ -1159,7 +1276,7 @@ const validateCurrentBatchContract = (files) => {
     requireOrder(
       fileName,
       [ratingRowToken, 'className="media-primary-action-row"'],
-      'playback and ratings must appear above the primary action row'
+      'the rating row must appear above the primary action row'
     );
   }
   const issueListItem = 'src/components/IssueList/IssueItem/index.tsx';
@@ -1339,18 +1456,38 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     globals,
-    '.app-filter-button {\n    @apply inline-flex items-center justify-center gap-1.5',
+    '.app-filter-button {\n    @apply relative inline-flex items-center justify-center gap-1.5',
     'filter buttons must consume the shared compact geometry'
   );
   requireText(
     globals,
-    '.app-filter-button {\n    @apply inline-flex items-center justify-center gap-1.5 rounded-md border px-2 text-xs font-medium whitespace-nowrap transition focus:ring-2 focus:ring-indigo-400 focus:outline-none;\n    height: var(--compact-control-height);',
+    'height: var(--compact-control-height);\n    min-height: var(--compact-control-height);\n    max-height: var(--compact-control-height);',
     'filter buttons must resolve through the shared 20-pixel height'
+  );
+  requireText(
+    globals,
+    '.app-filter-button:focus-within,\n  .app-filter-button:focus-visible {\n    outline: 2px solid rgb(129 140 248);\n    outline-offset: 1px;',
+    'filter button focus emphasis must render outside the fixed control box'
+  );
+  requireText(
+    globals,
+    '.app-filter-button-active {\n    @apply border-indigo-400 bg-indigo-500 text-white;\n    outline: 1px solid rgb(129 140 248);\n    outline-offset: 1px;',
+    'selected filter emphasis must render outside the fixed control box'
+  );
+  requireText(
+    globals,
+    '.pinned-filter-section .detail-disclosure-pin-active {\n    background-color: hsl(217 100% 20% / 0.55);',
+    'pinned filter section icons must use the shared dark-blue selected surface'
   );
   requireText(
     globals,
     '.discover-filter-control {\n    @apply relative inline-flex max-w-full min-w-0 rounded-md border',
     'filter fields and dropdowns must use the shared compact row'
+  );
+  rejectText(
+    globals,
+    '.discover-filter-control {\n    @apply relative inline-flex max-w-full min-w-0 rounded-md border focus-within:ring-2 focus-within:ring-indigo-400 focus-within:ring-inset;',
+    'filter field focus emphasis must not render inside the compact control box'
   );
   requireText(
     globals,
@@ -2243,7 +2380,7 @@ const validateCurrentBatchContract = (files) => {
     );
   }
   for (const token of [
-    'dialogClass="app-card-main request-modal-site-surface sm:max-w-5xl"',
+    'dialogClass="request-modal-site-surface sm:max-w-5xl"',
     '<RequestMediaCard',
     'className="app-card-inset refreshed-inset-surface rounded-lg border border-gray-700 p-3"',
   ]) {
@@ -2640,6 +2777,19 @@ const validateCurrentBatchContract = (files) => {
       "selectedQuality === '4k'",
       'Movie and Series playback must use the exact selected quality'
     );
+    requireOrder(
+      detailLayout,
+      [
+        'className="media-rating-row"',
+        'className="media-primary-action-row"',
+        '{playbackActions?.(',
+        '{primaryActions}',
+        'className="media-request-action-row"',
+        '{indexerSearchAction}',
+        '{requestAction}',
+      ],
+      'Movie and Series must keep playback before Blocklist and Search Prowlarr opposite Request on the following row'
+    );
   }
   requireOrder(
     seriesLayout,
@@ -2647,9 +2797,10 @@ const validateCurrentBatchContract = (files) => {
       'className="media-rating-row"',
       '<MediaQualitySelect',
       'label={intl.formatMessage(messages.quality)}',
+      'className="media-primary-action-row"',
       '{playbackActions?.(',
     ],
-    'Series quality selection must match the Movie row immediately before playback controls'
+    'Series quality selection and ratings must precede playback in the primary action row'
   );
   rejectText(
     seriesLayout,
@@ -2662,9 +2813,10 @@ const validateCurrentBatchContract = (files) => {
       'className="media-rating-row"',
       '<MediaQualitySelect',
       'label={intl.formatMessage(messages.quality)}',
+      'className="media-primary-action-row"',
       "playbackActions?.(selectedQuality === '4k')",
     ],
-    'Movie quality selection must be a directly justified row item immediately before playback controls'
+    'Movie quality selection and ratings must precede playback in the primary action row'
   );
   rejectText(
     movieLayout,
@@ -3084,8 +3236,8 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'every continuation line remains anchored to the right edge',
-    'the style standard must preserve right alignment when request actions wrap'
+    'keep the status control at the left edge and History at the right edge',
+    'the style standard must preserve full justification when request actions wrap'
   );
   const advanced = 'src/components/RequestModal/AdvancedRequester/index.tsx';
   requireText(
@@ -3904,8 +4056,8 @@ const validateCurrentBatchContract = (files) => {
   }
   requireText(
     'src/components/Requests/index.tsx',
-    'border-emerald-600/80 bg-emerald-800/25 px-2 text-[11px]',
-    'Request Status History must use the compact translucent green action treatment'
+    'buttonType="manage"',
+    'Request Status History must use the approved purple action treatment'
   );
   requireText(
     'src/components/Requests/index.tsx',
@@ -3929,8 +4081,8 @@ const validateCurrentBatchContract = (files) => {
   }
   requireText(
     globals,
-    '.request-status-action-row {\n    @apply relative z-10 flex flex-wrap items-center justify-end;\n    padding-top: var(--card-spacing);',
-    'every wrapped request action line must stay right-justified'
+    '.request-status-action-row {\n    @apply relative z-10 flex w-full flex-wrap items-center justify-between;\n    padding-top: var(--card-spacing);',
+    'request action rows must remain fully justified'
   );
   requireText(
     issueDetails,
@@ -4398,6 +4550,9 @@ const validateCurrentBatchContract = (files) => {
     '--app-card-frame-background: var(--palette-blue, #0051d4);',
     '--app-card-frame-width: 1px;',
     'border-radius: 0.5rem;',
+    '--app-card-frame-background: linear-gradient(\n      45deg,\n      #333333 0%,',
+    'color-mix(in hsl, #333333 58%, #e6e6e6) 42%,',
+    'color-mix(in hsl, #333333 12%, #e6e6e6) 68%,',
     'background: var(--app-card-frame-background);',
     'mask-composite: exclude;',
   ]) {
@@ -4461,30 +4616,39 @@ const validateCurrentBatchContract = (files) => {
     [
       [
         '.app-button-primary',
-        'border-indigo-500/90 bg-indigo-950/35 text-indigo-200',
+        'border-indigo-500/90 bg-indigo-950/55 text-indigo-200',
       ],
       'standard primary actions must use the translucent dark-indigo treatment',
     ],
     [
-      ['.app-button-danger', 'border-red-500/90 bg-red-950/35 text-red-300'],
-      'standard red actions must use the translucent dark-red treatment',
+      [
+        '.app-button-danger',
+        'border-color: color-mix(in srgb, #d52c2c 90%, transparent);',
+        'background-color: hsl(0 66% 10% / 0.55);',
+        'color: hsl(0 66% 76%);',
+      ],
+      'standard red actions must use the approved palette-derived treatment',
     ],
     [
       [
         '.app-button-warning',
-        'border-yellow-500/90 bg-yellow-950/35 text-yellow-200',
+        'border-color: color-mix(in srgb, var(--palette-yellow) 90%, transparent);',
+        'background-color: hsl(53 100% 10% / 0.55);',
+        'color: hsl(53 100% 72%);',
       ],
-      'standard warning actions must use the translucent dark-yellow treatment',
+      'standard warning actions must use the approved palette-derived treatment',
     ],
     [
       [
         '.app-button-success',
-        'border-green-500/90 bg-green-950/35 text-green-300',
+        'border-color: color-mix(in srgb, var(--palette-green) 90%, transparent);',
+        'background-color: hsl(119 52% 10% / 0.55);',
+        'color: hsl(119 52% 74%);',
       ],
-      'standard green actions must use the translucent dark-green treatment',
+      'standard green actions must use the approved palette-derived treatment',
     ],
   ]) {
-    requireCssRule(token[0], [token[1]], description);
+    requireCssRule(token[0], token.slice(1), description);
   }
 
   const profile = 'src/components/UserProfile/ProfileHeader/index.tsx';
@@ -5329,8 +5493,13 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'src/components/RequestCard/index.tsx',
+    'cursor-pointer self-stretch overflow-hidden',
+    'Request posters must stretch to the content height of the compact card'
+  );
+  rejectText(
+    'src/components/RequestCard/index.tsx',
     "isMusic(title) ? 'aspect-square' : 'aspect-[2/3]'",
-    'Request poster frames must match square Music and portrait media artwork'
+    'Request posters must not restore fixed square or portrait aspect ratios'
   );
   rejectText(
     'src/components/RequestButton/index.tsx',

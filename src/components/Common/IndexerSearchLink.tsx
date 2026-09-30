@@ -28,7 +28,7 @@ const IndexerSearchLink = ({
     <Button
       as="a"
       href={href}
-      buttonType="ghost"
+      buttonType="prowlarr"
       buttonSize="sm"
       title={intl.formatMessage(messages.help)}
     >

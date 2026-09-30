@@ -572,6 +572,29 @@ describe('NotificationManager delivery lifecycle', () => {
     assert.strictEqual(await getRepository(NotificationOutbox).count(), 0);
   });
 
+  it('retires a typed intent when its source record was deleted', async () => {
+    let sends = 0;
+    const manager = new NotificationManager();
+    manager.registerAgents([
+      {
+        shouldSend: () => true,
+        send: async () => {
+          sends += 1;
+          return true;
+        },
+      },
+    ]);
+
+    await manager.sendNotificationIntent(Notification.MEDIA_PENDING, {
+      kind: 'media-request',
+      requestId: Number.MAX_SAFE_INTEGER,
+    });
+    await waitForBackgroundTasks();
+
+    assert.strictEqual(sends, 0);
+    assert.strictEqual(await getRepository(NotificationOutbox).count(), 0);
+  });
+
   it('hydrates durable issue-comment intents with their relations', async (t) => {
     const getAlbumMock = mock.method(
       ListenBrainzAPI.prototype,

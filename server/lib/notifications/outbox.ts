@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { In } from 'typeorm';
 import type { Notification } from '.';
 import type { NotificationPayload } from './agents/agent';
+import { hydrateNotificationIntent } from './intents';
 
 export const MAX_NOTIFICATION_OUTBOX_ROWS = 10_000;
 export const NOTIFICATION_OUTBOX_SCAN_BATCH_SIZE = 250;
@@ -413,7 +414,6 @@ export const hydrateNotificationOutboxPayload = async (
       (untyped as StoredNotificationIntent).intent
     );
     validateIntentType(record.type as Notification, intent);
-    const { hydrateNotificationIntent } = await import('./intents');
     const payload = await hydrateNotificationIntent(
       record.type as Notification,
       intent

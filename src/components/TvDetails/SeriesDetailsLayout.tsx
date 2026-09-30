@@ -84,6 +84,10 @@ interface SeriesDetailsLayoutProps {
   visibleSeasons: TvDetails['seasons'];
   primaryActions: ReactNode;
   secondaryActions: ReactNode;
+  indexerSearchAction: ReactNode;
+  indexerCompanionActions: ReactNode;
+  reportIssueAction: ReactNode;
+  requestAction: ReactNode;
   playbackActions?: (itemIds: string[], is4k: boolean) => ReactNode;
 }
 
@@ -120,6 +124,10 @@ const SeriesDetailsLayout = ({
   visibleSeasons,
   primaryActions,
   secondaryActions,
+  indexerSearchAction,
+  indexerCompanionActions,
+  reportIssueAction,
+  requestAction,
   playbackActions,
 }: SeriesDetailsLayoutProps) => {
   const intl = useIntl();
@@ -489,17 +497,6 @@ const SeriesDetailsLayout = ({
                 onChange={setSelectedQuality}
                 label={intl.formatMessage(messages.quality)}
               />
-              {playbackActions?.(
-                effectivePlaybackItemIds,
-                effectiveSelectedQuality === '4k'
-              )}
-              {playbackActions && (
-                <PlayOnDeviceButton
-                  mediaId={data.mediaInfo?.id}
-                  itemIds={effectivePlaybackItemIds}
-                  is4k={effectiveSelectedQuality === '4k'}
-                />
-              )}
               {effectiveRatings.rtCriticsRating !== undefined &&
                 effectiveRatings.rtCriticsScore !== undefined && (
                   <Tooltip
@@ -594,8 +591,30 @@ const SeriesDetailsLayout = ({
           )}
 
           <div className="media-primary-action-row">
+            {playbackActions?.(
+              effectivePlaybackItemIds,
+              effectiveSelectedQuality === '4k'
+            )}
+            {playbackActions && (
+              <PlayOnDeviceButton
+                mediaId={data.mediaInfo?.id}
+                itemIds={effectivePlaybackItemIds}
+                is4k={effectiveSelectedQuality === '4k'}
+              />
+            )}
             {primaryActions}
             {secondaryActions}
+            <div className="media-primary-report-action">
+              {reportIssueAction}
+            </div>
+          </div>
+
+          <div className="media-request-action-row">
+            <div className="media-request-search-action">
+              {indexerSearchAction}
+              {indexerCompanionActions}
+            </div>
+            <div className="media-request-submit-action">{requestAction}</div>
           </div>
 
           <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">

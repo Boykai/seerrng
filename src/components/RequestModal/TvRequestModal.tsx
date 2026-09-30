@@ -5,7 +5,9 @@ import SeriesSeasonEpisodeSelector from '@app/components/Common/SeriesSeasonEpis
 import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
 import AdvancedOptionsDisclosureButton from '@app/components/RequestModal/AdvancedOptionsDisclosureButton';
 import type { RequestOverrides } from '@app/components/RequestModal/AdvancedRequester';
-import AdvancedRequester from '@app/components/RequestModal/AdvancedRequester';
+import AdvancedRequester, {
+  RequestListboxControl,
+} from '@app/components/RequestModal/AdvancedRequester';
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
 import RequestFooterStatus from '@app/components/RequestModal/RequestFooterStatus';
 import RequestMediaCard from '@app/components/RequestModal/RequestMediaCard';
@@ -744,7 +746,7 @@ const TvRequestModal = ({
       }
       cancelButtonType={editRequest ? 'danger' : 'default'}
       actionButtonSize={editRequest ? 'standard' : 'sm'}
-      dialogClass="app-card-main request-modal-site-surface sm:max-w-5xl"
+      dialogClass="request-modal-site-surface sm:max-w-5xl"
     >
       <RequestMediaCard
         artwork={
@@ -928,32 +930,26 @@ const TvRequestModal = ({
         )}
 
         {canConfigureWatchAhead && (
-          <div className="mt-3 rounded-md border border-indigo-500/40 bg-indigo-950/30 p-3">
-            <label
-              htmlFor="tv-watch-ahead-count"
-              className="block text-sm font-semibold text-gray-100"
-            >
-              {intl.formatMessage(messages.watchAheadLabel)}
-            </label>
-            <select
+          <div className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
+            <RequestListboxControl
               id="tv-watch-ahead-count"
-              className="app-control-standard-radius mt-2 w-full bg-gray-800 px-3 py-2 text-sm text-white"
+              label={intl.formatMessage(messages.watchAheadLabel)}
               value={watchAheadEpisodeCount}
-              onChange={(event) =>
-                setWatchAheadEpisodeCount(Number(event.target.value))
-              }
-            >
-              <option value={0}>
-                {intl.formatMessage(messages.watchAheadOff)}
-              </option>
-              {[1, 2, 3, 4, 5].map((count) => (
-                <option key={count} value={count}>
-                  {intl.formatMessage(messages.watchAheadEpisodeOption, {
+              options={[
+                {
+                  value: 0,
+                  label: intl.formatMessage(messages.watchAheadOff),
+                },
+                ...[1, 2, 3, 4, 5].map((count) => ({
+                  value: count,
+                  label: intl.formatMessage(messages.watchAheadEpisodeOption, {
                     count,
-                  })}
-                </option>
-              ))}
-            </select>
+                  }),
+                })),
+              ]}
+              onChange={setWatchAheadEpisodeCount}
+              loadingLabel={intl.formatMessage(messages.watchAheadOff)}
+            />
             <p className="mt-2 text-xs text-gray-300">
               {intl.formatMessage(messages.watchAheadDescription)}
             </p>

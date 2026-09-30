@@ -1,3 +1,4 @@
+import Button from '@app/components/Common/Button';
 import Modal from '@app/components/Common/Modal';
 import Tooltip from '@app/components/Common/Tooltip';
 import defineMessages from '@app/utils/defineMessages';
@@ -84,9 +85,10 @@ export const RequestActionButton = ({
       }
     >
       <span className="inline-flex">
-        <button
+        <Button
           type="button"
-          className={`compact-control request-destructive-action ${action === 'delete' ? 'request-destructive-action-delete' : 'request-destructive-action-remove'}`}
+          buttonType="danger"
+          buttonSize="standard"
           disabled={disabled || busy}
           onClick={onClick}
         >
@@ -97,7 +99,7 @@ export const RequestActionButton = ({
                 ? requestActionMessages.deleting
                 : requestActionMessages[action]
             )}
-        </button>
+        </Button>
       </span>
     </Tooltip>
   );

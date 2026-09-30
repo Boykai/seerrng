@@ -9,6 +9,7 @@ import ConfirmButton from '@app/components/Common/ConfirmButton';
 import MediaTypeBadge, {
   getMediaTypeBadgeType,
 } from '@app/components/Common/MediaTypeBadge';
+import Tooltip from '@app/components/Common/Tooltip';
 import StatusBadge from '@app/components/StatusBadge';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useSettings from '@app/hooks/useSettings';
@@ -90,6 +91,8 @@ const messages = defineMessages('components.RequestList.RequestItem', {
   watchAheadSaveError:
     'Could not update the requested episode queue. Check that your media server and Sonarr are connected.',
   watchAheadEpisodeBadge: 'Requested ahead of playback',
+  watchAheadEpisodeBadgeTooltip:
+    'Automatically requested by the Episode Queue as playback progressed.',
 });
 
 type RequestItemTitle =
@@ -870,11 +873,6 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                 {requestData.type !== 'book' && requestData.is4k && (
                   <Badge badgeType="warning">4K</Badge>
                 )}
-                {requestData.watchAheadParentRequestId && (
-                  <Badge badgeType="association">
-                    {intl.formatMessage(messages.watchAheadEpisodeBadge)}
-                  </Badge>
-                )}
                 <span>
                   {(isMovie(title)
                     ? title.releaseDate
@@ -1176,6 +1174,19 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
           </div>
         </div>
         <div className="z-10 mt-4 flex w-full flex-col justify-center space-y-2 pr-4 pl-4 xl:mt-0 xl:w-96 xl:items-end xl:pl-0">
+          {requestData.watchAheadParentRequestId && (
+            <Tooltip
+              content={intl.formatMessage(
+                messages.watchAheadEpisodeBadgeTooltip
+              )}
+            >
+              <span className="inline-flex">
+                <Badge badgeType="association">
+                  {intl.formatMessage(messages.watchAheadEpisodeBadge)}
+                </Badge>
+              </span>
+            </Tooltip>
+          )}
           {requestData.type === 'tv' &&
             !requestData.watchAheadParentRequestId &&
             requestData.requestedBy.id === user?.id &&
