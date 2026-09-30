@@ -1,5 +1,47 @@
 const shades = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
 
+export const ADVANCED_THEME_PALETTE_TOKENS = [
+  '--palette-gray-light',
+  '--palette-gray',
+  '--palette-gray-dark',
+  '--palette-black-light',
+  '--palette-black',
+  '--palette-black-dark',
+  '--palette-red-light',
+  '--palette-red',
+  '--palette-red-dark',
+  '--palette-orange-light',
+  '--palette-orange',
+  '--palette-orange-dark',
+  '--palette-yellow-light',
+  '--palette-yellow',
+  '--palette-yellow-dark',
+  '--palette-lime-light',
+  '--palette-lime',
+  '--palette-lime-dark',
+  '--palette-green-light',
+  '--palette-green',
+  '--palette-green-dark',
+  '--palette-aqua-light',
+  '--palette-aqua',
+  '--palette-aqua-dark',
+  '--palette-blue-light',
+  '--palette-blue',
+  '--palette-blue-dark',
+  '--palette-purple-light',
+  '--palette-purple',
+  '--palette-purple-dark',
+  '--palette-plum-light',
+  '--palette-plum',
+  '--palette-plum-dark',
+  '--palette-pink-light',
+  '--palette-pink',
+  '--palette-pink-dark',
+] as const;
+
+export const ADVANCED_THEME_PRESET_IDS = ['john-redesign'] as const;
+export type AdvancedThemePresetId = (typeof ADVANCED_THEME_PRESET_IDS)[number];
+
 const themeColorTokens = [
   '--theme-page-bg',
   '--theme-page-glow-start',
@@ -38,9 +80,13 @@ export const ADVANCED_THEME_COLOR_TOKENS = [
   ...(['gray', 'indigo', 'purple'] as const).flatMap((palette) =>
     shades.map((shade) => `--color-${palette}-${shade}` as const)
   ),
+  ...ADVANCED_THEME_PALETTE_TOKENS,
 ] as const;
 
 const advancedThemeColorTokenSet = new Set<string>(ADVANCED_THEME_COLOR_TOKENS);
+const advancedThemePaletteTokenSet = new Set<string>(
+  ADVANCED_THEME_PALETTE_TOKENS
+);
 const advancedThemeSpecialTokens = new Set([
   '--theme-page-spotlight-strength',
   '--theme-page-gradient-main-stop',
@@ -57,6 +103,7 @@ const allowedShadowValues = new Set([
 export type AdvancedThemeOverrides = Partial<
   Record<(typeof ADVANCED_THEME_COLOR_TOKENS)[number], string>
 > & {
+  preset?: AdvancedThemePresetId;
   '--theme-page-spotlight-strength'?: number;
   '--theme-page-gradient-main-stop'?: string;
   '--theme-detail-divider-shadow'?: string;
@@ -79,6 +126,10 @@ export const getAdvancedThemeCssValue = (
   token: string,
   value: string | number
 ): string => {
+  if (advancedThemePaletteTokenSet.has(token)) {
+    return String(value);
+  }
+
   if (!advancedThemeColorTokenSet.has(token) || typeof value !== 'string') {
     return String(value);
   }
@@ -101,12 +152,23 @@ export const validateAdvancedThemeOverrides = (
   }
 
   const entries = Object.entries(input as Record<string, unknown>);
-  if (entries.length > ADVANCED_THEME_COLOR_TOKENS.length + 3) {
+  if (entries.length > ADVANCED_THEME_COLOR_TOKENS.length + 4) {
     return { error: 'Theme overrides contain too many values.' };
   }
 
   const normalized: Record<string, string | number> = {};
   for (const [token, rawValue] of entries) {
+    if (token === 'preset') {
+      if (
+        typeof rawValue !== 'string' ||
+        !ADVANCED_THEME_PRESET_IDS.includes(rawValue as AdvancedThemePresetId)
+      ) {
+        return { error: 'preset must name a supported built-in theme preset.' };
+      }
+      normalized.preset = rawValue;
+      continue;
+    }
+
     if (advancedThemeColorTokenSet.has(token)) {
       if (typeof rawValue !== 'string') {
         return { error: `${token} must be a hexadecimal color.` };

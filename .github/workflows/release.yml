@@ -620,6 +620,7 @@ jobs:
             release-linux-packages.yml \
             release-flatpak.yml \
             release-aur.yml \
+            release-chocolatey.yml \
             release-snap.yml \
             release-ppa.yml \
             release-copr.yml

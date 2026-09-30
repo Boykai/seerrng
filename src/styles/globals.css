@@ -4181,6 +4181,367 @@
     height: 16px;
     -webkit-appearance: none;
   }
+
+  /* John's visual system is opt-in through the per-user advanced theme preset.
+     These rules recolor shared controls while leaving their current markup and
+     layout in place. */
+  :root[data-theme-preset='john-redesign'] .app-button-default {
+    border-color: color-mix(
+      in srgb,
+      rgb(var(--theme-control-border)) 75%,
+      var(--palette-gray-light, #cccccc) 25%
+    );
+    background-color: rgb(var(--theme-control-surface) / 0.55);
+  }
+
+  :root[data-theme-preset='john-redesign'] .app-button-default:hover {
+    background-color: rgb(var(--theme-control-surface-hover) / 0.7);
+  }
+
+  :root[data-theme-preset='john-redesign'] .app-button-default:active {
+    background-color: rgb(var(--theme-control-surface-hover) / 0.85);
+  }
+
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-danger,
+      .request-destructive-action-delete,
+      .request-destructive-action-remove,
+      .app-button-blocklist,
+      .poster-control-blocklist,
+      .poster-control-type-comic,
+      .app-button-media-type-comic
+    ) {
+    --john-accent: var(--palette-red, #d52c2c);
+    --john-accent-light: var(--palette-red-light, #ff6666);
+    --john-accent-dark: var(--palette-red-dark, #8f1717);
+  }
+
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-warning,
+      .app-button-report-issue,
+      .discover-filter-control.compact-select-warning,
+      .poster-control-type-book,
+      .poster-control-book-format,
+      .poster-control-pending,
+      .app-button-media-type-book
+    ) {
+    --john-accent: var(--palette-yellow, #d8c000);
+    --john-accent-light: var(--palette-yellow-light, #ffe53d);
+    --john-accent-dark: var(--palette-yellow-dark, #8c7900);
+  }
+
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-success,
+      .app-button-bulk-request,
+      .app-button-detail-request,
+      .poster-control-type-album,
+      .poster-control-available,
+      .app-button-media-type-album
+    ) {
+    --john-accent: var(--palette-green, #3ab338);
+    --john-accent-light: var(--palette-green-light, #68dc66);
+    --john-accent-dark: var(--palette-green-dark, #227a27);
+  }
+
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-manage,
+      .poster-control-type-tv,
+      .app-button-media-type-tv
+    ) {
+    --john-accent: var(--palette-purple, #8b5cf6);
+    --john-accent-light: var(--palette-purple-light, #a78bfa);
+    --john-accent-dark: var(--palette-purple-dark, #6d28d9);
+  }
+
+  :root[data-theme-preset='john-redesign'] .detail-disclosure-control {
+    --john-accent: var(--palette-plum, #8414a6);
+    --john-accent-light: var(--palette-plum-light, #b85ad3);
+    --john-accent-dark: var(--palette-plum-dark, #470b59);
+  }
+
+  :root[data-theme-preset='john-redesign']
+    .pinned-filter-section
+    .detail-disclosure-control {
+    --john-accent: var(--palette-blue, #0051d4);
+    --john-accent-light: var(--palette-blue-light, #4d8fff);
+    --john-accent-dark: var(--palette-blue-dark, #002b70);
+  }
+
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-association,
+      .poster-control-association,
+      .poster-control-type-magazine,
+      .app-button-media-type-magazine
+    ) {
+    --john-accent: var(--palette-aqua, #1aabcb);
+    --john-accent-light: var(--palette-aqua-light, #64d5e7);
+    --john-accent-dark: var(--palette-aqua-dark, #065769);
+  }
+
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-prowlarr,
+      .poster-control-type-movie,
+      .poster-control-type-collection,
+      .poster-control-processing,
+      .app-button-media-type-movie,
+      .app-button-media-type-collection
+    ) {
+    --john-accent: var(--palette-blue, #0051d4);
+    --john-accent-light: var(--palette-blue-light, #4d8fff);
+    --john-accent-dark: var(--palette-blue-dark, #002b70);
+  }
+
+  :root[data-theme-preset='john-redesign'] :is(.app-button-trailer) {
+    --john-accent: var(--palette-orange, #f97316);
+    --john-accent-light: var(--palette-orange-light, #fb923c);
+    --john-accent-dark: var(--palette-orange-dark, #c2410c);
+  }
+
+  :root[data-theme-preset='john-redesign']
+    :is(.poster-control-type-artist, .app-button-media-type-artist) {
+    --john-accent: var(--palette-pink, #e3008e);
+    --john-accent-light: var(--palette-pink-light, #ff5fc4);
+    --john-accent-dark: var(--palette-pink-dark, #8f005a);
+  }
+
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-danger,
+      .request-destructive-action-delete,
+      .request-destructive-action-remove,
+      .app-button-blocklist,
+      .app-button-warning,
+      .app-button-report-issue,
+      .app-button-success,
+      .app-button-bulk-request,
+      .app-button-detail-request,
+      .app-button-manage,
+      .detail-disclosure-control,
+      .app-button-association,
+      .app-button-prowlarr,
+      .app-button-trailer,
+      .discover-filter-control.compact-select-warning,
+      .poster-control-type-movie,
+      .poster-control-type-tv,
+      .poster-control-type-album,
+      .poster-control-type-artist,
+      .poster-control-type-book,
+      .poster-control-book-format,
+      .poster-control-type-comic,
+      .poster-control-type-magazine,
+      .poster-control-available,
+      .poster-control-pending,
+      .poster-control-processing,
+      .poster-control-association,
+      .poster-control-blocklist,
+      .app-button-media-type-movie,
+      .app-button-media-type-tv,
+      .app-button-media-type-collection,
+      .app-button-media-type-album,
+      .app-button-media-type-artist,
+      .app-button-media-type-book,
+      .app-button-media-type-comic,
+      .app-button-media-type-magazine
+    ) {
+    border-color: color-mix(in srgb, var(--john-accent) 90%, transparent);
+    background-color: color-mix(
+      in srgb,
+      var(--john-accent-dark) 55%,
+      transparent
+    );
+    color: var(--john-accent-light);
+  }
+
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-danger,
+      .request-destructive-action-delete,
+      .request-destructive-action-remove,
+      .app-button-blocklist,
+      .app-button-warning,
+      .app-button-report-issue,
+      .app-button-success,
+      .app-button-bulk-request,
+      .app-button-detail-request,
+      .app-button-manage,
+      .detail-disclosure-control,
+      .app-button-association,
+      .app-button-prowlarr,
+      .app-button-trailer,
+      .discover-filter-control.compact-select-warning,
+      .poster-control-type-movie,
+      .poster-control-type-tv,
+      .poster-control-type-album,
+      .poster-control-type-artist,
+      .poster-control-type-book,
+      .poster-control-book-format,
+      .poster-control-type-comic,
+      .poster-control-type-magazine,
+      .poster-control-available,
+      .poster-control-pending,
+      .poster-control-processing,
+      .poster-control-association,
+      .poster-control-blocklist,
+      .app-button-media-type-movie,
+      .app-button-media-type-tv,
+      .app-button-media-type-collection,
+      .app-button-media-type-album,
+      .app-button-media-type-artist,
+      .app-button-media-type-book,
+      .app-button-media-type-comic,
+      .app-button-media-type-magazine
+    ):hover {
+    border-color: color-mix(in srgb, var(--john-accent) 65%, white);
+    background-color: color-mix(in srgb, var(--john-accent) 70%, transparent);
+    color: #fff;
+  }
+
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-danger,
+      .request-destructive-action-delete,
+      .request-destructive-action-remove,
+      .app-button-blocklist,
+      .app-button-warning,
+      .app-button-report-issue,
+      .app-button-success,
+      .app-button-bulk-request,
+      .app-button-detail-request,
+      .app-button-manage,
+      .detail-disclosure-control,
+      .app-button-association,
+      .app-button-prowlarr,
+      .app-button-trailer,
+      .discover-filter-control.compact-select-warning,
+      .poster-control-type-movie,
+      .poster-control-type-tv,
+      .poster-control-type-album,
+      .poster-control-type-artist,
+      .poster-control-type-book,
+      .poster-control-book-format,
+      .poster-control-type-comic,
+      .poster-control-type-magazine,
+      .poster-control-available,
+      .poster-control-pending,
+      .poster-control-processing,
+      .poster-control-association,
+      .poster-control-blocklist,
+      .app-button-media-type-movie,
+      .app-button-media-type-tv,
+      .app-button-media-type-collection,
+      .app-button-media-type-album,
+      .app-button-media-type-artist,
+      .app-button-media-type-book,
+      .app-button-media-type-comic,
+      .app-button-media-type-magazine
+    ):focus {
+    border-color: color-mix(in srgb, var(--john-accent) 65%, white);
+    --tw-ring-color: var(--john-accent);
+  }
+
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-danger,
+      .request-destructive-action-delete,
+      .request-destructive-action-remove,
+      .app-button-blocklist,
+      .app-button-warning,
+      .app-button-report-issue,
+      .app-button-success,
+      .app-button-bulk-request,
+      .app-button-detail-request,
+      .app-button-manage,
+      .detail-disclosure-control,
+      .app-button-association,
+      .app-button-prowlarr,
+      .app-button-trailer,
+      .discover-filter-control.compact-select-warning,
+      .poster-control-type-movie,
+      .poster-control-type-tv,
+      .poster-control-type-album,
+      .poster-control-type-artist,
+      .poster-control-type-book,
+      .poster-control-book-format,
+      .poster-control-type-comic,
+      .poster-control-type-magazine,
+      .poster-control-available,
+      .poster-control-pending,
+      .poster-control-processing,
+      .poster-control-association,
+      .poster-control-blocklist,
+      .app-button-media-type-movie,
+      .app-button-media-type-tv,
+      .app-button-media-type-collection,
+      .app-button-media-type-album,
+      .app-button-media-type-artist,
+      .app-button-media-type-book,
+      .app-button-media-type-comic,
+      .app-button-media-type-magazine
+    ):active {
+    border-color: color-mix(in srgb, var(--john-accent) 80%, white);
+    background-color: color-mix(in srgb, var(--john-accent) 85%, transparent);
+  }
+
+  :root[data-theme-preset='john-redesign'] .poster-control {
+    --poster-control-background-opacity: 0.7;
+    text-shadow:
+      0 1px 1px rgb(0 0 0),
+      0 0 3px rgb(0 0 0),
+      0 0 6px rgb(0 0 0 / 0.9);
+  }
+
+  :root[data-theme-preset='john-redesign'] .poster-control svg {
+    filter: drop-shadow(0 1px 1px rgb(0 0 0))
+      drop-shadow(0 0 3px rgb(0 0 0 / 0.95));
+  }
+
+  :root[data-theme-preset='john-redesign'] .app-button-playback {
+    border-color: color-mix(in srgb, var(--palette-gray) 90%, transparent);
+    background-color: rgb(0 0 0 / 0.7);
+    color: #fff;
+  }
+
+  :root[data-theme-preset='john-redesign'] .app-button-playback:hover,
+  :root[data-theme-preset='john-redesign'] .app-button-playback:active {
+    background-color: rgb(0 0 0 / 0.7);
+    color: #fff;
+  }
+
+  :root[data-theme-preset='john-redesign'] .app-button-playback:hover,
+  :root[data-theme-preset='john-redesign'] .app-button-playback:focus {
+    border-color: var(--palette-gray-light, #cccccc);
+  }
+
+  :root[data-theme-preset='john-redesign'] .app-button-ghost {
+    border-color: color-mix(in srgb, var(--palette-gray) 60%, transparent);
+    background-color: rgb(0 0 0 / 0.55);
+  }
+
+  :root[data-theme-preset='john-redesign'] .app-button-ghost:hover {
+    border-color: var(--palette-gray-light, #cccccc);
+    background-color: rgb(0 0 0 / 0.7);
+  }
+
+  :root[data-theme-preset='john-redesign'] .app-button-ghost:active {
+    background-color: rgb(0 0 0 / 0.85);
+  }
+
+  :root[data-theme-preset='john-redesign'] .app-filter-button:focus-within,
+  :root[data-theme-preset='john-redesign'] .app-filter-button:focus-visible {
+    outline: 2px solid var(--palette-blue, #0051d4);
+    outline-offset: 1px;
+  }
+
+  :root[data-theme-preset='john-redesign'] .app-filter-button-active {
+    outline: 1px solid var(--palette-blue, #0051d4);
+    outline-offset: 1px;
+  }
 }
 
 @layer utilities {

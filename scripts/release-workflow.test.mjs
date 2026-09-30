@@ -35,6 +35,7 @@ test('release package channels wait for the reusable release asset build', () =>
   assert.deepEqual(packageDispatch.needs, ['verify', 'build-release-assets']);
   assert.equal(packageDispatch['timeout-minutes'], 360);
   assert.match(dispatchScript, /--ref main/u);
+  assert.match(dispatchScript, /release-chocolatey\.yml/u);
   assert.match(dispatchScript, /release-linux-packages\.yml/u);
   assert.match(dispatchScript, /watch-github-run\.mjs/u);
   assert.match(dispatchScript, /release-snap\.yml[\s\S]*optional=false/u);
@@ -106,6 +107,22 @@ test('package workflows build the requested tag and reject tags outside main', (
       `${workflowName} must verify tag ancestry before publishing`
     );
   }
+});
+
+test('Chocolatey packages only verified Windows release archives', () => {
+  const workflow = readWorkflow('release-chocolatey.yml');
+  const job = workflow.jobs['publish-chocolatey'];
+  const steps = job.steps.map((step) => step.run ?? '').join('\n');
+
+  assert.equal(workflow.on.workflow_dispatch.inputs.tag.required, true);
+  assert.equal(job['runs-on'], 'windows-latest');
+  assert.match(
+    steps,
+    /merge-base --is-ancestor HEAD refs\/remotes\/origin\/main/u
+  );
+  assert.match(steps, /Get-FileHash[\s\S]*SHA-256 mismatch/u);
+  assert.match(steps, /CHOCOLATEY_API_KEY/u);
+  assert.match(steps, /choco push/u);
 });
 
 test('Launchpad retries for the same release tag are serialized', () => {
