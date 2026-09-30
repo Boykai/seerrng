@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-MAX_ATTEMPTS = 3
+MAX_ATTEMPTS = 2
 KNOWN_RACE_EXIT_CODE = 2
 
 
@@ -67,12 +67,9 @@ def validate_args(args: argparse.Namespace) -> Path:
 
 
 def package_version(args: argparse.Namespace, attempt: int) -> str:
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     return (
-        f"{args.upstream_version}+ppa{timestamp}"
-        f".r{int(args.run_id):020d}"
-        f".a{int(args.run_attempt):04d}"
-        f".n{attempt:02d}~{args.series}"
+        f"{args.upstream_version}+ppa{int(args.run_id)}"
+        f".{int(args.run_attempt)}.{attempt}~{args.series}"
     )
 
 

@@ -5,7 +5,9 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const scriptsDirectory = path.dirname(fileURLToPath(import.meta.url));
-const waiterPath = path.join(scriptsDirectory, 'wait-for-launchpad-ppa.py');
+const waiterPath =
+  process.env.WAITER_SCRIPT ??
+  path.join(scriptsDirectory, 'wait-for-launchpad-ppa.py');
 
 test('reports a published source through its stable self link', () => {
   const python = [
@@ -96,12 +98,107 @@ test('reports a published source through its stable self link', () => {
   );
 });
 
-test('retries a completed build that has no binary publication record', () => {
+test('classifies only Launchpad’s known source-publication race for a retry', () => {
+  const python = [
+    'import importlib.util',
+    'import io',
+    'import sys',
+    'import types',
+    'sys.dont_write_bytecode = True',
+    '',
+    'launchpadlib = types.ModuleType("launchpadlib")',
+    'launchpadlib.__path__ = []',
+    'launchpad_module = types.ModuleType("launchpadlib.launchpad")',
+    'launchpad_module.Launchpad = object',
+    'sys.modules["launchpadlib"] = launchpadlib',
+    'sys.modules["launchpadlib.launchpad"] = launchpad_module',
+    '',
+    'spec = importlib.util.spec_from_file_location("waiter", sys.argv[1])',
+    'waiter = importlib.util.module_from_spec(spec)',
+    'spec.loader.exec_module(waiter)',
+    '',
+    'build = types.SimpleNamespace(',
+    '    upload_log_url="https://launchpad.net/upload.log",',
+    '    web_link="https://launchpad.net/+build/12345",',
+    ')',
+    'waiter.urlopen = lambda url, timeout: io.BytesIO(sys.stdin.buffer.read())',
+    'try:',
+    '    waiter.classify_failed_upload(build, "https://launchpad.net/~owner/+archive/ubuntu/seerrng", "3.41.2+ppa123.1.1~jammy", "jammy")',
+    'except waiter.FreshUploadRequired:',
+    '    if sys.argv[2] != "known":',
+    '        raise',
+    'else:',
+    '    raise AssertionError("known upload race was not classified for retry")',
+  ].join('\n');
+  const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+
+  for (const [label, log] of [
+    [
+      'known',
+      'Unable to find source publication seerrng/3.41.2+ppa123.1.1~jammy in jammy',
+    ],
+    ['unknown', 'Launchpad upload rejected for an unrelated reason'],
+  ]) {
+    const result = spawnSync(pythonCommand, ['-c', python, waiterPath, label], {
+      encoding: 'utf8',
+      input: log,
+    });
+
+    if (label === 'known') {
+      assert.equal(
+        result.status,
+        0,
+        'the known source-publication race was not isolated\n' +
+          result.stdout +
+          result.stderr
+      );
+    } else {
+      assert.notEqual(result.status, 0, 'unclassified upload errors must fail');
+      assert.match(
+        result.stderr,
+        /does not match the known source-publication race/
+      );
+    }
+  }
+});
+
+test('uses short unique source versions for each bounded Launchpad attempt', () => {
   const python = [
     'import importlib.util',
     'import sys',
     'import types',
-    'from datetime import datetime, timedelta, timezone',
+    'sys.dont_write_bytecode = True',
+    'spec = importlib.util.spec_from_file_location("publisher", sys.argv[1])',
+    'publisher = importlib.util.module_from_spec(spec)',
+    'spec.loader.exec_module(publisher)',
+    'args = types.SimpleNamespace(upstream_version="3.40.0", run_id="36638923093", run_attempt="1", series="jammy")',
+    'versions = [publisher.package_version(args, attempt) for attempt in (1, 2)]',
+    'assert versions[0] != versions[1], versions',
+    'assert all(len(version) <= 32 for version in versions), versions',
+    'assert versions == ["3.40.0+ppa36638923093.1.1~jammy", "3.40.0+ppa36638923093.1.2~jammy"], versions',
+  ].join('\n');
+  const publisherPath = path.join(scriptsDirectory, 'publish-launchpad-ppa.py');
+  const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+  const result = spawnSync(pythonCommand, ['-c', python, publisherPath], {
+    encoding: 'utf8',
+  });
+
+  assert.equal(
+    result.status,
+    0,
+    'Launchpad source version naming regression failed.\n' +
+      result.stdout +
+      '\n' +
+      result.stderr
+  );
+});
+
+test('does not resubmit a long-running build based only on its age', () => {
+  const python = [
+    'import importlib.util',
+    'import sys',
+    'import types',
+    'from datetime import datetime, timezone',
     'sys.dont_write_bytecode = True',
     '',
     'launchpadlib = types.ModuleType("launchpadlib")',
@@ -116,34 +213,30 @@ test('retries a completed build that has no binary publication record', () => {
     'spec.loader.exec_module(waiter)',
     '',
     'archive_web = "https://launchpad.net/~owner/+archive/ubuntu/seerrng"',
-    'stale_build = types.SimpleNamespace(',
-    '    buildstate="Successfully built",',
-    '    datebuilt=datetime.now(timezone.utc) - timedelta(minutes=46),',
+    'build = types.SimpleNamespace(',
+    '    arch_tag="amd64",',
+    '    buildstate="Uploading build",',
+    '    datebuilt=datetime(2020, 1, 1, tzinfo=timezone.utc),',
     '    web_link="https://launchpad.net/+build/12345",',
     ')',
-    'try:',
-    '    waiter.classify_stalled_upload(',
-    '        stale_build, [], "Published", "3.41.2+ppa1", archive_web',
-    '    )',
-    'except waiter.FreshUploadRequired as error:',
-    '    assert "no seerrng binary publication record" in str(error)',
-    'else:',
-    '    raise AssertionError("a stale completed build must request a fresh upload")',
-    '',
-    'pending_binary = types.SimpleNamespace(',
-    '    binary_package_name="seerrng", status="Pending"',
+    'publication = types.SimpleNamespace(',
+    '    status="Published",',
+    '    self_link="https://api.launchpad.net/1.0/+sourcepub/12345",',
+    '    date_created=datetime.now(timezone.utc),',
+    '    getBuilds=lambda: [build],',
+    '    getPublishedBinaries=lambda: [],',
     ')',
-    'waiter.classify_stalled_upload(',
-    '    stale_build, [pending_binary], "Published", "3.41.2+ppa1", archive_web',
-    ')',
-    'fresh_build = types.SimpleNamespace(',
-    '    buildstate="Successfully built",',
-    '    datebuilt=datetime.now(timezone.utc) - timedelta(minutes=44),',
-    '    web_link="https://launchpad.net/+build/67890",',
-    ')',
-    'waiter.classify_stalled_upload(',
-    '    fresh_build, [], "Published", "3.41.2+ppa1", archive_web',
-    ')',
+    'archive = types.SimpleNamespace(getPublishedSources=lambda **kwargs: [publication])',
+    'client = types.SimpleNamespace(load=lambda url: archive, distributions={"ubuntu": types.SimpleNamespace(getSeries=lambda name_or_version: object())})',
+    'waiter.create_launchpad_client = lambda: client',
+    'clock = {"now": 0}',
+    'waiter.time.monotonic = lambda: clock["now"]',
+    'def advance_clock(seconds):',
+    '    clock["now"] += seconds',
+    'waiter.time.sleep = advance_clock',
+    'sys.argv = [waiter.__file__, "--archive-url", "https://api.launchpad.net/1.0/archive", "--archive-web", archive_web, "--series", "jammy", "--source-version", "3.41.2+ppa1", "--timeout-minutes", "1"]',
+    'status = waiter.main()',
+    'assert status == 1, "a stale nonterminal build must wait for the overall timeout"',
   ].join('\n');
   const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
   const result = spawnSync(pythonCommand, ['-c', python, waiterPath], {
@@ -160,7 +253,7 @@ test('retries a completed build that has no binary publication record', () => {
   );
 });
 
-test('retries when an accepted upload never appears as a source publication', () => {
+test('times out when an accepted upload has no source record instead of resubmitting', () => {
   const python = [
     'import contextlib',
     'import importlib.util',
@@ -196,11 +289,10 @@ test('retries when an accepted upload never appears as a source publication', ()
     'waiter.create_launchpad_client = lambda: client',
     '',
     'clock = {"now": 0}',
-    'def advance_clock():',
-    '    clock["now"] += 60',
-    '    return clock["now"]',
-    'waiter.time.monotonic = advance_clock',
-    'waiter.time.sleep = lambda seconds: None',
+    'waiter.time.monotonic = lambda: clock["now"]',
+    'def advance_clock(seconds):',
+    '    clock["now"] += seconds',
+    'waiter.time.sleep = advance_clock',
     'sys.argv = [',
     '    waiter.__file__,',
     '    "--archive-url", "https://api.launchpad.net/1.0/~owner/+archive/ubuntu/seerrng",',
@@ -214,9 +306,8 @@ test('retries when an accepted upload never appears as a source publication', ()
     'with contextlib.redirect_stderr(output):',
     '    status = waiter.main()',
     '',
-    'assert status == 2, output.getvalue()',
-    'assert "no source publication record" in output.getvalue(), output.getvalue()',
-    'assert "fresh signed source version" in output.getvalue(), output.getvalue()',
+    'assert status == 1, output.getvalue()',
+    'assert "Timed out waiting" in output.getvalue(), output.getvalue()',
   ].join('\n');
   const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
   const result = spawnSync(pythonCommand, ['-c', python, waiterPath], {

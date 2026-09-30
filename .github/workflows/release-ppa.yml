@@ -198,4 +198,4 @@ jobs:
             --run-id "$GH_RUN_ID" \
             --run-attempt "$GH_RUN_ATTEMPT" \
             --timeout-minutes 300 \
-            --max-attempts 3
+            --max-attempts 2
