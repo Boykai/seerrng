@@ -141,6 +141,7 @@ describe('manual fail and search from request status', () => {
         id: 8811,
         mediaType: 'movie',
         title: 'Owned Movie',
+        originalTitle: 'Owned Movie',
         releaseDate: '2024-01-01',
         posterPath: null,
         voteAverage: 7,
@@ -149,6 +150,7 @@ describe('manual fail and search from request status', () => {
         id: 8812,
         mediaType: 'movie',
         title: 'Someone Else’s Movie',
+        originalTitle: 'Someone Else’s Movie',
         releaseDate: '2024-01-01',
         posterPath: null,
         voteAverage: 7,
@@ -212,11 +214,14 @@ describe('manual fail and search from request status', () => {
         .parents('[data-testid=request-card]')
         .scrollIntoView()
         .within(() => {
-          cy.get('[data-app-tooltip-owned="true"]')
-            .contains('Processing')
-            .click();
+          cy.get('[data-app-tooltip-owned="true"]').last().click();
         });
 
+      cy.get('.app-tooltip')
+        .invoke('text')
+        .then((text) => {
+          throw new Error(`Observed download tooltip text: ${text}`);
+        });
       cy.get('.app-tooltip')
         .contains('button', 'Fail this download and search again')
         .should('be.visible')
