@@ -1,4 +1,5 @@
 import { useUser } from '@app/hooks/useUser';
+import { getAdvancedThemePreset } from '@app/utils/advancedThemePresets';
 import {
   readLocalStorageValue,
   writeLocalStorageValue,
@@ -844,18 +845,33 @@ const advancedThemeTokens = [
 
 const applyAdvancedThemeOverrides = (
   root: HTMLElement,
-  overrides: AdvancedThemeOverrides | null
+  overrides: AdvancedThemeOverrides | null,
+  mode: ThemeMode
 ) => {
   const validation = validateAdvancedThemeOverrides(overrides);
   if ('error' in validation || !validation.value) return;
 
+  const preset = getAdvancedThemePreset(validation.value.preset);
+  if (preset) {
+    root.dataset.themePreset = preset.id;
+    Object.entries(preset.chromeByMode[mode]).forEach(([token, value]) => {
+      if (value !== undefined) {
+        root.style.setProperty(token, getAdvancedThemeCssValue(token, value));
+      }
+    });
+  } else {
+    delete root.dataset.themePreset;
+  }
+
   Object.entries(validation.value).forEach(([token, value]) => {
+    if (token === 'preset') return;
     root.style.setProperty(token, getAdvancedThemeCssValue(token, value));
   });
 };
 
 const resetAdvancedThemeOverrides = (root: HTMLElement) => {
   advancedThemeTokens.forEach((token) => root.style.removeProperty(token));
+  delete root.dataset.themePreset;
 };
 
 export const getThemeTokens = (mode: ThemeMode, palette: string) => {
@@ -950,16 +966,20 @@ const applyTheme = (
   applyScale(document.documentElement, 'purple', themeTokens.secondaryScale);
   applyScale(document.documentElement, 'gray', themeTokens.surfaceScale);
   applyThemeChrome(document.documentElement, themeTokens);
-  applyAdvancedThemeOverrides(document.documentElement, overrides);
+  applyAdvancedThemeOverrides(document.documentElement, overrides, mode);
+  const presetSidebarStart = getAdvancedThemePreset(overrides?.preset)
+    ?.chromeByMode[mode]['--theme-sidebar-start'];
+  const sidebarStartOverride =
+    overrides?.['--theme-sidebar-start'] ?? presetSidebarStart;
   document
     .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
     ?.setAttribute(
       'content',
       rgbToHex(
-        overrides?.['--theme-sidebar-start']
+        sidebarStartOverride !== undefined
           ? getAdvancedThemeCssValue(
               '--theme-sidebar-start',
-              overrides['--theme-sidebar-start']
+              sidebarStartOverride
             )
           : themeTokens.sidebarStart
       )
