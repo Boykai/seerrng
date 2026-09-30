@@ -136,7 +136,7 @@ const DownloadBlock = ({
             </Button>
           ) : (
             <ConfirmButton
-              className="min-h-11 w-full px-2 text-center whitespace-normal"
+              className="min-h-12 w-full px-2 text-center whitespace-normal"
               buttonSize="sm"
               confirmText={intl.formatMessage(messages.confirmFailAndSearch)}
               onClick={() => {
