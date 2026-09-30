@@ -5,7 +5,9 @@ import SeriesSeasonEpisodeSelector from '@app/components/Common/SeriesSeasonEpis
 import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
 import AdvancedOptionsDisclosureButton from '@app/components/RequestModal/AdvancedOptionsDisclosureButton';
 import type { RequestOverrides } from '@app/components/RequestModal/AdvancedRequester';
-import AdvancedRequester from '@app/components/RequestModal/AdvancedRequester';
+import AdvancedRequester, {
+  RequestListboxControl,
+} from '@app/components/RequestModal/AdvancedRequester';
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
 import RequestFooterStatus from '@app/components/RequestModal/RequestFooterStatus';
 import RequestMediaCard from '@app/components/RequestModal/RequestMediaCard';
@@ -33,10 +35,10 @@ import {
   getRequestableTvSelections,
   mergeEpisodeNumbersBySeason,
 } from '@app/utils/tvRequestSelection';
+import { hasLinkedWatchAheadAccount } from '@app/utils/watchAhead';
 import { ArrowDownTrayIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
-import { MediaServerType } from '@server/constants/server';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { SeasonEpisodeSelection } from '@server/interfaces/api/seasonInterfaces';
@@ -89,9 +91,9 @@ const messages = defineMessages('components.RequestModal', {
   notAvailable: 'Not Available',
   advancedOptions: 'Advanced Options',
   quality: 'Quality',
-  watchAheadLabel: 'Keep upcoming episodes requested',
+  watchAheadLabel: 'Requested Episode Queue',
   watchAheadDescription:
-    'After this TV request is approved, SeerrNG checks your linked Jellyfin playback every 30 seconds and keeps this many upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
+    'After this TV request is approved, SeerrNG follows your linked media server playback and keeps this many upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
   watchAheadOff: 'Off',
   watchAheadEpisodeOption:
     '{count, plural, one {# episode} other {# episodes}}',
@@ -197,8 +199,10 @@ const TvRequestModal = ({
     ? editRequest.media.tvdbId
     : (tvdbId ?? data?.externalIds.tvdbId);
   const canConfigureWatchAhead =
-    settings.currentSettings.mediaServerType === MediaServerType.JELLYFIN &&
-    Boolean(user?.jellyfinUsername) &&
+    hasLinkedWatchAheadAccount(
+      user,
+      settings.currentSettings.mediaServerType
+    ) &&
     Number.isSafeInteger(Number(watchAheadTvdbId)) &&
     Number(watchAheadTvdbId) > 0 &&
     hasPermission(
@@ -742,7 +746,7 @@ const TvRequestModal = ({
       }
       cancelButtonType={editRequest ? 'danger' : 'default'}
       actionButtonSize={editRequest ? 'standard' : 'sm'}
-      dialogClass="app-card-main request-modal-site-surface sm:max-w-5xl"
+      dialogClass="request-modal-site-surface sm:max-w-5xl"
     >
       <RequestMediaCard
         artwork={
@@ -926,32 +930,26 @@ const TvRequestModal = ({
         )}
 
         {canConfigureWatchAhead && (
-          <div className="mt-3 rounded-md border border-indigo-500/40 bg-indigo-950/30 p-3">
-            <label
-              htmlFor="tv-watch-ahead-count"
-              className="block text-sm font-semibold text-gray-100"
-            >
-              {intl.formatMessage(messages.watchAheadLabel)}
-            </label>
-            <select
+          <div className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
+            <RequestListboxControl
               id="tv-watch-ahead-count"
-              className="app-control-standard-radius mt-2 w-full bg-gray-800 px-3 py-2 text-sm text-white"
+              label={intl.formatMessage(messages.watchAheadLabel)}
               value={watchAheadEpisodeCount}
-              onChange={(event) =>
-                setWatchAheadEpisodeCount(Number(event.target.value))
-              }
-            >
-              <option value={0}>
-                {intl.formatMessage(messages.watchAheadOff)}
-              </option>
-              {[1, 2, 3, 4, 5].map((count) => (
-                <option key={count} value={count}>
-                  {intl.formatMessage(messages.watchAheadEpisodeOption, {
+              options={[
+                {
+                  value: 0,
+                  label: intl.formatMessage(messages.watchAheadOff),
+                },
+                ...[1, 2, 3, 4, 5].map((count) => ({
+                  value: count,
+                  label: intl.formatMessage(messages.watchAheadEpisodeOption, {
                     count,
-                  })}
-                </option>
-              ))}
-            </select>
+                  }),
+                })),
+              ]}
+              onChange={setWatchAheadEpisodeCount}
+              loadingLabel={intl.formatMessage(messages.watchAheadOff)}
+            />
             <p className="mt-2 text-xs text-gray-300">
               {intl.formatMessage(messages.watchAheadDescription)}
             </p>

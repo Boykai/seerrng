@@ -1,3 +1,4 @@
+import Badge from '@app/components/Common/Badge';
 import BookFormatBadge, {
   getBookFormatMessage,
   getRequestedBookFormat,
@@ -20,6 +21,7 @@ import {
 } from '@app/components/Discover/FilterPanel/CompactFilterSelect';
 import MediaFilterOption from '@app/components/Discover/MediaFilterOption';
 import PinnedFilterSection from '@app/components/Discover/PinnedFilterSection';
+import { RequestListboxControl } from '@app/components/RequestModal/AdvancedRequester';
 import SoftwareRequests from '@app/components/RequestStatus/SoftwareRequests';
 import useDebouncedState from '@app/hooks/useDebouncedState';
 import useMediaFilterPin from '@app/hooks/useMediaFilterPin';
@@ -36,6 +38,7 @@ import {
 import { sortCrewPriority } from '@app/utils/creditHelpers';
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
+import { hasLinkedWatchAheadAccount } from '@app/utils/watchAhead';
 import { Transition } from '@headlessui/react';
 import {
   ArrowDownTrayIcon,
@@ -54,7 +57,6 @@ import {
 } from '@heroicons/react/24/outline';
 import { BarsArrowDownIcon, BarsArrowUpIcon } from '@heroicons/react/24/solid';
 import { MediaRequestStatus } from '@server/constants/media';
-import { MediaServerType } from '@server/constants/server';
 import type {
   RequestStatusDetailResponse,
   RequestStatusResultsResponse,
@@ -217,13 +219,16 @@ const messages = defineMessages('components.Requests', {
   edit: 'Edit',
   editTooltip: 'Edit this pending request.',
   modifyFailed: 'Unable to update this request.',
-  watchAheadLabel: 'Keep next episodes requested',
+  watchAheadLabel: 'Episode Queue',
   watchAheadDescription:
-    'After this TV request is approved, SeerrNG checks your linked Jellyfin playback every 30 seconds and keeps this many upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
+    'After this TV request is approved, SeerrNG follows your linked media server playback and keeps this many upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
   watchAheadOff: 'Off',
   watchAheadOption: '{count, plural, one {# episode} other {# episodes}}',
-  watchAheadUpdated: 'Jellyfin watch-ahead setting updated.',
-  watchAheadFailed: 'Unable to update Jellyfin watch-ahead.',
+  watchAheadUpdated: 'Requested episode queue updated.',
+  watchAheadFailed: 'Unable to update the requested episode queue.',
+  watchAheadEpisodeBadge: 'Auto-Queued',
+  watchAheadEpisodeBadgeTooltip:
+    'Automatically requested by the Episode Queue as playback progressed.',
   retryFailed: 'Unable to retry this request.',
   retrySuccess: 'Request queued for another attempt.',
   ...requestActionMessageText,
@@ -455,17 +460,17 @@ const stageMessageKeys: Record<StatusStage, keyof typeof messages> = {
 };
 
 const stageTone: Record<StatusStage, string> = {
-  requested: 'border-gray-500 bg-gray-700/70 text-gray-100',
-  approved: 'border-indigo-400 bg-indigo-500/20 text-indigo-100',
-  searching: 'border-violet-400 bg-violet-500/20 text-violet-100',
-  downloading: 'border-blue-400 bg-blue-500/20 text-blue-100',
-  importing: 'border-cyan-400 bg-cyan-500/20 text-cyan-100',
-  library: 'border-fuchsia-400 bg-fuchsia-500/20 text-fuchsia-100',
-  available: 'border-emerald-400 bg-emerald-500/20 text-emerald-100',
-  unavailable: 'border-amber-400 bg-amber-500/20 text-amber-100',
-  failed: 'border-red-400 bg-red-500/20 text-red-100',
-  declined: 'border-red-400 bg-red-500/20 text-red-100',
-  cancelled: 'border-gray-500 bg-gray-700/70 text-gray-200',
+  requested: 'app-button-default',
+  approved: 'app-button-warning',
+  searching: 'app-button-manage',
+  downloading: 'app-button-primary',
+  importing: 'app-button-association',
+  library: 'app-button-manage',
+  available: 'app-button-success',
+  unavailable: 'app-button-warning',
+  failed: 'app-button-danger',
+  declined: 'app-button-danger',
+  cancelled: 'app-button-default',
 };
 
 const stageIcon: Record<StatusStage, typeof InformationCircleIcon> = {
@@ -1082,7 +1087,7 @@ const RequestDownloadAction = ({
   const downloadHref = (asset: RequestDownloadAsset) =>
     `/api/v1/request/status/${requestId}/downloads/${asset.id}`;
   const buttonClassName =
-    'compact-control inline-flex items-center gap-1 rounded-md border border-indigo-500/80 bg-indigo-800/25 px-2 text-[11px] leading-none font-semibold whitespace-nowrap text-indigo-200 transition hover:border-indigo-400 hover:bg-indigo-800/45 hover:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none';
+    'app-button app-button-primary button-sm inline-flex items-center gap-1';
 
   if (assets.length === 1) {
     const asset = assets[0];
@@ -1198,8 +1203,7 @@ const RequestStatusCard = ({
           (server) => server.isDefault && server.is4k === item.request.is4k
         );
   const canEnableWatchAhead =
-    currentSettings.mediaServerType === MediaServerType.JELLYFIN &&
-    Boolean(user?.jellyfinUsername) &&
+    hasLinkedWatchAheadAccount(user, currentSettings.mediaServerType) &&
     Number.isSafeInteger(Number(item.request.media.tvdbId)) &&
     Number(item.request.media.tvdbId) > 0 &&
     Boolean(matchingSonarr) &&
@@ -1402,96 +1406,106 @@ const RequestStatusCard = ({
 
     return () => resizeObserver.disconnect();
   }, []);
+  const watchAheadOptions = [
+    {
+      value: 0,
+      label: intl.formatMessage(messages.watchAheadOff),
+    },
+    ...(canEnableWatchAhead
+      ? [1, 2, 3, 4, 5].map((count) => ({
+          value: count,
+          label: intl.formatMessage(messages.watchAheadOption, { count }),
+        }))
+      : watchAheadEpisodeCount > 0
+        ? [
+            {
+              value: watchAheadEpisodeCount,
+              label: intl.formatMessage(messages.watchAheadOption, {
+                count: watchAheadEpisodeCount,
+              }),
+            },
+          ]
+        : []),
+  ];
   const actionControls = (
-    <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+    <div className="contents">
+      {item.request.watchAheadParentRequestId && (
+        <Tooltip
+          content={intl.formatMessage(messages.watchAheadEpisodeBadgeTooltip)}
+        >
+          <span className="inline-flex">
+            <Badge badgeType="association">
+              {intl.formatMessage(messages.watchAheadEpisodeBadge)}
+            </Badge>
+          </span>
+        </Tooltip>
+      )}
       {canManageWatchAhead && (
         <Tooltip content={intl.formatMessage(messages.watchAheadDescription)}>
           <span className="inline-flex">
-            <label
-              className="sr-only"
-              htmlFor={`watch-ahead-${item.request.id}`}
-            >
-              {intl.formatMessage(messages.watchAheadLabel)}
-            </label>
-            <select
+            <RequestListboxControl
               id={`watch-ahead-${item.request.id}`}
-              aria-label={intl.formatMessage(messages.watchAheadLabel)}
-              className="compact-control rounded-md border border-indigo-500/70 bg-indigo-950/50 px-2 text-[11px] font-semibold text-indigo-100"
+              label={intl.formatMessage(messages.watchAheadLabel)}
               value={watchAheadEpisodeCount}
+              options={watchAheadOptions}
               disabled={isUpdatingWatchAhead}
-              onChange={(event) =>
-                void updateWatchAhead(Number(event.target.value))
-              }
-            >
-              <option value={0}>
-                {intl.formatMessage(messages.watchAheadOff)}
-              </option>
-              {canEnableWatchAhead
-                ? [1, 2, 3, 4, 5].map((count) => (
-                    <option key={count} value={count}>
-                      {intl.formatMessage(messages.watchAheadOption, {
-                        count,
-                      })}
-                    </option>
-                  ))
-                : watchAheadEpisodeCount > 0 && (
-                    <option value={watchAheadEpisodeCount} disabled>
-                      {intl.formatMessage(messages.watchAheadOption, {
-                        count: watchAheadEpisodeCount,
-                      })}
-                    </option>
-                  )}
-            </select>
+              onChange={(episodeCount) => void updateWatchAhead(episodeCount)}
+              loadingLabel={intl.formatMessage(messages.watchAheadOff)}
+            />
           </span>
         </Tooltip>
       )}
       {canModeratePending && (
         <>
           <Tooltip content={intl.formatMessage(messages.approveTooltip)}>
-            <button
+            <Button
               type="button"
-              className="compact-control inline-flex items-center rounded-md border border-emerald-600/80 bg-emerald-800/25 px-2 text-[11px] leading-none font-semibold text-emerald-200 transition hover:border-emerald-500 hover:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none disabled:opacity-40"
+              buttonType="success"
+              buttonSize="sm"
               disabled={isModifying}
               onClick={() => void modifyPendingRequest('approve')}
             >
               <CheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
               {intl.formatMessage(messages.approve)}
-            </button>
+            </Button>
           </Tooltip>
           <Tooltip content={intl.formatMessage(messages.declineTooltip)}>
-            <button
+            <Button
               type="button"
-              className="compact-control inline-flex items-center rounded-md border border-red-600/80 bg-red-800/25 px-2 text-[11px] leading-none font-semibold text-red-200 transition hover:border-red-500 hover:text-white focus:ring-2 focus:ring-red-500 focus:outline-none disabled:opacity-40"
+              buttonType="danger"
+              buttonSize="sm"
               disabled={isModifying}
               onClick={() => void modifyPendingRequest('decline')}
             >
               <XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
               {intl.formatMessage(messages.decline)}
-            </button>
+            </Button>
           </Tooltip>
           <Tooltip content={intl.formatMessage(messages.editTooltip)}>
-            <button
+            <Button
               type="button"
-              className="compact-control inline-flex items-center rounded-md border border-amber-600/80 bg-amber-800/25 px-2 text-[11px] leading-none font-semibold text-amber-200 transition hover:border-amber-500 hover:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none disabled:opacity-40"
+              buttonType="warning"
+              buttonSize="sm"
               disabled={isModifying}
               onClick={() => setShowEditModal(true)}
             >
               <PencilIcon className="h-3.5 w-3.5" aria-hidden="true" />
               {intl.formatMessage(messages.edit)}
-            </button>
+            </Button>
           </Tooltip>
         </>
       )}
       <Tooltip content={intl.formatMessage(messages.retryTooltip)}>
-        <button
+        <Button
           type="button"
-          className="compact-control inline-flex items-center rounded-md border border-amber-600/80 bg-amber-800/25 px-2 text-[11px] leading-none font-semibold whitespace-nowrap text-amber-300 transition hover:border-amber-400 hover:text-white focus:ring-2 focus:ring-amber-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+          buttonType="warning"
+          buttonSize="sm"
           disabled={!canRetry || isRetrying || isDeleting || isRemoving}
           onClick={() => void onRetry(item.request.id)}
         >
           <ArrowPathIcon className="h-3.5 w-3.5" aria-hidden="true" />
           {intl.formatMessage(isRetrying ? messages.retrying : messages.retry)}
-        </button>
+        </Button>
       </Tooltip>
       {canShowDelete && (
         <RequestActionButton
@@ -1882,7 +1896,7 @@ const RequestStatusCard = ({
         <div className="request-status-action-row">
           <Tooltip content={current.message}>
             <span
-              className={`app-control-standard-radius compact-control inline-flex w-32 flex-shrink-0 items-center justify-center gap-1.5 border px-2 text-[11px] font-semibold ${stageTone[currentStage] ?? stageTone.cancelled}`}
+              className={`app-button app-control-standard-radius button-sm inline-flex flex-shrink-0 items-center justify-center gap-1.5 text-xs font-semibold whitespace-nowrap ${stageTone[currentStage] ?? stageTone.cancelled}`}
               aria-label={`${getStageLabel(intl, currentStage)}: ${current.message}`}
               tabIndex={0}
             >
@@ -1895,9 +1909,10 @@ const RequestStatusCard = ({
             requestId={item.request.id}
             enabled={currentStage === 'available'}
           />
-          <button
+          <Button
             type="button"
-            className="compact-control inline-flex items-center rounded-md border border-emerald-600/80 bg-emerald-800/25 px-2 text-[11px] leading-none font-semibold whitespace-nowrap text-emerald-200 transition hover:border-emerald-500 hover:bg-emerald-800/45 hover:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            buttonType="manage"
+            buttonSize="sm"
             aria-expanded={isHistoryOpen}
             onClick={() => onToggleHistory(item.request.id)}
           >
@@ -1909,7 +1924,7 @@ const RequestStatusCard = ({
               className={`h-3.5 w-3.5 transition-transform motion-reduce:transition-none ${isHistoryOpen ? 'rotate-180' : ''}`}
               aria-hidden="true"
             />
-          </button>
+          </Button>
         </div>
 
         {isHistoryOpen && (
@@ -1941,7 +1956,7 @@ const RequestStatusCard = ({
                         className="refreshed-detail-text-muted whitespace-nowrap"
                         dateTime={eventDate.toISOString()}
                       >
-                        <FormattedDate value={eventDate} timeStyle="medium" />
+                        <FormattedDate value={eventDate} timeStyle="short" />
                       </time>
                       <span className="font-medium text-gray-200">
                         {getStageLabel(intl, event.stage as StatusStage)}

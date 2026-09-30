@@ -402,58 +402,80 @@ function createSonarrSettings(id: number, isDefault = true) {
 }
 
 describe('PUT /request/:requestId/watch-ahead', () => {
-  it('allows the linked request owner to enable and disable their TV buffer', async () => {
-    const settings = getSettings();
-    const previousMediaServerType = settings.main.mediaServerType;
-    settings.main.mediaServerType = MediaServerType.JELLYFIN;
-    configureSonarr([{}]);
+  for (const [serverName, mediaServerType] of [
+    ['Plex', MediaServerType.PLEX],
+    ['Jellyfin', MediaServerType.JELLYFIN],
+    ['Emby', MediaServerType.EMBY],
+  ] as const) {
+    it(`allows the linked request owner to enable and disable their TV buffer with ${serverName}`, async () => {
+      const settings = getSettings();
+      const previousMediaServerType = settings.main.mediaServerType;
+      settings.main.mediaServerType = mediaServerType;
+      configureSonarr([{}]);
 
-    try {
-      const userRepository = getRepository(User);
-      const requestedBy = await userRepository.findOneOrFail({
-        where: { email: 'friend@seerr.dev' },
-      });
-      requestedBy.jellyfinUserId = '01234567-89ab-cdef-0123-456789abcdef';
-      requestedBy.jellyfinUsername = 'friend';
-      await userRepository.save(requestedBy);
+      try {
+        const userRepository = getRepository(User);
+        const requestedBy = await userRepository.findOneOrFail({
+          where: { email: 'friend@seerr.dev' },
+        });
+        requestedBy.jellyfinUserId = '01234567-89ab-cdef-0123-456789abcdef';
+        requestedBy.jellyfinUsername = 'friend';
+        requestedBy.plexId = 12345;
+        requestedBy.plexUsername = 'friend';
+        await userRepository.save(requestedBy);
 
-      const media = await getRepository(Media).save(
-        new Media({
-          mediaType: MediaType.TV,
-          tmdbId: 765432,
-          tvdbId: 123456,
-          status: MediaStatus.UNKNOWN,
-          status4k: MediaStatus.UNKNOWN,
-        })
-      );
-      const tvRequest = await getRepository(MediaRequest).save(
-        new MediaRequest({
-          type: MediaType.TV,
-          status: MediaRequestStatus.APPROVED,
-          media,
-          requestedBy,
-          is4k: false,
-          serverId: 0,
-          seasons: [],
-        })
-      );
+        const media = await getRepository(Media).save(
+          new Media({
+            mediaType: MediaType.TV,
+            tmdbId: 765432,
+            tvdbId: 123456,
+            status: MediaStatus.UNKNOWN,
+            status4k: MediaStatus.UNKNOWN,
+          })
+        );
+        const tvRequest = await getRepository(MediaRequest).save(
+          new MediaRequest({
+            type: MediaType.TV,
+            status: MediaRequestStatus.APPROVED,
+            media,
+            requestedBy,
+            is4k: false,
+            serverId: 0,
+            seasons: [],
+          })
+        );
 
-      const owner = await loginAs('friend@seerr.dev', 'test1234');
-      const enabled = await owner
-        .put(`/request/${tvRequest.id}/watch-ahead`)
-        .send({ episodeCount: 3 });
-      assert.strictEqual(enabled.status, 200);
-      assert.strictEqual(enabled.body.watchAheadEpisodeCount, 3);
+        const owner = await loginAs('friend@seerr.dev', 'test1234');
+        const enabled = await owner
+          .put(`/request/${tvRequest.id}/watch-ahead`)
+          .send({ episodeCount: 3 });
+        assert.strictEqual(enabled.status, 200);
+        assert.strictEqual(enabled.body.watchAheadEpisodeCount, 3);
 
-      const disabled = await owner
-        .put(`/request/${tvRequest.id}/watch-ahead`)
-        .send({ episodeCount: 0 });
-      assert.strictEqual(disabled.status, 200);
-      assert.strictEqual(disabled.body.watchAheadEpisodeCount, 0);
-    } finally {
-      settings.main.mediaServerType = previousMediaServerType;
-    }
-  });
+        const disabled = await owner
+          .put(`/request/${tvRequest.id}/watch-ahead`)
+          .send({ episodeCount: 0 });
+        assert.strictEqual(disabled.status, 200);
+        assert.strictEqual(disabled.body.watchAheadEpisodeCount, 0);
+
+        const queueHistory = (
+          await getRepository(MediaRequestStatusEvent).find({
+            where: { requestId: tvRequest.id },
+            order: { id: 'ASC' },
+          })
+        ).filter((event) => event.message?.startsWith('Episode queue changed'));
+        assert.deepEqual(
+          queueHistory.map((event) => event.message),
+          [
+            'Episode queue changed from Off to 3 episodes.',
+            'Episode queue changed from 3 episodes to Off.',
+          ]
+        );
+      } finally {
+        settings.main.mediaServerType = previousMediaServerType;
+      }
+    });
+  }
 
   it('does not let an administrator opt in for another user', async () => {
     const settings = getSettings();

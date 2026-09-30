@@ -55,6 +55,7 @@ import { runMediaEntityMutation } from '@server/lib/mediaMutation';
 import { getLidarrAlbumMediaStatus } from '@server/lib/musicAvailability';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import requestDispatchManager, {
+  registerRequestDispatchHandler,
   type RequestDispatchOutcome,
 } from '@server/lib/requestDispatch';
 import {
@@ -3073,3 +3074,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     return MediaRequest;
   }
 }
+
+registerRequestDispatchHandler((requestId) =>
+  new MediaRequestSubscriber().dispatchRequestById(requestId)
+);

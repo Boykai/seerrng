@@ -339,7 +339,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
       }
     : undefined;
 
-  const primaryActions = (
+  const indexerCompanionActions = (
     <>
       {canUseBlocklist && (
         <Tooltip
@@ -387,6 +387,11 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
           </Button>
         </Tooltip>
       )}
+    </>
+  );
+
+  const reportIssueAction = (
+    <>
       {canUseReportIssue && (
         <Tooltip
           content={intl.formatMessage(
@@ -410,6 +415,11 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
           </Button>
         </Tooltip>
       )}
+    </>
+  );
+
+  const primaryActions = (
+    <>
       {safeTrailerUrl && (
         <Button
           as="a"
@@ -424,17 +434,23 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
         </Button>
       )}
       <AssociationBadge mediaType="movie" id={data.id} variant="button" />
-      <RequestButton
-        buttonSize="sm"
-        buttonType="detailRequest"
-        className="ml-0"
-        mediaType="movie"
-        media={data.mediaInfo}
-        tmdbId={data.id}
-        onUpdate={() => revalidate()}
-      />
-      <IndexerSearchLink category="movie" title={data.title} />
     </>
+  );
+
+  const requestAction = (
+    <RequestButton
+      buttonSize="sm"
+      buttonType="detailRequest"
+      className="ml-0"
+      mediaType="movie"
+      media={data.mediaInfo}
+      tmdbId={data.id}
+      onUpdate={() => revalidate()}
+    />
+  );
+
+  const indexerSearchAction = (
+    <IndexerSearchLink category="movie" title={data.title} />
   );
 
   const secondaryActions = (
@@ -529,6 +545,10 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
         }
         primaryActions={primaryActions}
         secondaryActions={secondaryActions}
+        indexerSearchAction={indexerSearchAction}
+        indexerCompanionActions={indexerCompanionActions}
+        reportIssueAction={reportIssueAction}
+        requestAction={requestAction}
         playbackActions={playbackActions}
       />
     </>

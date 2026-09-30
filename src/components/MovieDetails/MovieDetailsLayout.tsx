@@ -82,6 +82,10 @@ interface MovieDetailsLayoutProps {
   show4kAvailability: boolean;
   primaryActions: ReactNode;
   secondaryActions: ReactNode;
+  indexerSearchAction: ReactNode;
+  indexerCompanionActions: ReactNode;
+  reportIssueAction: ReactNode;
+  requestAction: ReactNode;
   playbackActions?: (is4k: boolean) => ReactNode;
 }
 
@@ -98,6 +102,10 @@ const MovieDetailsLayout = ({
   show4kAvailability,
   primaryActions,
   secondaryActions,
+  indexerSearchAction,
+  indexerCompanionActions,
+  reportIssueAction,
+  requestAction,
   playbackActions,
 }: MovieDetailsLayoutProps) => {
   const intl = useIntl();
@@ -109,6 +117,12 @@ const MovieDetailsLayout = ({
     Boolean(data.mediaInfo)
   );
   const { pins, togglePinned } = useDetailDisclosurePins('movie');
+  const [showRatingsReview, setShowRatingsReview] = useState(false);
+  useEffect(() => {
+    setShowRatingsReview(
+      new URLSearchParams(window.location.search).has('ratingsReview')
+    );
+  }, []);
   const [showDetails, setShowDetails] = useState(false);
   useEffect(() => {
     setShowDetails(pins.details);
@@ -238,7 +252,6 @@ const MovieDetailsLayout = ({
               onChange={setSelectedQuality}
               label={intl.formatMessage(messages.quality)}
             />
-            {playbackActions?.(selectedQuality === '4k')}
             {effectiveRatings.rtCriticsRating !== undefined &&
               effectiveRatings.rtCriticsScore !== undefined && (
                 <Tooltip content={intl.formatMessage(messages.rtCriticsScore)}>
@@ -309,7 +322,17 @@ const MovieDetailsLayout = ({
                 </a>
               </Tooltip>
             )}
-            <MdblistRatingBadges ratings={ratingData?.mdblist} />
+            <MdblistRatingBadges
+              ratings={
+                showRatingsReview
+                  ? {
+                      ...ratingData?.mdblist,
+                      metacriticRating: 68,
+                      traktRating: 8.3,
+                    }
+                  : ratingData?.mdblist
+              }
+            />
             {data.voteCount > 0 && (
               <Tooltip content={intl.formatMessage(messages.tmdbUserScore)}>
                 <a
@@ -328,8 +351,20 @@ const MovieDetailsLayout = ({
           </div>
 
           <div className="media-primary-action-row">
+            {playbackActions?.(selectedQuality === '4k')}
             {primaryActions}
             {secondaryActions}
+            <div className="media-primary-report-action">
+              {reportIssueAction}
+            </div>
+          </div>
+
+          <div className="media-request-action-row">
+            <div className="media-request-search-action">
+              {indexerSearchAction}
+              {indexerCompanionActions}
+            </div>
+            <div className="media-request-submit-action">{requestAction}</div>
           </div>
 
           <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">

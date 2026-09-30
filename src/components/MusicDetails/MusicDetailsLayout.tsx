@@ -52,6 +52,10 @@ interface MusicDetailsLayoutProps {
   data: MusicDetails;
   primaryActions: ReactNode;
   secondaryActions: ReactNode;
+  indexerSearchAction: ReactNode;
+  indexerCompanionActions: ReactNode;
+  reportIssueAction: ReactNode;
+  requestAction: ReactNode;
   catalogActions?: ReactNode;
   playbackActions?: (itemIds: string[], useFlac: boolean) => ReactNode;
   ratingData?: MusicRatingResponse;
@@ -62,6 +66,10 @@ const MusicDetailsLayout = ({
   data,
   primaryActions,
   secondaryActions,
+  indexerSearchAction,
+  indexerCompanionActions,
+  reportIssueAction,
+  requestAction,
   catalogActions,
   playbackActions,
   ratingData,
@@ -387,17 +395,6 @@ const MusicDetailsLayout = ({
                 onChange={setSelectedQuality}
                 label={intl.formatMessage(messages.quality)}
               />
-              {playbackActions?.(
-                effectivePlaybackItemIds,
-                selectedQuality === 'flac'
-              )}
-              {playbackActions && (
-                <PlayOnDeviceButton
-                  mediaId={data.mediaInfo?.id}
-                  itemIds={effectivePlaybackItemIds}
-                  is4k={selectedQuality === 'flac'}
-                />
-              )}
               <MusicRatings
                 ratings={
                   ratingData?.ratings ??
@@ -408,8 +405,30 @@ const MusicDetailsLayout = ({
           )}
 
           <div className="media-primary-action-row">
+            {playbackActions?.(
+              effectivePlaybackItemIds,
+              selectedQuality === 'flac'
+            )}
+            {playbackActions && (
+              <PlayOnDeviceButton
+                mediaId={data.mediaInfo?.id}
+                itemIds={effectivePlaybackItemIds}
+                is4k={selectedQuality === 'flac'}
+              />
+            )}
             {primaryActions}
             {secondaryActions}
+            <div className="media-primary-report-action">
+              {reportIssueAction}
+            </div>
+          </div>
+
+          <div className="media-request-action-row">
+            <div className="media-request-search-action">
+              {indexerSearchAction}
+              {indexerCompanionActions}
+            </div>
+            <div className="media-request-submit-action">{requestAction}</div>
           </div>
 
           <div className="media-detail-disclosure-row">

@@ -395,7 +395,7 @@ const MusicDetails = () => {
     </>
   );
 
-  const primaryActions = (
+  const indexerCompanionActions = (
     <>
       {canUseBlocklist && (
         <Tooltip
@@ -443,6 +443,11 @@ const MusicDetails = () => {
           </Button>
         </Tooltip>
       )}
+    </>
+  );
+
+  const reportIssueAction = (
+    <>
       {canUseReportIssue && (
         <Tooltip
           content={intl.formatMessage(
@@ -466,7 +471,17 @@ const MusicDetails = () => {
           </Button>
         </Tooltip>
       )}
+    </>
+  );
+
+  const primaryActions = (
+    <>
       <AssociationBadge mediaType="album" id={albumId} variant="button" />
+    </>
+  );
+
+  const requestAction = (
+    <>
       {activeMusicRequest && (
         <Button
           buttonType="ghost"
@@ -484,8 +499,11 @@ const MusicDetails = () => {
       {canShowRequest && musicRequestOptions.length > 0 && (
         <FormatRequestControl options={musicRequestOptions} />
       )}
-      <IndexerSearchLink category="music" title={data.title} />
     </>
+  );
+
+  const indexerSearchAction = (
+    <IndexerSearchLink category="music" title={data.title} />
   );
 
   const secondaryActions = (
@@ -603,6 +621,10 @@ const MusicDetails = () => {
         data={data}
         primaryActions={primaryActions}
         secondaryActions={secondaryActions}
+        indexerSearchAction={indexerSearchAction}
+        indexerCompanionActions={indexerCompanionActions}
+        reportIssueAction={reportIssueAction}
+        requestAction={requestAction}
         catalogActions={catalogActions}
         playbackActions={playbackActions}
         ratingData={ratingData}

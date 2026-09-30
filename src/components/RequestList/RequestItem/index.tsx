@@ -9,6 +9,7 @@ import ConfirmButton from '@app/components/Common/ConfirmButton';
 import MediaTypeBadge, {
   getMediaTypeBadgeType,
 } from '@app/components/Common/MediaTypeBadge';
+import Tooltip from '@app/components/Common/Tooltip';
 import StatusBadge from '@app/components/StatusBadge';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useSettings from '@app/hooks/useSettings';
@@ -23,6 +24,7 @@ import {
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
 import { refreshIntervalHelper } from '@app/utils/refreshIntervalHelper';
+import { hasLinkedWatchAheadAccount } from '@app/utils/watchAhead';
 import {
   ArrowPathIcon,
   CheckIcon,
@@ -31,7 +33,6 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/solid';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
-import { MediaServerType } from '@server/constants/server';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { RequestResultsResponse } from '@server/interfaces/api/requestInterfaces';
@@ -79,17 +80,19 @@ const messages = defineMessages('components.RequestList.RequestItem', {
   audiobook: 'Audiobook',
   both: 'Both',
   partialBookService: 'Partial Bookshelf link',
-  watchAheadTitle: 'Jellyfin watch-ahead',
+  watchAheadTitle: 'Requested Episode Queue',
   watchAheadDescription:
-    'After this TV request is approved, SeerrNG checks your linked Jellyfin playback every 30 seconds and keeps up to {count} upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
+    'After this TV request is approved, SeerrNG follows your linked media server playback and keeps up to {count} upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
   watchAheadOff: 'Off',
   watchAheadEpisodes: '{count, plural, one {# episode} other {# episodes}}',
   saveWatchAhead: 'Save',
   stopWatchAhead: 'Stop',
-  watchAheadSaved: 'Jellyfin watch-ahead updated.',
+  watchAheadSaved: 'Requested episode queue updated.',
   watchAheadSaveError:
-    'Could not update watch-ahead. Check that Jellyfin and Sonarr are connected.',
-  watchAheadEpisodeBadge: 'Requested ahead of playback',
+    'Could not update the requested episode queue. Check that your media server and Sonarr are connected.',
+  watchAheadEpisodeBadge: 'Auto-Queued',
+  watchAheadEpisodeBadgeTooltip:
+    'Automatically requested by the Episode Queue as playback progressed.',
 });
 
 type RequestItemTitle =
@@ -628,8 +631,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
           (server) => server.isDefault && server.is4k === requestData?.is4k
         );
   const canEnableWatchAhead =
-    currentSettings.mediaServerType === MediaServerType.JELLYFIN &&
-    Boolean(user?.jellyfinUsername) &&
+    hasLinkedWatchAheadAccount(user, currentSettings.mediaServerType) &&
     Number.isSafeInteger(Number(requestData?.media.tvdbId)) &&
     Number(requestData?.media.tvdbId) > 0 &&
     Boolean(matchingSonarr) &&
@@ -870,11 +872,6 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                 )}
                 {requestData.type !== 'book' && requestData.is4k && (
                   <Badge badgeType="warning">4K</Badge>
-                )}
-                {requestData.watchAheadParentRequestId && (
-                  <Badge badgeType="association">
-                    {intl.formatMessage(messages.watchAheadEpisodeBadge)}
-                  </Badge>
                 )}
                 <span>
                   {(isMovie(title)
@@ -1177,6 +1174,19 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
           </div>
         </div>
         <div className="z-10 mt-4 flex w-full flex-col justify-center space-y-2 pr-4 pl-4 xl:mt-0 xl:w-96 xl:items-end xl:pl-0">
+          {requestData.watchAheadParentRequestId && (
+            <Tooltip
+              content={intl.formatMessage(
+                messages.watchAheadEpisodeBadgeTooltip
+              )}
+            >
+              <span className="inline-flex">
+                <Badge badgeType="association">
+                  {intl.formatMessage(messages.watchAheadEpisodeBadge)}
+                </Badge>
+              </span>
+            </Tooltip>
+          )}
           {requestData.type === 'tv' &&
             !requestData.watchAheadParentRequestId &&
             requestData.requestedBy.id === user?.id &&

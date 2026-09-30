@@ -1,6 +1,6 @@
-import ListenBrainzAPI from '@server/api/listenbrainz';
-import OpenLibraryAPI from '@server/api/openlibrary';
-import TheMovieDb from '@server/api/themoviedb';
+import ListenBrainzAPI from '@server/api/listenbrainz/index';
+import OpenLibraryAPI from '@server/api/openlibrary/index';
+import TheMovieDb from '@server/api/themoviedb/index';
 import { IssueStatus, IssueType, IssueTypeName } from '@server/constants/issue';
 import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
@@ -310,11 +310,12 @@ export const buildMediaRequestNotificationPayload = async (
 const hydrateMediaRequestIntent = async (
   type: Notification,
   requestId: number
-): Promise<NotificationPayload> => {
-  const request = await getRepository(MediaRequest).findOneOrFail({
+): Promise<NotificationPayload | undefined> => {
+  const request = await getRepository(MediaRequest).findOne({
     where: { id: requestId },
     relations: { media: { identifiers: true } },
   });
+  if (!request) return undefined;
   return buildMediaRequestNotificationPayload(request, request.media, type);
 };
 
@@ -322,12 +323,15 @@ const hydrateIssueIntent = async (
   type: Notification,
   issueId: number,
   modifiedById?: number
-): Promise<NotificationPayload> => {
-  const issue = await getRepository(Issue).findOneByOrFail({ id: issueId });
+): Promise<NotificationPayload | undefined> => {
+  const issue = await getRepository(Issue).findOneBy({ id: issueId });
+  if (!issue) return undefined;
   if (modifiedById !== undefined) {
-    issue.modifiedBy = await getRepository(User).findOneByOrFail({
+    const modifiedBy = await getRepository(User).findOneBy({
       id: modifiedById,
     });
+    if (!modifiedBy) return undefined;
+    issue.modifiedBy = modifiedBy;
   }
   issue.status =
     type === Notification.ISSUE_RESOLVED
@@ -381,13 +385,15 @@ const hydrateIssueIntent = async (
 const hydrateIssueCommentIntent = async (
   commentId: number
 ): Promise<NotificationPayload | undefined> => {
-  const comment = await getRepository(IssueComment).findOneOrFail({
+  const comment = await getRepository(IssueComment).findOne({
     where: { id: commentId },
     relations: { issue: true },
   });
-  const issue = await getRepository(Issue).findOneByOrFail({
+  if (!comment) return undefined;
+  const issue = await getRepository(Issue).findOneBy({
     id: comment.issue.id,
   });
+  if (!issue) return undefined;
   const [firstComment] = sortBy(issue.comments, 'id');
   if (!firstComment || comment.id === firstComment.id) {
     return undefined;

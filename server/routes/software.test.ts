@@ -19,6 +19,7 @@ import SoftwareRequest, {
 import { User } from '@server/entity/User';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import { refreshTrackedSoftwareRequests } from '@server/lib/softwareRequests';
 import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
 import { AxiosError } from 'axios';
@@ -208,6 +209,26 @@ afterEach(() => {
 });
 
 describe('software request routes', () => {
+  it('reconciles tracked requests using the effective last-check order', async () => {
+    const saved = await createSoftwareRequest({
+      status: 'approved',
+      externalRequestId: 'seerrng:software:reconciliation-order',
+    });
+    const refreshed: string[] = [];
+    mock.method(
+      ROMarrNGAPI.prototype,
+      'getRequest',
+      async (externalRequestId: string) => {
+        refreshed.push(externalRequestId);
+        return acceptedRequest(externalRequestId);
+      }
+    );
+
+    await refreshTrackedSoftwareRequests();
+
+    assert.deepStrictEqual(refreshed, [saved.externalRequestId]);
+  });
+
   it('marks PC titles already owned in QuestarrNG as available', async () => {
     mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
       { id: 6, name: 'PC (Microsoft Windows)' },

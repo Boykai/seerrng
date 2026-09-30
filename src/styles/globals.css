@@ -75,6 +75,45 @@
     --inset-card-padding: 8px;
     --detail-row-height: 1rem;
     --detail-divider-width: 2px;
+    /* Shared application palette. Each family has light, normal, and dark
+       anchors so titles, borders, buttons, and future user themes use the
+       same named colors everywhere. */
+    --palette-gray-light: #cccccc;
+    --palette-gray: #999999;
+    --palette-gray-dark: #666666;
+    --palette-black-light: #4d4d4d;
+    --palette-black: #333333;
+    --palette-black-dark: #1a1a1a;
+    --palette-red-light: #ff6666;
+    --palette-red: #d52c2c;
+    --palette-red-dark: #8f1717;
+    --palette-orange-light: #fb923c;
+    --palette-orange: #f97316;
+    --palette-orange-dark: #c2410c;
+    --palette-yellow-light: #ffe53d;
+    --palette-yellow: #d8c000;
+    --palette-yellow-dark: #8c7900;
+    --palette-lime-light: #d4f75a;
+    --palette-lime: #aee000;
+    --palette-lime-dark: #668500;
+    --palette-green-light: #68dc66;
+    --palette-green: #3ab338;
+    --palette-green-dark: #227a27;
+    --palette-aqua-light: #64d5e7;
+    --palette-aqua: #1aabcb;
+    --palette-aqua-dark: #065769;
+    --palette-blue-light: #4d8fff;
+    --palette-blue: #0051d4;
+    --palette-blue-dark: #002b70;
+    --palette-purple-light: #a78bfa;
+    --palette-purple: #8b5cf6;
+    --palette-purple-dark: #6d28d9;
+    --palette-plum-light: #b85ad3;
+    --palette-plum: #8414a6;
+    --palette-plum-dark: #470b59;
+    --palette-pink-light: #ff5fc4;
+    --palette-pink: #e3008e;
+    --palette-pink-dark: #8f005a;
     /* Content-sized outer columns; caps only protect narrow/long-text cards. */
     --detail-first-column-limit: 40%;
     --detail-first-value-limit: 30%;
@@ -1247,6 +1286,26 @@
     @apply flex w-full flex-wrap items-center justify-between;
   }
 
+  .media-request-action-row {
+    @apply flex w-full flex-nowrap items-center;
+    gap: var(--card-spacing);
+    margin-top: var(--card-spacing);
+  }
+
+  .media-primary-report-action {
+    @apply ml-auto flex min-w-0 items-center justify-end;
+  }
+
+  .media-request-search-action {
+    @apply flex min-w-0 items-center justify-start;
+    gap: var(--card-spacing);
+  }
+
+  .media-request-submit-action {
+    @apply ml-auto flex min-w-0 items-center justify-end;
+    gap: var(--card-spacing);
+  }
+
   .media-availability-cell {
     @apply flex w-full items-center justify-center justify-self-stretch;
   }
@@ -1553,7 +1612,7 @@
   }
 
   .app-button-external-service {
-    @apply border-orange-500/90 bg-orange-950/35 text-orange-200 hover:border-orange-300 hover:bg-orange-900/55 hover:text-white focus:border-orange-300 focus:ring-orange-500 active:border-orange-400 active:bg-orange-900/70;
+    @apply border-orange-500/90 bg-orange-950/55 text-orange-200 hover:border-orange-300 hover:bg-orange-900/70 hover:text-white focus:border-orange-300 focus:ring-orange-500 active:border-orange-400 active:bg-orange-900/85;
   }
 
   .media-inset-heading {
@@ -1677,7 +1736,7 @@
   }
 
   .request-status-action-row {
-    @apply relative z-10 flex flex-wrap items-center justify-end;
+    @apply relative z-10 flex w-full flex-wrap items-center justify-between;
     padding-top: var(--card-spacing);
   }
 
@@ -1872,73 +1931,15 @@
     .manage-media-card-sections > div
   ) {
     --tw-ring-shadow: 0 0 #0000 !important;
-    --app-card-frame-background: conic-gradient(
-      from 210deg at 50% 50%,
-      #252a30 0deg,
-      #8d949b 10deg,
-      #f7f9fa 24deg,
-      #c6cbd0 34deg,
-      #3c4249 50deg,
-      #eef1f3 64deg,
-      #fbfcfd 78deg,
-      #777e86 94deg,
-      #24292f 112deg,
-      #bfc5ca 128deg,
-      #f8fafb 147deg,
-      #555c64 166deg,
-      #2b3036 184deg,
-      #dfe3e6 203deg,
-      #fafbfc 221deg,
-      #6f767e 240deg,
-      #24292f 258deg,
-      #adb3b9 276deg,
-      #f8fafb 296deg,
-      #4a5158 316deg,
-      #262b31 334deg,
-      #cfd4d8 350deg,
-      #252a30 360deg
-    );
-    --app-card-frame-top: linear-gradient(
-      90deg,
-      #252a30 0%,
-      #8d949b 10%,
-      #f8fafb 24%,
-      #555c64 40%,
-      #24292f 56%,
-      #eef1f3 72%,
-      #777e86 88%,
-      #252a30 100%
-    );
-    --app-card-frame-right: linear-gradient(
-      180deg,
-      #252a30 0%,
-      #cfd4d8 18%,
-      #f8fafb 34%,
-      #4a5158 52%,
-      #24292f 70%,
-      #bfc5ca 86%,
-      #252a30 100%
-    );
-    --app-card-frame-bottom: linear-gradient(
-      270deg,
-      #252a30 0%,
-      #8d949b 12%,
-      #f8fafb 28%,
-      #555c64 44%,
-      #24292f 62%,
-      #eef1f3 78%,
-      #777e86 90%,
-      #252a30 100%
-    );
-    --app-card-frame-left: linear-gradient(
-      0deg,
-      #252a30 0%,
-      #cfd4d8 18%,
-      #f8fafb 34%,
-      #4a5158 52%,
-      #24292f 70%,
-      #bfc5ca 86%,
-      #252a30 100%
+    /* Gradiant Black border palette: #333333 base to #e6e6e6 tint,
+       using the same bottom-left to top-right treatment as Visual Lab. */
+    --app-card-frame-background: linear-gradient(
+      45deg,
+      #333333 0%,
+      color-mix(in hsl, #333333 58%, #e6e6e6) 42%,
+      color-mix(in hsl, #333333 12%, #e6e6e6) 68%,
+      #e6e6e6 84%,
+      color-mix(in hsl, #333333 2%, white) 100%
     );
   }
 
@@ -2479,17 +2480,17 @@
   .app-button-default {
     @apply text-gray-200 hover:text-white focus:ring-blue-500 active:text-gray-100;
     border-color: rgb(var(--theme-control-border) / 0.7);
-    background-color: rgb(var(--theme-control-surface) / 0.35);
+    background-color: rgb(var(--theme-control-surface) / 0.55);
   }
 
   .app-button-default:hover {
     border-color: rgb(var(--theme-control-border) / 0.95);
-    background-color: rgb(var(--theme-control-surface-hover) / 0.55);
+    background-color: rgb(var(--theme-control-surface-hover) / 0.7);
   }
 
   .app-button-default:active {
     border-color: rgb(var(--theme-control-border) / 0.95);
-    background-color: rgb(var(--theme-control-surface-hover) / 0.7);
+    background-color: rgb(var(--theme-control-surface-hover) / 0.85);
   }
 
   .app-button-default:focus {
@@ -2497,55 +2498,311 @@
   }
 
   .app-button-primary {
-    @apply border-indigo-500/90 bg-indigo-950/35 text-indigo-200 hover:border-indigo-300 hover:bg-indigo-900/55 hover:text-white focus:border-indigo-300 focus:ring-indigo-500 active:border-indigo-400 active:bg-indigo-900/70;
+    @apply border-indigo-500/90 bg-indigo-950/55 text-indigo-200 hover:border-indigo-300 hover:bg-indigo-900/70 hover:text-white focus:border-indigo-300 focus:ring-indigo-500 active:border-indigo-400 active:bg-indigo-900/85;
   }
 
   .app-button-danger,
   .request-destructive-action-delete,
   .request-destructive-action-remove {
-    @apply border-red-500/90 bg-red-950/35 text-red-300 hover:border-red-300 hover:bg-red-900/55 hover:text-white focus:border-red-300 focus:ring-red-500 active:border-red-400 active:bg-red-900/70;
+    /* Red button contract: the border is the base hue. Text preserves hue and
+       saturation while moving 51% of the remaining lightness toward white.
+       Backgrounds preserve hue/saturation at 10% lightness for Normal and 20%
+       for Hover/Active, using 55%, 70%, and 85% opacity respectively. */
+    border-color: color-mix(in srgb, #d52c2c 90%, transparent);
+    background-color: hsl(0 66% 10% / 0.55);
+    color: hsl(0 66% 76%);
+  }
+
+  .app-button-danger:hover,
+  .request-destructive-action-delete:hover,
+  .request-destructive-action-remove:hover {
+    border-color: color-mix(in srgb, #d52c2c 65%, white);
+    background-color: hsl(0 66% 20% / 0.7);
+    color: #fff;
+  }
+
+  .app-button-danger:focus,
+  .request-destructive-action-delete:focus,
+  .request-destructive-action-remove:focus {
+    border-color: color-mix(in srgb, #d52c2c 65%, white);
+    --tw-ring-color: #d52c2c;
+  }
+
+  .app-button-danger:active,
+  .request-destructive-action-delete:active,
+  .request-destructive-action-remove:active {
+    border-color: color-mix(in srgb, #d52c2c 80%, white);
+    background-color: hsl(0 66% 20% / 0.85);
+    color: hsl(0 66% 76%);
   }
 
   .app-button-warning,
-  .discover-filter-control.compact-select-warning {
-    @apply border-yellow-500/90 bg-yellow-950/35 text-yellow-200 hover:border-yellow-300 hover:bg-yellow-900/55 hover:text-white focus:border-yellow-300 focus:ring-yellow-500 active:border-yellow-400 active:bg-yellow-900/70;
+  .app-button-report-issue {
+    border-color: color-mix(in srgb, var(--palette-yellow) 90%, transparent);
+    background-color: hsl(53 100% 10% / 0.55);
+    color: hsl(53 100% 72%);
   }
 
-  .app-button-success {
-    @apply border-green-500/90 bg-green-950/35 text-green-300 hover:border-green-300 hover:bg-green-900/55 hover:text-white focus:border-green-300 focus:ring-green-500 active:border-green-400 active:bg-green-900/70;
+  .app-button-warning:hover,
+  .app-button-report-issue:hover {
+    border-color: color-mix(in srgb, var(--palette-yellow) 65%, white);
+    background-color: hsl(53 100% 20% / 0.7);
+    color: #fff;
+  }
+
+  .app-button-warning:focus,
+  .app-button-report-issue:focus {
+    border-color: color-mix(in srgb, var(--palette-yellow) 65%, white);
+    --tw-ring-color: var(--palette-yellow);
+  }
+
+  .app-button-warning:active,
+  .app-button-report-issue:active {
+    border-color: color-mix(in srgb, var(--palette-yellow) 80%, white);
+    background-color: hsl(53 100% 20% / 0.85);
+    color: hsl(53 100% 72%);
+  }
+
+  .app-button-success,
+  .app-button-bulk-request,
+  .app-button-detail-request {
+    border-color: color-mix(in srgb, var(--palette-green) 90%, transparent);
+    background-color: hsl(119 52% 10% / 0.55);
+    color: hsl(119 52% 74%);
+  }
+
+  .app-button-success:hover,
+  .app-button-bulk-request:hover,
+  .app-button-detail-request:hover {
+    border-color: color-mix(in srgb, var(--palette-green) 65%, white);
+    background-color: hsl(119 52% 20% / 0.7);
+    color: #fff;
+  }
+
+  .app-button-success:focus,
+  .app-button-bulk-request:focus,
+  .app-button-detail-request:focus {
+    border-color: color-mix(in srgb, var(--palette-green) 65%, white);
+    --tw-ring-color: var(--palette-green);
+  }
+
+  .app-button-success:active,
+  .app-button-bulk-request:active,
+  .app-button-detail-request:active {
+    border-color: color-mix(in srgb, var(--palette-green) 80%, white);
+    background-color: hsl(119 52% 20% / 0.85);
+    color: hsl(119 52% 74%);
   }
 
   .app-button-blocklist {
-    @apply border-red-500/90 bg-red-950/35 text-red-300 hover:border-red-300 hover:bg-red-900/55 hover:text-white focus:border-red-300 focus:ring-red-500 active:border-red-400 active:bg-red-900/70;
+    border-color: color-mix(in srgb, var(--palette-red) 90%, transparent);
+    background-color: hsl(0 66% 10% / 0.55);
+    color: hsl(0 66% 76%);
   }
 
-  .app-button-manage,
+  .app-button-blocklist:hover {
+    border-color: color-mix(in srgb, var(--palette-red) 65%, white);
+    background-color: hsl(0 66% 20% / 0.7);
+    color: #fff;
+  }
+
+  .app-button-blocklist:focus {
+    border-color: color-mix(in srgb, var(--palette-red) 65%, white);
+    --tw-ring-color: var(--palette-red);
+  }
+
+  .app-button-blocklist:active {
+    border-color: color-mix(in srgb, var(--palette-red) 80%, white);
+    background-color: hsl(0 66% 20% / 0.85);
+    color: hsl(0 66% 76%);
+  }
+
+  .app-button-manage {
+    /* Purple button contract: use the same state formula documented above;
+       only the base hue, saturation, and derived text tint change. */
+    border-color: color-mix(in srgb, #8b5cf6 90%, transparent);
+    background-color: hsl(258 90% 10% / 0.55);
+    color: hsl(258 90% 83%);
+  }
+
+  .app-button-manage:hover {
+    border-color: color-mix(in srgb, #8b5cf6 65%, white);
+    background-color: hsl(258 90% 20% / 0.7);
+    color: #fff;
+  }
+
+  .app-button-manage:focus {
+    border-color: color-mix(in srgb, #8b5cf6 65%, white);
+    --tw-ring-color: #8b5cf6;
+  }
+
+  .app-button-manage:active {
+    border-color: color-mix(in srgb, #8b5cf6 80%, white);
+    background-color: hsl(258 90% 20% / 0.85);
+    color: hsl(258 90% 83%);
+  }
+
   .detail-disclosure-control {
-    @apply border-violet-500/90 bg-violet-950/35 text-violet-300 hover:border-violet-300 hover:bg-violet-900/55 hover:text-white focus:border-violet-300 focus:ring-violet-500 active:border-violet-400 active:bg-violet-900/70;
+    /* Cast, crew, and related disclosure rows use the warm Plum family. */
+    border-color: color-mix(in srgb, var(--palette-plum) 90%, transparent);
+    background-color: hsl(286 79% 10% / 0.55);
+    color: hsl(286 79% 69%);
   }
 
-  .app-button-report-issue {
-    @apply border-yellow-500/90 bg-yellow-950/35 text-yellow-300 hover:border-yellow-300 hover:bg-yellow-900/55 hover:text-white focus:border-yellow-300 focus:ring-yellow-500 active:border-yellow-400 active:bg-yellow-900/70;
+  .detail-disclosure-control:hover {
+    border-color: color-mix(in srgb, var(--palette-plum) 65%, white);
+    background-color: hsl(286 79% 20% / 0.7);
+    color: #fff;
+  }
+
+  .detail-disclosure-control:focus {
+    border-color: color-mix(in srgb, var(--palette-plum) 65%, white);
+    --tw-ring-color: var(--palette-plum);
+  }
+
+  .detail-disclosure-control:active {
+    border-color: color-mix(in srgb, var(--palette-plum) 80%, white);
+    background-color: hsl(286 79% 20% / 0.85);
+    color: hsl(286 79% 69%);
+  }
+
+  /* Discovery and search section headers use the dark-blue family. Detail-page
+     Cast, Crew, and related disclosure controls intentionally remain Plum. */
+  .pinned-filter-section .detail-disclosure-control {
+    border-color: color-mix(in srgb, var(--palette-blue) 90%, transparent);
+    background-color: hsl(217 100% 10% / 0.55);
+    color: hsl(217 100% 72%);
+  }
+
+  .pinned-filter-section .detail-disclosure-control:hover {
+    border-color: color-mix(in srgb, var(--palette-blue) 65%, white);
+    background-color: hsl(217 100% 20% / 0.7);
+    color: #fff;
+  }
+
+  .pinned-filter-section .detail-disclosure-control:focus-within {
+    border-color: color-mix(in srgb, var(--palette-blue) 65%, white);
+    --tw-ring-color: var(--palette-blue);
+  }
+
+  .pinned-filter-section .detail-disclosure-control:active {
+    border-color: color-mix(in srgb, var(--palette-blue) 80%, white);
+    background-color: hsl(217 100% 20% / 0.85);
+    color: hsl(217 100% 72%);
+  }
+
+  .pinned-filter-section .detail-disclosure-pin:focus,
+  .pinned-filter-section .detail-disclosure-button:focus {
+    --tw-ring-color: var(--palette-blue);
+  }
+
+  .pinned-filter-section .detail-disclosure-pin {
+    border-right-color: color-mix(
+      in srgb,
+      var(--palette-blue) 90%,
+      transparent
+    );
+  }
+
+  .pinned-filter-section .detail-disclosure-pin-active {
+    background-color: hsl(217 100% 20% / 0.55);
+    color: #fff;
   }
 
   .app-button-association {
-    @apply border-cyan-500/90 bg-cyan-950/35 text-cyan-300 hover:border-cyan-300 hover:bg-cyan-900/55 hover:text-white focus:border-cyan-300 focus:ring-cyan-500 active:border-cyan-400 active:bg-cyan-900/70;
+    border-color: color-mix(in srgb, var(--palette-aqua) 90%, transparent);
+    background-color: hsl(191 77% 10% / 0.55);
+    color: hsl(191 77% 75%);
   }
 
-  .app-button-bulk-request {
-    @apply border-emerald-600/90 bg-emerald-950/35 text-emerald-300 hover:border-emerald-400 hover:bg-emerald-900/55 hover:text-white focus:border-emerald-400 focus:ring-emerald-500 active:border-emerald-500 active:bg-emerald-900/70;
+  .app-button-association:hover {
+    border-color: color-mix(in srgb, var(--palette-aqua) 65%, white);
+    background-color: hsl(191 77% 20% / 0.7);
+    color: #fff;
   }
 
-  .app-button-detail-request {
-    @apply border-green-500/90 bg-green-950/35 text-green-300 hover:border-green-300 hover:bg-green-900/55 hover:text-white focus:border-green-300 focus:ring-green-500 active:border-green-400 active:bg-green-900/70;
+  .app-button-association:focus {
+    border-color: color-mix(in srgb, var(--palette-aqua) 65%, white);
+    --tw-ring-color: var(--palette-aqua);
+  }
+
+  .app-button-association:active {
+    border-color: color-mix(in srgb, var(--palette-aqua) 80%, white);
+    background-color: hsl(191 77% 20% / 0.85);
+    color: hsl(191 77% 75%);
+  }
+
+  .app-button-prowlarr {
+    border-color: color-mix(in srgb, var(--palette-blue) 90%, transparent);
+    background-color: hsl(217 100% 10% / 0.55);
+    color: hsl(217 100% 72%);
+  }
+
+  .app-button-prowlarr:hover {
+    border-color: color-mix(in srgb, var(--palette-blue) 65%, white);
+    background-color: hsl(217 100% 20% / 0.7);
+    color: #fff;
+  }
+
+  .app-button-prowlarr:focus {
+    border-color: color-mix(in srgb, var(--palette-blue) 65%, white);
+    --tw-ring-color: var(--palette-blue);
+  }
+
+  .app-button-prowlarr:active {
+    border-color: color-mix(in srgb, var(--palette-blue) 80%, white);
+    background-color: hsl(217 100% 20% / 0.85);
+    color: hsl(217 100% 72%);
   }
 
   .app-button-trailer {
-    @apply border-orange-500/90 bg-orange-950/35 text-orange-300 hover:border-orange-300 hover:bg-orange-900/55 hover:text-white focus:border-orange-300 focus:ring-orange-500 active:border-orange-400 active:bg-orange-900/70;
+    /* Orange button contract: use the shared button formula with Normal Orange
+       (#f97316) as the base border color. */
+    border-color: color-mix(in srgb, #f97316 90%, transparent);
+    background-color: hsl(25 95% 10% / 0.55);
+    color: hsl(25 95% 77%);
+  }
+
+  .app-button-trailer:hover {
+    border-color: color-mix(in srgb, #f97316 65%, white);
+    background-color: hsl(25 95% 20% / 0.7);
+    color: #fff;
+  }
+
+  .app-button-trailer:focus {
+    border-color: color-mix(in srgb, #f97316 65%, white);
+    --tw-ring-color: #f97316;
+  }
+
+  .app-button-trailer:active {
+    border-color: color-mix(in srgb, #f97316 80%, white);
+    background-color: hsl(25 95% 20% / 0.85);
+    color: hsl(25 95% 77%);
   }
 
   .app-button-playback {
-    @apply border-gray-500 bg-black/35 text-gray-400 hover:border-white hover:bg-black/55 hover:text-white focus:border-white focus:ring-gray-400 active:border-white active:bg-black/70 active:text-white;
+    /* Playback buttons keep page-button geometry but copy the poster media
+       server status control's high-contrast surface treatment. */
+    border-color: rgb(var(--color-gray-600));
+    background-color: rgb(0 0 0 / 0.7);
+    color: #fff;
+  }
+
+  .app-button-playback:hover {
+    border-color: rgb(var(--color-gray-200));
+    background-color: rgb(0 0 0 / 0.7);
+    color: #fff;
+  }
+
+  .app-button-playback:focus {
+    border-color: rgb(var(--color-gray-100));
+    --tw-ring-color: rgb(var(--color-gray-500));
+  }
+
+  .app-button-playback:active {
+    border-color: rgb(var(--color-gray-100));
+    background-color: rgb(0 0 0 / 0.7);
+    color: #fff;
   }
 
   .playback-dropdown-trigger {
@@ -2557,7 +2814,7 @@
   }
 
   .app-button-ghost {
-    @apply border-gray-600 bg-black/35 text-white hover:border-gray-200 hover:bg-black/55 hover:text-white focus:border-gray-100 active:border-gray-100 active:bg-black/70;
+    @apply border-gray-600 bg-black/55 text-white hover:border-gray-200 hover:bg-black/70 hover:text-white focus:border-gray-100 active:border-gray-100 active:bg-black/85;
   }
 
   .app-dropdown-menu {
@@ -2669,6 +2926,28 @@
     padding-inline: var(--compact-button-padding-x);
   }
 
+  .poster-rating-popover {
+    position: fixed;
+    z-index: 100;
+    width: max-content;
+    box-sizing: border-box;
+    pointer-events: none;
+    background-color: rgb(var(--theme-overlay-main) / 0.88);
+    border: 1px solid rgb(var(--color-gray-500) / 0.65);
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 24px rgb(0 0 0 / 0.4);
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.75rem;
+  }
+
+  .poster-rating-values {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem 0.75rem;
+  }
+
   .media-rating-row {
     @apply flex flex-nowrap items-center justify-between;
     padding-top: var(--card-spacing);
@@ -2697,6 +2976,10 @@
   .media-rating-link {
     @apply inline-flex flex-none items-center gap-[5px] text-xs text-gray-300 hover:text-white;
     height: var(--action-control-height);
+  }
+
+  .media-rating-provider-link {
+    column-gap: 5px;
   }
 
   .media-rating-icon {
@@ -2756,11 +3039,13 @@
     background-color: rgb(99 102 241 / 0.12);
   }
 
-  .season-focus-row {
+  .season-focus-row,
+  .episode-focus-row {
     position: relative;
   }
 
-  .season-focus-row::after {
+  .season-focus-row::after,
+  .episode-focus-row::after {
     content: '';
     position: absolute;
     inset: 0 0.25rem 0 2.5rem;
@@ -2769,17 +3054,22 @@
     pointer-events: none;
   }
 
-  .season-focus-row[data-active='true']::after {
+  .season-focus-row[data-active='true']::after,
+  .episode-focus-row[data-active='true']::after {
     border-color: rgb(129 140 248 / 0.5);
   }
 
-  .season-focus-row:hover::after {
+  .season-focus-row:hover::after,
+  .episode-focus-row:hover::after {
     border-color: rgb(129 140 248);
   }
 
   .season-focus-row:focus-visible::after,
   .season-focus-row[data-active='true']:hover::after,
-  .season-focus-row:has(button:focus-visible)::after {
+  .season-focus-row:has(button:focus-visible)::after,
+  .episode-focus-row:focus-visible::after,
+  .episode-focus-row[data-active='true']:hover::after,
+  .episode-focus-row:has(button:focus-visible)::after {
     box-shadow: 0 0 0 1px rgb(129 140 248);
   }
 
@@ -2885,74 +3175,197 @@
 
   /* Poster controls can change independently of page action buttons. */
   .poster-control {
-    @apply inline-flex items-center justify-center border text-xs font-semibold whitespace-nowrap;
+    --poster-control-background-opacity: 0.7;
+    @apply inline-flex cursor-pointer items-center justify-center rounded-md border text-xs leading-5 font-medium whitespace-nowrap transition duration-150 ease-in-out focus:ring-2 focus:outline-none focus:ring-inset disabled:cursor-not-allowed disabled:opacity-60;
     box-sizing: border-box;
-    border-radius: var(--control-corner-radius);
     background-color: transparent;
     backdrop-filter: blur(4px);
-    height: var(--poster-control-height);
-    min-height: var(--poster-control-height);
-    max-height: var(--poster-control-height);
+    height: var(--action-control-height);
+    min-height: var(--action-control-height);
+    max-height: var(--action-control-height);
     padding-block: 0;
-    padding-inline: var(--poster-control-padding-x);
-    line-height: var(--poster-control-content-height);
+    padding-inline: var(--action-control-padding-x);
+    line-height: var(--action-control-content-height);
     column-gap: var(--poster-control-gap);
+    text-shadow:
+      0 1px 1px rgb(0 0 0),
+      0 0 3px rgb(0 0 0),
+      0 0 6px rgb(0 0 0 / 0.9);
   }
 
   .poster-control.poster-control-type-movie,
   .poster-control.poster-control-type-collection {
-    @apply border-blue-500/70 bg-blue-950/35 text-blue-50;
+    border-color: color-mix(in srgb, var(--palette-blue) 90%, transparent);
+    background-color: hsl(
+      217 100% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(217 100% 72%);
   }
 
   .poster-control.poster-control-type-tv {
-    @apply border-violet-300/90 bg-purple-950/35 text-purple-50;
+    border-color: color-mix(in srgb, var(--palette-purple) 90%, transparent);
+    background-color: hsl(
+      258 90% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(258 90% 83%);
   }
 
   .poster-control.poster-control-type-album {
-    @apply border-emerald-500/70 bg-emerald-950/35 text-emerald-50;
+    border-color: color-mix(in srgb, var(--palette-green) 90%, transparent);
+    background-color: hsl(
+      119 52% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(119 52% 74%);
   }
 
   .poster-control.poster-control-type-artist {
-    @apply border-fuchsia-500/70 bg-fuchsia-950/35 text-fuchsia-50;
+    border-color: color-mix(in srgb, var(--palette-pink) 90%, transparent);
+    background-color: hsl(
+      322 100% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(322 100% 75%);
   }
 
   .poster-control.poster-control-type-book,
   .poster-control.poster-control-book-format {
-    @apply border-amber-500/70 bg-amber-950/35 text-amber-50;
+    border-color: color-mix(in srgb, var(--palette-yellow) 90%, transparent);
+    background-color: hsl(
+      53 100% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(53 100% 72%);
   }
 
   .poster-control.poster-control-type-comic {
-    @apply border-rose-500/70 bg-rose-950/35 text-rose-50;
+    border-color: color-mix(in srgb, var(--palette-red) 90%, transparent);
+    background-color: hsl(0 66% 10% / var(--poster-control-background-opacity));
+    color: hsl(0 66% 76%);
   }
 
   .poster-control.poster-control-type-magazine {
-    @apply border-cyan-400/70 bg-cyan-950/35 text-cyan-50;
+    border-color: color-mix(in srgb, var(--palette-aqua) 90%, transparent);
+    background-color: hsl(
+      191 77% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(191 77% 75%);
+  }
+
+  .app-button-media-type-movie,
+  .app-button-media-type-collection {
+    border-color: color-mix(in srgb, var(--palette-blue) 90%, transparent);
+    background-color: hsl(217 100% 10% / 0.35);
+    color: hsl(217 100% 72%);
+  }
+
+  .app-button-media-type-tv {
+    border-color: color-mix(in srgb, var(--palette-purple) 90%, transparent);
+    background-color: hsl(258 90% 10% / 0.35);
+    color: hsl(258 90% 83%);
+  }
+
+  .app-button-media-type-album {
+    border-color: color-mix(in srgb, var(--palette-green) 90%, transparent);
+    background-color: hsl(119 52% 10% / 0.35);
+    color: hsl(119 52% 74%);
+  }
+
+  .app-button-media-type-artist {
+    border-color: color-mix(in srgb, var(--palette-pink) 90%, transparent);
+    background-color: hsl(322 100% 10% / 0.35);
+    color: hsl(322 100% 75%);
+  }
+
+  .app-button-media-type-book {
+    border-color: color-mix(in srgb, var(--palette-yellow) 90%, transparent);
+    background-color: hsl(53 100% 10% / 0.35);
+    color: hsl(53 100% 72%);
+  }
+
+  .app-button-media-type-comic {
+    border-color: color-mix(in srgb, var(--palette-red) 90%, transparent);
+    background-color: hsl(0 66% 10% / 0.35);
+    color: hsl(0 66% 76%);
+  }
+
+  .app-button-media-type-magazine {
+    border-color: color-mix(in srgb, var(--palette-aqua) 90%, transparent);
+    background-color: hsl(191 77% 10% / 0.35);
+    color: hsl(191 77% 75%);
   }
 
   .poster-control.poster-control-available {
-    @apply border-green-500/90 bg-green-950/35 text-green-300;
+    border-color: color-mix(in srgb, var(--palette-green) 90%, transparent);
+    background-color: hsl(
+      119 52% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(119 52% 74%);
   }
 
   .poster-control.poster-control-pending {
-    @apply border-yellow-500/90 bg-yellow-950/35 text-yellow-200;
+    border-color: color-mix(in srgb, var(--palette-yellow) 90%, transparent);
+    background-color: hsl(
+      53 100% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(53 100% 72%);
   }
 
   .poster-control.poster-control-processing {
-    @apply border-indigo-500/90 bg-indigo-950/35 text-indigo-200;
+    border-color: color-mix(in srgb, var(--palette-blue) 90%, transparent);
+    background-color: hsl(
+      217 100% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(217 100% 72%);
   }
 
-  .poster-control-icon.poster-control-association {
-    @apply border-cyan-500/90 bg-cyan-950/35 text-cyan-300 hover:border-cyan-300 hover:bg-cyan-900/55 hover:text-white focus:border-cyan-300 focus:ring-cyan-500 active:border-cyan-400 active:bg-cyan-900/70;
+  /* All controls displayed over poster art share poster-control. Role classes
+     provide color only and never borrow app-button or filter-button styles. */
+  .poster-control.poster-control-association {
+    border-color: color-mix(in srgb, var(--palette-aqua) 90%, transparent);
+    background-color: hsl(
+      191 77% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(191 77% 75%);
+    --tw-ring-color: var(--palette-aqua);
   }
 
-  .poster-control-icon.poster-control-blocklist {
-    @apply border-red-500/90 bg-red-950/35 text-red-300 hover:border-red-300 hover:bg-red-900/55 hover:text-white focus:border-red-300 focus:ring-red-500 active:border-red-400 active:bg-red-900/70;
+  .poster-control.poster-control-association:hover {
+    border-color: color-mix(in srgb, var(--palette-aqua) 65%, white);
+    background-color: hsl(
+      191 77% 20% / var(--poster-control-background-opacity)
+    );
+    color: #fff;
+  }
+
+  .poster-control.poster-control-association:active {
+    border-color: color-mix(in srgb, var(--palette-aqua) 80%, white);
+    background-color: hsl(
+      191 77% 20% / var(--poster-control-background-opacity)
+    );
+  }
+
+  .poster-control.poster-control-blocklist {
+    border-color: color-mix(in srgb, var(--palette-red) 90%, transparent);
+    background-color: hsl(0 66% 10% / var(--poster-control-background-opacity));
+    color: hsl(0 66% 76%);
+    --tw-ring-color: var(--palette-red);
+  }
+
+  .poster-control.poster-control-blocklist:hover {
+    border-color: color-mix(in srgb, var(--palette-red) 65%, white);
+    background-color: hsl(0 66% 20% / var(--poster-control-background-opacity));
+    color: #fff;
+  }
+
+  .poster-control.poster-control-blocklist:active {
+    border-color: color-mix(in srgb, var(--palette-red) 80%, white);
+    background-color: hsl(0 66% 20% / var(--poster-control-background-opacity));
   }
 
   .poster-control svg {
     width: var(--poster-control-content-height);
     height: var(--poster-control-content-height);
     flex: none;
+    filter: drop-shadow(0 1px 1px rgb(0 0 0))
+      drop-shadow(0 0 3px rgb(0 0 0 / 0.95));
   }
 
   .poster-control-icon,
@@ -2977,14 +3390,17 @@
 
   .watched-status-badge {
     @apply border-gray-600 bg-black/35 text-white;
+    background-color: rgb(0 0 0 / var(--poster-control-background-opacity));
   }
 
   .watched-status-badge:hover {
     @apply bg-black/55;
+    background-color: rgb(0 0 0 / var(--poster-control-background-opacity));
   }
 
   .watched-status-badge:active {
     @apply bg-black/70;
+    background-color: rgb(0 0 0 / var(--poster-control-background-opacity));
   }
 
   .watched-status-badge.detail-watched-button {
@@ -3022,8 +3438,16 @@
     grid-template-columns: 2rem minmax(5.5rem, 1fr) 4rem 2.5rem 2.5rem;
   }
 
+  .request-season-grid {
+    grid-template-columns: 2rem minmax(5.5rem, 1fr) 4rem 2.5rem;
+  }
+
   .episode-watch-grid {
     grid-template-columns: 2rem 4.5rem minmax(0, 1fr) 2.5rem 2.5rem;
+  }
+
+  .request-episode-grid {
+    grid-template-columns: 2rem 4.5rem minmax(0, 1fr) 2.5rem;
   }
 
   .watched-status-cell {
@@ -3093,13 +3517,24 @@
   }
 
   .app-filter-button {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md border px-2 text-xs font-medium whitespace-nowrap transition focus:ring-2 focus:ring-indigo-400 focus:outline-none;
+    @apply relative inline-flex items-center justify-center gap-1.5 rounded-md border px-2 text-xs font-medium whitespace-nowrap transition focus:outline-none;
+    box-sizing: border-box;
     height: var(--compact-control-height);
+    min-height: var(--compact-control-height);
+    max-height: var(--compact-control-height);
     text-shadow: none;
   }
 
   .app-filter-segment-focus {
-    @apply focus:ring-2 focus:ring-indigo-400 focus:outline-none;
+    @apply focus:outline-none;
+  }
+
+  /* Selected and keyboard-focus emphasis belongs outside the fixed control
+     box so it never consumes label/icon space or changes the standard size. */
+  .app-filter-button:focus-within,
+  .app-filter-button:focus-visible {
+    outline: 2px solid rgb(129 140 248);
+    outline-offset: 1px;
   }
 
   .app-filter-button svg,
@@ -3113,6 +3548,13 @@
 
   .app-filter-button-active {
     @apply border-indigo-400 bg-indigo-500 text-white;
+    outline: 1px solid rgb(129 140 248);
+    outline-offset: 1px;
+  }
+
+  .app-filter-button-active:focus-within,
+  .app-filter-button-active:focus-visible {
+    outline-width: 2px;
   }
 
   .app-filter-button-idle {
@@ -3788,8 +4230,8 @@
   .media-actions,
   .media-detail-disclosure-row,
   .media-primary-action-row,
+  .media-request-action-row,
   .manage-request-action-buttons,
-  .request-status-action-row,
   .discover-filter-primary-row,
   .discover-filter-secondary-row,
   .settings-page-navigation-row,
@@ -3993,11 +4435,33 @@
   }
 
   .discover-filter-control {
-    @apply relative inline-flex max-w-full min-w-0 rounded-md border focus-within:ring-2 focus-within:ring-indigo-400 focus-within:ring-inset;
+    @apply relative inline-flex max-w-full min-w-0 rounded-md border focus-within:ring-2 focus-within:ring-indigo-400;
     height: var(--compact-control-height);
+    min-height: var(--compact-control-height);
+    max-height: var(--compact-control-height);
     border-color: rgb(var(--theme-control-border) / 0.7);
     background-color: rgb(var(--theme-control-surface) / 0.35);
     width: max-content;
+  }
+
+  /* Warning filters retain their own filter-control contract instead of
+     borrowing the application action-button class. */
+  .discover-filter-control.compact-select-warning {
+    border-color: color-mix(in srgb, var(--palette-yellow) 90%, transparent);
+    background-color: hsl(53 100% 10% / 0.35);
+    color: hsl(53 100% 72%);
+  }
+
+  .discover-filter-control.compact-select-warning:hover {
+    border-color: color-mix(in srgb, var(--palette-yellow) 65%, white);
+    background-color: hsl(53 100% 20% / 0.55);
+    color: #fff;
+  }
+
+  .discover-filter-control.compact-select-warning:active {
+    border-color: color-mix(in srgb, var(--palette-yellow) 80%, white);
+    background-color: hsl(53 100% 20% / 0.7);
+    color: hsl(53 100% 72%);
   }
 
   .discover-filter-control:hover {

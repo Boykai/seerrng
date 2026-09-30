@@ -38,7 +38,7 @@ describe('scheduled job lifecycle', () => {
     }
   });
 
-  it('schedules watch-ahead every 30 seconds only for Jellyfin', async () => {
+  it('schedules the requested episode queue for every supported media server', async () => {
     const settings = getSettings();
     mock.method(episodeWatchAhead, 'run', async () => undefined);
     const previousMediaServerType = settings.main.mediaServerType;
@@ -47,22 +47,29 @@ describe('scheduled job lifecycle', () => {
 
     try {
       settings.jobs['jellyfin-watch-ahead'].schedule = '*/30 * * * * *';
-      settings.main.mediaServerType = MediaServerType.EMBY;
+      settings.main.mediaServerType = MediaServerType.NOT_CONFIGURED;
       startJobs();
       assert.equal(
         scheduledJobs.some((job) => job.id === 'jellyfin-watch-ahead'),
         false
       );
 
-      await stopJobs();
-      settings.main.mediaServerType = MediaServerType.JELLYFIN;
-      startJobs();
-      const watchAheadJob = scheduledJobs.find(
-        (job) => job.id === 'jellyfin-watch-ahead'
-      );
-      assert.ok(watchAheadJob);
-      assert.equal(watchAheadJob.interval, 'seconds');
-      assert.equal(watchAheadJob.cronSchedule, '*/30 * * * * *');
+      for (const mediaServerType of [
+        MediaServerType.PLEX,
+        MediaServerType.JELLYFIN,
+        MediaServerType.EMBY,
+      ]) {
+        await stopJobs();
+        settings.main.mediaServerType = mediaServerType;
+        startJobs();
+        const watchAheadJob = scheduledJobs.find(
+          (job) => job.id === 'jellyfin-watch-ahead'
+        );
+        assert.ok(watchAheadJob);
+        assert.equal(watchAheadJob.name, 'Requested Episode Queue');
+        assert.equal(watchAheadJob.interval, 'seconds');
+        assert.equal(watchAheadJob.cronSchedule, '*/30 * * * * *');
+      }
     } finally {
       settings.main.mediaServerType = previousMediaServerType;
       settings.jobs['jellyfin-watch-ahead'].schedule =

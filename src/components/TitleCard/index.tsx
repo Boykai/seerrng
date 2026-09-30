@@ -718,101 +718,101 @@ const TitleCard = ({
             priority={priority}
           />
           <div className="absolute right-0 left-0 p-2">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] gap-x-1 gap-y-1">
-              <div className="flex min-w-0 flex-col items-start gap-1">
-                {isBook ? (
-                  showAllBookFormats ? (
-                    <>
+            <div className="flex flex-col gap-1">
+              <div className="flex w-full min-w-0 items-start justify-between gap-1">
+                <div className="flex min-w-0 flex-col items-start gap-1">
+                  {isBook ? (
+                    showAllBookFormats ? (
+                      <>
+                        <BookFormatBadge
+                          format="ebook"
+                          variant="card"
+                          className="pointer-events-none z-40 self-start"
+                        />
+                        <BookFormatBadge
+                          format="audiobook"
+                          variant="card"
+                          className="pointer-events-none z-40 self-start"
+                        />
+                      </>
+                    ) : (
                       <BookFormatBadge
-                        format="ebook"
+                        format={preferredBookFormat}
                         variant="card"
                         className="pointer-events-none z-40 self-start"
                       />
-                      <BookFormatBadge
-                        format="audiobook"
-                        variant="card"
-                        className="pointer-events-none z-40 self-start"
-                      />
-                    </>
+                    )
                   ) : (
-                    <BookFormatBadge
-                      format={preferredBookFormat}
+                    <MediaTypeBadge
+                      mediaType={mediaType === 'person' ? 'artist' : mediaType}
                       variant="card"
                       className="pointer-events-none z-40 self-start"
                     />
-                  )
-                ) : (
-                  <MediaTypeBadge
-                    mediaType={mediaType === 'person' ? 'artist' : mediaType}
-                    variant="card"
-                    className="pointer-events-none z-40 self-start"
-                  />
-                )}
-              </div>
-              <div className="z-40 flex min-h-4 items-center justify-end">
-                {primaryStatusBadge && (
-                  <StatusBadgeMini
-                    status={primaryStatusBadge.status}
-                    quality={primaryStatusBadge.quality}
-                    inProgress={primaryStatusBadge.inProgress}
-                    shrink
-                  />
-                )}
-                {!primaryStatusBadge && canShowBlocklistAction && (
-                  <Tooltip
-                    content={intl.formatMessage(globalMessages.addToBlocklist)}
-                  >
-                    <Button
-                      buttonType="ghost"
-                      className="poster-control poster-control-icon poster-control-blocklist z-40"
-                      buttonSize="sm"
-                      iconOnly
-                      aria-label={intl.formatMessage(
+                  )}
+                </div>
+                <div className="z-40 flex min-h-4 shrink-0 items-center justify-end">
+                  {primaryStatusBadge && (
+                    <StatusBadgeMini
+                      status={primaryStatusBadge.status}
+                      quality={primaryStatusBadge.quality}
+                      inProgress={primaryStatusBadge.inProgress}
+                      shrink
+                    />
+                  )}
+                  {!primaryStatusBadge && canShowBlocklistAction && (
+                    <Tooltip
+                      content={intl.formatMessage(
                         globalMessages.addToBlocklist
                       )}
-                      onClick={() => setShowBlocklistModal(true)}
                     >
-                      <EyeSlashIcon />
-                    </Button>
-                  </Tooltip>
-                )}
+                      <button
+                        type="button"
+                        className="poster-control poster-control-blocklist app-control-shadow-exempt z-40"
+                        aria-label={intl.formatMessage(
+                          globalMessages.addToBlocklist
+                        )}
+                        onClick={() => setShowBlocklistModal(true)}
+                      >
+                        <EyeSlashIcon />
+                      </button>
+                    </Tooltip>
+                  )}
+                </div>
               </div>
-              <div className="z-40 flex min-h-4 items-center">
-                {currentStatus !== MediaStatus.BLOCKLISTED && (
-                  <AssociationBadge
-                    mediaType={mediaType}
-                    id={id}
-                    variant="card"
-                    hideWhenEmpty={hideAssociationWhenEmpty}
-                  />
-                )}
-              </div>
-              <div className="z-40 flex min-h-4 items-center justify-end">
-                {secondaryStatusBadge && (
-                  <StatusBadgeMini
-                    status={secondaryStatusBadge.status}
-                    quality={secondaryStatusBadge.quality}
-                    inProgress={secondaryStatusBadge.inProgress}
-                    shrink
-                  />
-                )}
+              <div className="flex w-full min-w-0 items-center justify-between gap-1">
+                <div className="z-40 flex min-h-4 min-w-0 items-center">
+                  {currentStatus !== MediaStatus.BLOCKLISTED && (
+                    <AssociationBadge
+                      mediaType={mediaType}
+                      id={id}
+                      variant="card"
+                      hideWhenEmpty={hideAssociationWhenEmpty}
+                    />
+                  )}
+                </div>
+                <div className="z-40 flex min-h-4 shrink-0 items-center justify-end">
+                  {secondaryStatusBadge && (
+                    <StatusBadgeMini
+                      status={secondaryStatusBadge.status}
+                      quality={secondaryStatusBadge.quality}
+                      inProgress={secondaryStatusBadge.inProgress}
+                      shrink
+                    />
+                  )}
+                </div>
               </div>
               {watchedStatus && watchedStatus.watchedCount > 0 && (
-                <>
-                  <span aria-hidden="true" />
-                  <div className="z-40 flex items-center justify-end">
-                    <WatchedBadge
-                      status={watchedStatus}
-                      incompleteLibrary={
-                        mediaType === 'tv' &&
-                        (currentStatus === MediaStatus.PARTIALLY_AVAILABLE ||
-                          (currentStatus !== MediaStatus.AVAILABLE &&
-                            currentStatus4k ===
-                              MediaStatus.PARTIALLY_AVAILABLE))
-                      }
-                    />
-                  </div>
-                </>
+                <div className="z-40 flex w-full items-center justify-end">
+                  <WatchedBadge
+                    status={watchedStatus}
+                    incompleteLibrary={
+                      mediaType === 'tv' &&
+                      (currentStatus === MediaStatus.PARTIALLY_AVAILABLE ||
+                        (currentStatus !== MediaStatus.AVAILABLE &&
+                          currentStatus4k === MediaStatus.PARTIALLY_AVAILABLE))
+                    }
+                  />
+                </div>
               )}
             </div>
             {showDetail && currentStatus !== MediaStatus.BLOCKLISTED && (
