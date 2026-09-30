@@ -138,6 +138,115 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.42.0](https://github.com/snapetech/seerrng/compare/v3.41.2..v3.42.0) - 2026-09-30
+
+### User-facing changes
+
+#### Added
+
+- **Comics:** Administrators can connect BackIssue through Settings, the administrator API, or the CLI. Comic requests can use it as their default destination, while SeerrNG syncs its collection and shows active queue status and progress when BackIssue reports it.
+- **Appearance:** Power users can save personal overrides for supported theme colors and accents from the hidden Advanced Theme Overrides page. Users without saved overrides keep their selected theme unchanged.
+- **Appearance:** Administrators can opt their own account into John’s former visual system from Profile Settings > Advanced Theme. The preset colors shared controls and page chrome while keeping the default appearance unchanged for everyone else.
+- **Requests:** TV requesters can opt into the episode queue with a linked Plex or Emby account. The queue stays off unless the requester enables it and continues to support Jellyfin.
+- **Requests:** Requesters can retry their own failed requests when they still have permission to request that media. Request managers can retry any failed request, and the action stays hidden for other users.
+- **Distribution:** Windows operators can install SeerrNG from Chocolatey as a managed service. Package upgrades update the existing service and preserve its configuration under `%ProgramData%\SeerrNG\config`.
+- **Magazines:** The public magazine catalog now offers suggested title searches, helping users discover magazines before they know what to enter.
+- **Requests:** Request owners and request managers can remove and blocklist an active Radarr or Sonarr release, then search again from request status. The controls have a 48-pixel touch target for easier use on phones.
+
+#### Changed
+
+- **Bookshelf:** New book requests let Bookshelf or Readarr manage acquisition while SeerrNG tracks library availability. SeerrNG no longer reports its own download-queue or release-search stages for these requests.
+- **Comics:** Comic detail pages now load issue lists when the page opens, so issues are ready when users reach that section.
+- **Magazines:** Magazine search suggestions now have larger touch targets, making them easier to select on phones and smaller displays.
+- **Release Pipeline:** Launchpad publishing retries only a classified source-publication race and waits through nonterminal builds instead of creating another source upload based on elapsed time. If monitoring times out, inspect the Launchpad logs.
+
+#### Fixed
+
+- **Discovery:** Audiobook discovery now accepts the current response contract while retaining compatibility with existing clients, so Open Library and Bookshelf results load instead of failing with HTTP 400.
+- **Comics:** The BackIssue collection scan now has a named task in Settings > Jobs and can be started from the API or CLI, so operators can refresh synced comic availability on demand.
+- **Comics:** ComicVine volume descriptions now show paragraphs and lists as readable formatted text instead of exposing source HTML tags.
+- **Release Pipeline:** PPA publishing uses GPG_PRIVATE_KEY for package signing and LAUNCHPAD_PPA for its destination. It no longer requires a separate Launchpad OAuth credential; publication verification reads Launchpad's public API anonymously.
+- **Settings:** Prowlarr diagnostics now use a bounded scrollable report, with larger Save and Test buttons after the report so operators can reach them on smaller screens.
+- **Release Pipeline:** PPA publishing now recovers from Launchpad's source-publication race or a binary upload stalled for 45 minutes by signing a fresh package version, then waits for its Ubuntu binaries to publish. No Launchpad OAuth secret is needed.
+- **Comics:** Comic detail pages now report when ComicVine rejects an issue-page request instead of showing a misleading empty issue list. Users can retry after fixing a connection problem or waiting for ComicVine to recover.
+- **Bookshelf:** Book requests now start a tracked search after Bookshelf accepts the book. If the search command temporarily fails, SeerrNG retries it and keeps the request in progress until a library scan finds the book.
+- **Release Pipeline:** PPA releases now wait for Launchpad to publish the matching Ubuntu source and binary packages, and retry binary uploads rejected before source publication. This requires no Launchpad OAuth credential.
+- **Release Pipeline:** PPA publishing uses GPG_PRIVATE_KEY to sign packages and LAUNCHPAD_PPA to select the destination. LAUNCHPAD_CREDENTIALS is no longer used.
+  - **Action required:** Remove LAUNCHPAD_CREDENTIALS; configure GPG_PRIVATE_KEY and LAUNCHPAD_PPA if PPA publishing is enabled.
+- **Bookshelf:** Audiobook-only discovery no longer inherits ebook query filters. Browsing one Bookshelf audiobook library can load catalog pages instead of waiting for the full library response.
+- **Release Pipeline:** PPA publishing uses GPG_PRIVATE_KEY for signing and LAUNCHPAD_PPA as its destination. Do not configure LAUNCHPAD_CREDENTIALS; publishing and verification do not use it.
+  - **Action required:** Remove LAUNCHPAD_CREDENTIALS; configure GPG_PRIVATE_KEY and LAUNCHPAD_PPA if PPA publishing is enabled.
+- **Magazines:** Magazine cards now show “Tracked,” “Requested,” or availability in place of the request action when a title is already tracked or has an active SeerrNG request.
+- **Settings:** Remembered page media filters now pass API validation, so selected filters can be saved and restored normally.
+- **Requests:** Failed-request actions now stay fully visible in request sliders and have a larger touch target, so people can reach and retry them on phones.
+- **Software Acquisition:** Software provider connection checks now reuse saved API keys when the key field is left blank, so testing ROMarrNG or QuestarrNG settings no longer fails request validation.
+- **Bookshelf:** Book requests linked to the first configured Bookshelf service now show the correct linked format in request cards and status lists.
+- **Bookshelf:** The BookshelfNG source-build guide now uses the supported .NET 10 target and installs the combined standalone package, including its web interface.
+- **Release Pipeline:** Ubuntu PPA releases now retry with a fresh signed package if Launchpad accepts an upload but fails to publish its source record, preventing package jobs from waiting until their full timeout.
+- **Magazines:** Magazine discovery now loads cover images from the first configured LazyLibrarian service, so its titles no longer show the SeerrNG placeholder cover.
+- **Release Pipeline:** Release publishing now keeps waiting for package jobs through temporary GitHub API errors, instead of ending before their result is known.
+- **Software:** Software acquisition requests now continue to refresh their status in the background, including requests that have not yet been checked, so progress stays current.
+
+#### Security
+
+- **Security:** The sanitization library now includes its upstream fix for a DOM XSS issue in a supported in-place sanitization mode. No configuration change is required.
+- **Security:** SeerrNG now uses a patched brace expansion dependency to prevent crafted patterns from exhausting the Node.js stack and crashing the server.
+- **Security:** The application and documentation toolchains now resolve patched versions for reported URL parsing, address validation, date, brace-expansion, and web framework advisories. No operator action is required.
+
+### 🚀 Features
+- *(distribution)* Add Chocolatey service package - ([156666a](https://github.com/snapetech/seerrng/commit/156666a50a0a2daa9fd50e8127eb782d17dc4d60))
+- Improve magazine and download workflows - ([68a33ce](https://github.com/snapetech/seerrng/commit/68a33ce8116106bc8f159505c7f11163ad3ae885))
+- Add John visual system as opt-in theme preset - ([46204a1](https://github.com/snapetech/seerrng/commit/46204a183e31d3af6893d689da554ddeedeb0fe8))
+- Opt-in advanced themes and cross-server episode queue (#145) - ([f796d81](https://github.com/snapetech/seerrng/commit/f796d8185ebd239f53bbbed98a8222bf5766a0d0))
+
+### 🐛 Bug Fixes
+- *(bookshelf)* Let provider manage book searches - ([971fd8e](https://github.com/snapetech/seerrng/commit/971fd8ee07d58d3c5dc33043b7a327513f350965))
+- *(bookshelf)* Let provider manage book searches - ([52f50d0](https://github.com/snapetech/seerrng/commit/52f50d06d9f7e9be23b60c220096b7ed3cb654a5))
+- *(comics)* Load issue lists with comic details - ([997c0c3](https://github.com/snapetech/seerrng/commit/997c0c3d754e09c0ee4e2a07723dd0d3f7b2483d))
+- *(comics)* Load issue lists with comic details - ([c9b7265](https://github.com/snapetech/seerrng/commit/c9b7265c4aa2a153a3fb84397400f6cbb467c228))
+- *(discovery)* Page audiobook library results - ([5c960ad](https://github.com/snapetech/seerrng/commit/5c960ad22f6571f078403a57ca31dce2c55d28b5))
+- *(discovery)* Page audiobook library results - ([80fc9d3](https://github.com/snapetech/seerrng/commit/80fc9d30131f06f21f3c5b75e38784182e706e5d))
+- *(release)* Wait before retrying Launchpad uploads - ([98f68a4](https://github.com/snapetech/seerrng/commit/98f68a49eff225c9f602a85579152eabd15915eb))
+- *(release)* Wait before retrying Launchpad uploads - ([9953b4e](https://github.com/snapetech/seerrng/commit/9953b4ec2e6296b5169e89f360143a8c8bc80c62))
+- *(release)* Retry transient child run API errors - ([71dca8a](https://github.com/snapetech/seerrng/commit/71dca8a01bdf4b9a5d88af57820d34393d228214))
+- *(release)* Retry missing Launchpad source records - ([d576715](https://github.com/snapetech/seerrng/commit/d5767157bc7840cb853f3f48df041e9d1f5332c0))
+- *(release)* Retry PPA builds without binaries - ([f3214c9](https://github.com/snapetech/seerrng/commit/f3214c9216e462bae28ab14b07c05ae242990538))
+- *(release)* Allow Launchpad publication retries - ([0f77f45](https://github.com/snapetech/seerrng/commit/0f77f454afd8481428afadc450225b2a7c6a8573))
+- *(requests)* Keep failed actions reachable in sliders - ([54630e9](https://github.com/snapetech/seerrng/commit/54630e976b04156b58a978ca72d11a87405b279c))
+- *(requests)* Let requesters retry their failed requests - ([2345cb0](https://github.com/snapetech/seerrng/commit/2345cb0b5c59ab4db8ca9de1afd00f026bb17b11))
+- *(requests)* Keep failed actions reachable in sliders - ([1accb9d](https://github.com/snapetech/seerrng/commit/1accb9dbf330513f5c56d7b6f69969264cff1bf2))
+- *(requests)* Let requesters retry their failed requests - ([6126b17](https://github.com/snapetech/seerrng/commit/6126b172e20e692ed85fe7ff0dd46da4d04920b1))
+- *(security)* Update DOMPurify for latest advisory - ([3284b93](https://github.com/snapetech/seerrng/commit/3284b93597915baf470225ae1857cea232fb6f39))
+- *(security)* Patch dependency advisories - ([65cfd19](https://github.com/snapetech/seerrng/commit/65cfd198f88b13deb96ca8ccaa3247a821725558))
+- *(security)* Patch dependency advisories - ([25c28ea](https://github.com/snapetech/seerrng/commit/25c28ea52849ccd787706cbd4b0804a05a28091e))
+- *(software)* Keep request reconciliation query valid - ([60cec64](https://github.com/snapetech/seerrng/commit/60cec648e527c12ab99f08dcb7be837c2213350f))
+- *(ui)* Enlarge magazine and request control targets - ([677c674](https://github.com/snapetech/seerrng/commit/677c674df6bff1b55ee7e2c80995cdfbb357844b))
+- *(ui)* Remove unregistered request card style - ([914e04d](https://github.com/snapetech/seerrng/commit/914e04d59d8fa2ffc3d9975356fb6ca31a26ba96))
+- *(ui)* Remove unregistered request card style - ([4bf530b](https://github.com/snapetech/seerrng/commit/4bf530b8f50d8428dce22403a872fab78eada6e0))
+- Show existing request state on magazine cards - ([15ef461](https://github.com/snapetech/seerrng/commit/15ef4613d646eceaa9511b9e534a922d9ba3f408))
+
+### 📖 Documentation
+- Fix BookshelfNG source UI installation (#147) - ([9f756c9](https://github.com/snapetech/seerrng/commit/9f756c9c2538156cd5da5f64af292f16ef4d8ada))
+
+### 🧪 Testing
+- *(cypress)* Use processing label for failed download action - ([b535a70](https://github.com/snapetech/seerrng/commit/b535a703f9e55efe76db9f20084d80a734ded0a1))
+- *(cypress)* Initialize isolated database before seeding - ([62e6458](https://github.com/snapetech/seerrng/commit/62e64588b89ef9d8b3972c98232c22952e86c449))
+- *(discovery)* Scope audiobook paging regression - ([e9f5973](https://github.com/snapetech/seerrng/commit/e9f59737d62ae038bf34f814116a6e729f77b525))
+- *(discovery)* Scope audiobook paging regression - ([86edfa3](https://github.com/snapetech/seerrng/commit/86edfa31f76f7f763f0b858c18b8f646e469a353))
+- *(distribution)* Format release workflow test - ([ffb5788](https://github.com/snapetech/seerrng/commit/ffb5788115365f7f68aae09f5be454305d3c2972))
+- *(distribution)* Validate Chocolatey release workflow - ([8e1e10d](https://github.com/snapetech/seerrng/commit/8e1e10de966981c1eec32aa29bc1b1d0dca96752))
+- *(e2e)* Exercise failed request retry action - ([56fc9b8](https://github.com/snapetech/seerrng/commit/56fc9b8581637471bbb079c8fa37525a0fc63e64))
+- *(e2e)* Stabilize settings job interactions - ([5dd7991](https://github.com/snapetech/seerrng/commit/5dd7991fe51f9d378f8a213d5621af3feb7ef13a))
+- *(e2e)* Exercise failed request retry action - ([be90995](https://github.com/snapetech/seerrng/commit/be909957654b4c48c657e15a236fb9749b667be4))
+- *(e2e)* Stabilize settings job interactions - ([ead59c2](https://github.com/snapetech/seerrng/commit/ead59c2138c2f74da533f2aa6a2ec0cdac90b30f))
+
+### ⚙️ Miscellaneous Tasks
+- *(i18n)* Sync generated English messages - ([7728bcc](https://github.com/snapetech/seerrng/commit/7728bcc05114f841f2df2bafe95dd60c64bd0948))
+- Merge upstream security release updates - ([1be1f70](https://github.com/snapetech/seerrng/commit/1be1f707ee4436e15e157fc7e597b91535c60afe))
+- Merge upstream theme and episode queue updates - ([df3d78b](https://github.com/snapetech/seerrng/commit/df3d78b361dd25d30cc9abc9b0a8328344b33f40))
+
 ## [3.41.2](https://github.com/snapetech/seerrng/compare/v3.41.1..v3.41.2) - 2026-09-30
 
 ### User-facing changes
