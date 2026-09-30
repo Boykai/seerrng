@@ -1,4 +1,7 @@
 const PRIVATE_DOWNLOAD_ALIAS = 'a'.repeat(64);
+const REQUEST_PENDING = 1;
+const REQUEST_DECLINED = 3;
+const MEDIA_DELETED = 7;
 
 const createApprovedMovieRequest = (
   id: number,
@@ -29,6 +32,7 @@ const createApprovedMovieRequest = (
     status4k: 1,
     serviceId: 31,
     externalServiceId: tmdbId + 100,
+    mediaUrl: `https://plex.example/movie/${tmdbId}`,
     downloadStatus: [
       {
         mediaType: 'movie',
@@ -121,6 +125,32 @@ describe('manual fail and search from request status', () => {
         id: currentUser.id,
         permissions: currentUser.permissions,
       });
+      const declinedRequest = {
+        ...createApprovedMovieRequest(
+          814,
+          { id: currentUser.id, permissions: currentUser.permissions },
+          8814,
+          'Declined Movie',
+          'c'.repeat(64)
+        ),
+        status: REQUEST_DECLINED,
+      };
+      const pendingDeletedRequestBase = createApprovedMovieRequest(
+        815,
+        { id: currentUser.id, permissions: currentUser.permissions },
+        8815,
+        'Pending Deleted Movie',
+        'd'.repeat(64)
+      );
+      const pendingDeletedRequest = {
+        ...pendingDeletedRequestBase,
+        status: REQUEST_PENDING,
+        media: {
+          ...pendingDeletedRequestBase.media,
+          status: MEDIA_DELETED,
+          downloadStatus: [],
+        },
+      };
       const refreshedRequest = {
         ...ownedRequest,
         media: { ...ownedRequest.media, downloadStatus: [] },
@@ -128,8 +158,14 @@ describe('manual fail and search from request status', () => {
       let failed = false;
 
       cy.intercept('GET', `/api/v1/user/${currentUser.id}/requests?*`, {
-        pageInfo: { pages: 1, pageSize: 10, results: 3, page: 1 },
-        results: [ownedRequest, otherRequest, firstServiceBookRequest],
+        pageInfo: { pages: 1, pageSize: 10, results: 5, page: 1 },
+        results: [
+          ownedRequest,
+          otherRequest,
+          firstServiceBookRequest,
+          declinedRequest,
+          pendingDeletedRequest,
+        ],
         serviceErrors: { radarr: [], sonarr: [], lidarr: [], readarr: [] },
       }).as('getRequests');
       cy.intercept('GET', '/api/v1/request/811', (req) => {
@@ -137,6 +173,8 @@ describe('manual fail and search from request status', () => {
       });
       cy.intercept('GET', '/api/v1/request/812', otherRequest);
       cy.intercept('GET', '/api/v1/request/813', firstServiceBookRequest);
+      cy.intercept('GET', '/api/v1/request/814', declinedRequest);
+      cy.intercept('GET', '/api/v1/request/815', pendingDeletedRequest);
       cy.intercept('GET', '/api/v1/movie/8811', {
         id: 8811,
         mediaType: 'movie',
@@ -151,6 +189,24 @@ describe('manual fail and search from request status', () => {
         mediaType: 'movie',
         title: 'Someone Else’s Movie',
         originalTitle: 'Someone Else’s Movie',
+        releaseDate: '2024-01-01',
+        posterPath: null,
+        voteAverage: 7,
+      });
+      cy.intercept('GET', '/api/v1/movie/8814', {
+        id: 8814,
+        mediaType: 'movie',
+        title: 'Declined Movie',
+        originalTitle: 'Declined Movie',
+        releaseDate: '2024-01-01',
+        posterPath: null,
+        voteAverage: 7,
+      });
+      cy.intercept('GET', '/api/v1/movie/8815', {
+        id: 8815,
+        mediaType: 'movie',
+        title: 'Pending Deleted Movie',
+        originalTitle: 'Pending Deleted Movie',
         releaseDate: '2024-01-01',
         posterPath: null,
         voteAverage: 7,
@@ -212,6 +268,15 @@ describe('manual fail and search from request status', () => {
       cy.wait('@ownedMovie');
       cy.contains('Owned Movie')
         .parents('[data-testid=request-card]')
+        .within(() => {
+          cy.contains('Processing').should(
+            'have.attr',
+            'href',
+            'https://plex.example/movie/8811'
+          );
+        });
+      cy.contains('Owned Movie')
+        .parents('[data-testid=request-card]')
         .scrollIntoView()
         .within(() => {
           cy.contains('Processing').click();
@@ -249,6 +314,12 @@ describe('manual fail and search from request status', () => {
           cy.contains('Partial Bookshelf link').should('be.visible');
           cy.contains('Book').should('be.visible');
         });
+      cy.contains('Declined Movie')
+        .parents('[data-testid=request-card]')
+        .within(() => cy.contains('Declined').should('be.visible'));
+      cy.contains('Pending Deleted Movie')
+        .parents('[data-testid=request-card]')
+        .within(() => cy.contains('Pending').should('be.visible'));
     });
   });
 });

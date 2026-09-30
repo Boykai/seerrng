@@ -662,6 +662,71 @@ describe('NotificationManager delivery lifecycle', () => {
     assert.strictEqual(recoveredPayload?.issue?.createdBy.id, createdBy.id);
     assert.strictEqual(await getRepository(NotificationOutbox).count(), 0);
   });
+
+  it('delivers an issue update when its optional actor account is gone', async (t) => {
+    const getAlbumMock = mock.method(
+      ListenBrainzAPI.prototype,
+      'getAlbum',
+      async () =>
+        ({
+          release_group_mbid: 'removed-actor-release-group',
+          release_group_metadata: {
+            release_group: {
+              name: 'Issue Album',
+              date: '2025-01-02',
+            },
+            artist: { name: 'Issue Artist' },
+          },
+        }) as Awaited<ReturnType<ListenBrainzAPI['getAlbum']>>
+    );
+    t.after(() => getAlbumMock.mock.restore());
+
+    const createdBy = await getRepository(User).findOneByOrFail({ id: 2 });
+    const media = await getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.MUSIC,
+        tmdbId: 0,
+        mbId: 'removed-actor-release-group',
+        status: MediaStatus.AVAILABLE,
+        status4k: MediaStatus.UNKNOWN,
+      })
+    );
+    const issue = await getRepository(Issue).save(
+      new Issue({
+        createdBy,
+        issueType: IssueType.VIDEO,
+        status: IssueStatus.OPEN,
+        media,
+        comments: [
+          new IssueComment({ user: createdBy, message: 'Original report' }),
+        ],
+      })
+    );
+
+    let recoveredPayload: NotificationPayload | undefined;
+    const manager = new NotificationManager();
+    manager.registerAgents([
+      {
+        shouldSend: () => true,
+        send: async (_type, recovered) => {
+          recoveredPayload = recovered;
+          return true;
+        },
+      },
+    ]);
+
+    await manager.sendNotificationIntent(Notification.ISSUE_RESOLVED, {
+      kind: 'issue',
+      issueId: issue.id,
+      modifiedById: Number.MAX_SAFE_INTEGER,
+    });
+    await waitForBackgroundTasks();
+
+    assert.strictEqual(recoveredPayload?.subject, 'Issue Album (2025)');
+    assert.strictEqual(recoveredPayload?.issue?.modifiedBy, undefined);
+    assert.strictEqual(recoveredPayload?.notifyUser?.id, createdBy.id);
+    assert.strictEqual(await getRepository(NotificationOutbox).count(), 0);
+  });
 });
 
 describe('notification outbox retry policy', () => {

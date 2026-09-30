@@ -1,4 +1,6 @@
 import PageTitle from '@app/components/Common/PageTitle';
+import useRouteGuard from '@app/hooks/useRouteGuard';
+import { Permission } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { useIntl } from 'react-intl';
 
@@ -683,6 +685,9 @@ interface VisualLabProps {
 }
 
 const VisualLab = ({ view = 'index' }: VisualLabProps) => {
+  // All Visual Lab routes render through this component; guard here so its
+  // alternate palette pages cannot accidentally omit the admin redirect.
+  useRouteGuard(Permission.ADMIN);
   const intl = useIntl();
   const document =
     view === 'title-text'

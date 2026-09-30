@@ -315,6 +315,8 @@ const hydrateMediaRequestIntent = async (
     where: { id: requestId },
     relations: { media: { identifiers: true } },
   });
+  // The request was deleted after its durable notification was queued. There
+  // is no current payload to send, so the outbox should retire this stale row.
   if (!request) return undefined;
   return buildMediaRequestNotificationPayload(request, request.media, type);
 };
@@ -325,13 +327,15 @@ const hydrateIssueIntent = async (
   modifiedById?: number
 ): Promise<NotificationPayload | undefined> => {
   const issue = await getRepository(Issue).findOneBy({ id: issueId });
+  // A deleted issue cannot produce a useful notification payload.
   if (!issue) return undefined;
   if (modifiedById !== undefined) {
     const modifiedBy = await getRepository(User).findOneBy({
       id: modifiedById,
     });
-    if (!modifiedBy) return undefined;
-    issue.modifiedBy = modifiedBy;
+    // The actor is optional. Keep the issue event deliverable when the actor
+    // account has since been removed, while omitting that stale reference.
+    issue.modifiedBy = modifiedBy ?? undefined;
   }
   issue.status =
     type === Notification.ISSUE_RESOLVED
@@ -389,7 +393,9 @@ const hydrateIssueCommentIntent = async (
     where: { id: commentId },
     relations: { issue: true },
   });
+  // Deleted comments and orphaned issue references cannot be hydrated.
   if (!comment) return undefined;
+  if (!comment.issue) return undefined;
   const issue = await getRepository(Issue).findOneBy({
     id: comment.issue.id,
   });

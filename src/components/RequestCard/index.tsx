@@ -12,6 +12,7 @@ import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import Tooltip from '@app/components/Common/Tooltip';
 import { canRetryRequest } from '@app/components/RequestCard/retryPermissions';
 import StatusBadge from '@app/components/StatusBadge';
+import useDeepLinks from '@app/hooks/useDeepLinks';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -273,6 +274,12 @@ interface RequestCardErrorProps {
 const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
   const { hasPermission } = useUser();
   const intl = useIntl();
+  const { mediaUrl: plexUrl, mediaUrl4k: plexUrl4k } = useDeepLinks({
+    mediaUrl: requestData?.media?.mediaUrl,
+    mediaUrl4k: requestData?.media?.mediaUrl4k,
+    iOSPlexUrl: requestData?.media?.iOSPlexUrl,
+    iOSPlexUrl4k: requestData?.media?.iOSPlexUrl4k,
+  });
   const deleteRequest = async () => {
     await axios.delete(`/api/v1/media/${requestData?.media.id}`);
     mutate('/api/v1/media?filter=allavailable&take=20&sort=mediaAdded');
@@ -372,6 +379,7 @@ const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
                           ? getRequestedBookFormat(requestData.bookFormat)
                           : undefined
                       }
+                      plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
                       serviceUrl={getRequestServiceUrl(requestData)}
                     />
                   )}
@@ -505,6 +513,12 @@ const RequestCard = ({
     getRequestDownloadStatus(requestData)?.some((item) => item.downloadId) &&
     canRetry
   );
+  const { mediaUrl: plexUrl, mediaUrl4k: plexUrl4k } = useDeepLinks({
+    mediaUrl: requestData?.media?.mediaUrl,
+    mediaUrl4k: requestData?.media?.mediaUrl4k,
+    iOSPlexUrl: requestData?.media?.iOSPlexUrl,
+    iOSPlexUrl4k: requestData?.media?.iOSPlexUrl4k,
+  });
 
   const modifyRequest = async (type: 'approve' | 'decline') => {
     setUpdatingType(type);
@@ -577,11 +591,13 @@ const RequestCard = ({
     return <RequestCardError requestData={requestData} />;
   }
 
-  const visibleAvailabilityStatuses = [
+  const visibleMediaStatuses = [
     MediaStatus.PENDING,
     MediaStatus.PROCESSING,
     MediaStatus.PARTIALLY_AVAILABLE,
     MediaStatus.AVAILABLE,
+    MediaStatus.BLOCKLISTED,
+    MediaStatus.DELETED,
   ];
   const availabilityQualityBadges =
     requestData.type === 'movie' || requestData.type === 'tv'
@@ -596,7 +612,7 @@ const RequestCard = ({
             status: requestData.media.status4k,
             inProgress: (requestData.media.downloadStatus4k ?? []).length > 0,
           },
-        ].filter((badge) => visibleAvailabilityStatuses.includes(badge.status))
+        ].filter((badge) => visibleMediaStatuses.includes(badge.status))
       : [
           {
             quality: undefined,
@@ -604,7 +620,7 @@ const RequestCard = ({
             inProgress:
               (getRequestDownloadStatus(requestData) ?? []).length > 0,
           },
-        ].filter((badge) => visibleAvailabilityStatuses.includes(badge.status));
+        ].filter((badge) => visibleMediaStatuses.includes(badge.status));
 
   return (
     <>
@@ -794,12 +810,24 @@ const RequestCard = ({
             </div>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-1 text-sm sm:mt-1">
-            {requestData.status === MediaRequestStatus.FAILED ? (
+            {requestData.status === MediaRequestStatus.DECLINED ? (
+              <Badge badgeType="danger">
+                {intl.formatMessage(globalMessages.declined)}
+              </Badge>
+            ) : requestData.status === MediaRequestStatus.FAILED ? (
               <Badge
                 badgeType="danger"
                 href={getRequestDetailHref(requestData, true)}
               >
                 {intl.formatMessage(globalMessages.failed)}
+              </Badge>
+            ) : requestData.status === MediaRequestStatus.PENDING &&
+              getRequestMediaStatus(requestData) === MediaStatus.DELETED ? (
+              <Badge
+                badgeType="warning"
+                href={getRequestDetailHref(requestData, true)}
+              >
+                {intl.formatMessage(globalMessages.pending)}
               </Badge>
             ) : canFailDownload ? (
               <StatusBadge
@@ -824,6 +852,7 @@ const RequestCard = ({
                 is4k={requestData.is4k}
                 tmdbId={requestData.media.tmdbId}
                 mediaType={requestData.type === 'tv' ? 'tv' : 'movie'}
+                plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
                 serviceUrl={getRequestServiceUrl(requestData)}
                 requestId={requestData.id}
                 canFailDownload

@@ -26,18 +26,6 @@ export type RequestDispatchOutcome = {
   retryAfterMs?: number;
 };
 
-type RequestDispatchHandler = (
-  requestId: number
-) => Promise<RequestDispatchOutcome | boolean>;
-
-let requestDispatchHandler: RequestDispatchHandler | undefined;
-
-export const registerRequestDispatchHandler = (
-  handler: RequestDispatchHandler
-): void => {
-  requestDispatchHandler = handler;
-};
-
 export const getRequestDispatchRetryDelayMs = (attempts: number): number =>
   Math.min(
     60_000 * 2 ** Math.max(0, Math.min(attempts - 1, 30)),
@@ -361,14 +349,15 @@ export class RequestDispatchManager {
             if (!claimToken) {
               return;
             }
-            if (!requestDispatchHandler) {
-              throw new Error('Request dispatch handler is not registered.');
-            }
-            const dispatchRequest = requestDispatchHandler;
+            const { MediaRequestSubscriber } =
+              await import('@server/subscriber/MediaRequestSubscriber');
             const dispatchResult = await this.runWithHeartbeat(
               record,
               claimToken,
-              () => dispatchRequest(record.requestId)
+              () =>
+                new MediaRequestSubscriber().dispatchRequestById(
+                  record.requestId
+                )
             );
             const outcome: RequestDispatchOutcome =
               typeof dispatchResult === 'boolean'
