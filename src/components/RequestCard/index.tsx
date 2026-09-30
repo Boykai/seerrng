@@ -9,6 +9,7 @@ import MediaTypeBadge, {
   getMediaTypeBadgeType,
 } from '@app/components/Common/MediaTypeBadge';
 import Tooltip from '@app/components/Common/Tooltip';
+import { canRetryRequest } from '@app/components/RequestCard/retryPermissions';
 import StatusBadge from '@app/components/StatusBadge';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useToasts from '@app/hooks/useToasts';
@@ -54,6 +55,7 @@ const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
 const messages = defineMessages('components.RequestCard', {
   seasons: '{seasonCount, plural, one {Season} other {Seasons}}',
   failedretry: 'Something went wrong while retrying the request.',
+  searchAgain: 'Search Again',
   failedmodify: 'Something went wrong while modifying the request.',
   mediaerror: '{mediaType} Not Found',
   tmdbid: 'TMDB ID',
@@ -493,6 +495,16 @@ const RequestCard = ({
       requestData.media.serviceId !== requestData.media.audiobookServiceId &&
       (requestData.media.serviceId || requestData.media.audiobookServiceId)
     );
+  const canRetry =
+    requestData &&
+    user &&
+    canRetryRequest({
+      requestType: requestData.type,
+      is4k: requestData.is4k,
+      requestedById: requestData.requestedBy.id,
+      userId: user.id,
+      permissions: user.permissions,
+    });
 
   const { mediaUrl: plexUrl, mediaUrl4k: plexUrl4k } = useDeepLinks({
     mediaUrl: requestData?.media?.mediaUrl,
@@ -871,23 +883,22 @@ const RequestCard = ({
             )}
           </div>
           <div className="flex flex-1 items-end space-x-2">
-            {requestData.status === MediaRequestStatus.FAILED &&
-              hasPermission(Permission.MANAGE_REQUESTS) && (
-                <Button
-                  buttonType="primary"
-                  buttonSize="sm"
-                  disabled={isRetrying}
-                  onClick={() => retryRequest()}
-                >
-                  <ArrowPathIcon
-                    className={isRetrying ? 'animate-spin' : ''}
-                    style={{ marginRight: '0', animationDirection: 'reverse' }}
-                  />
-                  <span className="ml-1.5 hidden sm:block">
-                    {intl.formatMessage(globalMessages.retry)}
-                  </span>
-                </Button>
-              )}
+            {requestData.status === MediaRequestStatus.FAILED && canRetry && (
+              <Button
+                buttonType="primary"
+                buttonSize="sm"
+                disabled={isRetrying}
+                onClick={() => retryRequest()}
+              >
+                <ArrowPathIcon
+                  className={isRetrying ? 'animate-spin' : ''}
+                  style={{ marginRight: '0', animationDirection: 'reverse' }}
+                />
+                <span className="ml-1.5">
+                  {intl.formatMessage(messages.searchAgain)}
+                </span>
+              </Button>
+            )}
             {showApprovalActions &&
               requestData.status === MediaRequestStatus.PENDING &&
               hasPermission(Permission.MANAGE_REQUESTS) && (
