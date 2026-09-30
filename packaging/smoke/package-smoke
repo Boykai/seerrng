@@ -127,7 +127,7 @@ fi
 case "$channel" in
   container-ghcr|container-dockerhub|helm|github-archive|github-binary)
     ;;
-  deb|rpm|aur|aur-bin|copr|ppa|snap|flatpak)
+  deb|rpm|aur|aur-bin|copr|ppa|snap|chocolatey|flatpak)
     [[ "$arch" == amd64 || "$arch" == x86_64 ]] ||
       die "$channel is published only for amd64/x86_64"
     ;;
@@ -485,7 +485,20 @@ install_chocolatey() {
   have choco || die "choco is required for Chocolatey smoke"
   run choco install "$CHOCO_PACKAGE" --version "$(normalized_version "$version")" -y --no-progress
   cleanup_cmds+=("choco uninstall '$CHOCO_PACKAGE' -y")
-  smoke_binary "$BINARY"
+  binary_path="Windows service SeerrNG"
+  resolved_version="$version"
+  local port="${PACKAGE_SMOKE_PORT:-$DEFAULT_PORT}"
+  [[ "$port" =~ ^[0-9]+$ && "$port" -ge 1 && "$port" -le 65535 ]] || die "invalid service port: $port"
+  endpoint_status=""
+  for attempt in {1..60}; do
+    endpoint_status="$(curl -fsS --connect-timeout 2 --max-time 10 -o "$tmp_dir/endpoint" -w "%{http_code}" "http://127.0.0.1:$port$HEALTH_PATH" || true)"
+    if [[ "$endpoint_status" =~ ^[23][0-9][0-9]$ ]]; then
+      break
+    fi
+    echo "Waiting for the SeerrNG Windows service ($attempt/60)"
+    sleep 5
+  done
+  [[ "$endpoint_status" =~ ^[23][0-9][0-9]$ ]] || die "Chocolatey service smoke failed with HTTP status $endpoint_status"
   uninstall_status="scheduled choco uninstall"
 }
 
