@@ -264,7 +264,7 @@ const SeriesSeasonEpisodeSelector = ({
   };
 
   return (
-    <div className="mt-[5px] grid min-w-0 gap-2 sm:grid-cols-[max-content_minmax(0,1fr)]">
+    <div className="mt-[5px] grid min-w-0 gap-2 sm:grid-cols-2">
       <section className="app-card-inset refreshed-inset-surface min-w-[12rem] rounded-lg border border-gray-700 p-2">
         <div className="media-inset-table-heading media-scroll-grid-header request-divider-dark request-season-grid grid items-center gap-x-2 border-b pb-2 pl-1">
           <SelectionCircle

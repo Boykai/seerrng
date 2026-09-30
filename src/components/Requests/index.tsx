@@ -226,7 +226,7 @@ const messages = defineMessages('components.Requests', {
   watchAheadOption: '{count, plural, one {# episode} other {# episodes}}',
   watchAheadUpdated: 'Requested episode queue updated.',
   watchAheadFailed: 'Unable to update the requested episode queue.',
-  watchAheadEpisodeBadge: 'Requested ahead of playback',
+  watchAheadEpisodeBadge: 'Auto-Queued',
   watchAheadEpisodeBadgeTooltip:
     'Automatically requested by the Episode Queue as playback progressed.',
   retryFailed: 'Unable to retry this request.',

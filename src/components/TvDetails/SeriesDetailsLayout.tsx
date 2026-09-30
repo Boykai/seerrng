@@ -459,164 +459,6 @@ const SeriesDetailsLayout = ({
             </div>
           </div>
 
-          <SeriesSeasonEpisodeBrowser
-            tvId={data.id}
-            seasons={visibleSeasons}
-            catalog={playbackCatalog}
-            watchedStatus={watchedStatus}
-            selectedItemIds={selectedPlaybackItemIds}
-            onSelectionChange={setSelectedPlaybackItemIds}
-          />
-
-          {(playbackActions ||
-            effectiveRatings.rtCriticsScore !== undefined ||
-            effectiveRatings.rtAudienceScore !== undefined ||
-            effectiveRatings.imdbScore !== undefined ||
-            ratingData?.mdblist?.metacriticRating !== undefined ||
-            ratingData?.mdblist?.traktRating !== undefined ||
-            data.voteCount > 0) && (
-            <div className="media-rating-row">
-              <MediaQualitySelect
-                value={effectiveSelectedQuality}
-                options={[
-                  {
-                    label: 'HD',
-                    value: 'hd',
-                    disabled: !availableFormats.includes('HD'),
-                  },
-                  ...(show4kAvailability
-                    ? ([
-                        {
-                          label: '4K',
-                          value: '4k',
-                          disabled: !availableFormats.includes('4K'),
-                        },
-                      ] as const)
-                    : []),
-                ]}
-                onChange={setSelectedQuality}
-                label={intl.formatMessage(messages.quality)}
-              />
-              {effectiveRatings.rtCriticsRating !== undefined &&
-                effectiveRatings.rtCriticsScore !== undefined && (
-                  <Tooltip
-                    content={intl.formatMessage(messages.rtCriticsScore)}
-                  >
-                    <a
-                      href={getSafeHref(effectiveRatings.rtUrl)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="media-rating-link"
-                    >
-                      {effectiveRatings.rtCriticsRating === 'Rotten' ? (
-                        <RTRotten className="media-rating-icon" />
-                      ) : (
-                        <RTFresh className="media-rating-icon" />
-                      )}
-                      <span className="media-rating-value">
-                        {effectiveRatings.rtCriticsScore}%
-                      </span>
-                    </a>
-                  </Tooltip>
-                )}
-              {effectiveRatings.rtAudienceRating !== undefined &&
-                effectiveRatings.rtAudienceScore !== undefined && (
-                  <Tooltip
-                    content={intl.formatMessage(messages.rtAudienceScore)}
-                  >
-                    <a
-                      href={getSafeHref(effectiveRatings.rtUrl)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="media-rating-link"
-                    >
-                      {effectiveRatings.rtAudienceRating === 'Spilled' ? (
-                        <RTAudRotten className="media-rating-icon media-rating-icon-audience" />
-                      ) : (
-                        <RTAudFresh className="media-rating-icon media-rating-icon-audience" />
-                      )}
-                      <span className="media-rating-value">
-                        {effectiveRatings.rtAudienceScore}%
-                      </span>
-                    </a>
-                  </Tooltip>
-                )}
-              {effectiveRatings.imdbScore !== undefined && (
-                <Tooltip
-                  content={
-                    effectiveRatings.imdbVotes
-                      ? intl.formatMessage(messages.imdbUserScore, {
-                          formattedCount: intl.formatNumber(
-                            effectiveRatings.imdbVotes,
-                            {
-                              notation: 'compact',
-                              compactDisplay: 'short',
-                              maximumFractionDigits: 1,
-                            }
-                          ),
-                        })
-                      : intl.formatMessage(messages.imdbScore)
-                  }
-                >
-                  <a
-                    href={getSafeHref(effectiveRatings.imdbUrl)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="media-rating-link"
-                  >
-                    <ImdbLogo className="media-rating-wordmark" />
-                    <span className="media-rating-value">
-                      {effectiveRatings.imdbScore.toFixed(1)}
-                    </span>
-                  </a>
-                </Tooltip>
-              )}
-              <MdblistRatingBadges ratings={ratingData?.mdblist} />
-              {data.voteCount > 0 && (
-                <Tooltip content={intl.formatMessage(messages.tmdbUserScore)}>
-                  <a
-                    href={`https://www.themoviedb.org/tv/${data.id}?language=${locale}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="media-rating-link"
-                  >
-                    <TmdbLogo className="media-rating-wordmark" />
-                    <span className="media-rating-value">
-                      {Math.round(data.voteAverage * 10)}%
-                    </span>
-                  </a>
-                </Tooltip>
-              )}
-            </div>
-          )}
-
-          <div className="media-primary-action-row">
-            {playbackActions?.(
-              effectivePlaybackItemIds,
-              effectiveSelectedQuality === '4k'
-            )}
-            {playbackActions && (
-              <PlayOnDeviceButton
-                mediaId={data.mediaInfo?.id}
-                itemIds={effectivePlaybackItemIds}
-                is4k={effectiveSelectedQuality === '4k'}
-              />
-            )}
-            {primaryActions}
-            {secondaryActions}
-            <div className="media-primary-report-action">
-              {reportIssueAction}
-            </div>
-          </div>
-
-          <div className="media-request-action-row">
-            <div className="media-request-search-action">
-              {indexerSearchAction}
-              {indexerCompanionActions}
-            </div>
-            <div className="media-request-submit-action">{requestAction}</div>
-          </div>
-
           <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
             <h2 className="media-inset-heading">
               {intl.formatMessage(messages.overview)}
@@ -842,6 +684,164 @@ const SeriesDetailsLayout = ({
               </div>
             </section>
           )}
+
+          <SeriesSeasonEpisodeBrowser
+            tvId={data.id}
+            seasons={visibleSeasons}
+            catalog={playbackCatalog}
+            watchedStatus={watchedStatus}
+            selectedItemIds={selectedPlaybackItemIds}
+            onSelectionChange={setSelectedPlaybackItemIds}
+          />
+
+          {(playbackActions ||
+            effectiveRatings.rtCriticsScore !== undefined ||
+            effectiveRatings.rtAudienceScore !== undefined ||
+            effectiveRatings.imdbScore !== undefined ||
+            ratingData?.mdblist?.metacriticRating !== undefined ||
+            ratingData?.mdblist?.traktRating !== undefined ||
+            data.voteCount > 0) && (
+            <div className="media-rating-row">
+              <MediaQualitySelect
+                value={effectiveSelectedQuality}
+                options={[
+                  {
+                    label: 'HD',
+                    value: 'hd',
+                    disabled: !availableFormats.includes('HD'),
+                  },
+                  ...(show4kAvailability
+                    ? ([
+                        {
+                          label: '4K',
+                          value: '4k',
+                          disabled: !availableFormats.includes('4K'),
+                        },
+                      ] as const)
+                    : []),
+                ]}
+                onChange={setSelectedQuality}
+                label={intl.formatMessage(messages.quality)}
+              />
+              {effectiveRatings.rtCriticsRating !== undefined &&
+                effectiveRatings.rtCriticsScore !== undefined && (
+                  <Tooltip
+                    content={intl.formatMessage(messages.rtCriticsScore)}
+                  >
+                    <a
+                      href={getSafeHref(effectiveRatings.rtUrl)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="media-rating-link"
+                    >
+                      {effectiveRatings.rtCriticsRating === 'Rotten' ? (
+                        <RTRotten className="media-rating-icon" />
+                      ) : (
+                        <RTFresh className="media-rating-icon" />
+                      )}
+                      <span className="media-rating-value">
+                        {effectiveRatings.rtCriticsScore}%
+                      </span>
+                    </a>
+                  </Tooltip>
+                )}
+              {effectiveRatings.rtAudienceRating !== undefined &&
+                effectiveRatings.rtAudienceScore !== undefined && (
+                  <Tooltip
+                    content={intl.formatMessage(messages.rtAudienceScore)}
+                  >
+                    <a
+                      href={getSafeHref(effectiveRatings.rtUrl)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="media-rating-link"
+                    >
+                      {effectiveRatings.rtAudienceRating === 'Spilled' ? (
+                        <RTAudRotten className="media-rating-icon media-rating-icon-audience" />
+                      ) : (
+                        <RTAudFresh className="media-rating-icon media-rating-icon-audience" />
+                      )}
+                      <span className="media-rating-value">
+                        {effectiveRatings.rtAudienceScore}%
+                      </span>
+                    </a>
+                  </Tooltip>
+                )}
+              {effectiveRatings.imdbScore !== undefined && (
+                <Tooltip
+                  content={
+                    effectiveRatings.imdbVotes
+                      ? intl.formatMessage(messages.imdbUserScore, {
+                          formattedCount: intl.formatNumber(
+                            effectiveRatings.imdbVotes,
+                            {
+                              notation: 'compact',
+                              compactDisplay: 'short',
+                              maximumFractionDigits: 1,
+                            }
+                          ),
+                        })
+                      : intl.formatMessage(messages.imdbScore)
+                  }
+                >
+                  <a
+                    href={getSafeHref(effectiveRatings.imdbUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="media-rating-link"
+                  >
+                    <ImdbLogo className="media-rating-wordmark" />
+                    <span className="media-rating-value">
+                      {effectiveRatings.imdbScore.toFixed(1)}
+                    </span>
+                  </a>
+                </Tooltip>
+              )}
+              <MdblistRatingBadges ratings={ratingData?.mdblist} />
+              {data.voteCount > 0 && (
+                <Tooltip content={intl.formatMessage(messages.tmdbUserScore)}>
+                  <a
+                    href={`https://www.themoviedb.org/tv/${data.id}?language=${locale}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="media-rating-link"
+                  >
+                    <TmdbLogo className="media-rating-wordmark" />
+                    <span className="media-rating-value">
+                      {Math.round(data.voteAverage * 10)}%
+                    </span>
+                  </a>
+                </Tooltip>
+              )}
+            </div>
+          )}
+
+          <div className="media-primary-action-row">
+            {playbackActions?.(
+              effectivePlaybackItemIds,
+              effectiveSelectedQuality === '4k'
+            )}
+            {playbackActions && (
+              <PlayOnDeviceButton
+                mediaId={data.mediaInfo?.id}
+                itemIds={effectivePlaybackItemIds}
+                is4k={effectiveSelectedQuality === '4k'}
+              />
+            )}
+            {primaryActions}
+            {secondaryActions}
+            <div className="media-primary-report-action">
+              {reportIssueAction}
+            </div>
+          </div>
+
+          <div className="media-request-action-row">
+            <div className="media-request-search-action">
+              {indexerSearchAction}
+              {indexerCompanionActions}
+            </div>
+            <div className="media-request-submit-action">{requestAction}</div>
+          </div>
         </div>
       </article>
 

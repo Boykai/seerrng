@@ -91,7 +91,7 @@ const messages = defineMessages('components.RequestList.RequestItem', {
   watchAheadSaved: 'Requested episode queue updated.',
   watchAheadSaveError:
     'Could not update the requested episode queue. Check that your media server and Sonarr are connected.',
-  watchAheadEpisodeBadge: 'Requested ahead of playback',
+  watchAheadEpisodeBadge: 'Auto-Queued',
   watchAheadEpisodeBadgeTooltip:
     'Automatically requested by the Episode Queue as playback progressed.',
 });
