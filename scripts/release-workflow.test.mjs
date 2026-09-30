@@ -24,6 +24,10 @@ test('release package channels wait for the reusable release asset build', () =>
     (step) => step.name === 'Dispatch package workflows'
   ).run;
 
+  assert.equal(
+    packageDispatch.steps[0].uses,
+    'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+  );
   assert.equal(assetBuild.uses, './.github/workflows/release-assets.yml');
   assert.equal(assetBuild.needs, 'verify');
   assert.equal(assetBuild.with.tag, '${{ inputs.tag || github.ref_name }}');
@@ -32,7 +36,7 @@ test('release package channels wait for the reusable release asset build', () =>
   assert.equal(packageDispatch['timeout-minutes'], 360);
   assert.match(dispatchScript, /--ref main/u);
   assert.match(dispatchScript, /release-linux-packages\.yml/u);
-  assert.match(dispatchScript, /gh run watch/u);
+  assert.match(dispatchScript, /watch-github-run\.mjs/u);
   assert.match(dispatchScript, /release-snap\.yml[\s\S]*optional=false/u);
   assert.match(
     dispatchScript,

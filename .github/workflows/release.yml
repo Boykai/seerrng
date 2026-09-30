@@ -602,6 +602,9 @@ jobs:
       actions: write
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Dispatch package workflows
         env:
           GH_TOKEN: ${{ secrets.GH_WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
@@ -654,7 +657,7 @@ jobs:
               exit 1
             fi
             echo "Waiting for $workflow run $run_id"
-            if ! gh run watch "$run_id" --repo "$REPO" --interval 15 --exit-status; then
+            if ! node scripts/watch-github-run.mjs "$REPO" "$run_id"; then
               if [[ "$optional" == true ]]; then
                 echo "::warning::Optional package workflow $workflow failed; continuing without Snap Store publication."
                 continue
