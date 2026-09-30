@@ -68,6 +68,17 @@ install or manage Lidarr, Bookshelf, Readarr, Sonarr, Radarr, Plex, Jellyfin, or
 Emby. Those services remain optional external integrations configured from
 SeerrNG after installation.
 
+The Windows Chocolatey package installs the x64 release as the `SeerrNG`
+service and installs Node.js 22 and NSSM as dependencies. It stores the
+database, settings, and logs under `%ProgramData%\SeerrNG\config`; package
+removal preserves this directory. The release workflow submits each stable
+package to Chocolatey Community Repository moderation and requires the
+`CHOCOLATEY_API_KEY` repository secret. This is a required release gate; set
+the secret with `gh secret set CHOCOLATEY_API_KEY --repo snapetech/seerrng`.
+Use the **Publish Chocolatey** workflow to submit or retry a stable tag created
+from a commit that includes `packaging/chocolatey` and its Windows release
+archive.
+
 ## Live Test Deployment
 
 `request.snape.tech` is not connected to a developer's local checkout or local

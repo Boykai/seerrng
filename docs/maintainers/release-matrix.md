@@ -14,6 +14,7 @@ multi-architecture runtime:
 | Native archive | Linux tarball | `x64`, `arm64` | GitHub Release asset with SHA-256 sidecar |
 | Native archive | macOS tarball | `arm64` | GitHub Release asset with SHA-256 sidecar |
 | Native archive | Windows ZIP | `x64` | GitHub Release asset with SHA-256 sidecar |
+| Windows package | Chocolatey Community Repository | `x64` | Submitted by the release workflow; each package version passes repository moderation |
 | Linux package | Debian, RPM, AppImage | `amd64`/`x86_64` | GitHub Release asset with SHA-256 sidecar |
 | Linux package | Launchpad PPA | `amd64` on Jammy and Noble | Published source builds |
 | Linux package | COPR | `x86_64` Fedora chroots | COPR project `slskdn/seerrng` |
