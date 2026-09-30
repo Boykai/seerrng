@@ -4576,9 +4576,6 @@ const validateCurrentBatchContract = (files) => {
     '--app-card-frame-background: var(--palette-blue, #0051d4);',
     '--app-card-frame-width: 1px;',
     'border-radius: 0.5rem;',
-    '--app-card-frame-background: linear-gradient(\n      45deg,\n      #333333 0%,',
-    'color-mix(in hsl, #333333 58%, #e6e6e6) 42%,',
-    'color-mix(in hsl, #333333 12%, #e6e6e6) 68%,',
     'background: var(--app-card-frame-background);',
     'mask-composite: exclude;',
   ]) {
