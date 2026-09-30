@@ -269,11 +269,7 @@ describe('manual fail and search from request status', () => {
       cy.contains('Owned Movie')
         .parents('[data-testid=request-card]')
         .within(() => {
-          cy.contains('Processing').should(
-            'have.attr',
-            'href',
-            'https://plex.example/movie/8811'
-          );
+          cy.contains('Processing').should('not.have.attr', 'href');
         });
       cy.contains('Owned Movie')
         .parents('[data-testid=request-card]')
@@ -281,6 +277,9 @@ describe('manual fail and search from request status', () => {
         .within(() => {
           cy.contains('Processing').click();
         });
+      cy.get('.app-tooltip')
+        .contains('a', 'Play on Plex')
+        .should('have.attr', 'href', 'https://plex.example/movie/8811');
       cy.get('.app-tooltip')
         .contains('button', 'Fail this download and search again')
         .should('be.visible')

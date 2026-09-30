@@ -215,6 +215,31 @@ const StatusBadge = ({
       </ul>
     );
 
+  // When the badge opens a manual-fail tooltip, reserve its tap/click for that
+  // action. Keep playback/service navigation beside the fail button instead
+  // of making the same control both a link and a tooltip trigger.
+  const opensManualFailTooltip =
+    canFailDownload &&
+    inProgress &&
+    (status === MediaStatus.AVAILABLE ||
+      status === MediaStatus.PARTIALLY_AVAILABLE ||
+      status === MediaStatus.PROCESSING ||
+      status === MediaStatus.DELETED);
+  const statusBadgeLink = opensManualFailTooltip ? undefined : mediaLink;
+  const downloadTooltipContent =
+    opensManualFailTooltip && mediaLink && mediaLinkDescription ? (
+      <>
+        {tooltipContent}
+        <div className="px-4 pb-4">
+          <Badge href={mediaLink} className="min-h-11">
+            {mediaLinkDescription}
+          </Badge>
+        </div>
+      </>
+    ) : (
+      tooltipContent
+    );
+
   const downloadTooltipClassName = inProgress
     ? `scrollable-card ${
         canFailDownload ? '' : 'hidden sm:block'
@@ -254,13 +279,13 @@ const StatusBadge = ({
     case MediaStatus.AVAILABLE:
       return (
         <Tooltip
-          content={inProgress ? tooltipContent : mediaLinkDescription}
+          content={inProgress ? downloadTooltipContent : mediaLinkDescription}
           className={downloadTooltipClassName}
           tooltipConfig={downloadTooltipConfig}
         >
           <Badge
             badgeType="success"
-            href={mediaLink}
+            href={statusBadgeLink}
             className={`${className ?? ''} ${
               inProgress &&
               'relative !bg-gray-700/35 !px-0 hover:!bg-gray-700/55'
@@ -316,13 +341,13 @@ const StatusBadge = ({
     case MediaStatus.PARTIALLY_AVAILABLE:
       return (
         <Tooltip
-          content={inProgress ? tooltipContent : mediaLinkDescription}
+          content={inProgress ? downloadTooltipContent : mediaLinkDescription}
           className={downloadTooltipClassName}
           tooltipConfig={downloadTooltipConfig}
         >
           <Badge
             badgeType="success"
-            href={mediaLink}
+            href={statusBadgeLink}
             className={`${className ?? ''} ${
               inProgress &&
               'relative !bg-gray-700/35 !px-0 hover:!bg-gray-700/55'
@@ -378,13 +403,13 @@ const StatusBadge = ({
     case MediaStatus.PROCESSING:
       return (
         <Tooltip
-          content={inProgress ? tooltipContent : mediaLinkDescription}
+          content={inProgress ? downloadTooltipContent : mediaLinkDescription}
           className={downloadTooltipClassName}
           tooltipConfig={downloadTooltipConfig}
         >
           <Badge
             badgeType="primary"
-            href={mediaLink}
+            href={statusBadgeLink}
             className={`${className ?? ''} ${
               inProgress &&
               'relative !bg-gray-700/35 !px-0 hover:!bg-gray-700/55'
@@ -440,7 +465,11 @@ const StatusBadge = ({
     case MediaStatus.PENDING:
       return (
         <Tooltip content={mediaLinkDescription}>
-          <Badge badgeType="warning" href={mediaLink} className={className}>
+          <Badge
+            badgeType="warning"
+            href={statusBadgeLink}
+            className={className}
+          >
             {intl.formatMessage(is4k ? messages.status4k : messages.status, {
               status: intl.formatMessage(globalMessages.pending),
             })}
@@ -451,7 +480,11 @@ const StatusBadge = ({
     case MediaStatus.BLOCKLISTED:
       return (
         <Tooltip content={mediaLinkDescription}>
-          <Badge badgeType="danger" href={mediaLink} className={className}>
+          <Badge
+            badgeType="danger"
+            href={statusBadgeLink}
+            className={className}
+          >
             {intl.formatMessage(is4k ? messages.status4k : messages.status, {
               status:
                 statusLabelOverride ??
@@ -464,13 +497,13 @@ const StatusBadge = ({
     case MediaStatus.DELETED:
       return (
         <Tooltip
-          content={inProgress ? tooltipContent : mediaLinkDescription}
+          content={inProgress ? downloadTooltipContent : mediaLinkDescription}
           className={downloadTooltipClassName}
           tooltipConfig={downloadTooltipConfig}
         >
           <Badge
             badgeType="danger"
-            href={mediaLink}
+            href={statusBadgeLink}
             className={`${className ?? ''} ${
               inProgress &&
               'relative !bg-gray-700/35 !px-0 hover:!bg-gray-700/55'
