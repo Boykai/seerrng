@@ -311,6 +311,11 @@ export interface ReadarrBook extends ReadarrBookLookupResult {
   };
 }
 
+export interface ReadarrBookPage {
+  books: ReadarrBook[];
+  totalCount: number;
+}
+
 export interface ReadarrBookFile {
   id: number;
   bookId: number;
@@ -1095,6 +1100,60 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
       throw new Error(`[Readarr] Failed to retrieve books: ${e.message}`, {
         cause: e,
       });
+    }
+  }
+
+  public async getBooksPage(
+    offset: number,
+    pageSize: number
+  ): Promise<ReadarrBookPage> {
+    const safeOffset = Math.max(0, Math.floor(offset));
+    const safePageSize = Math.min(Math.max(1, Math.floor(pageSize)), 200);
+
+    try {
+      await this.ensureProvider();
+      const payload = await this.get<unknown>(
+        '/book/paged',
+        this.getRequestConfig({
+          offset: safeOffset,
+          pageSize: safePageSize,
+          includeUnmonitored: true,
+        }),
+        0
+      );
+
+      if (
+        !isRecord(payload) ||
+        !Array.isArray(payload.records) ||
+        !Number.isSafeInteger(payload.totalCount) ||
+        Number(payload.totalCount) < 0 ||
+        (payload.offset !== undefined && payload.offset !== safeOffset)
+      ) {
+        throw new Error('Readarr returned an invalid paged library response.');
+      }
+
+      return {
+        books: sanitizeServarrRecordArray<ReadarrBook>(
+          payload.records,
+          safePageSize
+        ),
+        totalCount: Number(payload.totalCount),
+      };
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        const books = await this.getBooks();
+        return {
+          books: books.slice(safeOffset, safeOffset + safePageSize),
+          totalCount: books.length,
+        };
+      }
+
+      throw new Error(
+        `[Readarr] Failed to retrieve a book page: ${getReadarrErrorMessage(error)}`,
+        {
+          cause: error,
+        }
+      );
     }
   }
 

@@ -4,6 +4,7 @@ import ReadarrAPI, {
 import type { ReadarrSettings } from '@server/lib/settings';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  getBookshelfAudiobookLibraryPage,
   getBookshelfBookDetails,
   getBookshelfMetadataSource,
   makeBookshelfAuthorId,
@@ -112,6 +113,44 @@ describe('Bookshelf catalog identities', () => {
       'audiobook',
     ]);
     expect(new Set(results.map((result) => result.id)).size).toBe(2);
+  });
+
+  it('maps only the requested audiobook library page and retains its total', async () => {
+    const server = {
+      id: 53,
+      hostname: 'audiobookshelf.test',
+      port: 8787,
+      apiKey: 'audiobook-key',
+      useSsl: false,
+      baseUrl: '',
+      serviceType: 'audiobook',
+    } as ReadarrSettings;
+    const getBooksPage = vi
+      .spyOn(ReadarrAPI.prototype, 'getBooksPage')
+      .mockResolvedValue({
+        books: [
+          {
+            id: 51,
+            title: 'Page 2 Story',
+            foreignBookId: 'hardcover:page-2',
+            author: { authorName: 'Writer Two' },
+          },
+          {
+            id: 52,
+            title: 'Unidentified Story',
+            foreignBookId: '',
+          },
+        ],
+        totalCount: 5000,
+      });
+
+    const page = await getBookshelfAudiobookLibraryPage([server], 50, 50);
+
+    expect(getBooksPage).toHaveBeenCalledOnce();
+    expect(getBooksPage).toHaveBeenCalledWith(50, 50);
+    expect(page.totalCount).toBe(5000);
+    expect(page.books.map((book) => book.title)).toEqual(['Page 2 Story']);
+    expect(page.books[0]?.bookFormat).toBe('audiobook');
   });
 
   it('keeps Europeana IDs opaque when wrapping them for Seerr details and authors', () => {

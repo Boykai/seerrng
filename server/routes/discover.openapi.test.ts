@@ -16,8 +16,8 @@ const createValidatedApp = (): Express => {
       validateSecurity: false,
     })
   );
-  app.get('/api/v1/discover/books', (_req, res) =>
-    res.status(200).json({ accepted: true })
+  app.get('/api/v1/discover/books', (req, res) =>
+    res.status(200).json({ accepted: true, query: req.query })
   );
   app.use(
     (
@@ -36,6 +36,17 @@ const createValidatedApp = (): Express => {
 };
 
 describe('book discovery responseVersion OpenAPI contract', () => {
+  it('does not inject ebook-only search filters into audiobook browse requests', async () => {
+    const response = await request(createValidatedApp())
+      .get('/api/v1/discover/books')
+      .query({ format: 'audiobook' });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.query.format, 'audiobook');
+    assert.strictEqual(response.body.query.query, undefined);
+    assert.strictEqual(response.body.query.subject, undefined);
+  });
+
   it('accepts the current response contract and retains compatibility with v2', async () => {
     const app = createValidatedApp();
 
