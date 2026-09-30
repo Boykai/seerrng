@@ -136,6 +136,44 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.41.2](https://github.com/snapetech/seerrng/compare/v3.41.1..v3.41.2) - 2026-09-30
+
+### User-facing changes
+
+#### Added
+
+- **Comics:** Administrators can connect BackIssue through Settings, the administrator API, or the CLI. Comic requests can use it as their default destination, while SeerrNG syncs its collection and shows active queue status and progress when BackIssue reports it.
+
+#### Fixed
+
+- **Discovery:** Audiobook discovery now accepts the current response contract while retaining compatibility with existing clients, so Open Library and Bookshelf results load instead of failing with HTTP 400.
+- **Comics:** The BackIssue collection scan now has a named task in Settings > Jobs and can be started from the API or CLI, so operators can refresh synced comic availability on demand.
+- **Comics:** ComicVine volume descriptions now show paragraphs and lists as readable formatted text instead of exposing source HTML tags.
+- **Release Pipeline:** PPA publishing uses GPG_PRIVATE_KEY for package signing and LAUNCHPAD_PPA for its destination. It no longer requires a separate Launchpad OAuth credential; publication verification reads Launchpad's public API anonymously.
+- **Settings:** Prowlarr diagnostics now use a bounded scrollable report, with larger Save and Test buttons after the report so operators can reach them on smaller screens.
+- **Release Pipeline:** PPA publishing now recovers from Launchpad's source-publication race or a binary upload stalled for 45 minutes by signing a fresh package version, then waits for its Ubuntu binaries to publish. No Launchpad OAuth secret is needed.
+- **Comics:** Comic detail pages now report when ComicVine rejects an issue-page request instead of showing a misleading empty issue list. Users can retry after fixing a connection problem or waiting for ComicVine to recover.
+- **Bookshelf:** Book requests now start a tracked search after Bookshelf accepts the book. If the search command temporarily fails, SeerrNG retries it and keeps the request in progress until a library scan finds the book.
+- **Release Pipeline:** PPA releases now wait for Launchpad to publish the matching Ubuntu source and binary packages, and retry binary uploads rejected before source publication. This requires no Launchpad OAuth credential.
+- **Release Pipeline:** PPA publishing uses GPG_PRIVATE_KEY to sign packages and LAUNCHPAD_PPA to select the destination. LAUNCHPAD_CREDENTIALS is no longer used.
+  - **Action required:** Remove LAUNCHPAD_CREDENTIALS; configure GPG_PRIVATE_KEY and LAUNCHPAD_PPA if PPA publishing is enabled.
+- **Release Pipeline:** PPA publishing uses GPG_PRIVATE_KEY for signing and LAUNCHPAD_PPA as its destination. Do not configure LAUNCHPAD_CREDENTIALS; publishing and verification do not use it.
+  - **Action required:** Remove LAUNCHPAD_CREDENTIALS; configure GPG_PRIVATE_KEY and LAUNCHPAD_PPA if PPA publishing is enabled.
+
+#### Security
+
+- **Security:** SeerrNG now uses a patched brace expansion dependency to prevent crafted patterns from exhausting the Node.js stack and crashing the server.
+
+### 🐛 Bug Fixes
+- *(release)* Report Launchpad publication by self link - ([a262ac8](https://github.com/snapetech/seerrng/commit/a262ac801a5b4e6a225d2259e130ea19fd7da35a))
+- *(security)* Patch brace expansion stack exhaustion - ([f3ce833](https://github.com/snapetech/seerrng/commit/f3ce83305d734d4e2831b6f9dd46ef0465e456cf))
+
+### 📖 Documentation
+- *(release)* Clarify current PPA setup - ([abef9b1](https://github.com/snapetech/seerrng/commit/abef9b11adb442a77f2c21b1d301927bd48482d4))
+- *(release)* Correct unpublished PPA setup notes - ([bd2f471](https://github.com/snapetech/seerrng/commit/bd2f47199e8aa6e4a98604e2ff6e68f03b650a20))
+
 ## [3.41.1](https://github.com/snapetech/seerrng/compare/v3.41.0..v3.41.1) - 2026-09-30
 
 ### User-facing changes
