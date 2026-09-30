@@ -491,6 +491,101 @@ describe('ReadarrAPI media type requests', () => {
       params: { mediaType: 'audiobook' },
     });
   });
+
+  it('reads only the requested Bookshelf page and preserves its total', async () => {
+    const api = new ReadarrAPI({
+      url: 'http://localhost:8787/api/v1',
+      apiKey: 'key',
+      mediaType: 'audiobook',
+    });
+    mock.method(
+      api as unknown as { ensureProvider: () => Promise<void> },
+      'ensureProvider',
+      async () => undefined
+    );
+    const getMock = mock.method(
+      ReadarrAPI.prototype as unknown as MockableReadarr,
+      'get',
+      async () => ({
+        records: [
+          {
+            id: 51,
+            title: 'Paged audiobook',
+            foreignBookId: 'hardcover:paged-audio',
+          },
+        ],
+        offset: 50,
+        pageSize: 50,
+        totalCount: 300,
+      })
+    );
+
+    const result = await api.getBooksPage(50, 50);
+
+    assert.deepStrictEqual(
+      result.books.map((book) => book.id),
+      [51]
+    );
+    assert.strictEqual(result.totalCount, 300);
+    assert.strictEqual(getMock.mock.calls[0].arguments[0], '/book/paged');
+    assert.deepStrictEqual(getMock.mock.calls[0].arguments[1], {
+      params: {
+        mediaType: 'audiobook',
+        offset: 50,
+        pageSize: 50,
+        includeUnmonitored: true,
+      },
+    });
+    assert.strictEqual(getMock.mock.calls[0].arguments[2], 0);
+  });
+
+  it('falls back to the regular library only when paging is unsupported', async () => {
+    const api = new ReadarrAPI({
+      url: 'http://localhost:8787/api/v1',
+      apiKey: 'key',
+      mediaType: 'audiobook',
+    });
+    mock.method(
+      api as unknown as { ensureProvider: () => Promise<void> },
+      'ensureProvider',
+      async () => undefined
+    );
+    const getMock = mock.method(
+      ReadarrAPI.prototype as unknown as MockableReadarr,
+      'get',
+      async (endpoint: string) => {
+        if (endpoint === '/book/paged') {
+          const error = new axios.AxiosError('Not found');
+          error.response = {
+            status: 404,
+            statusText: 'Not Found',
+            headers: {},
+            config: {} as never,
+            data: {},
+          };
+          throw error;
+        }
+
+        return [
+          { id: 1, title: 'First book', foreignBookId: 'first' },
+          { id: 2, title: 'Second book', foreignBookId: 'second' },
+          { id: 3, title: 'Third book', foreignBookId: 'third' },
+        ];
+      }
+    );
+
+    const result = await api.getBooksPage(1, 1);
+
+    assert.deepStrictEqual(
+      result.books.map((book) => book.id),
+      [2]
+    );
+    assert.strictEqual(result.totalCount, 3);
+    assert.deepStrictEqual(
+      getMock.mock.calls.map((call) => call.arguments[0]),
+      ['/book/paged', '/book']
+    );
+  });
 });
 
 describe('ReadarrAPI.getDevelopmentConfig', () => {

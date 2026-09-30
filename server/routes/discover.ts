@@ -104,6 +104,7 @@ import {
 import { mapNetwork } from '@server/models/Tv';
 import {
   getBookshelfAudiobookLibrary,
+  getBookshelfAudiobookLibraryPage,
   searchBookshelfCatalogs,
   searchBookshelfNarrators,
 } from '@server/utils/bookshelfCatalog';
@@ -3628,12 +3629,45 @@ discoverRoutes.get('/books', async (req, res) => {
         : await getBookshelfAudiobookLibrary(getSettings().readarr);
     return filterAndSortAudiobooks(books);
   };
+  const canPageAudiobookBrowse =
+    audiobookEnabled &&
+    getSettings().readarr.filter((server) => server.serviceType === 'audiobook')
+      .length === 1 &&
+    !hasSearchQuery &&
+    !authorQuery &&
+    !narratorQuery &&
+    !subjectQuery &&
+    !language &&
+    parsedRatingNumber === undefined &&
+    !firstPublishYear &&
+    sortByBase === 'ranked';
   const audiobookSearchOutcome = audiobookEnabled
-    ? searchAudiobookResults().then(
-        (books) => ({ books }),
-        (error: unknown) => ({ books: [], error })
-      )
-    : Promise.resolve({ books: [] as BookResult[] });
+    ? (canPageAudiobookBrowse
+        ? getBookshelfAudiobookLibraryPage(
+            getSettings().readarr,
+            (page - 1) * itemsPerPage,
+            itemsPerPage
+          ).then(({ books, totalCount }) => ({
+            books: filterAndSortAudiobooks(books),
+            totalCount,
+            pageResolved: true,
+          }))
+        : searchAudiobookResults().then((books) => ({
+            books,
+            totalCount: books.length,
+            pageResolved: false,
+          }))
+      ).catch((error: unknown) => ({
+        books: [] as BookResult[],
+        totalCount: 0,
+        pageResolved: false,
+        error,
+      }))
+    : Promise.resolve({
+        books: [] as BookResult[],
+        totalCount: 0,
+        pageResolved: false,
+      });
   const providerWindow = needsLocalFiltering
     ? getProviderWindow(page, pageSizePerFormat, pageSizePerFormat)
     : undefined;
@@ -3648,11 +3682,16 @@ discoverRoutes.get('/books', async (req, res) => {
       if ('error' in outcome) throw outcome.error;
       const books = outcome.books;
       const offset = (page - 1) * itemsPerPage;
+      const resultCount = outcome.pageResolved
+        ? outcome.totalCount
+        : books.length;
       return res.status(200).json({
         page,
-        totalPages: Math.max(Math.ceil(books.length / itemsPerPage), 1),
-        totalResults: books.length,
-        results: books.slice(offset, offset + itemsPerPage),
+        totalPages: Math.max(Math.ceil(resultCount / itemsPerPage), 1),
+        totalResults: resultCount,
+        results: outcome.pageResolved
+          ? books
+          : books.slice(offset, offset + itemsPerPage),
       });
     } catch (error) {
       logger.error('Failed to search audiobook catalog', {
@@ -3793,10 +3832,15 @@ discoverRoutes.get('/books', async (req, res) => {
       );
     }
     const audiobookOffset = (page - 1) * itemsPerPage;
-    const audiobookResults = audiobookOutcome.books.slice(
-      audiobookOffset,
-      audiobookOffset + itemsPerPage
-    );
+    const audiobookResults = audiobookOutcome.pageResolved
+      ? audiobookOutcome.books
+      : audiobookOutcome.books.slice(
+          audiobookOffset,
+          audiobookOffset + itemsPerPage
+        );
+    const audiobookTotalResults = audiobookOutcome.pageResolved
+      ? audiobookOutcome.totalCount
+      : audiobookOutcome.books.length;
     const ebookResults = pagedDocs.map((doc) => ({
       ...mapOpenLibrarySearchDoc(
         doc,
@@ -3834,20 +3878,22 @@ discoverRoutes.get('/books', async (req, res) => {
       page,
       totalPages: Math.max(
         ebookTotalPages,
-        Math.ceil(audiobookOutcome.books.length / itemsPerPage),
+        Math.ceil(audiobookTotalResults / itemsPerPage),
         1
       ),
-      totalResults: ebookTotalResults + audiobookOutcome.books.length,
+      totalResults: ebookTotalResults + audiobookTotalResults,
       results,
     });
   } catch (e) {
     const audiobookOutcome = await audiobookSearchOutcome;
     if (audiobookOutcome.books.length > 0) {
       const offset = (page - 1) * itemsPerPage;
-      const results = audiobookOutcome.books.slice(
-        offset,
-        offset + itemsPerPage
-      );
+      const results = audiobookOutcome.pageResolved
+        ? audiobookOutcome.books
+        : audiobookOutcome.books.slice(offset, offset + itemsPerPage);
+      const audiobookTotalResults = audiobookOutcome.pageResolved
+        ? audiobookOutcome.totalCount
+        : audiobookOutcome.books.length;
       logger.warn(
         'Open Library failed during combined discovery; returning audiobook results.',
         {
@@ -3859,10 +3905,10 @@ discoverRoutes.get('/books', async (req, res) => {
       return res.status(200).json({
         page,
         totalPages: Math.max(
-          Math.ceil(audiobookOutcome.books.length / itemsPerPage),
+          Math.ceil(audiobookTotalResults / itemsPerPage),
           1
         ),
-        totalResults: audiobookOutcome.books.length,
+        totalResults: audiobookTotalResults,
         results,
       });
     }

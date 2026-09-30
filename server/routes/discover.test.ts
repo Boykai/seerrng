@@ -3422,33 +3422,110 @@ describe('GET /discover/books', () => {
       OpenLibraryAPI.prototype,
       'searchBooks'
     );
-    const getBooks = mock.method(ReadarrAPI.prototype, 'getBooks', async () => [
-      {
-        id: 1,
-        title: 'Existing Audio Edition',
-        foreignBookId: 'hardcover:audio-work',
-        author: { authorName: 'Writer One' },
-        narrators: ['Reader One'],
-      },
-      {
-        id: 2,
-        title: 'Unidentified Audio Edition',
-        author: { authorName: 'Writer Two' },
-      },
-    ]);
+    const getBooks = mock.method(ReadarrAPI.prototype, 'getBooks');
+    const getBooksPage = mock.method(
+      ReadarrAPI.prototype,
+      'getBooksPage',
+      async (offset: number, pageSize: number) => {
+        assert.strictEqual(offset, 50);
+        assert.strictEqual(pageSize, 50);
+        return {
+          books: [
+            {
+              id: 51,
+              title: 'Existing Audio Edition',
+              foreignBookId: 'hardcover:audio-work',
+              author: { authorName: 'Writer One' },
+              narrators: ['Reader One'],
+            },
+            {
+              id: 52,
+              title: 'Unidentified Audio Edition',
+              author: { authorName: 'Writer Two' },
+            },
+          ],
+          totalCount: 300,
+        };
+      }
+    );
 
     try {
       const agent = await login();
       const result = await agent
         .get('/discover/books')
-        .query({ format: 'audiobook' });
+        .query({ format: 'audiobook', page: 2 });
 
       assert.strictEqual(result.status, 200);
       assert.deepStrictEqual(
         result.body.results.map((book: { title: string }) => book.title),
         ['Existing Audio Edition']
       );
-      assert.strictEqual(getBooks.mock.callCount(), 1);
+      assert.strictEqual(result.body.totalResults, 300);
+      assert.strictEqual(result.body.totalPages, 6);
+      assert.strictEqual(getBooksPage.mock.callCount(), 1);
+      assert.strictEqual(getBooks.mock.callCount(), 0);
+      assert.strictEqual(searchOpenLibrary.mock.callCount(), 0);
+    } finally {
+      getSettings().readarr = [];
+    }
+  });
+
+  it('keeps combined audiobook catalog paging global across multiple services', async () => {
+    getSettings().readarr = [
+      {
+        id: 0,
+        hostname: 'audiobookshelf-one.test',
+        port: 8787,
+        apiKey: 'audio-key-one',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'audiobook',
+      } as ReadarrSettings,
+      {
+        id: 1,
+        hostname: 'audiobookshelf-two.test',
+        port: 8787,
+        apiKey: 'audio-key-two',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'audiobook',
+      } as ReadarrSettings,
+    ];
+    const searchOpenLibrary = mock.method(
+      OpenLibraryAPI.prototype,
+      'searchBooks'
+    );
+    const catalog = Array.from({ length: 70 }, (_, index) => ({
+      id: index + 1,
+      title: `Audiobook ${String(index + 1).padStart(2, '0')}`,
+      foreignBookId: `hardcover:audiobook-${index + 1}`,
+      author: { authorName: 'Fixture Author' },
+    }));
+    const getBooks = mock.method(
+      ReadarrAPI.prototype,
+      'getBooks',
+      async () => catalog
+    );
+    const getBooksPage = mock.method(
+      ReadarrAPI.prototype,
+      'getBooksPage',
+      async () => {
+        throw new Error('combined libraries must use global paging');
+      }
+    );
+
+    try {
+      const agent = await login();
+      const result = await agent
+        .get('/discover/books')
+        .query({ format: 'audiobook', page: 2 });
+
+      assert.strictEqual(result.status, 200);
+      assert.strictEqual(result.body.totalResults, 140);
+      assert.strictEqual(result.body.results.length, 50);
+      assert.strictEqual(result.body.results[0].title, 'Audiobook 26');
+      assert.strictEqual(getBooks.mock.callCount(), 2);
+      assert.strictEqual(getBooksPage.mock.callCount(), 0);
       assert.strictEqual(searchOpenLibrary.mock.callCount(), 0);
     } finally {
       getSettings().readarr = [];

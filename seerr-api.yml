@@ -11309,7 +11309,6 @@ paths:
           schema:
             type: string
             example: subject:fiction
-            default: subject:fiction
         - in: query
           name: author
           schema:
@@ -11327,13 +11326,11 @@ paths:
           schema:
             type: string
             example: fiction
-            default: fiction
         - in: query
           name: format
           schema:
             type: string
             enum: [ebook, audiobook]
-            default: ebook
           description: Format context for book requests from this discovery view.
         - in: query
           name: sortBy
