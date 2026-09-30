@@ -2,7 +2,7 @@
 category: fixed
 audience: operators
 area: release-pipeline
-action: Configure GPG_PRIVATE_KEY and LAUNCHPAD_PPA for PPA publishing.
+action: Remove LAUNCHPAD_CREDENTIALS; configure GPG_PRIVATE_KEY and LAUNCHPAD_PPA.
 breaking: false
 ---
-PPA publishing reads GPG_PRIVATE_KEY for signing and LAUNCHPAD_PPA for its destination. It does not read LAUNCHPAD_CREDENTIALS; remove that obsolete setting and configure the current signing key and PPA destination instead.
+Correction to the earlier PPA setup note: publishing does not read LAUNCHPAD_CREDENTIALS. Remove that obsolete value; releases use GPG_PRIVATE_KEY to sign packages and LAUNCHPAD_PPA to select the destination.
