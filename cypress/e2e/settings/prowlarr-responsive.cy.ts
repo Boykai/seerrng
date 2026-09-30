@@ -131,6 +131,5 @@ describe('Prowlarr settings on a short mobile screen', () => {
       })
       .click();
     cy.wait('@saveProwlarr').its('response.statusCode').should('eq', 200);
-    cy.screenshot('prowlarr-actions-mobile');
   });
 });
