@@ -29,7 +29,7 @@ test('release package channels wait for the reusable release asset build', () =>
   assert.equal(assetBuild.with.tag, '${{ inputs.tag || github.ref_name }}');
   assert.equal(assetBuild.permissions.actions, 'read');
   assert.deepEqual(packageDispatch.needs, ['verify', 'build-release-assets']);
-  assert.equal(packageDispatch['timeout-minutes'], 240);
+  assert.equal(packageDispatch['timeout-minutes'], 360);
   assert.match(dispatchScript, /--ref main/u);
   assert.match(dispatchScript, /release-linux-packages\.yml/u);
   assert.match(dispatchScript, /gh run watch/u);
@@ -102,6 +102,17 @@ test('package workflows build the requested tag and reject tags outside main', (
       `${workflowName} must verify tag ancestry before publishing`
     );
   }
+});
+
+test('Launchpad retries for the same release tag are serialized', () => {
+  const ppa = readWorkflow('release-ppa.yml');
+
+  assert.equal(
+    ppa.concurrency.group,
+    'release-ppa-${{ inputs.tag || github.ref_name }}'
+  );
+  assert.equal(ppa.concurrency['cancel-in-progress'], false);
+  assert.equal(ppa.jobs['publish-ppa']['timeout-minutes'], 360);
 });
 
 test('release asset uploaders preserve the draft until the final publish gate', () => {
