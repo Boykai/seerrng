@@ -95,3 +95,67 @@ test('reports a published source through its stable self link', () => {
       result.stderr
   );
 });
+
+test('retries a completed build that has no binary publication record', () => {
+  const python = [
+    'import importlib.util',
+    'import sys',
+    'import types',
+    'from datetime import datetime, timedelta, timezone',
+    'sys.dont_write_bytecode = True',
+    '',
+    'launchpadlib = types.ModuleType("launchpadlib")',
+    'launchpadlib.__path__ = []',
+    'launchpad_module = types.ModuleType("launchpadlib.launchpad")',
+    'launchpad_module.Launchpad = object',
+    'sys.modules["launchpadlib"] = launchpadlib',
+    'sys.modules["launchpadlib.launchpad"] = launchpad_module',
+    '',
+    'spec = importlib.util.spec_from_file_location("waiter", sys.argv[1])',
+    'waiter = importlib.util.module_from_spec(spec)',
+    'spec.loader.exec_module(waiter)',
+    '',
+    'archive_web = "https://launchpad.net/~owner/+archive/ubuntu/seerrng"',
+    'stale_build = types.SimpleNamespace(',
+    '    buildstate="Successfully built",',
+    '    datebuilt=datetime.now(timezone.utc) - timedelta(minutes=46),',
+    '    web_link="https://launchpad.net/+build/12345",',
+    ')',
+    'try:',
+    '    waiter.classify_stalled_upload(',
+    '        stale_build, [], "Published", "3.41.2+ppa1", archive_web',
+    '    )',
+    'except waiter.FreshUploadRequired as error:',
+    '    assert "no seerrng binary publication record" in str(error)',
+    'else:',
+    '    raise AssertionError("a stale completed build must request a fresh upload")',
+    '',
+    'pending_binary = types.SimpleNamespace(',
+    '    binary_package_name="seerrng", status="Pending"',
+    ')',
+    'waiter.classify_stalled_upload(',
+    '    stale_build, [pending_binary], "Published", "3.41.2+ppa1", archive_web',
+    ')',
+    'fresh_build = types.SimpleNamespace(',
+    '    buildstate="Successfully built",',
+    '    datebuilt=datetime.now(timezone.utc) - timedelta(minutes=44),',
+    '    web_link="https://launchpad.net/+build/67890",',
+    ')',
+    'waiter.classify_stalled_upload(',
+    '    fresh_build, [], "Published", "3.41.2+ppa1", archive_web',
+    ')',
+  ].join('\n');
+  const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+  const result = spawnSync(pythonCommand, ['-c', python, waiterPath], {
+    encoding: 'utf8',
+  });
+
+  assert.equal(
+    result.status,
+    0,
+    'stalled Launchpad binary recovery regression failed.\n' +
+      result.stdout +
+      '\n' +
+      result.stderr
+  );
+});

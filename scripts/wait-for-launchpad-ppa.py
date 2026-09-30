@@ -65,14 +65,6 @@ def get_builds(source_publication: Any) -> list[Any]:
     return list(source_publication.getBuilds())
 
 
-def published_package_binaries(source_publication: Any) -> list[Any]:
-    return [
-        binary
-        for binary in source_publication.getPublishedBinaries()
-        if binary.binary_package_name == "seerrng" and binary.status == PUBLISHED
-    ]
-
-
 def classify_failed_upload(
     build: Any,
     archive_web: str,
@@ -108,8 +100,22 @@ def classify_failed_upload(
     )
 
 
-def classify_stalled_upload(build: Any, source_version: str, archive_web: str) -> None:
-    if build.buildstate != "Uploading build" or not build.datebuilt:
+def classify_stalled_upload(
+    build: Any,
+    binary_publications: list[Any],
+    publication_status: str,
+    source_version: str,
+    archive_web: str,
+) -> None:
+    if build.buildstate not in (
+        "Uploading build",
+        "Successfully built",
+        "Currently building",
+    ):
+        return
+    if any(binary.binary_package_name == "seerrng" for binary in binary_publications):
+        return
+    if not build.datebuilt:
         return
 
     build_finished = build.datebuilt
@@ -126,8 +132,9 @@ def classify_stalled_upload(build: Any, source_version: str, archive_web: str) -
 
     minutes = int(stalled_for.total_seconds() // 60)
     raise FreshUploadRequired(
-        f"Launchpad built {source_version} but left {build.web_link} in "
-        f"'Uploading build' for {minutes} minutes without publishing a binary. "
+        f"Launchpad finished the amd64 build for {source_version} at {build.web_link}, "
+        f"but produced no seerrng binary publication record for {minutes} minutes "
+        f"(build state: {build.buildstate}; source state: {publication_status}). "
         f"Republishing a fresh signed source version to {archive_web}."
     )
 
@@ -175,6 +182,13 @@ def main() -> int:
                 publication = max(publications, key=lambda item: item.date_created)
                 publication_status = publication.status
                 builds = get_builds(publication)
+                binary_publications = list(publication.getPublishedBinaries())
+                binaries = [
+                    binary
+                    for binary in binary_publications
+                    if binary.binary_package_name == "seerrng"
+                    and binary.status == PUBLISHED
+                ]
                 amd64_builds = [
                     build for build in builds if build.arch_tag == "amd64"
                 ]
@@ -195,6 +209,8 @@ def main() -> int:
                         fail_for_build(build)
                     classify_stalled_upload(
                         build,
+                        binary_publications,
+                        publication_status,
                         args.source_version,
                         args.archive_web,
                     )
@@ -223,7 +239,6 @@ def main() -> int:
                         build.buildstate == "Successfully built"
                         for build in amd64_builds
                     )
-                    binaries = published_package_binaries(publication)
                     if completed and binaries:
                         print(
                             f"Published {args.source_version} for {args.series}: "
