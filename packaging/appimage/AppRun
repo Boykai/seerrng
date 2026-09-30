@@ -1,7 +1,9 @@
 #!/usr/bin/env sh
 set -eu
 HERE="$(dirname "$(readlink -f "$0")")"
+APP_DIR="$HERE/usr/lib/seerrng"
 export NODE_ENV=production
 export CONFIG_DIRECTORY="${CONFIG_DIRECTORY:-$HOME/.config/seerrng}"
 mkdir -p "$CONFIG_DIRECTORY"
-exec "$HERE/usr/bin/node" "$HERE/usr/lib/seerrng/dist/index.js" "$@"
+cd "$APP_DIR"
+exec "$HERE/usr/bin/node" "$APP_DIR/dist/index.js" "$@"
