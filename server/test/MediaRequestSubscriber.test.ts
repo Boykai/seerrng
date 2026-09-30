@@ -894,7 +894,7 @@ describe('MediaRequestSubscriber service dispatch', () => {
     assert.equal(addPayload?.metadataProfileId, 0);
     assert.equal(addPayload?.rootFolderPath, '/books');
     assert.deepStrictEqual(addPayload?.tags, [4]);
-    assert.equal(addPayload?.addOptions?.searchForNewBook, false);
+    assert.equal(addPayload?.addOptions?.searchForNewBook, true);
     assert.equal(addPayload?.author?.monitorNewItems, 'none');
     assert.deepStrictEqual(addPayload?.author?.addOptions?.booksToMonitor, [
       'readarr-work-id',
@@ -915,6 +915,7 @@ describe('MediaRequestSubscriber service dispatch', () => {
     assert.equal(savedSearch.bookId, 55);
     assert.equal(savedSearch.commandId, null);
     assert.equal(savedSearch.state, 'monitoring');
+    assert.equal(savedSearch.providerManagedSearch, true);
     assert.equal(startedBookSearches, 0);
 
     const savedRequest = await getRepository(MediaRequest).findOneByOrFail({

@@ -49,6 +49,7 @@ const createTrackedRequest = async (options: {
   pendingId?: number;
   providerBookId?: string;
   monitoring?: boolean;
+  providerManagedSearch?: boolean;
 }) => {
   const pending = options.pendingId !== undefined;
   const requestedBy = await getRepository(User).findOneByOrFail({
@@ -87,6 +88,7 @@ const createTrackedRequest = async (options: {
       commandId: pending || options.monitoring ? null : 901,
       createdBook: options.createdBook,
       createdAuthor: options.createdAuthor,
+      providerManagedSearch: options.providerManagedSearch ?? false,
       state: pending
         ? 'pending'
         : options.monitoring
@@ -174,7 +176,7 @@ describe('BookRequestSearchManager', () => {
     assert.equal(lookupMock.mock.calls.length, 0);
   });
 
-  it('starts a deferred search after a prepared Chaptarr book is added', async () => {
+  it('tracks provider-owned acquisition after a prepared Chaptarr book is added', async () => {
     const { media, request } = await createTrackedRequest({
       createdBook: false,
       createdAuthor: false,
@@ -217,6 +219,13 @@ describe('BookRequestSearchManager', () => {
       'startBookSearch',
       async () => ({ id: 903, name: 'BookSearch', status: 'started' })
     );
+    const getCommand = mock.method(
+      ReadarrAPI.prototype,
+      'getCommand',
+      async () => {
+        throw new Error('provider-managed requests do not poll commands');
+      }
+    );
 
     await bookRequestSearchManager.run();
 
@@ -227,7 +236,9 @@ describe('BookRequestSearchManager', () => {
     assert.equal(operation.pendingId, null);
     assert.equal(operation.bookId, 56);
     assert.equal(operation.commandId, null);
+    assert.equal(operation.providerManagedSearch, true);
     assert.equal(startBookSearch.mock.callCount(), 0);
+    assert.equal(getCommand.mock.callCount(), 0);
     const updatedMedia = await getRepository(Media).findOneByOrFail({
       id: media.id,
     });
@@ -236,12 +247,13 @@ describe('BookRequestSearchManager', () => {
 
     await bookRequestSearchManager.run();
 
-    const searching = await getRepository(BookRequestSearch).findOneByOrFail({
+    const monitoring = await getRepository(BookRequestSearch).findOneByOrFail({
       requestId: request.id,
     });
-    assert.equal(searching.state, 'searching');
-    assert.equal(searching.commandId, 903);
-    assert.equal(startBookSearch.mock.callCount(), 1);
+    assert.equal(monitoring.state, 'monitoring');
+    assert.equal(monitoring.commandId, null);
+    assert.equal(startBookSearch.mock.callCount(), 0);
+    assert.equal(getCommand.mock.callCount(), 0);
   });
 
   it('starts and tracks BookSearch until the library scan finds a file', async () => {
@@ -320,6 +332,75 @@ describe('BookRequestSearchManager', () => {
     assert.equal(getCommand.mock.callCount(), 2);
     assert.equal(startBookSearch.mock.callCount(), 1);
     assert.equal(removeBook.mock.callCount(), 0);
+  });
+
+  it('lets Bookshelf manage search and tracks only library availability', async () => {
+    const { media, request } = await createTrackedRequest({
+      createdBook: true,
+      createdAuthor: true,
+      monitoring: true,
+      providerManagedSearch: true,
+    });
+    let fileCount = 0;
+    mock.method(
+      ReadarrAPI.prototype,
+      'getBookIfExists',
+      async (bookId: number) => ({
+        id: bookId,
+        title: 'Provider managed book',
+        foreignBookId: 'hc:book-55',
+        statistics: { bookFileCount: fileCount },
+      })
+    );
+    const startBookSearch = mock.method(
+      ReadarrAPI.prototype,
+      'startBookSearch',
+      async () => ({ id: 905, name: 'BookSearch', status: 'started' })
+    );
+    const getCommand = mock.method(
+      ReadarrAPI.prototype,
+      'getCommand',
+      async () => {
+        throw new Error('provider-managed requests do not poll commands');
+      }
+    );
+    const getQueue = mock.method(ReadarrAPI.prototype, 'getQueue', async () => {
+      throw new Error('provider-managed requests do not poll queues');
+    });
+    const getBookHistory = mock.method(
+      ReadarrAPI.prototype,
+      'getBookHistory',
+      async () => {
+        throw new Error(
+          'provider-managed requests do not poll download history'
+        );
+      }
+    );
+
+    await bookRequestSearchManager.run();
+
+    const monitoring = await getRepository(BookRequestSearch).findOneByOrFail({
+      requestId: request.id,
+    });
+    assert.equal(monitoring.state, 'monitoring');
+    assert.equal(startBookSearch.mock.callCount(), 0);
+    assert.equal(getCommand.mock.callCount(), 0);
+    assert.equal(getQueue.mock.callCount(), 0);
+    assert.equal(getBookHistory.mock.callCount(), 0);
+
+    fileCount = 1;
+    await bookRequestSearchManager.run();
+
+    assert.equal(
+      await getRepository(BookRequestSearch).countBy({ requestId: request.id }),
+      0
+    );
+    assert.equal(
+      (await getRepository(Media).findOneByOrFail({ id: media.id })).status,
+      MediaStatus.AVAILABLE
+    );
+    assert.equal(startBookSearch.mock.callCount(), 0);
+    assert.equal(getCommand.mock.callCount(), 0);
   });
 
   it('retries starting a BookSearch command after a temporary failure', async () => {

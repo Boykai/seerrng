@@ -2103,9 +2103,9 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
           editions: bookEditions,
           useRequestedEdition: !!(preferredEditionId || preferredIsbn),
           addOptions: {
-            // Let Bookshelf's normal monitored-book workflow acquire this
-            // title; Seerr follows availability through library sync.
-            searchForNewBook: false,
+            // Let Bookshelf own acquisition. Seerr only checks for the file
+            // through library availability tracking.
+            searchForNewBook: true,
           },
         });
 
@@ -2139,6 +2139,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
             commandId: null,
             createdBook: result.createdBook,
             createdAuthor: result.createdAuthor,
+            providerManagedSearch: !result.pending,
             state: result.pending ? 'pending' : 'monitoring',
           })
         );
