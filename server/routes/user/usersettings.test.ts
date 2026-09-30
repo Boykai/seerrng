@@ -1,3 +1,4 @@
+import * as OpenApiValidator from 'express-openapi-validator';
 import assert from 'node:assert/strict';
 import { before, beforeEach, describe, it, mock } from 'node:test';
 
@@ -14,6 +15,7 @@ import type { Express } from 'express';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
+import path from 'node:path';
 import request from 'supertest';
 import userRoutes from '.';
 
@@ -34,6 +36,7 @@ const authenticateQCMock = mock.method(
 );
 
 let app: Express;
+const API_SPEC_PATH = path.resolve(process.cwd(), 'seerr-api.yml');
 
 function createApp() {
   const app = express();
@@ -49,6 +52,12 @@ function createApp() {
   );
   app.use(rateLimit({ windowMs: 60_000, limit: 10_000 }), checkUser);
   app.use('/auth', authRoutes);
+  app.use(
+    OpenApiValidator.middleware({
+      apiSpec: API_SPEC_PATH,
+      validateRequests: true,
+    })
+  );
   app.use('/user', isAuthenticated(), userRoutes);
   app.use(
     (
@@ -148,5 +157,58 @@ describe('POST /user/:id/settings/linked-accounts/jellyfin/quickconnect', () => 
       where: { id: userId },
     });
     assert.strictEqual(user.jellyfinUserId, null);
+  });
+});
+
+describe('POST /user/:id/settings/advanced-theme', () => {
+  it('saves validated overrides for the signed-in user and clears them on reset', async () => {
+    const { sessionCookie, userId } = await loginAs(
+      'demo@seerr.dev',
+      'test1234'
+    );
+    const route = `/user/${userId}/settings/advanced-theme`;
+
+    const saved = await request(app)
+      .post(route)
+      .set('X-Forwarded-Proto', 'https')
+      .set('Cookie', sessionCookie)
+      .send({
+        overrides: {
+          '--theme-page-bg': '#123456',
+          '--theme-page-spotlight-strength': 0.5,
+        },
+      });
+
+    assert.strictEqual(saved.status, 200);
+    assert.deepEqual(saved.body.advancedThemeOverrides, {
+      '--theme-page-bg': '#123456',
+      '--theme-page-spotlight-strength': 0.5,
+    });
+
+    const user = await getRepository(User).findOneOrFail({
+      where: { id: userId },
+      relations: { settings: true },
+    });
+    assert.deepEqual(user.settings?.advancedThemeOverrides, {
+      '--theme-page-bg': '#123456',
+      '--theme-page-spotlight-strength': 0.5,
+    });
+
+    const invalid = await request(app)
+      .post(route)
+      .set('X-Forwarded-Proto', 'https')
+      .set('Cookie', sessionCookie)
+      .send({
+        overrides: { '--theme-page-bg': 'url(https://example.invalid)' },
+      });
+    assert.strictEqual(invalid.status, 400);
+
+    const reset = await request(app)
+      .post(route)
+      .set('X-Forwarded-Proto', 'https')
+      .set('Cookie', sessionCookie)
+      .send({ overrides: null });
+    assert.strictEqual(reset.status, 200);
+    assert.strictEqual(reset.body.advancedThemeOverrides, null);
   });
 });

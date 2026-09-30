@@ -26,6 +26,7 @@ import { sonarrScanner } from '@server/lib/scanners/sonarr';
 import type { JobId } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { refreshTrackedSoftwareRequests } from '@server/lib/softwareRequests';
+import { isWatchAheadMediaServer } from '@server/lib/watchAheadEligibility';
 import watchlistSync from '@server/lib/watchlistsync';
 import logger from '@server/logger';
 import { MediaRequestSubscriber } from '@server/subscriber/MediaRequestSubscriber';
@@ -300,21 +301,21 @@ export const startJobs = (): void => {
       running: () => jellyfinFullScanner.status().running,
       cancelFn: () => jellyfinFullScanner.cancel(),
     });
+  }
 
-    if (mediaServerType === MediaServerType.JELLYFIN) {
-      scheduledJobs.push({
-        id: 'jellyfin-watch-ahead',
-        name: 'Jellyfin Episode Watch-Ahead',
-        type: 'process',
-        interval: 'seconds',
-        cronSchedule: jobs['jellyfin-watch-ahead'].schedule,
-        job: schedule.scheduleJob(jobs['jellyfin-watch-ahead'].schedule, () =>
-          runTrackedJob('Jellyfin Episode Watch-Ahead', () =>
-            episodeWatchAhead.run()
-          )
-        ),
-      });
-    }
+  // The persisted job key retains its original name for configuration
+  // compatibility, but the queue now follows Plex, Jellyfin, or Emby playback.
+  if (isWatchAheadMediaServer(mediaServerType)) {
+    scheduledJobs.push({
+      id: 'jellyfin-watch-ahead',
+      name: 'Requested Episode Queue',
+      type: 'process',
+      interval: 'seconds',
+      cronSchedule: jobs['jellyfin-watch-ahead'].schedule,
+      job: schedule.scheduleJob(jobs['jellyfin-watch-ahead'].schedule, () =>
+        runTrackedJob('Requested Episode Queue', () => episodeWatchAhead.run())
+      ),
+    });
   }
 
   // Run full radarr scan every 24 hours

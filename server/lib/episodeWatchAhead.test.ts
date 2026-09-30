@@ -3,8 +3,10 @@ import type { MediaRequest } from '@server/entity/MediaRequest';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  getCompletedPlexWatchAheadProgress,
   getCompletedWatchAheadProgress,
   getCoveredEpisodeKeys,
+  getPlexTvdbId,
   selectNextWatchAheadEpisodeSelections,
   type WatchAheadEpisode,
 } from './episodeWatchAhead';
@@ -191,6 +193,58 @@ describe('episode watch-ahead playback threshold', () => {
         ...item,
         UserData: { Played: false },
       }),
+      undefined
+    );
+  });
+
+  it('advances a matching Plex episode after 90% playback', () => {
+    assert.deepEqual(
+      getCompletedPlexWatchAheadProgress({
+        ratingKey: 'episode-4',
+        grandparentRatingKey: 'series-1',
+        type: 'episode',
+        index: 4,
+        parentIndex: 2,
+        viewOffset: 2_160_000,
+        duration: 2_400_000,
+        state: 'playing',
+      }),
+      { seasonNumber: 2, episodeNumber: 4 }
+    );
+  });
+
+  it('rejects incomplete and paused Plex episodes', () => {
+    const session = {
+      ratingKey: 'episode-4',
+      grandparentRatingKey: 'series-1',
+      type: 'episode' as const,
+      index: 4,
+      parentIndex: 2,
+      viewOffset: 2_000_000,
+      duration: 2_400_000,
+      state: 'playing',
+    };
+    assert.equal(getCompletedPlexWatchAheadProgress(session), undefined);
+    assert.equal(
+      getCompletedPlexWatchAheadProgress({
+        ...session,
+        viewOffset: 2_200_000,
+        state: 'paused',
+      }),
+      undefined
+    );
+  });
+
+  it('resolves a Plex series TVDB identity from its provider GUIDs', () => {
+    assert.equal(
+      getPlexTvdbId({
+        guid: 'plex://show/series-1',
+        Guid: [{ id: 'tmdb://100' }, { id: 'tvdb://123456' }],
+      }),
+      123456
+    );
+    assert.equal(
+      getPlexTvdbId({ guid: 'plex://show/series-1', Guid: [] }),
       undefined
     );
   });

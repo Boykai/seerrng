@@ -36,6 +36,7 @@ import {
 import { sortCrewPriority } from '@app/utils/creditHelpers';
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
+import { hasLinkedWatchAheadAccount } from '@app/utils/watchAhead';
 import { Transition } from '@headlessui/react';
 import {
   ArrowDownTrayIcon,
@@ -54,7 +55,6 @@ import {
 } from '@heroicons/react/24/outline';
 import { BarsArrowDownIcon, BarsArrowUpIcon } from '@heroicons/react/24/solid';
 import { MediaRequestStatus } from '@server/constants/media';
-import { MediaServerType } from '@server/constants/server';
 import type {
   RequestStatusDetailResponse,
   RequestStatusResultsResponse,
@@ -217,13 +217,13 @@ const messages = defineMessages('components.Requests', {
   edit: 'Edit',
   editTooltip: 'Edit this pending request.',
   modifyFailed: 'Unable to update this request.',
-  watchAheadLabel: 'Keep next episodes requested',
+  watchAheadLabel: 'Episode Queue',
   watchAheadDescription:
-    'After this TV request is approved, SeerrNG checks your linked Jellyfin playback every 30 seconds and keeps this many upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
+    'After this TV request is approved, SeerrNG follows your linked media server playback and keeps this many upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
   watchAheadOff: 'Off',
   watchAheadOption: '{count, plural, one {# episode} other {# episodes}}',
-  watchAheadUpdated: 'Jellyfin watch-ahead setting updated.',
-  watchAheadFailed: 'Unable to update Jellyfin watch-ahead.',
+  watchAheadUpdated: 'Requested episode queue updated.',
+  watchAheadFailed: 'Unable to update the requested episode queue.',
   retryFailed: 'Unable to retry this request.',
   retrySuccess: 'Request queued for another attempt.',
   ...requestActionMessageText,
@@ -1198,8 +1198,7 @@ const RequestStatusCard = ({
           (server) => server.isDefault && server.is4k === item.request.is4k
         );
   const canEnableWatchAhead =
-    currentSettings.mediaServerType === MediaServerType.JELLYFIN &&
-    Boolean(user?.jellyfinUsername) &&
+    hasLinkedWatchAheadAccount(user, currentSettings.mediaServerType) &&
     Number.isSafeInteger(Number(item.request.media.tvdbId)) &&
     Number(item.request.media.tvdbId) > 0 &&
     Boolean(matchingSonarr) &&
