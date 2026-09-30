@@ -71,6 +71,7 @@ const RecentRequestsSlider = () => {
       <Slider
         compact
         sliderKey="requests"
+        disableItemContentVisibility
         isLoading={isLoading}
         isEmpty={!!requests && requests.results.length === 0 && !requestError}
         items={(requests?.results ?? []).map((request) => (
