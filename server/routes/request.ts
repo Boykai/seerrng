@@ -114,6 +114,143 @@ const maxRequestProfileNameLength = 512;
 const maxBulkRequestItemTextLength = 512;
 const maxSeasonCount = 500;
 const maxSeasonNumber = 10_000;
+
+class RequestDownloadActionError extends Error {
+  public constructor(
+    public readonly status: number,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
+const matchesRequestDownloadId = (
+  queueDownloadId: string | undefined,
+  requestedDownloadId: string
+) =>
+  !!queueDownloadId &&
+  (queueDownloadId === requestedDownloadId ||
+    aliasDownloadId(queueDownloadId) === requestedDownloadId);
+
+const failAndSearchRequestDownload = async (
+  request: MediaRequest,
+  requestedDownloadId: string
+): Promise<void> => {
+  if (request.type !== MediaType.MOVIE && request.type !== MediaType.TV) {
+    throw new RequestDownloadActionError(
+      400,
+      'Manual fail and search is currently available for movie and series downloads.'
+    );
+  }
+
+  const serviceId = request.is4k
+    ? request.media.serviceId4k
+    : request.media.serviceId;
+  const externalServiceId = request.is4k
+    ? request.media.externalServiceId4k
+    : request.media.externalServiceId;
+  if (
+    serviceId === undefined ||
+    serviceId === null ||
+    typeof externalServiceId !== 'number' ||
+    !Number.isSafeInteger(externalServiceId) ||
+    externalServiceId < 1
+  ) {
+    throw new RequestDownloadActionError(
+      409,
+      'This request is not linked to an active acquisition service.'
+    );
+  }
+
+  if (request.type === MediaType.MOVIE) {
+    const result = await runWithCurrentServarrService(
+      'radarr',
+      serviceId,
+      async (server) => {
+        const api = new RadarrAPI({
+          url: RadarrAPI.buildUrl(server, '/api/v3'),
+          apiKey: server.apiKey,
+        });
+        const item = (await api.getQueue()).find(
+          (candidate) =>
+            candidate.movieId === externalServiceId &&
+            matchesRequestDownloadId(candidate.downloadId, requestedDownloadId)
+        );
+        if (!item) {
+          throw new RequestDownloadActionError(
+            409,
+            'That download is no longer in Radarr. Refresh the request before trying again.'
+          );
+        }
+
+        await api.deleteQueueItem(item.id, {
+          removeFromClient: true,
+          blocklist: true,
+          skipRedownload: false,
+        });
+        try {
+          await api.searchMovieOrThrow(externalServiceId);
+          return true;
+        } catch {
+          throw new RequestDownloadActionError(
+            502,
+            'Radarr removed the release, but could not start a new search. Search the movie in Radarr or try again later.'
+          );
+        }
+      }
+    );
+    if (result !== true) {
+      throw new RequestDownloadActionError(
+        409,
+        'The Radarr connection changed. Refresh the request before trying again.'
+      );
+    }
+    return;
+  }
+
+  const result = await runWithCurrentServarrService(
+    'sonarr',
+    serviceId,
+    async (server) => {
+      const api = new SonarrAPI({
+        url: SonarrAPI.buildUrl(server, '/api/v3'),
+        apiKey: server.apiKey,
+      });
+      const item = (await api.getQueue()).find(
+        (candidate) =>
+          candidate.seriesId === externalServiceId &&
+          matchesRequestDownloadId(candidate.downloadId, requestedDownloadId)
+      );
+      if (!item) {
+        throw new RequestDownloadActionError(
+          409,
+          'That download is no longer in Sonarr. Refresh the request before trying again.'
+        );
+      }
+
+      await api.deleteQueueItem(item.id, {
+        removeFromClient: true,
+        blocklist: true,
+        skipRedownload: false,
+      });
+      try {
+        await api.searchSeriesOrThrow(externalServiceId);
+        return true;
+      } catch {
+        throw new RequestDownloadActionError(
+          502,
+          'Sonarr removed the release, but could not start a new search. Search the series in Sonarr or try again later.'
+        );
+      }
+    }
+  );
+  if (result !== true) {
+    throw new RequestDownloadActionError(
+      409,
+      'The Sonarr connection changed. Refresh the request before trying again.'
+    );
+  }
+};
 const requestMediaTypeFilters = [
   'all',
   'movie',
@@ -4257,6 +4394,97 @@ requestRoutes.post<{
       message: e.message,
     });
     next({ status: 404, message: 'Request not found.' });
+  }
+});
+
+requestRoutes.post<{
+  requestId: string;
+}>('/:requestId/fail-download', isAuthenticated(), async (req, res, next) => {
+  const requestRepository = getRepository(MediaRequest);
+  const requestId = parseRequestParamId(req.params.requestId);
+  const requestedDownloadId = req.body?.downloadId;
+  if (!requestId) {
+    return next({ status: 404, message: 'Request not found.' });
+  }
+  if (
+    typeof requestedDownloadId !== 'string' ||
+    !requestedDownloadId.trim() ||
+    requestedDownloadId.length > 2048 ||
+    requestedDownloadId.trim() !== requestedDownloadId
+  ) {
+    return next({ status: 400, message: 'Choose a current download.' });
+  }
+
+  try {
+    const initialRequest = await requestRepository.findOne({
+      where: { id: requestId },
+      relations: { requestedBy: true },
+    });
+    if (!initialRequest) {
+      return next({ status: 404, message: 'Request not found.' });
+    }
+
+    return await runUserSecurityMutationWithActor(
+      req.user!.id,
+      initialRequest.requestedBy.id,
+      Permission.MANAGE_REQUESTS,
+      (actor) =>
+        runWithRequestAdmission(
+          [getRequestMutationAdmissionKey(requestId)],
+          async () => {
+            const request = await requestRepository.findOneOrFail({
+              where: { id: requestId },
+              relations: { requestedBy: true, modifiedBy: true },
+            });
+
+            if (
+              !actor.hasPermission(Permission.MANAGE_REQUESTS) &&
+              (request.requestedBy.id !== actor.id ||
+                !hasMediaRequestPermission(actor, request.type, request.is4k))
+            ) {
+              return next({
+                status: 403,
+                message:
+                  'You do not have permission to manage this request download.',
+              });
+            }
+            if (request.status !== MediaRequestStatus.APPROVED) {
+              return next({
+                status: 409,
+                message:
+                  'Only an active approved request download can be failed.',
+              });
+            }
+
+            await failAndSearchRequestDownload(request, requestedDownloadId);
+            return res.status(200).json({ success: true });
+          }
+        ),
+      {
+        expectedCredentialVersion: getExpectedCredentialVersion(req),
+      }
+    );
+  } catch (error) {
+    if (error instanceof UserMutationActorUnauthorizedError) {
+      return next({
+        status: 403,
+        message: 'You do not have permission to manage this request download.',
+      });
+    }
+    if (error instanceof RequestDownloadActionError) {
+      return next({ status: error.status, message: error.message });
+    }
+
+    logger.error('Unable to fail and search a request download', {
+      label: 'Media Request',
+      requestId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    return next({
+      status: 502,
+      message:
+        'Unable to fail this download and start a new search. Refresh to check its current state.',
+    });
   }
 });
 

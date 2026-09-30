@@ -22,6 +22,24 @@ describe('mapLazyLibrarianMagazine', () => {
     );
   });
 
+  it('preserves the first configured service ID of zero in cover URLs', () => {
+    const coverId = 'b'.repeat(40);
+    const magazine = mapLazyLibrarianMagazine(
+      {
+        title: 'The New Yorker',
+        latestCover: `cache/magazine/${coverId}.jpg`,
+      },
+      [],
+      undefined,
+      0
+    );
+
+    assert.strictEqual(
+      magazine.posterPath,
+      `/api/v1/magazine/cover/0/${coverId}`
+    );
+  });
+
   it('does not expose unsafe or unconfigured LazyLibrarian cover paths', () => {
     const untrustedCover = mapLazyLibrarianMagazine(
       {

@@ -145,6 +145,29 @@ describe('Sonarr response normalization', () => {
   });
 });
 
+describe('Sonarr series search errors', () => {
+  it('keeps existing best-effort behavior and exposes a strict search method', async (t) => {
+    const api = buildSonarr();
+    const runCommand = mock.method(
+      api as unknown as {
+        runCommand: (command: string, payload: unknown) => Promise<void>;
+      },
+      'runCommand',
+      async () => {
+        throw new Error('Sonarr command rejected');
+      }
+    );
+    t.after(() => runCommand.mock.restore());
+
+    await api.searchSeries(42);
+    await assert.rejects(
+      api.searchSeriesOrThrow(42),
+      /Failed to execute Sonarr series search/
+    );
+    assert.strictEqual(runCommand.mock.callCount(), 2);
+  });
+});
+
 describe('SonarrAPI getLibrarySeriesByTvdbId', () => {
   afterEach(() => mock.restoreAll());
 

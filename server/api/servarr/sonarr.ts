@@ -893,6 +893,18 @@ class SonarrAPI extends ServarrBase<{
   }
 
   public async searchSeries(seriesId: number): Promise<void> {
+    return this.executeSeriesSearch(seriesId, false);
+  }
+
+  /** Run a series search and let callers handle a provider command failure. */
+  public async searchSeriesOrThrow(seriesId: number): Promise<void> {
+    return this.executeSeriesSearch(seriesId, true);
+  }
+
+  private async executeSeriesSearch(
+    seriesId: number,
+    throwOnError: boolean
+  ): Promise<void> {
     logger.info('Executing series search command.', {
       label: 'Sonarr API',
       seriesId,
@@ -909,6 +921,11 @@ class SonarrAPI extends ServarrBase<{
           seriesId,
         }
       );
+      if (throwOnError) {
+        throw new Error('Failed to execute Sonarr series search.', {
+          cause: e,
+        });
+      }
     }
   }
 

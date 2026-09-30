@@ -46,6 +46,8 @@ interface StatusBadgeProps {
   title?: string | string[];
   statusLabelOverride?: string;
   className?: string;
+  requestId?: number;
+  canFailDownload?: boolean;
 }
 
 const StatusBadge = ({
@@ -63,6 +65,8 @@ const StatusBadge = ({
   title,
   statusLabelOverride,
   className,
+  requestId,
+  canFailDownload = false,
 }: StatusBadgeProps) => {
   const intl = useIntl();
   const { hasPermission } = useUser();
@@ -188,6 +192,8 @@ const StatusBadge = ({
         downloadItem={downloadItem[0]}
         title={Array.isArray(title) ? title[0] : title}
         is4k={is4k}
+        requestId={requestId}
+        canFailDownload={canFailDownload}
       />
     ) : (
       <ul>
@@ -201,11 +207,31 @@ const StatusBadge = ({
               title={Array.isArray(title) ? title[index] : title}
               is4k={is4k}
               bookFormat={mediaType === 'book' ? bookFormat : undefined}
+              requestId={requestId}
+              canFailDownload={canFailDownload}
             />
           </li>
         ))}
       </ul>
     );
+
+  const downloadTooltipClassName = inProgress
+    ? `scrollable-card ${
+        canFailDownload ? '' : 'hidden sm:block'
+      } max-h-96 w-96 max-w-[calc(100vw-2rem)] overflow-y-auto`
+    : undefined;
+  const downloadTooltipConfig = inProgress
+    ? {
+        interactive: true,
+        delayHide: 100,
+        ...(canFailDownload && {
+          trigger: ['hover', 'click', 'focus'] as (
+            'hover' | 'click' | 'focus'
+          )[],
+          followCursor: false,
+        }),
+      }
+    : undefined;
 
   const badgeDownloadProgress = (
     <div
@@ -229,13 +255,8 @@ const StatusBadge = ({
       return (
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
-          className={`${
-            inProgress &&
-            'scrollable-card hidden max-h-96 w-96 overflow-y-auto sm:block'
-          }`}
-          tooltipConfig={{
-            ...(inProgress && { interactive: true, delayHide: 100 }),
-          }}
+          className={downloadTooltipClassName}
+          tooltipConfig={downloadTooltipConfig}
         >
           <Badge
             badgeType="success"
@@ -296,13 +317,8 @@ const StatusBadge = ({
       return (
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
-          className={`${
-            inProgress &&
-            'scrollable-card hidden max-h-96 w-96 overflow-y-auto sm:block'
-          }`}
-          tooltipConfig={{
-            ...(inProgress && { interactive: true, delayHide: 100 }),
-          }}
+          className={downloadTooltipClassName}
+          tooltipConfig={downloadTooltipConfig}
         >
           <Badge
             badgeType="success"
@@ -363,13 +379,8 @@ const StatusBadge = ({
       return (
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
-          className={`${
-            inProgress &&
-            'scrollable-card hidden max-h-96 w-96 overflow-y-auto sm:block'
-          }`}
-          tooltipConfig={{
-            ...(inProgress && { interactive: true, delayHide: 100 }),
-          }}
+          className={downloadTooltipClassName}
+          tooltipConfig={downloadTooltipConfig}
         >
           <Badge
             badgeType="primary"
@@ -454,13 +465,8 @@ const StatusBadge = ({
       return (
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
-          className={`${
-            inProgress &&
-            'scrollable-card hidden max-h-96 w-96 overflow-y-auto sm:block'
-          }`}
-          tooltipConfig={{
-            ...(inProgress && { interactive: true, delayHide: 100 }),
-          }}
+          className={downloadTooltipClassName}
+          tooltipConfig={downloadTooltipConfig}
         >
           <Badge
             badgeType="danger"

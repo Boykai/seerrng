@@ -492,7 +492,10 @@ const RequestCard = ({
     requestData.bookFormat === 'both' &&
     !!(
       requestData.media.serviceId !== requestData.media.audiobookServiceId &&
-      (requestData.media.serviceId || requestData.media.audiobookServiceId)
+      ((requestData.media.serviceId !== null &&
+        requestData.media.serviceId !== undefined) ||
+        (requestData.media.audiobookServiceId !== null &&
+          requestData.media.audiobookServiceId !== undefined))
     );
   const canRetry =
     requestData &&
@@ -504,6 +507,13 @@ const RequestCard = ({
       userId: user.id,
       permissions: user.permissions,
     });
+  const canFailDownload = Boolean(
+    requestData &&
+    requestData.status === MediaRequestStatus.APPROVED &&
+    (requestData.type === 'movie' || requestData.type === 'tv') &&
+    getRequestDownloadStatus(requestData)?.some((item) => item.downloadId) &&
+    canRetry
+  );
 
   const modifyRequest = async (type: 'approve' | 'decline') => {
     setUpdatingType(type);
@@ -785,7 +795,8 @@ const RequestCard = ({
                 {intl.formatMessage(messages.partialBookService)}
               </span>
               <span className="flex truncate text-sm text-gray-300">
-                {requestData.media.serviceId
+                {requestData.media.serviceId !== null &&
+                requestData.media.serviceId !== undefined
                   ? intl.formatMessage(messages.ebook)
                   : intl.formatMessage(messages.audiobook)}
               </span>
@@ -799,6 +810,34 @@ const RequestCard = ({
               >
                 {intl.formatMessage(globalMessages.failed)}
               </Badge>
+            ) : canFailDownload ? (
+              <StatusBadge
+                status={getRequestMediaStatus(requestData)}
+                downloadItem={getRequestDownloadStatus(requestData)}
+                title={
+                  isMovie(title)
+                    ? title.title
+                    : isMusic(title)
+                      ? title.title
+                      : isBook(title)
+                        ? title.title
+                        : isComic(title)
+                          ? title.title
+                          : isMagazine(title)
+                            ? title.title
+                            : title.name
+                }
+                inProgress={
+                  (getRequestDownloadStatus(requestData) ?? []).length > 0
+                }
+                is4k={requestData.is4k}
+                tmdbId={requestData.media.tmdbId}
+                mediaType={requestData.type === 'tv' ? 'tv' : 'movie'}
+                plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
+                serviceUrl={getRequestServiceUrl(requestData)}
+                requestId={requestData.id}
+                canFailDownload
+              />
             ) : (
               availabilityQualityBadges.map((badge) => (
                 <StatusBadgeMini

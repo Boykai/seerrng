@@ -652,6 +652,18 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
   }
 
   public async searchMovie(movieId: number): Promise<void> {
+    return this.executeMovieSearch(movieId, false);
+  }
+
+  /** Run a movie search and let callers handle a provider command failure. */
+  public async searchMovieOrThrow(movieId: number): Promise<void> {
+    return this.executeMovieSearch(movieId, true);
+  }
+
+  private async executeMovieSearch(
+    movieId: number,
+    throwOnError: boolean
+  ): Promise<void> {
     logger.info('Executing movie search command', {
       label: 'Radarr API',
       movieId,
@@ -668,6 +680,11 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
           movieId,
         }
       );
+      if (throwOnError) {
+        throw new Error('Failed to execute Radarr movie search.', {
+          cause: e,
+        });
+      }
     }
   }
   public removeMovie = async (tmdbId: number): Promise<void> => {

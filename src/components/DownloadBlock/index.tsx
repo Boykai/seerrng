@@ -2,14 +2,26 @@ import Badge from '@app/components/Common/Badge';
 import BookFormatBadge, {
   type RequestedBookFormat,
 } from '@app/components/Common/BookFormatBadge';
+import Button from '@app/components/Common/Button';
+import ConfirmButton from '@app/components/Common/ConfirmButton';
+import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import type { DownloadingItem } from '@server/lib/downloadtracker';
+import axios from 'axios';
+import { useState } from 'react';
 import { FormattedRelativeTime, useIntl } from 'react-intl';
+import { useSWRConfig } from 'swr';
 
 const messages = defineMessages('components.DownloadBlock', {
   estimatedtime: 'Estimated {time}',
   formattedTitle: '{title}: Season {seasonNumber} Episode {episodeNumber}',
+  failAndSearch: 'Fail this download and search again',
+  confirmFailAndSearch: 'Remove and blocklist this release, then search again?',
+  failingDownload: 'Failing download…',
+  failAndSearchSuccess: 'The release was failed and a new search was started.',
+  failAndSearchError:
+    'Could not fail this download. Refresh the request and try again.',
 });
 
 interface DownloadBlockProps {
@@ -17,6 +29,8 @@ interface DownloadBlockProps {
   is4k?: boolean;
   title?: string;
   bookFormat?: RequestedBookFormat;
+  requestId?: number;
+  canFailDownload?: boolean;
 }
 
 const DownloadBlock = ({
@@ -24,9 +38,14 @@ const DownloadBlock = ({
   is4k = false,
   title,
   bookFormat,
+  requestId,
+  canFailDownload = false,
 }: DownloadBlockProps) => {
   const intl = useIntl();
   const { hasPermission } = useUser();
+  const { addToast } = useToasts();
+  const { mutate } = useSWRConfig();
+  const [isFailing, setIsFailing] = useState(false);
   const displayTitle = hasPermission(Permission.ADMIN)
     ? downloadItem.title
     : downloadItem.episode
@@ -109,6 +128,49 @@ const DownloadBlock = ({
             : ''}
         </span>
       </div>
+      {canFailDownload && requestId && downloadItem.downloadId && (
+        <div className="mt-3">
+          {isFailing ? (
+            <Button className="w-full" buttonSize="sm" disabled>
+              {intl.formatMessage(messages.failingDownload)}
+            </Button>
+          ) : (
+            <ConfirmButton
+              className="min-h-11 w-full px-2 text-center whitespace-normal"
+              buttonSize="sm"
+              confirmText={intl.formatMessage(messages.confirmFailAndSearch)}
+              onClick={() => {
+                setIsFailing(true);
+                void axios
+                  .post(`/api/v1/request/${requestId}/fail-download`, {
+                    downloadId: downloadItem.downloadId,
+                  })
+                  .then(() => {
+                    void mutate(`/api/v1/request/${requestId}`);
+                    addToast(
+                      intl.formatMessage(messages.failAndSearchSuccess),
+                      { appearance: 'success', autoDismiss: true }
+                    );
+                  })
+                  .catch((error: unknown) => {
+                    const message =
+                      axios.isAxiosError(error) &&
+                      typeof error.response?.data?.message === 'string'
+                        ? error.response.data.message
+                        : intl.formatMessage(messages.failAndSearchError);
+                    addToast(message, {
+                      appearance: 'error',
+                      autoDismiss: true,
+                    });
+                  })
+                  .finally(() => setIsFailing(false));
+              }}
+            >
+              {intl.formatMessage(messages.failAndSearch)}
+            </ConfirmButton>
+          )}
+        </div>
+      )}
     </div>
   );
 };
