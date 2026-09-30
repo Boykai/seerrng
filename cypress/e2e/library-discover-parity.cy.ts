@@ -1382,7 +1382,7 @@ describe('Books and Music discover parity', () => {
     cy.location('search').should('include', 'mediaType=music');
   });
 
-  it('only marks dual-format book requests partial when one format is missing', () => {
+  it('marks a missing dual-format book side as partial when its service ID is zero', () => {
     const requestedBy = {
       id: 1,
       displayName: 'Admin',
@@ -1407,7 +1407,7 @@ describe('Books and Music discover parity', () => {
         status: 5,
         status4k: 1,
         tmdbId: 0,
-        serviceId: 1,
+        serviceId: 0,
         externalServiceId: 101,
         audiobookServiceId: 2,
         audiobookExternalServiceId: 202,

@@ -31,10 +31,20 @@ const messages = defineMessages('components.Discover.DiscoverMagazines', {
     'Search magazines tracked by LazyLibrarian, or request another title by name.',
   publicCatalogHint:
     'Search Google Books for magazine titles. Requests and issue tracking still use LazyLibrarian.',
+  suggestedSearches: 'Suggested searches',
   requestTitle: 'Request “{title}”',
   noResults: 'No tracked magazines match this title.',
   noPublicResults: 'No public magazine titles match this search.',
 });
+
+const suggestedMagazineSearches = [
+  'National Geographic',
+  'Time',
+  'Vogue',
+  'The New Yorker',
+  'Scientific American',
+  'Wired',
+];
 
 const DiscoverMagazines = () => {
   const intl = useIntl();
@@ -196,6 +206,25 @@ const DiscoverMagazines = () => {
             </Button>
           )}
         </div>
+        {isPublicCatalog && !search.trim() && (
+          <div className="mt-4">
+            <p className="mb-2 text-xs font-semibold text-gray-400">
+              {intl.formatMessage(messages.suggestedSearches)}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {suggestedMagazineSearches.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  className="min-h-11 rounded-full border border-gray-700 bg-gray-900/70 px-3 text-xs font-medium text-gray-200 transition-colors hover:border-indigo-400 hover:bg-gray-800"
+                  onClick={() => setSearch(suggestion)}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       {requestTitle && (
         <RequestModal

@@ -77,4 +77,37 @@ describe('Magazine discovery sources', () => {
       expect(requestedCatalogs).to.deep.equal(['public', 'tracked'])
     );
   });
+
+  it('offers tap-sized public catalog suggestions that start a search', () => {
+    const publicQueries: string[] = [];
+    cy.intercept('GET', '/api/v1/discover/magazines*', (request) => {
+      publicQueries.push(String(request.query.query ?? ''));
+      request.alias = 'publicMagazineSuggestions';
+      request.reply({ page: 1, totalPages: 1, totalResults: 0, results: [] });
+    });
+
+    cy.viewport(375, 812);
+    cy.visit('/discover/magazines?catalog=public');
+    cy.wait('@publicMagazineSuggestions');
+    cy.contains('button', 'National Geographic')
+      .should('be.visible')
+      .and(($button) => {
+        expect($button[0].getBoundingClientRect().height).to.be.at.least(44);
+      })
+      .click();
+
+    cy.get('input[aria-label="Search public magazine catalog"]').should(
+      'have.value',
+      'National Geographic'
+    );
+    cy.wait('@publicMagazineSuggestions')
+      .its('request.query')
+      .should('deep.include', {
+        catalog: 'public',
+        query: 'National Geographic',
+      });
+    cy.then(() =>
+      expect(publicQueries).to.deep.equal(['', 'National Geographic'])
+    );
+  });
 });

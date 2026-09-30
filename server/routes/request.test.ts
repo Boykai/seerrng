@@ -6,6 +6,7 @@ import MusicBrainz from '@server/api/musicbrainz';
 import OpenLibraryAPI from '@server/api/openlibrary';
 import RadarrAPI from '@server/api/servarr/radarr';
 import ReadarrAPI from '@server/api/servarr/readarr';
+import SonarrAPI from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
 import type {
   TmdbMovieDetails,
@@ -33,6 +34,7 @@ import OverrideRule from '@server/entity/OverrideRule';
 import Season from '@server/entity/Season';
 import SeasonRequest from '@server/entity/SeasonRequest';
 import { User } from '@server/entity/User';
+import { aliasDownloadId } from '@server/lib/mediaResponse';
 import { Permission } from '@server/lib/permissions';
 import requestAdmissionCoordinator from '@server/lib/requestAdmission';
 import requestDispatchManager from '@server/lib/requestDispatch';
@@ -399,6 +401,27 @@ function createSonarrSettings(id: number, isDefault = true) {
     enableSeasonFolders: true,
     monitorNewItems: 'all' as const,
   };
+}
+
+function replacePrototypeMethod(
+  target: object,
+  methodName: string,
+  implementation: (...args: unknown[]) => unknown,
+  t: { after: (callback: () => void | Promise<void>) => void }
+): void {
+  const previous = Object.getOwnPropertyDescriptor(target, methodName);
+  Object.defineProperty(target, methodName, {
+    configurable: true,
+    writable: true,
+    value: implementation,
+  });
+  t.after(() => {
+    if (previous) {
+      Object.defineProperty(target, methodName, previous);
+    } else {
+      Reflect.deleteProperty(target, methodName);
+    }
+  });
 }
 
 describe('PUT /request/:requestId/watch-ahead', () => {
@@ -1381,6 +1404,264 @@ describe('DELETE /request/:requestId', () => {
     const res = await agent.delete('/request/not-a-number');
 
     assert.strictEqual(res.status, 404);
+  });
+});
+
+describe('POST /request/:requestId/fail-download', () => {
+  const rawMovieDownloadId = 'movie-download-91b6';
+
+  async function linkMovieToRadarr(
+    requestData: MediaRequest,
+    serviceId: number,
+    externalServiceId: number
+  ) {
+    await getRepository(Media).update(requestData.media.id, {
+      serviceId,
+      externalServiceId,
+    });
+  }
+
+  async function allowUserRequestType(
+    email: string,
+    mediaPermission: Permission,
+    t: { after: (callback: () => void | Promise<void>) => void }
+  ) {
+    const userRepository = getRepository(User);
+    const user = await userRepository.findOneOrFail({ where: { email } });
+    const previousPermissions = user.permissions;
+    await userRepository.update(user.id, {
+      permissions: previousPermissions | Permission.REQUEST | mediaPermission,
+    });
+    t.after(async () => {
+      await userRepository.update(user.id, {
+        permissions: previousPermissions,
+      });
+    });
+  }
+
+  const movieQueueItem = (movieId: number) =>
+    ({
+      size: 100,
+      title: 'Bad release',
+      sizeleft: 50,
+      timeleft: '00:10:00',
+      estimatedCompletionTime: '2026-09-30T20:00:00.000Z',
+      status: 'downloading',
+      trackedDownloadStatus: 'downloading',
+      trackedDownloadState: 'importPending',
+      downloadId: rawMovieDownloadId,
+      protocol: 'torrent',
+      downloadClient: 'qBittorrent',
+      indexer: 'Test indexer',
+      id: 901,
+      movieId,
+    }) as Awaited<ReturnType<RadarrAPI['getQueue']>>[number];
+
+  it('lets the requester fail the matching movie release using its private download alias', async (t) => {
+    const requestData = await seedRequest(MediaRequestStatus.APPROVED);
+    await linkMovieToRadarr(requestData, 31, 812);
+    await allowUserRequestType('friend@seerr.dev', Permission.REQUEST_MOVIE, t);
+    configureRadarr([createRadarrSettings(31)]);
+    const getQueue = mock.method(RadarrAPI.prototype, 'getQueue', async () => [
+      movieQueueItem(812),
+    ]);
+    const deleteQueueItem = mock.method(
+      RadarrAPI.prototype,
+      'deleteQueueItem',
+      async () => undefined
+    );
+    const searchedMovieIds: number[] = [];
+    replacePrototypeMethod(
+      RadarrAPI.prototype,
+      'searchMovieOrThrow',
+      async (movieId) => {
+        searchedMovieIds.push(Number(movieId));
+      },
+      t
+    );
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const response = await agent
+      .post(`/request/${requestData.id}/fail-download`)
+      .send({ downloadId: aliasDownloadId(rawMovieDownloadId) });
+
+    assert.strictEqual(
+      response.status,
+      200,
+      JSON.stringify({
+        response: response.body,
+        queueCalls: getQueue.mock.callCount(),
+      })
+    );
+    assert.strictEqual(getQueue.mock.callCount(), 1);
+    assert.deepStrictEqual(deleteQueueItem.mock.calls[0].arguments, [
+      901,
+      { removeFromClient: true, blocklist: true, skipRedownload: false },
+    ]);
+    assert.deepStrictEqual(searchedMovieIds, [812]);
+  });
+
+  it('does not remove a queued release that belongs to another movie', async (t) => {
+    const requestData = await seedRequest(MediaRequestStatus.APPROVED);
+    await linkMovieToRadarr(requestData, 31, 812);
+    await allowUserRequestType('friend@seerr.dev', Permission.REQUEST_MOVIE, t);
+    configureRadarr([createRadarrSettings(31)]);
+    mock.method(RadarrAPI.prototype, 'getQueue', async () => [
+      movieQueueItem(999),
+    ]);
+    const deleteQueueItem = mock.method(
+      RadarrAPI.prototype,
+      'deleteQueueItem',
+      async () => undefined
+    );
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const response = await agent
+      .post(`/request/${requestData.id}/fail-download`)
+      .send({ downloadId: aliasDownloadId(rawMovieDownloadId) });
+
+    assert.strictEqual(response.status, 409);
+    assert.strictEqual(deleteQueueItem.mock.callCount(), 0);
+  });
+
+  it('reports a replacement-search failure after the matching release is removed', async (t) => {
+    const requestData = await seedRequest(MediaRequestStatus.APPROVED);
+    await linkMovieToRadarr(requestData, 31, 812);
+    await allowUserRequestType('friend@seerr.dev', Permission.REQUEST_MOVIE, t);
+    configureRadarr([createRadarrSettings(31)]);
+    mock.method(RadarrAPI.prototype, 'getQueue', async () => [
+      movieQueueItem(812),
+    ]);
+    const deleteQueueItem = mock.method(
+      RadarrAPI.prototype,
+      'deleteQueueItem',
+      async () => undefined
+    );
+    let replacementSearchFailed = false;
+    replacePrototypeMethod(
+      RadarrAPI.prototype,
+      'searchMovieOrThrow',
+      async () => {
+        replacementSearchFailed = true;
+        throw new Error('Provider search failed');
+      },
+      t
+    );
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const response = await agent
+      .post(`/request/${requestData.id}/fail-download`)
+      .send({ downloadId: aliasDownloadId(rawMovieDownloadId) });
+
+    assert.strictEqual(response.status, 502);
+    assert.match(
+      response.body.message,
+      /removed the release.*could not start/i
+    );
+    assert.strictEqual(deleteQueueItem.mock.callCount(), 1);
+    assert.strictEqual(replacementSearchFailed, true);
+  });
+
+  it('rejects pending requests before contacting Radarr', async () => {
+    const requestData = await seedRequest(MediaRequestStatus.PENDING);
+    const getQueue = mock.method(
+      RadarrAPI.prototype,
+      'getQueue',
+      async () => []
+    );
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const response = await agent
+      .post(`/request/${requestData.id}/fail-download`)
+      .send({ downloadId: aliasDownloadId(rawMovieDownloadId) });
+
+    assert.strictEqual(response.status, 409);
+    assert.strictEqual(getQueue.mock.callCount(), 0);
+  });
+
+  it('lets the requester fail a matching series release through Sonarr', async (t) => {
+    const requestedBy = await getRepository(User).findOneOrFail({
+      where: { email: 'friend@seerr.dev' },
+    });
+    const media = await getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.TV,
+        tmdbId: 921,
+        tvdbId: 88221,
+        status: MediaStatus.PROCESSING,
+        status4k: MediaStatus.UNKNOWN,
+        serviceId: 32,
+        externalServiceId: 731,
+      })
+    );
+    const requestData = await getRepository(MediaRequest).save(
+      new MediaRequest({
+        type: MediaType.TV,
+        status: MediaRequestStatus.APPROVED,
+        media,
+        requestedBy,
+        is4k: false,
+        seasons: [],
+      })
+    );
+    await allowUserRequestType('friend@seerr.dev', Permission.REQUEST_TV, t);
+    configureSonarr([createSonarrSettings(32)]);
+    const getQueue = mock.method(SonarrAPI.prototype, 'getQueue', async () => [
+      {
+        size: 100,
+        title: 'Bad episode release',
+        sizeleft: 50,
+        timeleft: '00:10:00',
+        estimatedCompletionTime: '2026-09-30T20:00:00.000Z',
+        status: 'downloading',
+        trackedDownloadStatus: 'downloading',
+        trackedDownloadState: 'importPending',
+        downloadId: rawMovieDownloadId,
+        protocol: 'torrent',
+        downloadClient: 'qBittorrent',
+        indexer: 'Test indexer',
+        id: 902,
+        seriesId: 731,
+        episode: { seasonNumber: 1, episodeNumber: 1 },
+        episodeId: 551,
+      } as unknown as Awaited<ReturnType<SonarrAPI['getQueue']>>[number],
+    ]);
+    const deleteQueueItem = mock.method(
+      SonarrAPI.prototype,
+      'deleteQueueItem',
+      async () => undefined
+    );
+    const searchedSeriesIds: number[] = [];
+    replacePrototypeMethod(
+      SonarrAPI.prototype,
+      'searchSeriesOrThrow',
+      async (seriesId) => {
+        searchedSeriesIds.push(Number(seriesId));
+      },
+      t
+    );
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const response = await agent
+      .post(`/request/${requestData.id}/fail-download`)
+      .send({ downloadId: aliasDownloadId(rawMovieDownloadId) });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(getQueue.mock.callCount(), 1);
+    assert.strictEqual(deleteQueueItem.mock.calls[0].arguments[0], 902);
+    assert.deepStrictEqual(searchedSeriesIds, [731]);
+  });
+
+  it('does not let another ordinary requester operate on the request download', async (t) => {
+    const requestData = await seedRequest(MediaRequestStatus.APPROVED);
+    await allowUserRequestType('demo@seerr.dev', Permission.REQUEST_MOVIE, t);
+    const agent = await loginAs('demo@seerr.dev', 'test1234');
+
+    const response = await agent
+      .post(`/request/${requestData.id}/fail-download`)
+      .send({ downloadId: aliasDownloadId(rawMovieDownloadId) });
+
+    assert.strictEqual(response.status, 403);
   });
 });
 

@@ -13,7 +13,7 @@ import logger from '@server/logger';
 import { mapLazyLibrarianMagazineDetails } from '@server/models/Magazine';
 import { filterEntityResponse } from '@server/utils/entityResponse';
 import { getHttpErrorDetails } from '@server/utils/httpError';
-import { parsePositiveRouteId } from '@server/utils/routeId';
+import { parseNonNegativeRouteId } from '@server/utils/routeId';
 import { parseBoundedString } from '@server/utils/validation';
 import { Router } from 'express';
 
@@ -22,13 +22,14 @@ const maxServiceId = 1_000_000_000;
 const maxMagazineDetailLookupMs = 20_000;
 
 magazineRoutes.get('/cover/:serviceId/:coverId', async (req, res) => {
-  const serviceId = parsePositiveRouteId(req.params.serviceId, maxServiceId);
+  const serviceId = parseNonNegativeRouteId(req.params.serviceId, maxServiceId);
   const coverId = req.params.coverId;
-  const service = serviceId
-    ? getExternalRuntimeConfig().lazylibrarian.find(
-        (candidate) => candidate.id === serviceId
-      )
-    : undefined;
+  const service =
+    serviceId !== undefined
+      ? getExternalRuntimeConfig().lazylibrarian.find(
+          (candidate) => candidate.id === serviceId
+        )
+      : undefined;
 
   if (!service || !/^(?:[a-f\d]{32}|[a-f\d]{40})$/i.test(coverId)) {
     return res.status(404).send('Magazine cover not found.');

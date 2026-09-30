@@ -9,6 +9,7 @@ import ConfirmButton from '@app/components/Common/ConfirmButton';
 import MediaTypeBadge, {
   getMediaTypeBadgeType,
 } from '@app/components/Common/MediaTypeBadge';
+import { canRetryRequest } from '@app/components/RequestCard/retryPermissions';
 import StatusBadge from '@app/components/StatusBadge';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useSettings from '@app/hooks/useSettings';
@@ -603,6 +604,20 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
       15000
     ),
   });
+  const canFailDownload = Boolean(
+    requestData &&
+    requestData.status === MediaRequestStatus.APPROVED &&
+    (requestData.type === 'movie' || requestData.type === 'tv') &&
+    getRequestDownloadStatus(requestData)?.some((item) => item.downloadId) &&
+    user &&
+    canRetryRequest({
+      requestType: requestData.type,
+      is4k: requestData.is4k,
+      requestedById: requestData.requestedBy.id,
+      userId: user.id,
+      permissions: user.permissions,
+    })
+  );
 
   useEffect(() => {
     setWatchAheadEpisodeCount(requestData?.watchAheadEpisodeCount ?? 0);
@@ -1026,6 +1041,8 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                   }
                   plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
                   serviceUrl={getRequestServiceUrl(requestData)}
+                  requestId={requestData.id}
+                  canFailDownload={canFailDownload}
                 />
               )}
             </div>
@@ -1167,7 +1184,8 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                   {intl.formatMessage(messages.partialBookService)}
                 </span>
                 <span className="flex truncate text-sm text-gray-300">
-                  {requestData.media.serviceId
+                  {requestData.media.serviceId !== null &&
+                  requestData.media.serviceId !== undefined
                     ? intl.formatMessage(messages.ebook)
                     : intl.formatMessage(messages.audiobook)}
                 </span>

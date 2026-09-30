@@ -41,7 +41,9 @@ const getMagazinePosterPath = (
     /^cache\/magazine\/([a-f\d]{32}|[a-f\d]{40})\.jpg$/i
   )?.[1];
 
-  if (!serviceId || !Number.isSafeInteger(serviceId) || !coverId) {
+  // The first configured Servarr-compatible service is assigned ID 0.
+  // Treat only an absent ID as unconfigured; zero is a valid authority key.
+  if (serviceId === undefined || !Number.isSafeInteger(serviceId) || !coverId) {
     return undefined;
   }
 

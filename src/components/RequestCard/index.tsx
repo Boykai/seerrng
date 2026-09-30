@@ -493,7 +493,10 @@ const RequestCard = ({
     requestData.bookFormat === 'both' &&
     !!(
       requestData.media.serviceId !== requestData.media.audiobookServiceId &&
-      (requestData.media.serviceId || requestData.media.audiobookServiceId)
+      ((requestData.media.serviceId !== null &&
+        requestData.media.serviceId !== undefined) ||
+        (requestData.media.audiobookServiceId !== null &&
+          requestData.media.audiobookServiceId !== undefined))
     );
   const canRetry =
     requestData &&
@@ -505,6 +508,13 @@ const RequestCard = ({
       userId: user.id,
       permissions: user.permissions,
     });
+  const canFailDownload = Boolean(
+    requestData &&
+    requestData.status === MediaRequestStatus.APPROVED &&
+    (requestData.type === 'movie' || requestData.type === 'tv') &&
+    getRequestDownloadStatus(requestData)?.some((item) => item.downloadId) &&
+    canRetry
+  );
 
   const { mediaUrl: plexUrl, mediaUrl4k: plexUrl4k } = useDeepLinks({
     mediaUrl: requestData?.media?.mediaUrl,
@@ -787,7 +797,8 @@ const RequestCard = ({
                 {intl.formatMessage(messages.partialBookService)}
               </span>
               <span className="flex truncate text-sm text-gray-300">
-                {requestData.media.serviceId
+                {requestData.media.serviceId !== null &&
+                requestData.media.serviceId !== undefined
                   ? intl.formatMessage(messages.ebook)
                   : intl.formatMessage(messages.audiobook)}
               </span>
@@ -879,6 +890,8 @@ const RequestCard = ({
                 }
                 plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
                 serviceUrl={getRequestServiceUrl(requestData)}
+                requestId={requestData.id}
+                canFailDownload={canFailDownload}
               />
             )}
           </div>

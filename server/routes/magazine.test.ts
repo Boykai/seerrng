@@ -161,3 +161,25 @@ describe('GET /magazine/:title', () => {
     assert.doesNotMatch(JSON.stringify(logContext), /super-secret/);
   });
 });
+
+describe('GET /magazine/cover/:serviceId/:coverId', () => {
+  it('loads a cover from the first configured service with ID zero', async () => {
+    const coverId = 'a'.repeat(40);
+    getSettings().lazylibrarian = [magazineService(0)];
+    const getMagazineCover = mock.method(
+      LazyLibrarianAPI.prototype,
+      'getMagazineCover',
+      async () => ({
+        imageBuffer: Buffer.from('cover'),
+        contentType: 'image/jpeg',
+      })
+    );
+
+    const res = await request(app).get(`/magazine/cover/0/${coverId}`);
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.headers['content-type'], 'image/jpeg');
+    assert.deepStrictEqual(res.body, Buffer.from('cover'));
+    assert.strictEqual(getMagazineCover.mock.callCount(), 1);
+  });
+});

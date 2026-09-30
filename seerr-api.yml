@@ -6937,7 +6937,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [hostname, port, useSsl, apiKey]
+              required: [hostname, port, useSsl]
               properties:
                 hostname:
                   type: string
@@ -14286,6 +14286,59 @@ paths:
           description: Request not found
         '409':
           description: Jellyfin or Sonarr is not configured, the series has no TVDB identity, or the request cannot be enrolled
+  /request/{requestId}/fail-download:
+    post:
+      summary: Fail an active request download and search again
+      description: |
+        Removes and blocklists the selected active Radarr or Sonarr release, then starts a fresh search. The request owner may use this action while they still have permission to request the media; users with `MANAGE_REQUESTS` may use it on any request.
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: requestId
+          description: Request ID
+          required: true
+          schema:
+            type: string
+            example: '1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [downloadId]
+              properties:
+                downloadId:
+                  type: string
+                  minLength: 1
+                  maxLength: 2048
+                  description: Identifier of the active Radarr or Sonarr queue download.
+      responses:
+        '200':
+          description: Release removed and a new search started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+        '400':
+          description: Invalid download identifier or unsupported request media type
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller may not manage this request download
+        '404':
+          description: Request not found
+        '409':
+          description: Request is not active, the selected download is stale, or its acquisition service changed
+        '502':
+          description: The release was removed but a new search could not be started, or the acquisition service failed
   /request/{requestId}/retry:
     post:
       summary: Retry failed or unavailable request
