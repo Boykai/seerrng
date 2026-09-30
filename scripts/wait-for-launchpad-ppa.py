@@ -167,6 +167,7 @@ def main() -> int:
 
     deadline = time.monotonic() + args.timeout_minutes * 60
     last_report = ""
+    missing_source_since: float | None = None
 
     while time.monotonic() < deadline:
         try:
@@ -174,11 +175,24 @@ def main() -> int:
                 archive, series, args.source_version
             )
             if not publications:
+                now = time.monotonic()
+                if missing_source_since is None:
+                    missing_source_since = now
+                missing_for = now - missing_source_since
+                if missing_for >= STALE_UPLOAD_TIMEOUT.total_seconds():
+                    minutes = int(missing_for // 60)
+                    raise FreshUploadRequired(
+                        f"Launchpad has no source publication record for "
+                        f"{args.source_version} in {args.series} after {minutes} "
+                        f"minutes of successful checks. Republishing a fresh "
+                        f"signed source version to {args.archive_web}."
+                    )
                 report = (
                     f"Waiting for {args.source_version} source publication in "
                     f"{args.series} ({args.archive_web})."
                 )
             else:
+                missing_source_since = None
                 publication = max(publications, key=lambda item: item.date_created)
                 publication_status = publication.status
                 builds = get_builds(publication)
