@@ -659,7 +659,8 @@ export const refreshTrackedSoftwareRequests = async (): Promise<void> => {
     .where('request.status IN (:...statuses)', {
       statuses: ['approved', 'searching', 'downloading', 'importing'],
     })
-    .orderBy('COALESCE(request.lastCheckedAt, request.createdAt)', 'ASC')
+    .orderBy('request.lastCheckedAt', 'ASC', 'NULLS FIRST')
+    .addOrderBy('request.createdAt', 'ASC')
     .take(100)
     .getMany();
 
