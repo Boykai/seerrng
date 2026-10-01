@@ -1848,6 +1848,39 @@ describe('User route input validation', () => {
     assert.strictEqual(res.body[0].permissions, Permission.REQUEST);
   });
 
+  it('bulk-updates auto-request settings without changing user permissions', async () => {
+    const userRepository = getRepository(User);
+    const before = await userRepository.findOneByOrFail({ id: 2 });
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.put('/user').send({
+      ids: [2],
+      settings: {
+        watchlistSyncMovies: true,
+        watchlistSyncTv: false,
+      },
+    });
+
+    assert.strictEqual(res.status, 200);
+    const saved = await userRepository.findOneByOrFail({ id: 2 });
+    assert.strictEqual(saved.permissions, before.permissions);
+    assert.strictEqual(saved.settings?.watchlistSyncMovies, true);
+    assert.strictEqual(saved.settings?.watchlistSyncTv, false);
+  });
+
+  it('rejects malformed bulk auto-request settings', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.put('/user').send({
+      ids: [2],
+      settings: { watchlistSyncMovies: 'true' },
+    });
+
+    assert.strictEqual(res.status, 400);
+    assert.match(
+      res.body.message,
+      /settings\.watchlistSyncMovies must be a boolean/i
+    );
+  });
+
   it('rechecks the grant ceiling after bulk-update actor demotion', async () => {
     const userRepository = getRepository(User);
     await userRepository.update(1, {
@@ -2623,6 +2656,21 @@ describe('User route input validation', () => {
     assert.strictEqual(target.movieQuotaDays, 30);
     assert.strictEqual(target.settings?.id, targetSettings.id);
     assert.strictEqual(targetSettings.user.id, 2);
+  });
+
+  it('preserves profile identity when blank name and email fields are omitted', async () => {
+    const userRepository = getRepository(User);
+    const before = await userRepository.findOneByOrFail({ id: 2 });
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/user/2/settings/main').send({
+      locale: 'fr',
+    });
+
+    assert.strictEqual(res.status, 200);
+    const saved = await userRepository.findOneByOrFail({ id: 2 });
+    assert.strictEqual(saved.username, before.username);
+    assert.strictEqual(saved.email, before.email);
+    assert.strictEqual(saved.settings?.locale, 'fr');
   });
 
   it('preserves omitted general settings and clears only explicit values', async () => {

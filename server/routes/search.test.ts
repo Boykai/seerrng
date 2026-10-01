@@ -524,6 +524,42 @@ describe('GET /search', () => {
     assert.strictEqual(audiobookSearch.mock.callCount(), 1);
   });
 
+  it('explains when the configured audiobook catalog is unavailable', async () => {
+    getSettings().readarr = [
+      {
+        id: 1,
+        hostname: 'audiobookshelf.test',
+        port: 8787,
+        apiKey: 'audio-key',
+        useSsl: false,
+        baseUrl: '',
+        serviceType: 'audiobook',
+      } as ReadarrSettings,
+    ];
+    const audiobookSearch = mock.method(
+      ReadarrAPI.prototype,
+      'lookupBook',
+      async () => {
+        throw new Error('Catalog connection refused');
+      }
+    );
+
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const res = await agent.get('/search').query({
+      query: 'Pacific',
+      type: 'book',
+      format: 'audiobook',
+    });
+
+    assert.strictEqual(res.status, 503);
+    assert.deepStrictEqual(res.body, {
+      status: 503,
+      message:
+        'The configured audiobook catalog is unavailable. Please try again.',
+    });
+    assert.strictEqual(audiobookSearch.mock.callCount(), 1);
+  });
+
   it('does not search an administrator-disabled book format', async () => {
     const settings = getSettings();
     const originalCategories = { ...settings.main.enabledMediaCategories };
