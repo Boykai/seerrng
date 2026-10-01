@@ -120,9 +120,13 @@ jobs:
         shell: bash
         env:
           EXPECTED_PNPM_VERSION: ${{ matrix.pnpm_version }}
-          npm_config_manage_package_manager_versions: 'false'
         run: |
           set -euo pipefail
+          case "$EXPECTED_PNPM_VERSION" in
+            10.*) export npm_config_manage_package_manager_versions=false ;;
+            11.*) export pnpm_config_pm_on_fail=ignore ;;
+            *) echo "Unsupported pnpm version for release build: $EXPECTED_PNPM_VERSION" >&2; exit 1 ;;
+          esac
           actual_version="$(pnpm --version)"
           printf 'Using pnpm %s from %s\n' "$actual_version" "$(command -v pnpm)"
           [[ "$actual_version" == "$EXPECTED_PNPM_VERSION" ]] || {
@@ -156,12 +160,25 @@ jobs:
 
       - name: Build archive
         shell: bash
-        run: ./scripts/build-release-assets.sh "${TAG}" dist-release
         env:
+          EXPECTED_PNPM_VERSION: ${{ matrix.pnpm_version }}
           TAG: ${{ needs.resolve.outputs.tag }}
           GYP_MSVS_VERSION: ${{ matrix.os == 'windows' && matrix.arch == 'arm64' && '2026' || 'auto' }}
           npm_config_engine_strict: ${{ matrix.pnpm_version == '11.25.0' && 'false' || 'true' }}
-          npm_config_manage_package_manager_versions: 'false'
+        run: |
+          set -euo pipefail
+          case "$EXPECTED_PNPM_VERSION" in
+            10.*) export npm_config_manage_package_manager_versions=false ;;
+            11.*) export pnpm_config_pm_on_fail=ignore ;;
+            *) echo "Unsupported pnpm version for release build: $EXPECTED_PNPM_VERSION" >&2; exit 1 ;;
+          esac
+          actual_version="$(pnpm --version)"
+          printf 'Building with pnpm %s from %s\n' "$actual_version" "$(command -v pnpm)"
+          [[ "$actual_version" == "$EXPECTED_PNPM_VERSION" ]] || {
+            echo "Expected pnpm $EXPECTED_PNPM_VERSION, got $actual_version." >&2
+            exit 1
+          }
+          ./scripts/build-release-assets.sh "${TAG}" dist-release
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
