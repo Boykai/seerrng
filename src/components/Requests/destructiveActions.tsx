@@ -111,6 +111,7 @@ export const RequestActionConfirmation = ({
   service,
   busy,
   disabled = false,
+  confirmLabel,
   onConfirm,
   onCancel,
   children,
@@ -122,6 +123,7 @@ export const RequestActionConfirmation = ({
   service?: string;
   busy: boolean;
   disabled?: boolean;
+  confirmLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
   children?: ReactNode;
@@ -140,7 +142,7 @@ export const RequestActionConfirmation = ({
           { title, service }
         )
       }
-      okText={intl.formatMessage(requestActionMessages[action])}
+      okText={confirmLabel ?? intl.formatMessage(requestActionMessages[action])}
       okButtonType="danger"
       okButtonProps={{ buttonIcon: 'delete' }}
       cancelButtonType="success"

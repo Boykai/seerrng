@@ -7,7 +7,7 @@ import type {
   SoftwareCatalogPlatform,
   SoftwareProviderActions,
 } from '@server/api/software/types';
-import { getRepository } from '@server/datasource';
+import dataSource, { getRepository } from '@server/datasource';
 import SoftwareRequest, {
   type SoftwareRequestCategory,
   type SoftwareRequestProvider,
@@ -1344,6 +1344,65 @@ softwareRoutes.get('/status/:id', async (req, res) => {
       url: `/api/v1/request/software/status/${request.id}/downloads/${encodeURIComponent(asset.id)}`,
     })),
   });
+});
+
+softwareRoutes.delete('/status/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'Invalid software request id.' });
+  }
+
+  const request = await getRepository(SoftwareRequest).findOneBy({ id });
+  if (!request) {
+    return res.status(404).json({ error: 'Software request not found.' });
+  }
+
+  const canManage = req.user!.hasPermission(Permission.MANAGE_REQUESTS);
+  const isOwner = request.requestedById === req.user!.id;
+  if (
+    !canManage &&
+    (!isOwner || !req.user!.hasPermission(Permission.REQUEST))
+  ) {
+    return res.status(404).json({ error: 'Software request not found.' });
+  }
+
+  try {
+    await dataSource.transaction(async (manager) => {
+      const current = await manager.findOneBy(SoftwareRequest, { id });
+      if (!current) {
+        return;
+      }
+      if (current.status !== 'cancelled') {
+        throw new SoftwareRequestStateError(
+          'Only cancelled software requests can be cleared.'
+        );
+      }
+
+      await manager.delete(SoftwareRequestStatusEvent, { requestId: id });
+      const deletion = await manager.delete(SoftwareRequest, {
+        id,
+        status: 'cancelled',
+      });
+      if (deletion.affected !== 1) {
+        throw new SoftwareRequestStateError(
+          'Only cancelled software requests can be cleared.'
+        );
+      }
+    });
+    return res.status(204).send();
+  } catch (error) {
+    if (error instanceof SoftwareRequestStateError) {
+      return res.status(409).json({ error: error.message });
+    }
+    logger.error('Failed to clear cancelled software request', {
+      label: 'Software Request',
+      requestId: id,
+      ...getHttpErrorDetails(error),
+    });
+    return res
+      .status(500)
+      .json({ error: 'Software request could not be cleared.' });
+  }
 });
 
 softwareRoutes.post('/status/:id/approve', async (req, res) => {

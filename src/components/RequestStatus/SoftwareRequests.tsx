@@ -2,6 +2,10 @@ import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PaginationFooter from '@app/components/Common/PaginationFooter';
+import {
+  RequestActionButton,
+  RequestActionConfirmation,
+} from '@app/components/Requests/destructiveActions';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
@@ -56,6 +60,12 @@ const messages = defineMessages('components.RequestStatus.SoftwareRequests', {
     'The provider cannot confirm whether the previous download started. Check the download client’s queue and history. Continue only if no matching download exists.',
   confirmAfterCheck: 'I checked; continue',
   cancelRetry: 'Cancel',
+  clearCancelled: 'Clear cancelled request',
+  clearCancelledTitle: 'Clear this cancelled request?',
+  clearCancelledDescription:
+    'This removes the cancelled request and its saved status history from Seerr. It does not delete installed software.',
+  clearSuccess: 'Cancelled request cleared.',
+  clearFailed: 'Unable to clear this cancelled request.',
   loadError: 'Software request status could not be loaded.',
   noRequests: 'No software requests yet.',
   quotaExceeded: 'Your software request limit has been reached.',
@@ -227,6 +237,8 @@ const SoftwareRequests = ({
     requestId: number;
     action: 'retry' | 'cancel';
   } | null>(null);
+  const [clearSelection, setClearSelection] = useState<number | null>(null);
+  const [clearingId, setClearingId] = useState<number | null>(null);
   const historyEndpoint = historyRequestId
     ? `/api/v1/request/software/status/${historyRequestId}`
     : null;
@@ -292,6 +304,32 @@ const SoftwareRequests = ({
     } finally {
       setWorkingId(null);
     }
+  };
+
+  const clearCancelledRequest = async () => {
+    if (clearSelection === null) return;
+    const requestId = clearSelection;
+    setClearingId(requestId);
+    try {
+      await axios.delete(`/api/v1/request/software/status/${requestId}`);
+      setClearSelection(null);
+      setHistoryRequestId((current) =>
+        current === requestId ? null : current
+      );
+      addToast(intl.formatMessage(messages.clearSuccess), {
+        appearance: 'success',
+        autoDismiss: true,
+      });
+    } catch {
+      addToast(intl.formatMessage(messages.clearFailed), {
+        appearance: 'error',
+        autoDismiss: true,
+      });
+      return;
+    } finally {
+      setClearingId(null);
+    }
+    await mutate().catch(() => undefined);
   };
 
   if (
@@ -361,6 +399,17 @@ const SoftwareRequests = ({
       className="mb-6 space-y-3"
       aria-label={intl.formatMessage(messages.title)}
     >
+      {clearSelection !== null && (
+        <RequestActionConfirmation
+          action="delete"
+          heading={intl.formatMessage(messages.clearCancelledTitle)}
+          explanation={intl.formatMessage(messages.clearCancelledDescription)}
+          confirmLabel={intl.formatMessage(messages.clearCancelled)}
+          busy={clearingId === clearSelection}
+          onConfirm={() => void clearCancelledRequest()}
+          onCancel={() => setClearSelection(null)}
+        />
+      )}
       <h2 className="text-lg font-semibold text-gray-100">
         {intl.formatMessage(messages.title)}
       </h2>
@@ -495,6 +544,16 @@ const SoftwareRequests = ({
                       >
                         {intl.formatMessage(messages.retry)}
                       </Button>
+                    )}
+                    {status === 'cancelled' && canManageRequest(request) && (
+                      <RequestActionButton
+                        action="delete"
+                        label={intl.formatMessage(messages.clearCancelled)}
+                        tooltip={intl.formatMessage(messages.clearCancelled)}
+                        busy={clearingId === request.id}
+                        disabled={workingId === request.id}
+                        onClick={() => setClearSelection(request.id)}
+                      />
                     )}
                     {status === 'available' && (
                       <DownloadCopies requestId={request.id} assets={assets} />
