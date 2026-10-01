@@ -45,9 +45,13 @@ trap cleanup EXIT
 stage="${work_dir}/${asset}"
 mkdir -p "$stage"
 
-if command -v corepack >/dev/null 2>&1; then
+if ! command -v pnpm >/dev/null 2>&1 && command -v corepack >/dev/null 2>&1; then
   corepack enable
 fi
+command -v pnpm >/dev/null 2>&1 || {
+  echo "pnpm or Corepack is required to build release assets" >&2
+  exit 127
+}
 CI=true CYPRESS_INSTALL_BINARY=0 pnpm install --frozen-lockfile
 pnpm build
 

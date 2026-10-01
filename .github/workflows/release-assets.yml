@@ -94,6 +94,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: 'package.json'
+          package-manager-cache: false
+
       - name: Prepare isolated pnpm package metadata
         if: matrix.os == 'windows'
         shell: bash
@@ -111,10 +116,19 @@ jobs:
           version: ${{ matrix.pnpm_version }}
           package_json_file: ${{ matrix.os == 'windows' && '.github/release-pnpm-tooling.json' || 'package.json' }}
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: 'package.json'
-          package-manager-cache: false
+      - name: Verify pinned pnpm runtime
+        shell: bash
+        env:
+          EXPECTED_PNPM_VERSION: ${{ matrix.pnpm_version }}
+          npm_config_manage_package_manager_versions: 'false'
+        run: |
+          set -euo pipefail
+          actual_version="$(pnpm --version)"
+          printf 'Using pnpm %s from %s\n' "$actual_version" "$(command -v pnpm)"
+          [[ "$actual_version" == "$EXPECTED_PNPM_VERSION" ]] || {
+            echo "Expected pnpm $EXPECTED_PNPM_VERSION, got $actual_version." >&2
+            exit 1
+          }
 
       - name: Verify runner platform
         shell: bash
