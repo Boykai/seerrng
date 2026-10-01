@@ -162,10 +162,16 @@ describe('Requests', () => {
       .should('contain.text', 'Clear this cancelled request?')
       .contains('button', 'Clear cancelled request')
       .click();
+    cy.then(() => {
+      expect(clientErrors.join('\n')).not.to.include(
+        'Transition.Child is used but it is missing a parent'
+      );
+    });
     cy.wait('@clearCancelledRequest');
     cy.contains('Cancelled request cleared.').should('be.visible');
-    cy.get('[aria-label="Software requests"]')
-      .contains('Cancelled software request')
-      .should('not.exist');
+    cy.contains('Cancelled software request').should('not.exist');
+    cy.contains(
+      'No movie, show, music, book, comic, or magazine requests match these filters.'
+    ).should('be.visible');
   });
 });
