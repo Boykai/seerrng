@@ -67,7 +67,7 @@ describe('Requests', () => {
     cy.visit('/requests');
     cy.wait('@softwareStatus')
       .its('request.url')
-      .should('include', 'filter=all');
+      .should('not.include', 'filter=');
     cy.get('[aria-label="Task Filters"]')
       .contains('button', 'No Release Found')
       .click();
@@ -90,6 +90,17 @@ describe('Requests', () => {
 
   it('clears a cancelled software request from the request list', () => {
     let cleared = false;
+    const clientErrors: string[] = [];
+    cy.on('window:before:load', (window) => {
+      const originalConsoleError = window.console.error.bind(window.console);
+      window.console.error = (...args) => {
+        clientErrors.push(args.map(String).join(' '));
+        originalConsoleError(...args);
+      };
+      window.addEventListener('error', (event) => {
+        clientErrors.push(event.message);
+      });
+    });
     cy.intercept('GET', '/api/v1/request/status*', {
       pageInfo: { page: 1, pages: 1, pageSize: 10, results: 0 },
       results: [],
@@ -140,6 +151,13 @@ describe('Requests', () => {
     cy.get('[aria-label="Software requests"]')
       .contains('button', 'Clear cancelled request')
       .click();
+    cy.get('body').then(($body) => {
+      if ($body.text().includes('Oops')) {
+        throw new Error(
+          `The confirmation click caused a page error: ${clientErrors.join('\n') || 'no browser console error was captured'}`
+        );
+      }
+    });
     cy.get('[role="dialog"]')
       .should('contain.text', 'Clear this cancelled request?')
       .contains('button', 'Clear cancelled request')

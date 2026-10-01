@@ -4,6 +4,7 @@ describe('Search provider errors', () => {
   });
 
   it('shows an audiobook catalog failure message and a retry action', () => {
+    cy.mockConfiguredMediaAvailability({ booksEnabled: true });
     cy.intercept('GET', '/api/v1/discover/books*', {
       statusCode: 503,
       body: {
