@@ -627,7 +627,9 @@ jobs:
             release-copr.yml
           do
             optional=false
-            [[ "$workflow" == "release-snap.yml" ]] && optional=true
+            if [[ "$workflow" == "release-snap.yml" || "$workflow" == "release-chocolatey.yml" ]]; then
+              optional=true
+            fi
             dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             if ! gh workflow run "$workflow" --repo "$REPO" --ref main -f "tag=$TAG"; then
               if [[ "$optional" == true ]]; then
@@ -661,7 +663,7 @@ jobs:
             echo "Waiting for $workflow run $run_id"
             if ! node scripts/watch-github-run.mjs "$REPO" "$run_id"; then
               if [[ "$optional" == true ]]; then
-                echo "::warning::Optional package workflow $workflow failed; continuing without Snap Store publication."
+                echo "::warning::Optional package workflow $workflow failed; continuing without that package channel."
                 continue
               fi
               exit 1
