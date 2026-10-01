@@ -125,10 +125,9 @@ describe('Per-user request destination folders', () => {
     cy.wait('@getRequestRootFolders').then(({ response }) => {
       expect(response?.statusCode).to.eq(200);
     });
-    cy.get('[role="dialog"] #folder').should(
-      'contain.text',
-      '/media/Movies/David'
-    );
+    cy.get('[role="dialog"]')
+      .contains('button', '/media/Movies/David')
+      .should('have.class', 'bg-indigo-500/20');
   });
 
   it('shows the service default when a saved folder is no longer available', () => {
@@ -185,9 +184,8 @@ describe('Per-user request destination folders', () => {
       .within(() => cy.contains('button', 'Request').click());
     cy.get('[role="dialog"]').contains('button', 'Advanced Options').click();
     cy.wait('@getRequestRootFolders');
-    cy.get('[role="dialog"] #folder').should(
-      'contain.text',
-      '/media/Movies (953.67 MB)'
-    );
+    cy.get('[role="dialog"]')
+      .contains('button', '/media/Movies')
+      .should('have.class', 'bg-indigo-500/20');
   });
 });
