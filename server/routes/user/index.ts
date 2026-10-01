@@ -13,9 +13,12 @@ import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { UserPushSubscription } from '@server/entity/UserPushSubscription';
+import { UserSettings } from '@server/entity/UserSettings';
 import type { WatchlistResponse } from '@server/interfaces/api/discoverInterfaces';
 import type {
   QuotaResponse,
+  UserBulkUpdateRequest,
+  UserBulkUpdateSettings,
   UserRequestsResponse,
   UserResultsResponse,
   UserWatchDataResponse,
@@ -85,6 +88,7 @@ import {
 import { escapeSqlLikePattern } from '@server/utils/sqlLike';
 import {
   parseBoundedString,
+  parseOptionalBodyBoolean,
   parseOptionalBoundedString,
   parseOptionalNonNegativeInteger,
 } from '@server/utils/validation';
@@ -289,6 +293,61 @@ const parseUserBodyObject = (
   }
 
   return { value: body as Record<string, unknown> };
+};
+
+const BULK_USER_SETTINGS_FIELDS = [
+  'watchlistSyncMovies',
+  'watchlistSyncTv',
+  'watchlistSyncMusic',
+  'watchlistSyncBooks',
+  'watchlistSyncComics',
+  'watchlistSyncMagazines',
+] as const satisfies readonly (keyof UserBulkUpdateSettings)[];
+
+const parseBulkUserSettings = (
+  value: unknown
+): { value: UserBulkUpdateSettings | undefined } | { error: string } => {
+  if (value === undefined) {
+    return { value: undefined };
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { error: 'settings must be an object.' };
+  }
+
+  const settingsObject = value as Record<string, unknown>;
+  const unsupportedFields = Object.keys(settingsObject).filter(
+    (fieldName) =>
+      !BULK_USER_SETTINGS_FIELDS.includes(
+        fieldName as (typeof BULK_USER_SETTINGS_FIELDS)[number]
+      )
+  );
+  if (unsupportedFields.length > 0) {
+    return {
+      error: `settings contains unsupported field ${unsupportedFields[0]}.`,
+    };
+  }
+
+  const settings: UserBulkUpdateSettings = {};
+  for (const fieldName of BULK_USER_SETTINGS_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(settingsObject, fieldName)) {
+      continue;
+    }
+
+    const parsed = parseOptionalBodyBoolean(
+      settingsObject[fieldName],
+      `settings.${fieldName}`
+    );
+    if ('error' in parsed) {
+      return parsed;
+    }
+    if (parsed.value !== undefined) {
+      settings[fieldName] = parsed.value;
+    }
+  }
+
+  return Object.keys(settings).length > 0
+    ? { value: settings }
+    : { error: 'settings must include at least one supported field.' };
 };
 
 const parseOptionalUserBodyObject = (
@@ -1488,112 +1547,137 @@ export const canMakePermissionsChange = (
   return (requested & ~held) === 0n;
 };
 
-router.put<
-  Record<string, never>,
-  Partial<User>[],
-  { ids: string[]; permissions: number }
->('/', isAuthenticated(Permission.MANAGE_USERS), async (req, res, next) => {
-  const parsedBody = parseUserBodyObject(req.body);
-  if ('error' in parsedBody) {
-    return next({ status: 400, message: parsedBody.error });
-  }
-  const body = parsedBody.value;
+router.put<Record<string, never>, Partial<User>[], UserBulkUpdateRequest>(
+  '/',
+  isAuthenticated(Permission.MANAGE_USERS),
+  async (req, res, next) => {
+    const parsedBody = parseUserBodyObject(req.body);
+    if ('error' in parsedBody) {
+      return next({ status: 400, message: parsedBody.error });
+    }
+    const body = parsedBody.value;
 
-  const parsedIds = parsePositiveIntegerArray(body.ids, {
-    fieldName: 'ids',
-    maxItems: MAX_BULK_USER_IDS,
-  });
+    const parsedIds = parsePositiveIntegerArray(body.ids, {
+      fieldName: 'ids',
+      maxItems: MAX_BULK_USER_IDS,
+    });
 
-  if ('error' in parsedIds) {
-    return next({ status: 400, message: parsedIds.error });
-  }
-  if (parsedIds.value.length === 0) {
-    return res.status(200).json([]);
-  }
-
-  const parsedPermissions = parseOptionalNonNegativeInteger(
-    body.permissions,
-    MAX_PERMISSION_VALUE
-  );
-
-  if (
-    parsedPermissions === undefined ||
-    !isValidPermissionValue(parsedPermissions)
-  ) {
-    return next({ status: 400, message: 'permissions is invalid.' });
-  }
-
-  try {
-    if (!canMakePermissionsChange(parsedPermissions, req.user)) {
-      return next({
-        status: 403,
-        message: 'You do not have permission to grant this level of access',
-      });
+    if ('error' in parsedIds) {
+      return next({ status: 400, message: parsedIds.error });
+    }
+    if (parsedIds.value.length === 0) {
+      return res.status(200).json([]);
     }
 
-    const updatedUsers = await runAuthorizedUserSecurityMutation(
-      req.user!.id,
-      parsedIds.value,
-      Permission.MANAGE_USERS,
-      (actor) => {
-        if (!canMakePermissionsChange(parsedPermissions, actor)) {
-          throw new UserMutationActorUnauthorizedError(
-            'The active user cannot grant these permissions.'
+    const parsedBulkSettings = parseBulkUserSettings(body.settings);
+    if ('error' in parsedBulkSettings) {
+      return next({ status: 400, message: parsedBulkSettings.error });
+    }
+    const settings = parsedBulkSettings.value;
+
+    const parsedPermissions =
+      body.permissions === undefined
+        ? undefined
+        : parseOptionalNonNegativeInteger(
+            body.permissions,
+            MAX_PERMISSION_VALUE
           );
-        }
 
-        return dataSource.transaction(async (manager) => {
-          const userRepository = manager.getRepository(User);
-          const users = await userRepository.find({
-            where: { id: In(parsedIds.value) },
-          });
-
-          if (
-            actor.id !== 1 &&
-            users.some((user) => user.hasPermission(Permission.ADMIN))
-          ) {
-            throw new ProtectedAdministratorMutationError();
-          }
-
-          const criteria: FindOptionsWhere<User> = {
-            id: In(users.map((user) => user.id)),
-            ...(actor.id !== 1 && {
-              permissions: Raw((alias) => `(${alias} & :adminPermission) = 0`, {
-                adminPermission: Permission.ADMIN,
-              }),
-            }),
-          };
-          const result = await userRepository.update(criteria, {
-            permissions: parsedPermissions,
-          });
-
-          if (result.affected !== users.length) {
-            throw new ProtectedAdministratorMutationError();
-          }
-
-          return userRepository.find({
-            where: { id: In(users.map((user) => user.id)) },
-          });
-        });
-      }
-    );
-
-    return res
-      .status(200)
-      .json(User.filterMany(updatedUsers, req.user?.id === 1));
-  } catch (e) {
     if (
-      e instanceof ProtectedAdministratorMutationError ||
-      e instanceof UserMutationActorUnauthorizedError
+      (body.permissions !== undefined &&
+        (parsedPermissions === undefined ||
+          !isValidPermissionValue(parsedPermissions))) ||
+      (parsedPermissions === undefined && !settings)
     ) {
       return next({
-        status: 403,
-        message: 'You do not have permission to modify an administrator',
+        status: 400,
+        message:
+          parsedPermissions === undefined && !settings
+            ? 'At least one bulk user update is required.'
+            : 'permissions is invalid.',
       });
     }
-    next({ status: 500, message: e.message });
+
+    try {
+      if (
+        parsedPermissions !== undefined &&
+        !canMakePermissionsChange(parsedPermissions, req.user)
+      ) {
+        return next({
+          status: 403,
+          message: 'You do not have permission to grant this level of access',
+        });
+      }
+
+      const updatedUsers = await runAuthorizedUserSecurityMutation(
+        req.user!.id,
+        parsedIds.value,
+        Permission.MANAGE_USERS,
+        (actor) => {
+          if (
+            parsedPermissions !== undefined &&
+            !canMakePermissionsChange(parsedPermissions, actor)
+          ) {
+            throw new UserMutationActorUnauthorizedError(
+              'The active user cannot grant these permissions.'
+            );
+          }
+
+          return dataSource.transaction(async (manager) => {
+            const userRepository = manager.getRepository(User);
+            const users = await userRepository.find({
+              where: { id: In(parsedIds.value) },
+              relations: { settings: true },
+            });
+
+            if (
+              actor.id !== 1 &&
+              users.some((user) => user.hasPermission(Permission.ADMIN))
+            ) {
+              throw new ProtectedAdministratorMutationError();
+            }
+
+            if (parsedPermissions !== undefined) {
+              for (const user of users) {
+                user.permissions = parsedPermissions;
+              }
+            }
+
+            if (settings) {
+              for (const user of users) {
+                user.settings ??= new UserSettings({ user });
+                Object.assign(user.settings, settings);
+              }
+            }
+
+            if (users.length > 0) {
+              await userRepository.save(users);
+            }
+
+            return userRepository.find({
+              where: { id: In(users.map((user) => user.id)) },
+            });
+          });
+        }
+      );
+
+      return res
+        .status(200)
+        .json(User.filterMany(updatedUsers, req.user?.id === 1));
+    } catch (e) {
+      if (
+        e instanceof ProtectedAdministratorMutationError ||
+        e instanceof UserMutationActorUnauthorizedError
+      ) {
+        return next({
+          status: 403,
+          message: 'You do not have permission to modify an administrator',
+        });
+      }
+      next({ status: 500, message: e.message });
+    }
   }
-});
+);
 
 router.put<{ id: string }>(
   '/:id',

@@ -305,9 +305,8 @@ const UserGeneralSettings = () => {
         onSubmit={async (values) => {
           try {
             await axios.post(`/api/v1/user/${user?.id}/settings/main`, {
-              username: values.displayName,
-              email:
-                values.email || user?.jellyfinUsername || user?.plexUsername,
+              username: values.displayName?.trim() || undefined,
+              email: values.email || undefined,
               locale: values.locale,
               preferredLanguages: {
                 all: values.preferredLanguageAll || null,

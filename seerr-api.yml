@@ -8706,7 +8706,7 @@ paths:
     put:
       summary: Update batch of users
       description: |
-        Update users with given IDs with provided values in request `body.settings`. You cannot update users' Plex tokens through this request.
+        Update permissions and supported per-user Auto-Request settings for users with the given IDs. Omitted settings are left unchanged. You cannot update users' Plex tokens through this request.
 
         Requires the `MANAGE_USERS` permission.
       tags:
@@ -8724,6 +8724,22 @@ paths:
                     type: integer
                 permissions:
                   type: integer
+                settings:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    watchlistSyncMovies:
+                      type: boolean
+                    watchlistSyncTv:
+                      type: boolean
+                    watchlistSyncMusic:
+                      type: boolean
+                    watchlistSyncBooks:
+                      type: boolean
+                    watchlistSyncComics:
+                      type: boolean
+                    watchlistSyncMagazines:
+                      type: boolean
       responses:
         '200':
           description: Successfully updated user details

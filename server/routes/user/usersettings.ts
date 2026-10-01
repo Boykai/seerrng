@@ -602,16 +602,18 @@ const parseGeneralSettingsBody = (
   ];
   const value: UserSettingsGeneralResponse = {};
 
-  const username = parseBoundedString(bodyObject.username, {
-    fieldName: 'username',
-    maxLength: USER_SETTINGS_LIMITS.username,
-  });
+  if (hasOwn(bodyObject, 'username')) {
+    const username = parseBoundedString(bodyObject.username, {
+      fieldName: 'username',
+      maxLength: USER_SETTINGS_LIMITS.username,
+    });
 
-  if ('error' in username) {
-    return username;
+    if ('error' in username) {
+      return username;
+    }
+
+    value.username = username.value;
   }
-
-  value.username = username.value;
 
   for (const [fieldName, maxLength] of boundedFields) {
     if (fieldName === 'username') {
@@ -1173,7 +1175,9 @@ userSettingsRoutes.post<
             });
           }
 
-          user.username = body.username;
+          if (body.username !== undefined) {
+            user.username = body.username;
+          }
           user.email = nextEmail;
 
           const existingUser = await userRepository.findOne({

@@ -5,6 +5,10 @@ import type { User } from '@app/hooks/useUser';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import type {
+  UserBulkUpdateRequest,
+  UserBulkUpdateSettings,
+} from '@server/interfaces/api/userInterfaces';
 import { hasPermission } from '@server/lib/permissions';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
@@ -19,10 +23,41 @@ interface BulkEditProps {
 }
 
 const messages = defineMessages('components.UserList', {
-  userssaved: 'User permissions saved successfully!',
-  userfail: 'Something went wrong while saving user permissions.',
-  edituser: 'Edit User Permissions',
+  userssaved: 'User updates saved successfully!',
+  userfail: 'Something went wrong while saving user updates.',
+  edituser: 'Bulk Edit Users',
+  autoRequestSettings: 'Auto-Request Settings',
+  autoRequestSettingsDescription:
+    'Choose which automatic watchlist request settings to update. No Change keeps each selected user’s current value.',
+  autoRequestMovies: 'Movies',
+  autoRequestSeries: 'Series',
+  autoRequestMusic: 'Music',
+  autoRequestBooks: 'Books',
+  autoRequestComics: 'Comics',
+  autoRequestMagazines: 'Magazines',
+  noChange: 'No Change',
+  enabled: 'Enabled',
+  disabled: 'Disabled',
 });
+
+const autoRequestFields = [
+  ['watchlistSyncMovies', 'autoRequestMovies'],
+  ['watchlistSyncTv', 'autoRequestSeries'],
+  ['watchlistSyncMusic', 'autoRequestMusic'],
+  ['watchlistSyncBooks', 'autoRequestBooks'],
+  ['watchlistSyncComics', 'autoRequestComics'],
+  ['watchlistSyncMagazines', 'autoRequestMagazines'],
+] as const satisfies readonly [
+  keyof UserBulkUpdateSettings,
+  (
+    | 'autoRequestMovies'
+    | 'autoRequestSeries'
+    | 'autoRequestMusic'
+    | 'autoRequestBooks'
+    | 'autoRequestComics'
+    | 'autoRequestMagazines'
+  ),
+][];
 
 const BulkEditModal = ({
   selectedUserIds,
@@ -35,7 +70,13 @@ const BulkEditModal = ({
   const intl = useIntl();
   const { addToast } = useToasts();
   const [currentPermission, setCurrentPermission] = useState(0);
+  const [permissionChanged, setPermissionChanged] = useState(false);
+  const [autoRequestSettings, setAutoRequestSettings] =
+    useState<UserBulkUpdateSettings>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  const hasChanges =
+    permissionChanged || Object.keys(autoRequestSettings).length > 0;
 
   useEffect(() => {
     if (onSaving) {
@@ -46,10 +87,15 @@ const BulkEditModal = ({
   const updateUsers = async () => {
     try {
       setIsSaving(true);
-      const { data: updated } = await axios.put<User[]>(`/api/v1/user`, {
-        ids: selectedUserIds,
-        permissions: currentPermission,
-      });
+      const update: UserBulkUpdateRequest = { ids: selectedUserIds };
+      if (permissionChanged) {
+        update.permissions = currentPermission;
+      }
+      if (Object.keys(autoRequestSettings).length > 0) {
+        update.settings = autoRequestSettings;
+      }
+
+      const { data: updated } = await axios.put<User[]>(`/api/v1/user`, update);
       if (onComplete) {
         onComplete(updated);
       }
@@ -84,6 +130,8 @@ const BulkEditModal = ({
       if (allPermissionsEqual) {
         setCurrentPermission(allPermissionsEqual);
       }
+      setPermissionChanged(false);
+      setAutoRequestSettings({});
     }
   }, [users, selectedUserIds]);
 
@@ -93,7 +141,7 @@ const BulkEditModal = ({
       onOk={() => {
         updateUsers();
       }}
-      okDisabled={isSaving}
+      okDisabled={isSaving || !hasChanges}
       okText={intl.formatMessage(globalMessages.save)}
       onCancel={onCancel}
     >
@@ -101,8 +149,64 @@ const BulkEditModal = ({
         <PermissionEdit
           actingUser={currentUser}
           currentPermission={currentPermission}
-          onUpdate={(newPermission) => setCurrentPermission(newPermission)}
+          onUpdate={(newPermission) => {
+            setCurrentPermission(newPermission);
+            setPermissionChanged(true);
+          }}
         />
+      </div>
+      <div className="settings-page-content">
+        <section className="settings-group-card">
+          <h3 className="settings-group-heading">
+            {intl.formatMessage(messages.autoRequestSettings)}
+          </h3>
+          <p className="settings-group-description">
+            {intl.formatMessage(messages.autoRequestSettingsDescription)}
+          </p>
+          <div className="settings-group-content">
+            {autoRequestFields.map(([fieldName, labelKey]) => (
+              <div className="form-row" key={fieldName}>
+                <label htmlFor={`bulk-${fieldName}`} className="text-label">
+                  {intl.formatMessage(messages[labelKey])}
+                </label>
+                <div className="form-input-area">
+                  <select
+                    id={`bulk-${fieldName}`}
+                    value={
+                      autoRequestSettings[fieldName] === undefined
+                        ? 'unchanged'
+                        : autoRequestSettings[fieldName]
+                          ? 'enabled'
+                          : 'disabled'
+                    }
+                    onChange={(event) => {
+                      const { value } = event.target;
+                      setAutoRequestSettings((previous) => {
+                        const next = { ...previous };
+                        if (value === 'unchanged') {
+                          delete next[fieldName];
+                        } else {
+                          next[fieldName] = value === 'enabled';
+                        }
+                        return next;
+                      });
+                    }}
+                  >
+                    <option value="unchanged">
+                      {intl.formatMessage(messages.noChange)}
+                    </option>
+                    <option value="enabled">
+                      {intl.formatMessage(messages.enabled)}
+                    </option>
+                    <option value="disabled">
+                      {intl.formatMessage(messages.disabled)}
+                    </option>
+                  </select>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </Modal>
   );
