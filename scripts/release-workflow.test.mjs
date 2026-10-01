@@ -487,6 +487,12 @@ test('release assets build supported native archive platforms', () => {
   const assets = readWorkflow('release-assets.yml');
   const build = assets.jobs.build;
   const publish = assets.jobs.publish;
+  const downloadAssets = publish.steps.find(
+    (step) => step.name === 'Download built assets'
+  );
+  const flattenAssets = publish.steps.find(
+    (step) => step.name === 'Flatten downloaded release assets'
+  );
   const verifyInventory = publish.steps.find(
     (step) => step.name === 'Verify archive inventory and checksums'
   ).run;
@@ -552,6 +558,11 @@ test('release assets build supported native archive platforms', () => {
     'build',
     'build-jellyfin-plugin',
   ]);
+  assert.equal(downloadAssets.with.path, 'dist-release/downloaded');
+  assert.equal(downloadAssets.with['merge-multiple'], undefined);
+  assert.match(flattenAssets.run, /Duplicate release asset filename/u);
+  assert.match(flattenAssets.run, /find "\$downloads" -type f/u);
+  assert.match(verifyInventory, /sha256sum -c/u);
   for (const archive of [
     'seerrng-${TAG}-macos-x64.tar.gz',
     'seerrng-${TAG}-windows-arm64.zip',

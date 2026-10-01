@@ -327,8 +327,23 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: seerrng-*
-          path: dist-release
-          merge-multiple: true
+          path: dist-release/downloaded
+
+      - name: Flatten downloaded release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir='dist-release'
+          downloads="$release_dir/downloaded"
+          while IFS= read -r -d '' file; do
+            filename="${file##*/}"
+            target="$release_dir/$filename"
+            if [[ -e "$target" ]]; then
+              echo "Duplicate release asset filename: $filename" >&2
+              exit 1
+            fi
+            cp -- "$file" "$target"
+          done < <(find "$downloads" -type f -name 'seerrng-*' -print0)
 
       - name: Verify archive inventory and checksums
         shell: bash
