@@ -54,3 +54,44 @@ it('does not let an old in-flight read repopulate a cache after a write', async 
     'updated'
   );
 });
+
+it('bounds one account to its share of the in-flight budget without affecting other accounts', async () => {
+  const busyAccount = {
+    ...account,
+    accessToken: 'busy-account-flight-cap-test',
+  } as DiscoveryAccount;
+  invalidateAccountReads(busyAccount);
+  const releases: (() => void)[] = [];
+  const hold = () =>
+    new Promise<string>((resolve) => {
+      releases.push(() => resolve('held'));
+    });
+
+  const admitted = Array.from({ length: 32 }, (_, index) =>
+    cachedAccountRead(busyAccount, `op-${index}`, hold)
+  );
+  await Promise.resolve();
+
+  await assert.rejects(
+    cachedAccountRead(busyAccount, 'op-over-budget', hold),
+    /Too many discovery requests are in progress for this account/
+  );
+
+  const otherAccount = {
+    ...account,
+    accessToken: 'quiet-account-flight-cap-test',
+  } as DiscoveryAccount;
+  invalidateAccountReads(otherAccount);
+  assert.equal(
+    await cachedAccountRead(otherAccount, 'read', async () => 'owned'),
+    'owned'
+  );
+
+  releases.forEach((release) => release());
+  await Promise.all(admitted);
+
+  assert.equal(
+    await cachedAccountRead(busyAccount, 'op-after-drain', async () => 'free'),
+    'free'
+  );
+});

@@ -2,7 +2,12 @@ import type DiscoveryAccount from '@server/entity/DiscoveryAccount';
 import cacheManager from '@server/lib/cache';
 import { createHash, randomUUID } from 'node:crypto';
 
+const MAX_TOTAL_DISCOVERY_FLIGHTS = 256;
+// Caps how much of the shared flight budget a single discovery account can
+// hold at once, so one chatty account cannot starve requests for the rest.
+const MAX_DISCOVERY_FLIGHTS_PER_SCOPE = 32;
 const flights = new Map<string, Promise<unknown>>();
+const flightsPerScope = new Map<string, number>();
 const generations = new Map<string, string>();
 const accountScope = (account: DiscoveryAccount) =>
   createHash('sha256')
@@ -45,15 +50,24 @@ export async function cachedAccountRead<T>(
   if (cached !== undefined) return cached;
   const existing = flights.get(key);
   if (existing) return existing as Promise<T>;
-  if (flights.size >= 256)
+  if ((flightsPerScope.get(scope) ?? 0) >= MAX_DISCOVERY_FLIGHTS_PER_SCOPE) {
+    throw new Error(
+      'Too many discovery requests are in progress for this account.'
+    );
+  }
+  if (flights.size >= MAX_TOTAL_DISCOVERY_FLIGHTS)
     throw new Error('Too many discovery requests are in progress.');
   const pending = load();
   flights.set(key, pending);
+  flightsPerScope.set(scope, (flightsPerScope.get(scope) ?? 0) + 1);
   try {
     const result = await pending;
     if (generations.get(scope) === revision) cache.set(key, result, ttl);
     return result;
   } finally {
     if (flights.get(key) === pending) flights.delete(key);
+    const remaining = (flightsPerScope.get(scope) ?? 1) - 1;
+    if (remaining <= 0) flightsPerScope.delete(scope);
+    else flightsPerScope.set(scope, remaining);
   }
 }
