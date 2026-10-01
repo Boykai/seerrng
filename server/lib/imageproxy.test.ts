@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, describe, it, mock } from 'node:test';
 
+import type { AxiosInstance } from 'axios';
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +11,7 @@ import sharp from 'sharp';
 
 import ImageProxy, {
   ImageDiskCacheBudget,
+  LRU_ITEM_MAX_BYTES,
   MAX_IMAGE_CACHE_MAX_AGE,
   MAX_IMAGE_PIXELS,
   MAX_PENDING_IMAGE_CACHE_WRITES,
@@ -460,6 +463,69 @@ describe('ImageDiskCacheBudget', () => {
       /hard-linked/
     );
     assert.equal(await fs.readFile(target, 'utf8'), 'outside');
+  });
+});
+
+describe('fetchAndCache disk persistence for large images', () => {
+  it('persists an image larger than the in-memory threshold to disk and serves it from disk on the next request', async () => {
+    const key = `test-large-image-${crypto.randomUUID()}`;
+    const imagePath = '/large-image.gif';
+    const proxy = new ImageProxy(key, 'http://media.local', {
+      allowPrivateAddresses: true,
+    });
+
+    try {
+      const baseGif = await sharp({
+        create: {
+          width: 4,
+          height: 4,
+          channels: 3,
+          background: { r: 10, g: 20, b: 30 },
+        },
+      })
+        .gif()
+        .toBuffer();
+      // GIF decoders stop at the trailer byte, so appended padding inflates
+      // the file past the in-memory threshold without touching the image
+      // sharp actually decodes for metadata validation.
+      const largeGif = Buffer.concat([
+        baseGif,
+        Buffer.alloc(LRU_ITEM_MAX_BYTES, 1),
+      ]);
+      assert.ok(largeGif.length > LRU_ITEM_MAX_BYTES);
+
+      const axiosGetMock = mock.method(
+        (proxy as unknown as { axios: AxiosInstance }).axios,
+        'get',
+        async () => ({
+          data: largeGif,
+          headers: { 'content-type': 'image/gif' },
+        })
+      );
+
+      const first = await proxy.getImage(imagePath);
+      assert.equal(axiosGetMock.mock.callCount(), 1);
+      assert.equal(first.imageBuffer?.length, largeGif.length);
+
+      // The second request must be served from the disk cache the first
+      // request wrote, not re-fetched from the upstream provider.
+      const second = await proxy.getImage(imagePath);
+      assert.equal(axiosGetMock.mock.callCount(), 1);
+      assert.ok(
+        second.filePath,
+        'expected the second response to stream from disk'
+      );
+      const diskBytes = await readPrivateImageCacheFile(
+        second.filePath as string,
+        largeGif.length
+      );
+      assert.equal(diskBytes.length, largeGif.length);
+    } finally {
+      await proxy.clearCachedImage(imagePath);
+      // clearCachedImage removes the entry, then refresh the shared budget
+      // index so this test does not leave a phantom disk-cache allocation.
+      await ImageProxy.clearCache(key);
+    }
   });
 });
 

@@ -53,7 +53,7 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const LRU_MAX_BYTES = 64 * 1024 * 1024;
 const LRU_MAX_ENTRIES = 512;
 // Images larger than this are streamed from disk instead of held in memory.
-const LRU_ITEM_MAX_BYTES = 1.5 * 1024 * 1024;
+export const LRU_ITEM_MAX_BYTES = 1.5 * 1024 * 1024;
 export const MAX_IMAGE_PIXELS = 16 * 1024 * 1024;
 export const MAX_IMAGE_DISK_CACHE_BYTES = 2 * 1024 * 1024 * 1024;
 export const MAX_IMAGE_DISK_CACHE_ENTRIES = 20_000;
@@ -1143,6 +1143,22 @@ class ImageProxy {
         });
       } else {
         memoryCache.delete(cacheKey);
+        try {
+          await imageDiskCacheBudget.write(
+            resolveCachePath(this.key, cacheKey),
+            `${maxAge}.${expireAt}.${etag}.${extension}`,
+            buffer
+          );
+        } catch (error) {
+          // Serving the fetched buffer to this request must not fail just
+          // because persisting it for future requests did.
+          logger.warn('Failed to persist large image to the disk cache', {
+            label: 'Image Cache',
+            imageProvider: this.key,
+            imagePath: getImageLogPath(path),
+            errorMessage: (error as Error).message,
+          });
+        }
       }
 
       return {
