@@ -81,7 +81,7 @@ test('release package channels wait for the reusable release asset build', () =>
 });
 
 test('container workflows use the canonical lowercase GitHub Container Registry path', () => {
-  const expectedImage = 'ghcr.io/yunohost-apps/seerrng';
+  const expectedImage = 'ghcr.io/snapetech/seerrng';
   for (const name of [
     'ci.yml',
     'helm.yml',
@@ -116,6 +116,9 @@ test('AppImage uses the current launcher and excludes binaries above its glibc b
     path.join(rootDirectory, 'packaging', 'appimage', 'AppRun'),
     'utf8'
   );
+  const applicationPackage = JSON.parse(
+    fs.readFileSync(path.join(rootDirectory, 'package.json'), 'utf8')
+  );
   const desktop = fs.readFileSync(
     path.join(rootDirectory, 'packaging', 'appimage', 'seerrng.desktop'),
     'utf8'
@@ -124,6 +127,19 @@ test('AppImage uses the current launcher and excludes binaries above its glibc b
   assert.equal(launcherCheckout.with.ref, 'main');
   assert.equal(launcherCheckout.with.path, 'appimage-packaging');
   assert.match(build.run, /@next\/swc-linux-x64-gnu/u);
+  assert.ok(
+    build.run.includes(`${applicationPackage.dependencies.next})`),
+    'AppImage must pin its WASM compiler to the app’s Next.js version'
+  );
+  assert.match(build.run, /@next\/swc-wasm-nodejs/u);
+  assert.match(
+    build.run,
+    /next_directory="\$app_dir\/node_modules\/next"[\s\S]*swc_wasm_directory="\$next_directory\/wasm\/@next\/swc-wasm-nodejs"/u
+  );
+  assert.match(
+    build.run,
+    /sha512-Qbh5QIWcyzZfp\+neSFDxSaS0PjyCv7NUVipXcOaEp0\+bCAynyGAoGnZirESQyPwpn\/VXBncpZCVa0cnD\+EWDmQ==/u
+  );
   assert.match(build.run, /dpkg --compare-versions[\s\S]*gt 2\.29/u);
   assert.match(smoke.run, /--appimage-extract-and-run/u);
   assert.match(smoke.run, /api\/v1\/settings\/public/u);
@@ -407,6 +423,75 @@ test('release assets support trusted reuse and main-only manual dispatch', () =>
       .RELEASE_TAG,
     /inputs\.tag/u
   );
+});
+
+test('release assets build macOS x64, Windows arm64, and an emulated Linux arm archive', () => {
+  const assets = readWorkflow('release-assets.yml');
+  const build = assets.jobs.build;
+  const linuxArm = assets.jobs['build-linux-arm'];
+  const publish = assets.jobs.publish;
+  const verifyInventory = publish.steps.find(
+    (step) => step.name === 'Verify archive inventory and checksums'
+  ).run;
+
+  assert.deepEqual(build.strategy.matrix.include, [
+    { runner: 'ubuntu-latest', os: 'linux', arch: 'x64' },
+    { runner: 'ubuntu-24.04-arm', os: 'linux', arch: 'arm64' },
+    { runner: 'macos-15', os: 'macos', arch: 'arm64' },
+    { runner: 'macos-13', os: 'macos', arch: 'x64' },
+    { runner: 'windows-latest', os: 'windows', arch: 'x64' },
+    { runner: 'windows-11-arm', os: 'windows', arch: 'arm64' },
+  ]);
+
+  assert.ok(
+    linuxArm,
+    'expected a build-linux-arm job for the emulated archive'
+  );
+  assert.equal(linuxArm.needs, 'resolve');
+  assert.equal(linuxArm['runs-on'], 'ubuntu-latest');
+  assert.ok(
+    linuxArm['timeout-minutes'] >= 60,
+    'emulated native-module compilation needs materially more time than a native build'
+  );
+  const qemuStep = linuxArm.steps.find((step) => step.name === 'Set up QEMU');
+  assert.ok(qemuStep);
+  assert.equal(qemuStep.with.platforms, 'arm');
+  const buildStep = linuxArm.steps.find(
+    (step) => step.name === 'Build archive under armv7 emulation'
+  );
+  assert.match(buildStep.run, /--platform linux\/arm\/v7/u);
+  assert.match(buildStep.run, /\.\/scripts\/build-release-assets\.sh/u);
+  const uploadStep = linuxArm.steps.find(
+    (step) => step.uses && step.uses.startsWith('actions/upload-artifact')
+  );
+  assert.equal(uploadStep.with.name, 'seerrng-linux-arm');
+
+  assert.ok(publish.needs.includes('build-linux-arm'));
+  for (const archive of [
+    'seerrng-${TAG}-linux-arm.tar.gz',
+    'seerrng-${TAG}-macos-x64.tar.gz',
+    'seerrng-${TAG}-windows-arm64.zip',
+  ]) {
+    assert.ok(
+      verifyInventory.includes(`"${archive}"`),
+      `expected the release-asset inventory check to require ${archive}`
+    );
+  }
+
+  const release = readWorkflow('release.yml');
+  const requiredAssets = release.jobs['dispatch-package-channels'].steps.find(
+    (step) => step.name === 'Verify release package assets'
+  ).run;
+  for (const archive of [
+    'seerrng-${TAG}-linux-arm.tar.gz',
+    'seerrng-${TAG}-macos-x64.tar.gz',
+    'seerrng-${TAG}-windows-arm64.zip',
+  ]) {
+    assert.ok(
+      requiredAssets.includes(`"${archive}"`),
+      `expected the release gate to require ${archive}`
+    );
+  }
 });
 
 test('tag preparation keeps Helm metadata aligned with the application release', () => {

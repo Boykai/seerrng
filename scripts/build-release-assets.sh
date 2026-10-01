@@ -25,6 +25,7 @@ esac
 case "$(uname -m)" in
   x86_64|amd64) arch=x64 ;;
   arm64|aarch64) arch=arm64 ;;
+  armv7l|armv7) arch=arm ;;
   *)
     echo "Unsupported release architecture: $(uname -m)" >&2
     exit 1

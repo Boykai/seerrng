@@ -11,9 +11,9 @@ multi-architecture runtime:
 | --- | --- | --- | --- |
 | Container | GHCR and Docker Hub stable releases | `linux/amd64`, `linux/arm64` | Published and signed by `release.yml` |
 | Container | GHCR `main` and `preview-*` | `linux/amd64`, `linux/arm64` | Published by CI/preview; not release-signed |
-| Native archive | Linux tarball | `x64`, `arm64` | GitHub Release asset with SHA-256 sidecar |
-| Native archive | macOS tarball | `arm64` | GitHub Release asset with SHA-256 sidecar |
-| Native archive | Windows ZIP | `x64` | GitHub Release asset with SHA-256 sidecar |
+| Native archive | Linux tarball | `x64`, `arm64`, `arm` (armv7, built under QEMU emulation) | GitHub Release asset with SHA-256 sidecar |
+| Native archive | macOS tarball | `arm64`, `x64` | GitHub Release asset with SHA-256 sidecar |
+| Native archive | Windows ZIP | `x64`, `arm64` | GitHub Release asset with SHA-256 sidecar |
 | Windows package | Chocolatey Community Repository | `x64` | Submitted by the release workflow; each package version passes repository moderation |
 | Linux package | Debian, RPM, AppImage | `amd64`/`x86_64` | GitHub Release asset with SHA-256 sidecar |
 | Linux package | Launchpad PPA | `amd64` on Jammy and Noble | Published source builds |
@@ -23,11 +23,17 @@ multi-architecture runtime:
 | Snap | Snap Store stable channel | `amd64` | Requires a current store credential; a failed upload is not a release |
 | Kubernetes | Helm OCI chart | Uses the container image's `amd64`/`arm64` support | GHCR OCI registry |
 
-The project does not currently publish native artifacts for Linux armv7/armhf,
-Linux 32-bit, macOS x86_64, Windows arm64, or arm64 variants of the native
-Linux package channels. Those are intentionally unsupported until each format
+The project does not currently publish native artifacts for Linux 32-bit x86,
+or arm/arm64 variants of the Debian, RPM, AppImage, Flatpak, Snap, PPA, COPR,
+or AUR package channels. Those are intentionally unsupported until each format
 has a native build and post-publish smoke test. The package-smoke harness must
 reject those combinations rather than imply that they exist.
+
+Linux armv7 has no GitHub-hosted native runner, so its tarball is built by
+cross-compiling under QEMU emulation (`docker/setup-qemu-action` plus a
+`linux/arm/v7` container) rather than on a native host like every other native
+archive. Treat it as higher-risk than the natively-built architectures until
+it has shipped in a real release.
 
 The inherited Nix, Unraid, and Synology documentation describes upstream or
 third-party installation paths; this repository has no corresponding package
@@ -42,9 +48,9 @@ complete:
 
 1. Both registries expose an OCI index containing exactly `linux/amd64` and
    `linux/arm64`.
-2. The GitHub Release contains both native archive architectures and a valid
-   SHA-256 sidecar for every archive, plus sidecars for Debian, RPM, AppImage,
-   and Flatpak assets.
+2. The GitHub Release contains all seven native archives (Linux x64/arm64/arm,
+   macOS arm64/x64, Windows x64/arm64) and a valid SHA-256 sidecar for each,
+   plus sidecars for Debian, RPM, AppImage, and Flatpak assets.
 3. Every enabled package-channel workflow completed successfully and did not
    skip publication due to a missing credential.
 4. The GitHub release body and Discord announcement contain the curated release

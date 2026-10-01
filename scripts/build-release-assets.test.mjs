@@ -265,6 +265,27 @@ describe('release asset construction', () => {
     assert.match(listing, /start\.cmd/);
   });
 
+  it('builds a linux-arm archive for a 32-bit ARMv7 runner', async () => {
+    const fixture = await createFixture();
+    const distribution = path.join(fixture.root, 'dist-release');
+    await fs.writeFile(
+      path.join(fixture.executableDirectory, 'uname'),
+      '#!/bin/sh\nif [ "$1" = "-s" ]; then echo Linux; else echo armv7l; fi\n',
+      { mode: 0o755 }
+    );
+
+    const result = await run(fixture, ['v1.2.3', distribution]);
+
+    assert.equal(result.code, 0, result.output);
+    const archive = path.join(distribution, 'seerrng-v1.2.3-linux-arm.tar.gz');
+    assert.equal((await fs.stat(archive)).mode & 0o777, 0o644);
+    assert.equal(
+      (await fs.stat(`${archive.replace(/\.tar\.gz$/, '')}.sha256`)).mode &
+        0o777,
+      0o644
+    );
+  });
+
   it('rejects an architecture outside the published archive matrix', async () => {
     const fixture = await createFixture();
     const distribution = path.join(fixture.root, 'dist-release');

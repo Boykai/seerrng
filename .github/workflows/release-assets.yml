@@ -72,9 +72,15 @@ jobs:
           - runner: macos-15
             os: macos
             arch: arm64
+          - runner: macos-13
+            os: macos
+            arch: x64
           - runner: windows-latest
             os: windows
             arch: x64
+          - runner: windows-11-arm
+            os: windows
+            arch: arm64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,7 +93,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '22.22.2'
+          node-version-file: 'package.json'
           package-manager-cache: false
 
       - name: Verify runner platform
@@ -123,6 +129,56 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: seerrng-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist-release/seerrng-*
+
+  # No GitHub-hosted runner offers a 32-bit ARM (armv7) host, so this job
+  # cross-builds under QEMU emulation instead, reusing the same packaging
+  # script every other native archive uses. Emulated native-module
+  # compilation (better-sqlite3, sharp) is substantially slower than a
+  # native build, hence the generous timeout.
+  build-linux-arm:
+    name: Build linux arm
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm
+
+      - name: Build archive under armv7 emulation
+        shell: bash
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/arm/v7 \
+            -v "${PWD}:/workspace" -w /workspace \
+            -e "TAG=${TAG}" \
+            node:24-bookworm \
+            bash -c '
+              set -euo pipefail
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends python3 build-essential >/dev/null
+              ./scripts/build-release-assets.sh "$TAG" dist-release
+            '
+
+      - name: Reclaim host ownership of build output
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" dist-release
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: seerrng-linux-arm
           path: dist-release/seerrng-*
 
   build-jellyfin-plugin:
@@ -207,7 +263,7 @@ jobs:
 
   publish:
     name: Upload release assets
-    needs: [resolve, build, build-jellyfin-plugin]
+    needs: [resolve, build, build-linux-arm, build-jellyfin-plugin]
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -229,8 +285,11 @@ jobs:
           expected=(
             "seerrng-${TAG}-linux-x64.tar.gz"
             "seerrng-${TAG}-linux-arm64.tar.gz"
+            "seerrng-${TAG}-linux-arm.tar.gz"
             "seerrng-${TAG}-macos-arm64.tar.gz"
+            "seerrng-${TAG}-macos-x64.tar.gz"
             "seerrng-${TAG}-windows-x64.zip"
+            "seerrng-${TAG}-windows-arm64.zip"
             "seerrng-jellyfin-bridge-${TAG}.zip"
           )
           for archive in "${expected[@]}"; do
