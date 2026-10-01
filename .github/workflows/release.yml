@@ -289,6 +289,10 @@ jobs:
             sleep $((attempt * 30))
           done
 
+      - name: Log out of GHCR before public manifest checks
+        shell: bash
+        run: docker logout ghcr.io
+
       - name: Resolve manifest digest
         id: digests
         shell: bash
@@ -304,28 +308,6 @@ jobs:
             fi
             if [ "$attempt" -eq 5 ]; then
               echo 'Unable to resolve the release manifest digest after 5 attempts.' >&2
-              exit 1
-            fi
-            sleep $((attempt * 15))
-          done
-
-      - name: Also tag :latest (non-pre-release only)
-        shell: bash
-        if: ${{ !contains(env.VERSION, '-') }}
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3 4 5; do
-            echo "Tagging release images as latest (attempt ${attempt}/5)"
-            if docker buildx imagetools create \
-                -t "${{ env.DOCKER_HUB }}:latest" \
-                "${{ env.DOCKER_HUB }}:${{ env.VERSION }}" &&
-              docker buildx imagetools create \
-                -t "${GHCR_IMAGE}:latest" \
-                "${GHCR_IMAGE}:${VERSION}"; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 5 ]; then
-              echo 'Unable to tag release images as latest after 5 attempts.' >&2
               exit 1
             fi
             sleep $((attempt * 15))
