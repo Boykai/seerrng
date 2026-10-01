@@ -22,6 +22,14 @@ Our Docker images are available with the following tags:
 - Minor version aliases (e.g., `v0.1`): Alias for the latest stable release in the respective minor version series.
 :::
 
+:::warning Existing SeerrNG image references
+After the SeerrNG repository transfer, update manually configured images from
+`ghcr.io/yunohost-apps/seerrng` to `ghcr.io/snapetech/seerrng`. Keep the tag
+your deployment uses, pull the image again, and recreate the service. YunoHost
+package installations use SeerrNG release archives and do not use this container
+image path.
+:::
+
 :::info
 All official Seerr images are cryptographically signed and include a verified [Software Bill of Materials (SBOM)](https://cyclonedx.org/).
 
