@@ -184,6 +184,15 @@ jobs:
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: bash scripts/ensure-release-tag-on-main.sh "$TAG"
+      - name: Checkout AppImage launcher files from main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: appimage-packaging
+          sparse-checkout: |
+            packaging/appimage
+            public
+          persist-credentials: false
       - name: Download Linux asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -216,18 +225,74 @@ jobs:
           tar -xJf "$node_archive" -C node-runtime --strip-components=1 \
             "node-v${node_version}-linux-x64/bin/node" \
             "node-v${node_version}-linux-x64/LICENSE"
-          chmod +x appimagetool packaging/appimage/AppRun
+          chmod +x appimagetool appimage-packaging/packaging/appimage/AppRun
           mkdir -p SeerrNG.AppDir/usr/bin SeerrNG.AppDir/usr/lib/seerrng SeerrNG.AppDir/usr/share/applications SeerrNG.AppDir/usr/share/icons/hicolor/256x256/apps SeerrNG.AppDir/usr/share/licenses/nodejs
           tar -xzf "seerrng-${{ steps.version.outputs.tag }}-linux-x64.tar.gz" --strip-components=1 -C SeerrNG.AppDir/usr/lib/seerrng
           cp node-runtime/bin/node SeerrNG.AppDir/usr/bin/node
           cp node-runtime/LICENSE SeerrNG.AppDir/usr/share/licenses/nodejs/LICENSE
-          cp packaging/appimage/AppRun SeerrNG.AppDir/
-          cp packaging/appimage/seerrng.desktop SeerrNG.AppDir/
-          cp packaging/appimage/seerrng.desktop SeerrNG.AppDir/usr/share/applications/
-          cp public/android-chrome-512x512.png SeerrNG.AppDir/seerrng.png
-          cp public/android-chrome-512x512.png SeerrNG.AppDir/usr/share/icons/hicolor/256x256/apps/seerrng.png
+          cp appimage-packaging/packaging/appimage/AppRun SeerrNG.AppDir/
+          cp appimage-packaging/packaging/appimage/seerrng.desktop SeerrNG.AppDir/
+          cp appimage-packaging/packaging/appimage/seerrng.desktop SeerrNG.AppDir/usr/share/applications/
+          cp appimage-packaging/public/android-chrome-512x512.png SeerrNG.AppDir/seerrng.png
+          cp appimage-packaging/public/android-chrome-512x512.png SeerrNG.AppDir/usr/share/icons/hicolor/256x256/apps/seerrng.png
+          app_dir='SeerrNG.AppDir/usr/lib/seerrng'
+          find "$app_dir/node_modules/.pnpm" \
+            -path '*/node_modules/@next/swc-linux-x64-gnu/*.node' \
+            -type f -delete
+          if find "$app_dir/node_modules/.pnpm" \
+              -path '*/node_modules/@next/swc-linux-x64-gnu/*.node' \
+              -type f -print -quit | grep -q .; then
+            echo 'The AppImage still contains the build-only GNU SWC binary.' >&2
+            exit 1
+          fi
+          while IFS= read -r -d '' binary; do
+            if ! readelf -h "$binary" >/dev/null 2>&1; then
+              continue
+            fi
+            required_glibc="$(readelf --version-info "$binary" \
+              | grep -Eo 'GLIBC_[0-9]+(\.[0-9]+)+' \
+              | sort -V | tail -n 1 || true)"
+            if [ -n "$required_glibc" ] && \
+                dpkg --compare-versions "${required_glibc#GLIBC_}" gt 2.29; then
+              echo "AppImage binary requires ${required_glibc}: ${binary}" >&2
+              exit 1
+            fi
+          done < <(find SeerrNG.AppDir -type f \
+            \( -perm /111 -o -name '*.node' -o -name '*.so' -o -name '*.so.*' \) \
+            -print0)
           ARCH=x86_64 ./appimagetool SeerrNG.AppDir "SeerrNG-${{ steps.version.outputs.version }}-x86_64.AppImage"
           sha256sum "SeerrNG-${{ steps.version.outputs.version }}-x86_64.AppImage" > "SeerrNG-${{ steps.version.outputs.version }}-x86_64.AppImage.sha256"
+      - name: Smoke-test AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+          config_directory="${RUNNER_TEMP}/seerrng-appimage-config"
+          mkdir -p "$config_directory"
+          appimage_path="$PWD/SeerrNG-${{ steps.version.outputs.version }}-x86_64.AppImage"
+          CONFIG_DIRECTORY="$config_directory" PORT=55155 \
+            "$appimage_path" --appimage-extract-and-run > "$RUNNER_TEMP/appimage.log" 2>&1 &
+          appimage_pid=$!
+          cleanup() {
+            kill "$appimage_pid" 2>/dev/null || true
+            wait "$appimage_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT HUP INT TERM
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:55155/api/v1/settings/public >/dev/null; then
+              curl --fail --silent --show-error --location http://127.0.0.1:55155/ > "$RUNNER_TEMP/appimage-home.html"
+              grep -qi '<html' "$RUNNER_TEMP/appimage-home.html"
+              echo 'AppImage served its first-run web interface successfully.'
+              exit 0
+            fi
+            if ! kill -0 "$appimage_pid" 2>/dev/null; then
+              cat "$RUNNER_TEMP/appimage.log" >&2
+              exit 1
+            fi
+            sleep 0.5
+          done
+          cat "$RUNNER_TEMP/appimage.log" >&2
+          echo 'AppImage did not serve its web interface within 30 seconds.' >&2
+          exit 1
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}

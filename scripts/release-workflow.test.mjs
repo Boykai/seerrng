@@ -80,6 +80,58 @@ test('release package channels wait for the reusable release asset build', () =>
   );
 });
 
+test('container workflows use the canonical lowercase GitHub Container Registry path', () => {
+  const expectedImage = 'ghcr.io/yunohost-apps/seerrng';
+  for (const name of [
+    'ci.yml',
+    'helm.yml',
+    'preview.yml',
+    'release.yml',
+    'trivy-scan.yml',
+  ]) {
+    const source = fs.readFileSync(path.join(workflowDirectory, name), 'utf8');
+    assert.equal(readWorkflow(name).env.GHCR_IMAGE, expectedImage, name);
+    assert.doesNotMatch(
+      source,
+      /ghcr\.io\/\$\{GITHUB_REPOSITORY\}|ghcr\.io\/\$\{\{ github\.repository \}\}/u,
+      `${name} must not interpolate the case-sensitive GitHub repository name into an OCI image reference`
+    );
+  }
+  const release = readWorkflow('release.yml');
+  const digestResolver = release.jobs.publish.steps.find(
+    (step) => step.name === 'Resolve manifest digest'
+  );
+  assert.match(digestResolver.run, /image="\$\{GHCR_IMAGE\}:\$\{VERSION\}"/u);
+});
+
+test('AppImage uses the current launcher and excludes binaries above its glibc baseline', () => {
+  const workflow = readWorkflow('release-linux-packages.yml');
+  const job = workflow.jobs.appimage;
+  const launcherCheckout = job.steps.find(
+    (step) => step.name === 'Checkout AppImage launcher files from main'
+  );
+  const build = job.steps.find((step) => step.name === 'Build AppImage');
+  const smoke = job.steps.find((step) => step.name === 'Smoke-test AppImage');
+  const appRun = fs.readFileSync(
+    path.join(rootDirectory, 'packaging', 'appimage', 'AppRun'),
+    'utf8'
+  );
+  const desktop = fs.readFileSync(
+    path.join(rootDirectory, 'packaging', 'appimage', 'seerrng.desktop'),
+    'utf8'
+  );
+
+  assert.equal(launcherCheckout.with.ref, 'main');
+  assert.equal(launcherCheckout.with.path, 'appimage-packaging');
+  assert.match(build.run, /@next\/swc-linux-x64-gnu/u);
+  assert.match(build.run, /dpkg --compare-versions[\s\S]*gt 2\.29/u);
+  assert.match(smoke.run, /--appimage-extract-and-run/u);
+  assert.match(smoke.run, /api\/v1\/settings\/public/u);
+  assert.match(appRun, /xdg-open[\s\S]*127\.0\.0\.1/mu);
+  assert.match(desktop, /^Exec=AppRun$/mu);
+  assert.match(desktop, /^Terminal=false$/mu);
+});
+
 test('release asset publication can download artifacts from the same run', () => {
   const assets = readWorkflow('release-assets.yml');
 
@@ -236,7 +288,7 @@ test('multi-architecture publishers perform the real build once and verify the i
     ci.jobs['scan-main-image'].steps.find(
       (step) => step.name === 'Run Trivy image scan'
     ).run,
-    /ghcr\.io\/\$\{\{ github\.repository \}\}@\$\{\{ needs\.publish\.outputs\.image_digest \}\}/u
+    /\$\{GHCR_IMAGE\}@\$\{IMAGE_DIGEST\}/u
   );
 
   assert.equal(preview.jobs.build, undefined);
@@ -300,7 +352,7 @@ test('multi-architecture publishers perform the real build once and verify the i
   );
   assert.match(
     digestResolver.run,
-    /image="ghcr\.io\/\$\{GITHUB_REPOSITORY\}:\$\{VERSION\}"/u,
+    /image="\$\{GHCR_IMAGE\}:\$\{VERSION\}"/u,
     'release digest resolution must use GHCR rather than the unreachable Docker Hub blob mirror'
   );
   assert.match(
