@@ -3,7 +3,7 @@ import CoverArtArchive from '@server/api/coverartarchive';
 import LazyLibrarianAPI, {
   type LazyLibrarianMagazine,
 } from '@server/api/lazylibrarian';
-import MusicBrainz from '@server/api/musicbrainz';
+import MusicBrainz, { escapeMusicBrainzQuery } from '@server/api/musicbrainz';
 import OpenLibraryAPI from '@server/api/openlibrary';
 import TheAudioDb from '@server/api/theaudiodb';
 import TheMovieDb from '@server/api/themoviedb';
@@ -544,7 +544,7 @@ searchRoutes.get('/', async (req, res, next) => {
                   )
                 : typeFilter === 'music' && resultFilter
                   ? toMusicAlbumRefinementQuery(queryString, resultFilter)
-                  : queryString,
+                  : escapeMusicBrainzQuery(queryString),
               limit: 20,
               offset: musicOffset,
             })
@@ -554,7 +554,7 @@ searchRoutes.get('/', async (req, res, next) => {
               query:
                 typeFilter === 'artist'
                   ? buildArtistAutocompleteQuery(queryString)
-                  : queryString,
+                  : escapeMusicBrainzQuery(queryString),
               limit: 20,
               offset: musicOffset,
             })

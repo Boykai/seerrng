@@ -685,6 +685,37 @@ describe('GET /search', () => {
     assert.match(res.body.message, /only be used with book searches/);
   });
 
+  it('escapes MusicBrainz query operators in album and artist searches', async () => {
+    let albumQuery: string | undefined;
+    let artistQuery: string | undefined;
+    mock.method(
+      MusicBrainz.prototype,
+      'searchAlbumWithTotal',
+      async ({ query }: { query: string }) => {
+        albumQuery = query;
+        return { results: [], totalResults: 0 };
+      }
+    );
+    mock.method(
+      MusicBrainz.prototype,
+      'searchArtistWithTotal',
+      async ({ query }: { query: string }) => {
+        artistQuery = query;
+        return { results: [], totalResults: 0 };
+      }
+    );
+
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const res = await agent.get('/search').query({
+      query: 'AC/DC (Live) + 1992',
+      type: 'album',
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(albumQuery, 'AC\\/DC \\(Live\\) \\+ 1992');
+    assert.strictEqual(artistQuery, 'AC\\/DC \\(Live\\) \\+ 1992');
+  });
+
   it('rejects blank keyword searches', async () => {
     const agent = await loginAs('friend@seerr.dev', 'test1234');
     const res = await agent.get('/search/keyword').query({ query: '   ' });
