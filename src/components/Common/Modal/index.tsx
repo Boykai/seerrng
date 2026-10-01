@@ -108,175 +108,181 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
     useLockBodyScroll(true, disableScrollLock);
 
     return ReactDOM.createPortal(
-      <TransitionChild
-        as="div"
-        data-testid="modal-root"
-        className={`app-modal-screen-backdrop fixed top-0 right-0 bottom-0 left-0 z-[60] flex h-full w-full justify-center overflow-y-auto ${
-          alignTop ? 'items-start pt-[49px] pb-4 sm:pt-[65px]' : 'items-center'
-        } transition-opacity duration-300 data-closed:opacity-0`}
-        ref={parentRef}
-      >
-        <Transition
-          as={Fragment}
-          enter="transition duration-300"
-          enterFrom="opacity-0 scale-75"
-          enterTo="opacity-100 scale-100"
-          leave="transition-opacity duration-300"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-          show={loading}
-        >
-          <div style={{ position: 'absolute' }}>
-            <LoadingSpinner />
-          </div>
-        </Transition>
-        <Transition
-          className={`relative inline-block w-full overflow-auto bg-gray-800 px-4 pt-4 pb-4 text-left align-bottom shadow-xl ring-1 ring-gray-700 transition-all sm:max-w-3xl sm:rounded-lg sm:align-middle ${
-            alignTop
-              ? 'my-0 max-h-[calc(100dvh-65px)] sm:max-h-[calc(100dvh-81px)]'
-              : 'hide-scrollbar sm:my-8'
-          } ${dialogClass} transition duration-300 data-closed:scale-75 data-closed:opacity-0`}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={title || subTitle ? 'modal-headline' : undefined}
-          aria-label={!title && !subTitle ? ariaLabel : undefined}
-          style={
-            alignTop
-              ? undefined
-              : {
-                  maxHeight: 'calc(100% - env(safe-area-inset-top) * 2)',
-                }
-          }
+      <Transition as={Fragment} appear show>
+        <TransitionChild
           as="div"
-          show={!loading}
-          ref={modalRef}
+          data-testid="modal-root"
+          className={`app-modal-screen-backdrop fixed top-0 right-0 bottom-0 left-0 z-[60] flex h-full w-full justify-center overflow-y-auto ${
+            alignTop
+              ? 'items-start pt-[49px] pb-4 sm:pt-[65px]'
+              : 'items-center'
+          } transition-opacity duration-300 data-closed:opacity-0`}
+          ref={parentRef}
         >
-          {backdrop && (
-            <div
-              className={
-                backdropFull
-                  ? 'pointer-events-none absolute inset-0 z-0 overflow-hidden'
-                  : 'absolute top-0 right-0 left-0 z-0 h-64 max-h-full w-full'
-              }
-            >
-              <CachedImage
-                type="tmdb"
-                alt=""
-                src={backdrop}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                fill
-                priority
-              />
-              {backdropFull ? (
-                <>
-                  <div className="refreshed-artwork-scrim" />
-                  <div className="refreshed-artwork-gradient" />
-                </>
-              ) : (
-                <div className="app-modal-loading-overlay absolute inset-0" />
-              )}
+          <Transition
+            as={Fragment}
+            enter="transition duration-300"
+            enterFrom="opacity-0 scale-75"
+            enterTo="opacity-100 scale-100"
+            leave="transition-opacity duration-300"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+            show={loading}
+          >
+            <div style={{ position: 'absolute' }}>
+              <LoadingSpinner />
             </div>
-          )}
-          <div className="relative min-w-0 pt-0.5 sm:flex sm:items-center">
-            <div
-              className={`mt-3 min-w-0 truncate text-center text-white sm:mt-0 sm:text-left`}
-            >
-              {(title || subTitle) && (
-                <div className="flex flex-col space-y-1">
-                  {title && (
-                    <span
-                      className="text-overseerr truncate pb-0.5 text-2xl leading-6 font-bold"
-                      id="modal-headline"
-                      data-testid="modal-title"
+          </Transition>
+          <Transition
+            className={`relative inline-block w-full overflow-auto bg-gray-800 px-4 pt-4 pb-4 text-left align-bottom shadow-xl ring-1 ring-gray-700 transition-all sm:max-w-3xl sm:rounded-lg sm:align-middle ${
+              alignTop
+                ? 'my-0 max-h-[calc(100dvh-65px)] sm:max-h-[calc(100dvh-81px)]'
+                : 'hide-scrollbar sm:my-8'
+            } ${dialogClass} transition duration-300 data-closed:scale-75 data-closed:opacity-0`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={title || subTitle ? 'modal-headline' : undefined}
+            aria-label={!title && !subTitle ? ariaLabel : undefined}
+            style={
+              alignTop
+                ? undefined
+                : {
+                    maxHeight: 'calc(100% - env(safe-area-inset-top) * 2)',
+                  }
+            }
+            as="div"
+            show={!loading}
+            ref={modalRef}
+          >
+            {backdrop && (
+              <div
+                className={
+                  backdropFull
+                    ? 'pointer-events-none absolute inset-0 z-0 overflow-hidden'
+                    : 'absolute top-0 right-0 left-0 z-0 h-64 max-h-full w-full'
+                }
+              >
+                <CachedImage
+                  type="tmdb"
+                  alt=""
+                  src={backdrop}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  fill
+                  priority
+                />
+                {backdropFull ? (
+                  <>
+                    <div className="refreshed-artwork-scrim" />
+                    <div className="refreshed-artwork-gradient" />
+                  </>
+                ) : (
+                  <div className="app-modal-loading-overlay absolute inset-0" />
+                )}
+              </div>
+            )}
+            <div className="relative min-w-0 pt-0.5 sm:flex sm:items-center">
+              <div
+                className={`mt-3 min-w-0 truncate text-center text-white sm:mt-0 sm:text-left`}
+              >
+                {(title || subTitle) && (
+                  <div className="flex flex-col space-y-1">
+                    {title && (
+                      <span
+                        className="text-overseerr truncate pb-0.5 text-2xl leading-6 font-bold"
+                        id="modal-headline"
+                        data-testid="modal-title"
+                      >
+                        {title}
+                      </span>
+                    )}
+                    {subTitle && (
+                      <span
+                        className="truncate text-lg leading-6 font-semibold text-gray-200"
+                        id="modal-headline"
+                        data-testid="modal-title"
+                      >
+                        {subTitle}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            {children && (
+              <div
+                className={`relative mt-4 text-sm leading-5 text-gray-300 ${contentClass} ${
+                  !(onCancel || onOk || onSecondary || onTertiary) ? 'mb-3' : ''
+                }`}
+              >
+                {children}
+              </div>
+            )}
+            {!hideActions &&
+              (onCancel || onOk || onSecondary || onTertiary) && (
+                <div
+                  className={`app-modal-actions relative flex flex-row-reverse justify-center sm:justify-start ${actionsClass}`}
+                >
+                  {typeof onOk === 'function' && (
+                    <Button
+                      buttonType={okButtonType}
+                      buttonSize={actionButtonSize}
+                      onClick={onOk}
+                      disabled={okDisabled}
+                      data-testid="modal-ok-button"
+                      {...okButtonProps}
                     >
-                      {title}
-                    </span>
+                      {okText ? okText : 'Ok'}
+                    </Button>
                   )}
-                  {subTitle && (
-                    <span
-                      className="truncate text-lg leading-6 font-semibold text-gray-200"
-                      id="modal-headline"
-                      data-testid="modal-title"
+                  {typeof onSecondary === 'function' && secondaryText && (
+                    <Button
+                      buttonType={secondaryButtonType}
+                      buttonSize={actionButtonSize}
+                      onClick={onSecondary}
+                      disabled={secondaryDisabled}
+                      data-testid="modal-secondary-button"
+                      {...secondaryButtonProps}
                     >
-                      {subTitle}
-                    </span>
+                      {secondaryText}
+                    </Button>
+                  )}
+                  {typeof onTertiary === 'function' && tertiaryText && (
+                    <Button
+                      buttonType={tertiaryButtonType}
+                      buttonSize={actionButtonSize}
+                      onClick={onTertiary}
+                      disabled={tertiaryDisabled}
+                      {...tertiaryButtonProps}
+                    >
+                      {tertiaryText}
+                    </Button>
+                  )}
+                  {typeof onCancel === 'function' && (
+                    <Button
+                      buttonType={cancelButtonType}
+                      buttonIcon={
+                        !cancelText ||
+                        cancelText ===
+                          intl.formatMessage(globalMessages.cancel) ||
+                        cancelText === intl.formatMessage(globalMessages.close)
+                          ? 'cancel'
+                          : undefined
+                      }
+                      buttonSize={actionButtonSize}
+                      onClick={onCancel}
+                      data-testid="modal-cancel-button"
+                      {...cancelButtonProps}
+                    >
+                      {cancelText
+                        ? cancelText
+                        : intl.formatMessage(globalMessages.cancel)}
+                    </Button>
                   )}
                 </div>
               )}
-            </div>
-          </div>
-          {children && (
-            <div
-              className={`relative mt-4 text-sm leading-5 text-gray-300 ${contentClass} ${
-                !(onCancel || onOk || onSecondary || onTertiary) ? 'mb-3' : ''
-              }`}
-            >
-              {children}
-            </div>
-          )}
-          {!hideActions && (onCancel || onOk || onSecondary || onTertiary) && (
-            <div
-              className={`app-modal-actions relative flex flex-row-reverse justify-center sm:justify-start ${actionsClass}`}
-            >
-              {typeof onOk === 'function' && (
-                <Button
-                  buttonType={okButtonType}
-                  buttonSize={actionButtonSize}
-                  onClick={onOk}
-                  disabled={okDisabled}
-                  data-testid="modal-ok-button"
-                  {...okButtonProps}
-                >
-                  {okText ? okText : 'Ok'}
-                </Button>
-              )}
-              {typeof onSecondary === 'function' && secondaryText && (
-                <Button
-                  buttonType={secondaryButtonType}
-                  buttonSize={actionButtonSize}
-                  onClick={onSecondary}
-                  disabled={secondaryDisabled}
-                  data-testid="modal-secondary-button"
-                  {...secondaryButtonProps}
-                >
-                  {secondaryText}
-                </Button>
-              )}
-              {typeof onTertiary === 'function' && tertiaryText && (
-                <Button
-                  buttonType={tertiaryButtonType}
-                  buttonSize={actionButtonSize}
-                  onClick={onTertiary}
-                  disabled={tertiaryDisabled}
-                  {...tertiaryButtonProps}
-                >
-                  {tertiaryText}
-                </Button>
-              )}
-              {typeof onCancel === 'function' && (
-                <Button
-                  buttonType={cancelButtonType}
-                  buttonIcon={
-                    !cancelText ||
-                    cancelText === intl.formatMessage(globalMessages.cancel) ||
-                    cancelText === intl.formatMessage(globalMessages.close)
-                      ? 'cancel'
-                      : undefined
-                  }
-                  buttonSize={actionButtonSize}
-                  onClick={onCancel}
-                  data-testid="modal-cancel-button"
-                  {...cancelButtonProps}
-                >
-                  {cancelText
-                    ? cancelText
-                    : intl.formatMessage(globalMessages.cancel)}
-                </Button>
-              )}
-            </div>
-          )}
-        </Transition>
-      </TransitionChild>,
+          </Transition>
+        </TransitionChild>
+      </Transition>,
       document.body
     );
   }
