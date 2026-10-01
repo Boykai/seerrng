@@ -475,7 +475,11 @@ test('release assets build supported native archive platforms', () => {
   ]);
 
   assert.equal(assets.jobs['build-linux-arm'], undefined);
-  assert.deepEqual(publish.needs, ['resolve', 'build', 'build-jellyfin-plugin']);
+  assert.deepEqual(publish.needs, [
+    'resolve',
+    'build',
+    'build-jellyfin-plugin',
+  ]);
   for (const archive of [
     'seerrng-${TAG}-macos-x64.tar.gz',
     'seerrng-${TAG}-windows-arm64.zip',
