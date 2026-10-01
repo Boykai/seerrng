@@ -631,6 +631,37 @@ describe('GET /search', () => {
     assert.strictEqual(artistSearch.mock.callCount(), 0);
   });
 
+  it('escapes Lucene special characters in the default music search query', async () => {
+    let albumQuery: string | undefined;
+    let artistQuery: string | undefined;
+    mock.method(
+      MusicBrainz.prototype,
+      'searchAlbumWithTotal',
+      async ({ query }: { query: string }) => {
+        albumQuery = query;
+        return { results: [], totalResults: 0 };
+      }
+    );
+    mock.method(
+      MusicBrainz.prototype,
+      'searchArtistWithTotal',
+      async ({ query }: { query: string }) => {
+        artistQuery = query;
+        return { results: [], totalResults: 0 };
+      }
+    );
+
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const res = await agent.get('/search').query({
+      query: 'Say Anything (Live)!',
+      type: 'music',
+    });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(albumQuery, 'Say Anything \\(Live\\)\\!');
+    assert.strictEqual(artistQuery, 'Say Anything \\(Live\\)\\!');
+  });
+
   it('autocomplete searches artist prefixes without fetching albums or dropping mapped artists', async () => {
     const artistId = '79239441-bfd5-4981-a70c-55c3f15c1287';
     await getRepository(MetadataArtist).save(
