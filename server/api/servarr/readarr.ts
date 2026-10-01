@@ -15,6 +15,7 @@ import axios from 'axios';
 import ServarrBase, {
   isServarrServiceUrl,
   MAX_SERVARR_CONFIGURATION_RESULTS,
+  MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
   MAX_SERVARR_LIBRARY_RESULTS,
   MAX_SERVARR_LOOKUP_RESULTS,
   sanitizeServarrImages,
@@ -978,7 +979,10 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
     }
 
     const existingBooks = sanitizeServarrRecordArray<ReadarrBook>(
-      await this.get<ReadarrBook[]>('/book', this.getRequestConfig()),
+      await this.get<ReadarrBook[]>('/book', {
+        ...this.getRequestConfig(),
+        maxContentLength: MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
+      }),
       MAX_SERVARR_LIBRARY_RESULTS
     );
 
@@ -1093,7 +1097,10 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
       }
 
       return sanitizeServarrRecordArray<ReadarrBook>(
-        await this.get<ReadarrBook[]>('/book', this.getRequestConfig()),
+        await this.get<ReadarrBook[]>('/book', {
+          ...this.getRequestConfig(),
+          maxContentLength: MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
+        }),
         MAX_SERVARR_LIBRARY_RESULTS
       );
     } catch (e) {

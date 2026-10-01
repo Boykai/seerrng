@@ -14,12 +14,18 @@ import type {
 import ReadarrAPI from '@server/api/servarr/readarr';
 import axios from 'axios';
 
-import { MAX_SERVARR_COVER_IMAGES } from './base';
+import {
+  MAX_SERVARR_COVER_IMAGES,
+  MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
+} from './base';
 
 type MockableReadarr = {
   get: (
     endpoint: string,
-    options?: { params?: Record<string, unknown> },
+    options?: {
+      params?: Record<string, unknown>;
+      maxContentLength?: number;
+    },
     ttl?: number
   ) => Promise<unknown>;
   post: (
@@ -165,6 +171,29 @@ describe('ReadarrAPI.getEditions', () => {
     assert.deepStrictEqual(getMock.mock.calls[0].arguments[1], {
       params: { bookId: 42 },
     });
+  });
+});
+
+describe('Readarr full-library response limit', () => {
+  afterEach(() => mock.restoreAll());
+
+  it('applies the finite cap to the unpaged full-library response', async () => {
+    const api = new ReadarrAPI({
+      url: 'http://localhost:8787/api/v1',
+      apiKey: 'key',
+    });
+    const get = mock.method(
+      api as unknown as MockableReadarr,
+      'get',
+      async () => []
+    );
+
+    assert.deepEqual(await api.getBooks(), []);
+    assert.equal(get.mock.calls[0].arguments[0], '/book');
+    assert.equal(
+      get.mock.calls[0].arguments[1]?.maxContentLength,
+      MAX_SERVARR_LIBRARY_RESPONSE_BYTES
+    );
   });
 });
 
@@ -486,6 +515,7 @@ describe('ReadarrAPI media type requests', () => {
     });
     assert.deepStrictEqual(getMock.mock.calls[1].arguments[1], {
       params: { mediaType: 'audiobook' },
+      maxContentLength: MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
     });
     assert.deepStrictEqual(postMock.mock.calls[0].arguments[2], {
       params: { mediaType: 'audiobook' },
@@ -830,7 +860,7 @@ describe('ReadarrAPI.addBook', () => {
       url: 'http://localhost:8787/api/v1',
       apiKey: 'key',
     });
-    mock.method(
+    const get = mock.method(
       ReadarrAPI.prototype as unknown as MockableReadarr,
       'get',
       async () => []
@@ -846,6 +876,10 @@ describe('ReadarrAPI.addBook', () => {
     assert.strictEqual(result.id, 11);
     assert.strictEqual(postMock.mock.calls.length, 1);
     assert.strictEqual(postMock.mock.calls[0].arguments[0], '/book');
+    assert.equal(
+      get.mock.calls[0].arguments[1]?.maxContentLength,
+      MAX_SERVARR_LIBRARY_RESPONSE_BYTES
+    );
   });
 });
 

@@ -119,6 +119,8 @@ export const MAX_SERVARR_CONFIGURATION_RESULTS = 1_000;
 export const MAX_SERVARR_QUEUE_RESULTS = 10_000;
 export const MAX_SERVARR_QUEUE_PAGE_SIZE = 1_000;
 export const MAX_SERVARR_LIBRARY_RESULTS = 100_000;
+/** Finite cap for provider endpoints that return a complete library in one response. */
+export const MAX_SERVARR_LIBRARY_RESPONSE_BYTES = 64 * 1024 * 1024;
 export const MAX_SERVARR_LOOKUP_RESULTS = 1_000;
 export const MAX_SERVARR_COVER_IMAGES = 20;
 const MAX_SERVARR_TEXT_LENGTH = 10_000;

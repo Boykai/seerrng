@@ -1,6 +1,7 @@
 import { normalizeMusicBrainzId } from '@server/lib/externalIds';
 import logger from '@server/logger';
 import ServarrBase, {
+  MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
   MAX_SERVARR_LOOKUP_RESULTS,
   sanitizeServarrProfiles,
   sanitizeServarrRecordArray,
@@ -321,7 +322,11 @@ class LidarrAPI extends ServarrBase<{ albumId: number }> {
 
   public async getAlbums(cacheTtl?: number): Promise<LidarrAlbum[]> {
     try {
-      const data = await this.get<LidarrAlbum[]>('/album', undefined, cacheTtl);
+      const data = await this.get<LidarrAlbum[]>(
+        '/album',
+        { maxContentLength: MAX_SERVARR_LIBRARY_RESPONSE_BYTES },
+        cacheTtl
+      );
       return sanitizeServarrRecordArray<LidarrAlbum>(data);
     } catch (e) {
       throw new Error(`[Lidarr] Failed to retrieve albums: ${e.message}`, {

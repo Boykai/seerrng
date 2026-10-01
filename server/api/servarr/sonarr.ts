@@ -9,6 +9,7 @@ import { redactSecrets } from '@server/utils/security';
 import ServarrBase, {
   isServarrServiceUrl,
   MAX_SERVARR_CONFIGURATION_RESULTS,
+  MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
   MAX_SERVARR_LIBRARY_RESULTS,
   MAX_SERVARR_LOOKUP_RESULTS,
   sanitizeServarrImages,
@@ -426,7 +427,10 @@ class SonarrAPI extends ServarrBase<{
         'GET',
         '/series',
         undefined,
-        tvdbId ? { params: { tvdbId } } : undefined
+        {
+          ...(tvdbId ? { params: { tvdbId } } : {}),
+          maxContentLength: MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
+        }
       );
 
       const series = sanitizeServarrRecordArray<Record<string, unknown>>(

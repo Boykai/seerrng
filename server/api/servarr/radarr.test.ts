@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
 import { afterEach, describe, it, mock } from 'node:test';
+import { gzipSync } from 'node:zlib';
 
 import type { RadarrMovie } from '@server/api/servarr/radarr';
 import type { AxiosInstance } from 'axios';
 import axios from 'axios';
 
-import { MAX_SERVARR_COVER_IMAGES, MAX_SERVARR_LOOKUP_RESULTS } from './base';
+import {
+  MAX_SERVARR_COVER_IMAGES,
+  MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
+  MAX_SERVARR_LOOKUP_RESULTS,
+} from './base';
 import RadarrAPI, { sanitizeRadarrMovie } from './radarr';
 
 function buildRadarr(): RadarrAPI {
@@ -17,6 +24,67 @@ function getAxios(radarr: RadarrAPI): AxiosInstance {
 }
 
 describe('Radarr response normalization', () => {
+  it('accepts large inventories and rejects decompressed responses above the finite cap', async () => {
+    const largeInventory = JSON.stringify(
+      Array.from({ length: 17_000 }, (_, index) => ({
+        id: index + 1,
+        tmdbId: index + 1,
+        title: `Movie ${index + 1}`,
+        overview: 'x'.repeat(1_024),
+      }))
+    );
+    const largeInventoryBytes = Buffer.byteLength(largeInventory);
+    assert.ok(largeInventoryBytes > 16 * 1024 * 1024);
+    assert.ok(largeInventoryBytes < MAX_SERVARR_LIBRARY_RESPONSE_BYTES);
+
+    const oversizedCompressedInventory = gzipSync(
+      Buffer.alloc(MAX_SERVARR_LIBRARY_RESPONSE_BYTES + 1, 0x78)
+    );
+    let sendOversizedResponse = false;
+    const server = createServer((_request, response) => {
+      response.statusCode = 200;
+      response.setHeader('content-type', 'application/json');
+      if (sendOversizedResponse) {
+        response.setHeader('content-encoding', 'gzip');
+        response.end(oversizedCompressedInventory);
+        return;
+      }
+      response.end(largeInventory);
+    });
+
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+
+    try {
+      const radarr = new RadarrAPI({
+        url: `http://127.0.0.1:${address.port}/api/v3`,
+        apiKey: 'test',
+      });
+      assert.equal(
+        getAxios(radarr).defaults.maxContentLength,
+        16 * 1024 * 1024
+      );
+
+      const movies = await radarr.getMovies();
+      assert.equal(movies.length, 17_000);
+      assert.equal(movies.at(-1)?.title, 'Movie 17000');
+
+      sendOversizedResponse = true;
+      await assert.rejects(radarr.getMovies(), (error: unknown) => {
+        const cause = error instanceof Error ? error.cause : undefined;
+        assert.ok(cause instanceof Error);
+        assert.match(cause.message, /maxContentLength.*67108864/u);
+        return true;
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
+
   it('rejects malformed or incomplete inventories in deletion-check mode', async () => {
     const radarr = buildRadarr();
     for (const data of [

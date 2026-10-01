@@ -8,6 +8,7 @@ import axios from 'axios';
 import {
   MAX_SERVARR_CONFIGURATION_RESULTS,
   MAX_SERVARR_COVER_IMAGES,
+  MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
   MAX_SERVARR_LOOKUP_RESULTS,
 } from './base';
 import SonarrAPI, {
@@ -45,8 +46,9 @@ describe('Sonarr deletion-check inventory', () => {
     );
     assert.deepEqual(await api.getSeries({ strict: true, tvdbId: 33 }), []);
     const options = get.mock.calls[0].arguments[1] as
-      { params?: { tvdbId?: number } } | undefined;
+      { maxContentLength?: number; params?: { tvdbId?: number } } | undefined;
     assert.equal(options?.params?.tvdbId, 33);
+    assert.equal(options?.maxContentLength, MAX_SERVARR_LIBRARY_RESPONSE_BYTES);
   });
 });
 

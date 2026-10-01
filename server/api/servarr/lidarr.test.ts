@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it, mock } from 'node:test';
 
+import { MAX_SERVARR_LIBRARY_RESPONSE_BYTES } from './base';
 import LidarrAPI from './lidarr';
 
 type MockableLidarr = {
-  get: (endpoint: string) => Promise<unknown>;
+  get: (
+    endpoint: string,
+    config?: { maxContentLength?: number },
+    ttl?: number
+  ) => Promise<unknown>;
   request: () => Promise<{ data: unknown }>;
 };
 
@@ -13,6 +18,24 @@ afterEach(() => {
 });
 
 describe('Lidarr response normalization', () => {
+  it('uses the finite response cap for complete album inventories', async () => {
+    const api = new LidarrAPI({
+      url: 'http://localhost:8686/api/v1',
+      apiKey: 'key',
+    });
+    const get = mock.method(
+      LidarrAPI.prototype as unknown as MockableLidarr,
+      'get',
+      async () => []
+    );
+
+    assert.deepEqual(await api.getAlbums(), []);
+    assert.equal(
+      get.mock.calls[0].arguments[1]?.maxContentLength,
+      MAX_SERVARR_LIBRARY_RESPONSE_BYTES
+    );
+  });
+
   it('returns exact metadata profile records', async () => {
     const api = new LidarrAPI({
       url: 'http://localhost:8686/api/v1',

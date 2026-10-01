@@ -7,6 +7,7 @@ import {
 import { redactSecrets } from '@server/utils/security';
 import ServarrBase, {
   isServarrServiceUrl,
+  MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
   MAX_SERVARR_LIBRARY_RESULTS,
   MAX_SERVARR_LOOKUP_RESULTS,
   sanitizeServarrImages,
@@ -267,7 +268,10 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
         'GET',
         '/movie',
         undefined,
-        tmdbId ? { params: { tmdbId } } : undefined
+        {
+          ...(tmdbId ? { params: { tmdbId } } : {}),
+          maxContentLength: MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
+        }
       );
 
       const movies = sanitizeServarrRecordArray<Record<string, unknown>>(

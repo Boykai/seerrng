@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   MAX_SERVARR_CONFIGURATION_RESULTS,
+  MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
   MAX_SERVARR_LIBRARY_RESULTS,
   MAX_SERVARR_QUEUE_RESULTS,
   sanitizeServarrProfiles,
@@ -14,6 +15,11 @@ import {
 } from './base';
 
 describe('Servarr response normalization', () => {
+  it('keeps full-library response size bounded at 64 MiB', () => {
+    assert.equal(MAX_SERVARR_LIBRARY_RESPONSE_BYTES, 64 * 1024 * 1024);
+    assert.ok(MAX_SERVARR_LIBRARY_RESPONSE_BYTES > 0);
+  });
+
   it('returns only bounded operational system fields', () => {
     assert.deepStrictEqual(
       sanitizeServarrSystemStatus({
