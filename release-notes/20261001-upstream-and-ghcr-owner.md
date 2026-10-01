@@ -5,4 +5,4 @@ area: distribution
 action: Update manually configured container images to ghcr.io/snapetech/seerrng.
 breaking: true
 ---
-The upstream container is published at `ghcr.io/snapetech/seerrng`, matching the restored repository owner. Operators who configured the former `ghcr.io/yunohost-apps/seerrng` path must update it; package-managed YunoHost installs continue to use their package repository.
+SeerrNG's repository and GHCR publisher have returned to `snapetech` after the YunoHost-Apps transfer. The current image is `ghcr.io/snapetech/seerrng`; operators who switched custom image references to the interim `ghcr.io/yunohost-apps/seerrng` path should switch back. YunoHost installs continue to use their separate package repository.
