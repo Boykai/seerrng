@@ -17,6 +17,16 @@ on:
         required: false
         default: false
         type: boolean
+      reuse_from_run_id:
+        description: Reuse verified artifacts from a failed release run for this exact tag
+        required: false
+        type: string
+        default: ''
+      reuse_published_image:
+        description: Reuse the image only after its revision label matches this tag
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -37,6 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      actions: read
       contents: read
     steps:
       - name: Checkout
@@ -64,6 +75,69 @@ jobs:
             echo "::error::Release tags must point at commits contained in origin/main."
             exit 1
           fi
+
+      - name: Validate previous run artifacts for recovery
+        if: inputs.reuse_from_run_id != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REUSE_FROM_RUN_ID: ${{ inputs.reuse_from_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$REUSE_FROM_RUN_ID" =~ ^[0-9]+$ ]] || {
+            echo 'The previous run ID must be numeric.' >&2
+            exit 1
+          }
+
+          release_sha="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          run="$(gh api "repos/$REPO/actions/runs/$REUSE_FROM_RUN_ID")"
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --arg sha "$release_sha" \
+            '.status == "completed" and
+             .conclusion == "failure" and
+             .event == "push" and
+             .head_branch == $tag and
+             .head_sha == $sha' <<<"$run" >/dev/null || {
+              echo 'The previous run must be a failed tag push for this exact release commit.' >&2
+              exit 1
+            }
+
+          jobs="$(gh api "repos/$REPO/actions/runs/$REUSE_FROM_RUN_ID/jobs?per_page=100")"
+          jq -e '
+            ([.jobs[] | select(.conclusion == "failure") | .name] ==
+              ["Build release assets / Build windows x64"]) and
+            (([
+              "Validate main release tag",
+              "Build release assets / Validate release tag",
+              "Build release assets / Build linux x64",
+              "Build release assets / Build linux arm64",
+              "Build release assets / Build macos arm64",
+              "Build release assets / Build macos x64",
+              "Build release assets / Build windows arm64",
+              "Build release assets / Build optional Jellyfin plugin"
+            ] - [.jobs[] | select(.conclusion == "success") | .name]) | length == 0)
+          ' <<<"$jobs" >/dev/null || {
+            echo 'The previous run does not have the expected successful builders with only Windows x64 failed.' >&2
+            exit 1
+          }
+
+          artifacts="$(gh api "repos/$REPO/actions/runs/$REUSE_FROM_RUN_ID/artifacts?per_page=100")"
+          jq -e '
+            [
+              "seerrng-linux-x64",
+              "seerrng-linux-arm64",
+              "seerrng-macos-arm64",
+              "seerrng-macos-x64",
+              "seerrng-windows-arm64",
+              "seerrng-jellyfin-plugin"
+            ] as $expected |
+            ($expected - [.artifacts[] | select(.expired == false) | .name] | length == 0)
+          ' <<<"$artifacts" >/dev/null || {
+            echo 'One or more successful builder artifacts are missing or expired.' >&2
+            exit 1
+          }
 
   changelog:
     name: Generate changelog
@@ -229,6 +303,7 @@ jobs:
             org.opencontainers.image.revision=${{ steps.release.outputs.SHA }}
 
       - name: Build & Push (multi-arch)
+        if: inputs.reuse_published_image != true
         shell: bash
         env:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
@@ -292,6 +367,22 @@ jobs:
       - name: Log out of GHCR before public manifest checks
         shell: bash
         run: docker logout ghcr.io
+
+      - name: Verify and reuse published image for this exact release commit
+        if: inputs.reuse_published_image == true
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ steps.release.outputs.SHA }}
+        run: |
+          set -euo pipefail
+          image="${GHCR_IMAGE}:${VERSION}"
+          docker pull --platform linux/amd64 "$image"
+          image_revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
+          if [[ "$image_revision" != "$EXPECTED_SHA" ]]; then
+            echo "The published image revision does not match the release tag: $image_revision" >&2
+            exit 1
+          fi
+          docker image rm "$image"
 
       - name: Resolve manifest digest
         id: digests
@@ -586,6 +677,7 @@ jobs:
     uses: ./.github/workflows/release-assets.yml
     with:
       tag: ${{ inputs.tag || github.ref_name }}
+      reuse_from_run_id: ${{ inputs.reuse_from_run_id || '' }}
     permissions:
       actions: read
       contents: write

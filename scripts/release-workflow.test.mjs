@@ -417,6 +417,9 @@ test('release assets support trusted reuse and main-only manual dispatch', () =>
 
   assert.equal(workflowCall.inputs.tag.required, true);
   assert.equal(workflowCall.inputs.tag.type, 'string');
+  assert.equal(workflowCall.inputs.reuse_from_run_id.required, false);
+  assert.equal(workflowCall.inputs.reuse_from_run_id.type, 'string');
+  assert.equal(workflowCall.inputs.reuse_from_run_id.default, '');
   assert.equal(assets.jobs.build['timeout-minutes'], 45);
   assert.match(resolve.if, /github\.event_name != 'workflow_dispatch'/u);
   assert.match(resolve.if, /github\.ref == 'refs\/heads\/main'/u);
@@ -427,6 +430,59 @@ test('release assets support trusted reuse and main-only manual dispatch', () =>
   );
 });
 
+test('release recovery validates prior artifacts and rebuilds only the failed target', () => {
+  const release = readWorkflow('release.yml');
+  const assets = readWorkflow('release-assets.yml');
+  const inputs = release.on.workflow_dispatch.inputs;
+  const recoveryValidation = release.jobs['validate-main-tag'].steps.find(
+    (step) => step.name === 'Validate previous run artifacts for recovery'
+  );
+  const imageBuild = release.jobs.publish.steps.find(
+    (step) => step.name === 'Build & Push (multi-arch)'
+  );
+  const imageReuse = release.jobs.publish.steps.find(
+    (step) =>
+      step.name ===
+      'Verify and reuse published image for this exact release commit'
+  );
+  const assetBuild = release.jobs['build-release-assets'];
+  const reusedArtifactDownload = assets.jobs.build.steps.find(
+    (step) => step.name === 'Download validated artifacts from previous run'
+  );
+
+  assert.equal(inputs.reuse_from_run_id.type, 'string');
+  assert.equal(inputs.reuse_published_image.type, 'boolean');
+  assert.equal(inputs.reuse_published_image.default, false);
+  assert.equal(recoveryValidation.if, "inputs.reuse_from_run_id != ''");
+  assert.equal(release.jobs['validate-main-tag'].permissions.actions, 'read');
+  assert.match(recoveryValidation.run, /\.head_sha == \$sha/u);
+  assert.match(
+    recoveryValidation.run,
+    /Build release assets \/ Build windows x64/u
+  );
+  assert.match(recoveryValidation.run, /\.expired == false/u);
+  assert.match(imageBuild.if, /inputs\.reuse_published_image != true/u);
+  assert.match(imageReuse.if, /inputs\.reuse_published_image == true/u);
+  assert.match(imageReuse.run, /org\.opencontainers\.image\.revision/u);
+  assert.match(imageReuse.run, /EXPECTED_SHA/u);
+  assert.equal(
+    assetBuild.with.reuse_from_run_id,
+    "${{ inputs.reuse_from_run_id || '' }}"
+  );
+  assert.equal(
+    reusedArtifactDownload.with['run-id'],
+    '${{ inputs.reuse_from_run_id }}'
+  );
+  assert.match(
+    reusedArtifactDownload.if,
+    /matrix\.os != 'windows' \|\| matrix\.arch != 'x64'/u
+  );
+  assert.match(
+    assets.jobs.build.steps.find((step) => step.name === 'Build archive').if,
+    /matrix\.arch == 'x64'/u
+  );
+});
+
 test('release assets build supported native archive platforms', () => {
   const assets = readWorkflow('release-assets.yml');
   const build = assets.jobs.build;
@@ -434,6 +490,9 @@ test('release assets build supported native archive platforms', () => {
   const verifyInventory = publish.steps.find(
     (step) => step.name === 'Verify archive inventory and checksums'
   ).run;
+  const archiveBuild = build.steps.find(
+    (step) => step.name === 'Build archive'
+  );
 
   assert.deepEqual(build.strategy.matrix.include, [
     {
@@ -464,15 +523,28 @@ test('release assets build supported native archive platforms', () => {
       runner: 'windows-2022',
       os: 'windows',
       arch: 'x64',
-      pnpm_version: '11.25.0',
+      pnpm_version: '10.24.0',
+      msvs_version: 'auto',
     },
     {
-      runner: 'windows-11-arm',
+      runner: 'windows-11-vs2026-arm',
       os: 'windows',
       arch: 'arm64',
-      pnpm_version: '11.25.0',
+      pnpm_version: '10.24.0',
+      msvs_version: '2026',
     },
   ]);
+  assert.equal(
+    archiveBuild.env.GYP_MSVS_VERSION,
+    "${{ matrix.msvs_version || 'auto' }}"
+  );
+  assert.equal(archiveBuild.env.npm_config_msvs_version, undefined);
+  assert.match(
+    build.steps.find(
+      (step) => step.name === 'Install node-gyp for Visual Studio 2026'
+    ).run,
+    /npm_config_msvs_version=2026/u
+  );
 
   assert.equal(assets.jobs['build-linux-arm'], undefined);
   assert.deepEqual(publish.needs, [
