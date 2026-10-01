@@ -189,7 +189,7 @@ Promise.resolve()
 
     if (!appDataPermissions()) {
       logger.error(
-        'Something went wrong while checking config folder! Please ensure the config folder is set up properly.\nhttps://github.com/snapetech/seerrng/tree/main/docs/getting-started'
+        'Something went wrong while checking config folder! Please ensure the config folder is set up properly.\nhttps://github.com/YunoHost-Apps/seerrng/tree/main/docs/getting-started'
       );
     }
 

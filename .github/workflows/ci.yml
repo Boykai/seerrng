@@ -16,6 +16,7 @@ permissions:
 
 env:
   DOCKER_HUB: snapetech/seerrng
+  GHCR_IMAGE: ghcr.io/yunohost-apps/seerrng
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
@@ -335,7 +336,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.GHCR_IMAGE }}
           tags: |
             type=raw,value=${{ steps.channel.outputs.CHANNEL }}
             type=sha
@@ -437,7 +438,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          image_name="ghcr.io/${GITHUB_REPOSITORY}"
+          image_name="${GHCR_IMAGE}"
           scripts/verify-container-manifest.sh --require-provenance "${image_name}:main" linux/amd64 linux/arm64
           scripts/verify-container-manifest.sh --require-provenance "${image_name}:sha-${GITHUB_SHA::7}" linux/amd64 linux/arm64
 
@@ -446,7 +447,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          image_name="ghcr.io/${GITHUB_REPOSITORY}"
+          image_name="${GHCR_IMAGE}"
           for attempt in 1 2 3 4 5; do
             echo "Resolving published image digest (attempt ${attempt}/5)"
             if digest=$(docker buildx imagetools inspect "${image_name}:main" --format '{{json .Manifest.Digest}}' | tr -d '"') &&
@@ -509,6 +510,7 @@ jobs:
       - name: Run Trivy image scan
         env:
           PLATFORM: ${{ matrix.platform }}
+          IMAGE_DIGEST: ${{ needs.publish.outputs.image_digest }}
         run: |
           trivy image \
             --platform "$PLATFORM" \
@@ -517,7 +519,7 @@ jobs:
             --exit-code 1 \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
-            "ghcr.io/${{ github.repository }}@${{ needs.publish.outputs.image_digest }}"
+            "${GHCR_IMAGE}@${IMAGE_DIGEST}"
 
       - name: Upload SARIF to code scanning
         if: always()
@@ -565,7 +567,7 @@ jobs:
       - name: Pull latest main image
         run: |
           set -euo pipefail
-          image_name="ghcr.io/${GITHUB_REPOSITORY}"
+          image_name="${GHCR_IMAGE}"
           digest="${SEERRNG_IMAGE_DIGEST:?The publish job did not provide an image digest}"
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || {
             echo 'The publish job returned an invalid image digest.' >&2

@@ -21,7 +21,7 @@ fork divergence numbers are current.
 | Remote | Role | Current URL |
 | --- | --- | --- |
 | `upstream` | Product fork source for inherited upstream changes; remote default branch is `develop` | Inspect with `git remote get-url upstream` |
-| `origin` | Public SeerrNG GitHub fork | `https://github.com/snapetech/seerrng.git` |
+| `origin` | Public SeerrNG GitHub fork | `https://github.com/YunoHost-Apps/seerrng.git` |
 | `gitlab` | Internal GitLab remote / CI mirror | `git@gitlab.home:keith/seerrng.git` |
 
 There are no Git submodules in this checkout. Confidence: high.
@@ -83,10 +83,10 @@ high.
 
 | Surface | Current upstream/pin |
 | --- | --- |
-| Published image | `ghcr.io/snapetech/seerrng`, `docker.io/snapetech/seerrng` |
+| Published image | `ghcr.io/yunohost-apps/seerrng`, `docker.io/snapetech/seerrng` |
 | Local Postgres compose | `postgres:18` |
 | Bookshelf compose | Digest-pinned BookshelfNG, PostgreSQL, and backend-specific `blampe/rreading-glasses` images |
-| Helm chart | `charts/seerr-chart`, image `ghcr.io/snapetech/seerrng`, chart version/appVersion in `Chart.yaml` |
+| Helm chart | `charts/seerr-chart`, image `ghcr.io/yunohost-apps/seerrng`, chart version/appVersion in `Chart.yaml` |
 | Snap | `packaging/snap/snapcraft.yaml`, base `core24` |
 | Flatpak | `org.freedesktop.Platform` runtime `24.08`, local `flatpak-src/node` and `flatpak-src/seerrng` sources |
 | Debian/RPM/AUR | Node package dependency `>= 22`, release assets from GitHub tags |

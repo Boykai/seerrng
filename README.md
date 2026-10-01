@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <img src="https://github.com/snapetech/seerrng/actions/workflows/ci.yml/badge.svg" alt="SeerrNG CI" />
-  <a href="https://github.com/snapetech/seerrng/blob/main/LICENSE"><img src="https://img.shields.io/github/license/snapetech/seerrng" alt="License" /></a>
+  <img src="https://github.com/YunoHost-Apps/seerrng/actions/workflows/ci.yml/badge.svg" alt="SeerrNG CI" />
+  <a href="https://github.com/YunoHost-Apps/seerrng/blob/main/LICENSE"><img src="https://img.shields.io/github/license/YunoHost-Apps/seerrng" alt="License" /></a>
   <a href="https://discord.gg/5PyXBfvS6T"><img src="https://img.shields.io/badge/support-Discord-5865F2?logo=discord&logoColor=white" alt="Support on Discord" /></a>
 </p>
 
@@ -105,7 +105,7 @@ SeerrNG fork, not the upstream Seerr repository.
 
 ## Documentation
 
-SeerrNG documentation is maintained in the [docs folder](https://github.com/snapetech/seerrng/tree/main/docs). The links below open the corresponding guides directly:
+SeerrNG documentation is maintained in the [docs folder](https://github.com/YunoHost-Apps/seerrng/tree/main/docs). The links below open the corresponding guides directly:
 
 - [Install SeerrNG](./docs/getting-started/index.mdx)
 - [Install on Unraid](./docs/getting-started/third-parties/unraid.mdx)
@@ -156,7 +156,7 @@ docker run -d \
   -p 5055:5055 \
   -v /path/to/seerrng/config:/app/config \
   --restart unless-stopped \
-  ghcr.io/snapetech/seerrng:main
+  ghcr.io/yunohost-apps/seerrng:main
 ```
 
 Open `http://localhost:5055` and complete setup.
@@ -166,7 +166,7 @@ Open `http://localhost:5055` and complete setup.
 ```yaml
 services:
   seerrng:
-    image: ghcr.io/snapetech/seerrng:main
+    image: ghcr.io/yunohost-apps/seerrng:main
     container_name: seerrng
     environment:
       LOG_LEVEL: info
@@ -183,7 +183,7 @@ services:
 
 ### Unraid
 
-Install SeerrNG from Community Applications with the [Unraid template](https://raw.githubusercontent.com/snapetech/seerrng/main/packaging/unraid/seerrng.xml). It uses the stable `latest` image, maps HTTP port `5055` and optional HTTPS port `5056`, and persists `/app/config`. The image runs as UID/GID `1000:1000`, so make the selected appdata directory writable by that user before the first start. Optional BookshelfNG, ChaptarrNG, ROMarrNG, and QuestarrNG templates live in each fork's own repository; the [Unraid guide](docs/getting-started/third-parties/unraid.mdx) links to their templates and to the existing Community Apps listings for LazyLibrarian, Mylar3, and Kapowarr. BackIssue has its own Docker image and Unraid template; see its [getting-started guide](https://backissue.app/getting-started).
+Install SeerrNG from Community Applications with the [Unraid template](https://raw.githubusercontent.com/YunoHost-Apps/seerrng/main/packaging/unraid/seerrng.xml). It uses the stable `latest` image, maps HTTP port `5055` and optional HTTPS port `5056`, and persists `/app/config`. The image runs as UID/GID `1000:1000`, so make the selected appdata directory writable by that user before the first start. Optional BookshelfNG, ChaptarrNG, ROMarrNG, and QuestarrNG templates live in each fork's own repository; the [Unraid guide](docs/getting-started/third-parties/unraid.mdx) links to their templates and to the existing Community Apps listings for LazyLibrarian, Mylar3, and Kapowarr. BackIssue has its own Docker image and Unraid template; see its [getting-started guide](https://backissue.app/getting-started).
 
 ### Linux Packages
 
@@ -646,8 +646,8 @@ SeerrNG is intended for lawful personal media management. The project does not p
 ## Support
 
 - Discord: https://discord.gg/5PyXBfvS6T
-- Issues: https://github.com/snapetech/seerrng/issues
-- Discussions: https://github.com/snapetech/seerrng/discussions
+- Issues: https://github.com/YunoHost-Apps/seerrng/issues
+- Discussions: https://github.com/YunoHost-Apps/seerrng/discussions
 
 Use upstream Seerr documentation when you need background on inherited deployment or video-library behavior, but report SeerrNG-specific music, book, cache, packaging, and branding issues in this repository.
 

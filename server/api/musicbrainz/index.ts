@@ -462,7 +462,8 @@ class MusicBrainz extends ExternalAPI {
       {},
       {
         headers: {
-          'User-Agent': 'SeerrNG/0.1.0 (https://github.com/snapetech/seerrng)',
+          'User-Agent':
+            'SeerrNG/0.1.0 (https://github.com/YunoHost-Apps/seerrng)',
           Accept: 'application/json',
         },
         nodeCache: cacheManager.getCache('musicbrainz').data,
@@ -522,7 +523,8 @@ class MusicBrainz extends ExternalAPI {
       throw new Error(
         `[MusicBrainz] Failed to search albums: ${
           e instanceof Error ? e.message : 'Unknown error'
-        }`
+        }`,
+        { cause: e }
       );
     }
   }
@@ -567,7 +569,8 @@ class MusicBrainz extends ExternalAPI {
       throw new Error(
         `[MusicBrainz] Failed to search recordings: ${
           e instanceof Error ? e.message : 'Unknown error'
-        }`
+        }`,
+        { cause: e }
       );
     }
   }
@@ -661,7 +664,8 @@ class MusicBrainz extends ExternalAPI {
       throw new Error(
         `[MusicBrainz] Failed to search release groups by tag: ${
           e instanceof Error ? e.message : 'Unknown error'
-        }`
+        }`,
+        { cause: e }
       );
     }
   }
@@ -714,7 +718,8 @@ class MusicBrainz extends ExternalAPI {
       throw new Error(
         `[MusicBrainz] Failed to search artists: ${
           e instanceof Error ? e.message : 'Unknown error'
-        }`
+        }`,
+        { cause: e }
       );
     }
   }
@@ -755,7 +760,8 @@ class MusicBrainz extends ExternalAPI {
       throw new Error(
         `[MusicBrainz] Failed to fetch release group details: ${
           e instanceof Error ? e.message : 'Unknown error'
-        }`
+        }`,
+        { cause: e }
       );
     }
   }
@@ -788,7 +794,8 @@ class MusicBrainz extends ExternalAPI {
       throw new Error(
         `[MusicBrainz] Failed to fetch release labels: ${
           e instanceof Error ? e.message : 'Unknown error'
-        }`
+        }`,
+        { cause: e }
       );
     }
   }
@@ -815,7 +822,8 @@ class MusicBrainz extends ExternalAPI {
         ...WIKIPEDIA_EXTRACT_HTTP_OPTIONS,
         headers: {
           Accept: 'application/json',
-          'User-Agent': 'SeerrNG/0.1.0 (https://github.com/snapetech/seerrng)',
+          'User-Agent':
+            'SeerrNG/0.1.0 (https://github.com/YunoHost-Apps/seerrng)',
         },
       });
 
@@ -865,7 +873,8 @@ class MusicBrainz extends ExternalAPI {
       throw new Error(
         `[MusicBrainz] Failed to fetch Wikipedia extract: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
+        { cause: error }
       );
     }
   }
@@ -905,7 +914,8 @@ class MusicBrainz extends ExternalAPI {
       throw new Error(
         `[MusicBrainz] Failed to fetch release group: ${
           e instanceof Error ? e.message : 'Unknown error'
-        }`
+        }`,
+        { cause: e }
       );
     }
   }

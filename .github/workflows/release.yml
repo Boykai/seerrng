@@ -27,6 +27,7 @@ concurrency:
 
 env:
   DOCKER_HUB: snapetech/seerrng
+  GHCR_IMAGE: ghcr.io/yunohost-apps/seerrng
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
@@ -215,7 +216,7 @@ jobs:
         with:
           images: |
             ${{ env.DOCKER_HUB }}
-            ghcr.io/${{ github.repository }}
+            ${{ env.GHCR_IMAGE }}
           tags: |
             type=semver,pattern={{raw}},value=${{ env.VERSION }}
             type=semver,pattern=v{{major}}.{{minor}},value=${{ env.VERSION }}
@@ -279,7 +280,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          image="ghcr.io/${GITHUB_REPOSITORY}:${VERSION}"
+          image="${GHCR_IMAGE}:${VERSION}"
           for attempt in 1 2 3 4 5; do
             echo "Resolving release manifest digest (attempt ${attempt}/5)"
             if DIGEST=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"') &&
@@ -305,8 +306,8 @@ jobs:
                 -t "${{ env.DOCKER_HUB }}:latest" \
                 "${{ env.DOCKER_HUB }}:${{ env.VERSION }}" &&
               docker buildx imagetools create \
-                -t "ghcr.io/${{ github.repository }}:latest" \
-                "ghcr.io/${{ github.repository }}:${{ env.VERSION }}"; then
+                -t "${GHCR_IMAGE}:latest" \
+                "${GHCR_IMAGE}:${VERSION}"; then
               exit 0
             fi
             if [ "$attempt" -eq 5 ]; then
@@ -323,10 +324,10 @@ jobs:
         run: |
           set -euo pipefail
           scripts/verify-container-manifest.sh --require-provenance "${DOCKER_HUB}:${VERSION}" linux/amd64 linux/arm64
-          scripts/verify-container-manifest.sh --require-provenance "ghcr.io/${GITHUB_REPOSITORY}:${VERSION}" linux/amd64 linux/arm64
+          scripts/verify-container-manifest.sh --require-provenance "${GHCR_IMAGE}:${VERSION}" linux/amd64 linux/arm64
           if [[ "$VERSION" != *-* ]]; then
             scripts/verify-container-manifest.sh --require-provenance "${DOCKER_HUB}:latest" linux/amd64 linux/arm64
-            scripts/verify-container-manifest.sh --require-provenance "ghcr.io/${GITHUB_REPOSITORY}:latest" linux/amd64 linux/arm64
+            scripts/verify-container-manifest.sh --require-provenance "${GHCR_IMAGE}:latest" linux/amd64 linux/arm64
           fi
 
   scan-release-image:
@@ -386,7 +387,7 @@ jobs:
             --exit-code 1 \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
-            "ghcr.io/${{ github.repository }}@${{ needs.publish.outputs.image_digest }}"
+            "${GHCR_IMAGE}@${{ needs.publish.outputs.image_digest }}"
 
       - name: Upload SARIF to code scanning
         if: always()
@@ -437,7 +438,7 @@ jobs:
 
       - name: Sign images
         run: |
-          cosign sign --recursive "ghcr.io/${{ github.repository }}@${{ needs.publish.outputs.image_digest }}"
+          cosign sign --recursive "${GHCR_IMAGE}@${{ needs.publish.outputs.image_digest }}"
           cosign sign --recursive "${{ env.DOCKER_HUB }}@${{ needs.publish.outputs.image_digest }}"
 
       - name: Resolve published platform digests
@@ -454,7 +455,7 @@ jobs:
               ' | sort
           }
           mapfile -t ghcr_platforms < <(
-            resolve_platforms "ghcr.io/${{ github.repository }}@${{ needs.publish.outputs.image_digest }}"
+            resolve_platforms "${GHCR_IMAGE}@${{ needs.publish.outputs.image_digest }}"
           )
           mapfile -t dockerhub_platforms < <(
             resolve_platforms "${{ env.DOCKER_HUB }}@${{ needs.publish.outputs.image_digest }}"
@@ -474,14 +475,14 @@ jobs:
             dockerhub_sbom="seerr-dockerhub-${arch}-${{ env.VERSION }}.sbom"
             trivy image --platform "linux/$arch" --timeout 15m --format cyclonedx \
               --output "$ghcr_sbom" \
-              "ghcr.io/${{ github.repository }}@$digest"
+              "${GHCR_IMAGE}@$digest"
             trivy image --platform "linux/$arch" --timeout 15m --format cyclonedx \
               --output "$dockerhub_sbom" \
               "${{ env.DOCKER_HUB }}@$digest"
             cosign attest \
               --type cyclonedx \
               --predicate "$ghcr_sbom" \
-              "ghcr.io/${{ github.repository }}@$digest"
+              "${GHCR_IMAGE}@$digest"
             cosign attest \
               --type cyclonedx \
               --predicate "$dockerhub_sbom" \
@@ -528,7 +529,7 @@ jobs:
 
       - name: Verify signatures
         run: |
-          cosign verify "ghcr.io/${{ github.repository }}@${{ needs.publish.outputs.image_digest }}" \
+          cosign verify "${GHCR_IMAGE}@${{ needs.publish.outputs.image_digest }}" \
             --certificate-identity "https://github.com/${{ github.workflow_ref }}" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
@@ -550,7 +551,7 @@ jobs:
               ' | sort
           }
           for registry_image in \
-            "ghcr.io/${{ github.repository }}" \
+            "${GHCR_IMAGE}" \
             "${{ env.DOCKER_HUB }}"; do
             mapfile -t platforms < <(
               resolve_platforms "$registry_image@${{ needs.publish.outputs.image_digest }}"
@@ -742,7 +743,7 @@ jobs:
             exit 1
           }
           release_url="${{ github.server_url }}/${{ github.repository }}/releases/tag/${VERSION}"
-          image_ref="ghcr.io/${{ github.repository }}:${VERSION}"
+          image_ref="${GHCR_IMAGE}:${VERSION}"
           printf '%s' "$RELEASE_BODY" | node scripts/discord-release-notes.mjs --split > chunks.json
           chunk_count="$(jq 'length' chunks.json)"
           (( chunk_count > 0 )) || {

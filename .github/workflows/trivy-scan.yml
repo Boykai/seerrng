@@ -19,6 +19,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  GHCR_IMAGE: ghcr.io/yunohost-apps/seerrng
+
 jobs:
   trivy:
     if: >-
@@ -81,7 +84,7 @@ jobs:
             --exit-code 1 \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
-            "ghcr.io/${{ github.repository }}:latest"
+            "${GHCR_IMAGE}:latest"
 
       - name: Upload SARIF to code scanning
         if: always()

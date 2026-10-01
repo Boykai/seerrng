@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GHCR_IMAGE: ghcr.io/yunohost-apps/seerrng
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -66,7 +69,7 @@ jobs:
               echo "Invalid chart identity in $chart_path/Chart.yaml" >&2
               exit 1
             fi
-            if oras manifest fetch "ghcr.io/${GITHUB_REPOSITORY}/${chart_name}:${current_version}" >/dev/null 2>&1; then
+            if oras manifest fetch "${GHCR_IMAGE}/${chart_name}:${current_version}" >/dev/null 2>&1; then
               echo "No version change for $chart_name. Skipping."
             else
               helm dependency build "$chart_path"
@@ -157,13 +160,13 @@ jobs:
             helm_push_output="$(mktemp "$RUNNER_TEMP/helm-push.XXXXXX")"
             oras_push_output="$(mktemp "$RUNNER_TEMP/oras-push.XXXXXX")"
             trap 'rm -f "$helm_push_output" "$oras_push_output"' EXIT
-            helm push "$chart_path" "oci://ghcr.io/${GITHUB_REPOSITORY}" |& tee "$helm_push_output"
+            helm push "$chart_path" "oci://${GHCR_IMAGE}" |& tee "$helm_push_output"
             chart_digest="$(awk -F '[, ]+' '/Digest/{print $NF}' "$helm_push_output" | tail -n 1)"
             if [[ ! "$chart_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
               echo "Helm returned an invalid chart digest for $chart_name:$chart_version" >&2
               exit 1
             fi
-            cosign sign "ghcr.io/${GITHUB_REPOSITORY}/${chart_name}@${chart_digest}"
+            cosign sign "${GHCR_IMAGE}/${chart_name}@${chart_digest}"
 
             metadata_file="charts/$chart_name/artifacthub-repo.yml"
             if [[ ! -f "$metadata_file" || -L "$metadata_file" ]] ||
@@ -172,7 +175,7 @@ jobs:
               exit 1
             fi
             oras push \
-              "ghcr.io/${GITHUB_REPOSITORY}/${chart_name}:artifacthub.io" \
+              "${GHCR_IMAGE}/${chart_name}:artifacthub.io" \
               --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
               "$metadata_file:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml" \
               |& tee "$oras_push_output"
@@ -181,7 +184,7 @@ jobs:
               echo "ORAS returned an invalid metadata digest for $chart_name" >&2
               exit 1
             fi
-            cosign sign "ghcr.io/${GITHUB_REPOSITORY}/${chart_name}:artifacthub.io@${artifacthub_digest}"
+            cosign sign "${GHCR_IMAGE}/${chart_name}:artifacthub.io@${artifacthub_digest}"
             rm -f "$helm_push_output" "$oras_push_output"
             trap - EXIT
           done
@@ -239,7 +242,7 @@ jobs:
               echo "Invalid packaged chart identity: $chart_path" >&2
               exit 1
             fi
-            cosign verify "ghcr.io/${GITHUB_REPOSITORY}/${chart_name}:${version}" \
+            cosign verify "${GHCR_IMAGE}/${chart_name}:${version}" \
               --certificate-identity "https://github.com/${{ github.workflow_ref }}" \
               --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
           done

@@ -12,6 +12,7 @@ permissions:
 
 env:
   DOCKER_HUB: snapetech/seerrng
+  GHCR_IMAGE: ghcr.io/yunohost-apps/seerrng
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -95,7 +96,7 @@ jobs:
         with:
           images: |
             ${{ env.DOCKER_HUB }}
-            ghcr.io/${{ github.repository }}
+            ${{ env.GHCR_IMAGE }}
           tags: |
             type=raw,value=preview-${{ steps.ver.outputs.version }}
           labels: |
@@ -127,6 +128,6 @@ jobs:
           set -euo pipefail
           for image in \
             "${{ env.DOCKER_HUB }}:preview-${{ steps.ver.outputs.version }}" \
-            "ghcr.io/${{ github.repository }}:preview-${{ steps.ver.outputs.version }}"; do
+            "${GHCR_IMAGE}:preview-${{ steps.ver.outputs.version }}"; do
             scripts/verify-container-manifest.sh --require-provenance "$image" linux/amd64 linux/arm64
           done
