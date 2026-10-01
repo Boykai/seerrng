@@ -464,7 +464,7 @@ test('release assets build supported native archive platforms', () => {
       runner: 'windows-2022',
       os: 'windows',
       arch: 'x64',
-      pnpm_version: '10.24.0',
+      pnpm_version: '11.25.0',
     },
     {
       runner: 'windows-11-arm',
