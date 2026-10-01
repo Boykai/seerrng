@@ -1,7 +1,7 @@
 # SeerrNG for YunoHost
 
 This YunoHost package installs SeerrNG's prebuilt Linux release archives. It
-supports `amd64` and `arm64`, uses YunoHost's Node.js 22 runtime, and stores
+supports `amd64` and `arm64`, uses YunoHost's Node.js 24 runtime, and stores
 persistent application data in the YunoHost app data directory.
 
 The installable package is maintained in the dedicated

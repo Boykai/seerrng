@@ -38,10 +38,10 @@ To verify images:
 
 Official Seerr images are available from:
 
-- GitHub Container Registry (GHCR): `ghcr.io/yunohost-apps/seerrng:<tag>`
+- GitHub Container Registry (GHCR): `ghcr.io/snapetech/seerrng:<tag>`
 - Docker Hub: `snapetech/seerrng:<tag>`
 
-You can view all available tags on the [Seerr Releases page](https://github.com/YunoHost-Apps/seerrng/releases).
+You can view all available tags on the [Seerr Releases page](https://github.com/snapetech/seerrng/releases).
 
 ---
 
@@ -56,14 +56,14 @@ Verification should always be performed using the image digest (SHA256).
   <TabItem value="docker" label="Docker">
 
 ```bash
-docker buildx imagetools inspect ghcr.io/yunohost-apps/seerrng:v0.1.0 --format '{{json .Manifest.Digest}}' | tr -d '"'
+docker buildx imagetools inspect ghcr.io/snapetech/seerrng:v0.1.0 --format '{{json .Manifest.Digest}}' | tr -d '"'
 ```
   </TabItem>
 
   <TabItem value="podman" label="Podman / Skopeo">
 
 ```bash
-skopeo inspect docker://ghcr.io/yunohost-apps/seerrng:v0.1.0 --format '{{.Digest}}'
+skopeo inspect docker://ghcr.io/snapetech/seerrng:v0.1.0 --format '{{.Digest}}'
 ```
   </TabItem>
 </Tabs>
@@ -82,8 +82,8 @@ sha256:abcd1234...
   <TabItem value="ghcr" label="GitHub Container Registry (GHCR)">
 
 ```bash
-cosign verify ghcr.io/yunohost-apps/seerrng@sha256:abcd1234... \
-  --certificate-identity "https://github.com/YunoHost-Apps/seerrng/.github/workflows/release.yml@refs/tags/v0.1.0" \
+cosign verify ghcr.io/snapetech/seerrng@sha256:abcd1234... \
+  --certificate-identity "https://github.com/snapetech/seerrng/.github/workflows/release.yml@refs/tags/v0.1.0" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
   </TabItem>
@@ -92,14 +92,14 @@ cosign verify ghcr.io/yunohost-apps/seerrng@sha256:abcd1234... \
 
 ```bash
 cosign verify snapetech/seerrng@sha256:abcd1234... \
-  --certificate-identity "https://github.com/YunoHost-Apps/seerrng/.github/workflows/release.yml@refs/tags/v0.1.0" \
+  --certificate-identity "https://github.com/snapetech/seerrng/.github/workflows/release.yml@refs/tags/v0.1.0" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
   </TabItem>
 </Tabs>
 
 :::info Successful Verification Example
-Verification for `ghcr.io/yunohost-apps/seerrng@sha256:abcd1234...`
+Verification for `ghcr.io/snapetech/seerrng@sha256:abcd1234...`
 
 The following checks were performed:
 
@@ -123,14 +123,14 @@ Always verify the digest that `latest` currently points to.
   <TabItem value="docker" label="Docker">
 
 ```bash
-docker buildx imagetools inspect ghcr.io/yunohost-apps/seerrng:latest --format '{{json .Manifest.Digest}}' | tr -d '"'
+docker buildx imagetools inspect ghcr.io/snapetech/seerrng:latest --format '{{json .Manifest.Digest}}' | tr -d '"'
 ```
   </TabItem>
 
   <TabItem value="podman" label="Podman / Skopeo">
 
 ```bash
-skopeo inspect docker://ghcr.io/yunohost-apps/seerrng:latest --format '{{.Digest}}'
+skopeo inspect docker://ghcr.io/snapetech/seerrng:latest --format '{{.Digest}}'
 ```
   </TabItem>
 </Tabs>
@@ -147,8 +147,8 @@ sha256:abcd1234...
   <TabItem value="ghcr" label="GHCR">
 
 ```bash
-cosign verify ghcr.io/yunohost-apps/seerrng@sha256:abcd1234... \
-  --certificate-identity-regexp "https://github.com/YunoHost-Apps/seerrng/.github/workflows/release.yml@refs/tags/v.*" \
+cosign verify ghcr.io/snapetech/seerrng@sha256:abcd1234... \
+  --certificate-identity-regexp "https://github.com/snapetech/seerrng/.github/workflows/release.yml@refs/tags/v.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
   </TabItem>
@@ -157,7 +157,7 @@ cosign verify ghcr.io/yunohost-apps/seerrng@sha256:abcd1234... \
 
 ```bash
 cosign verify snapetech/seerrng@sha256:abcd1234... \
-  --certificate-identity-regexp "https://github.com/YunoHost-Apps/seerrng/.github/workflows/release.yml@refs/tags/v.*" \
+  --certificate-identity-regexp "https://github.com/snapetech/seerrng/.github/workflows/release.yml@refs/tags/v.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
   </TabItem>
@@ -176,13 +176,13 @@ Each image includes a CycloneDX SBOM attestation.
 #### Verify the Attestation
 
 ```bash
-cosign verify-attestation ghcr.io/yunohost-apps/seerrng@sha256:abcd1234... \
+cosign verify-attestation ghcr.io/snapetech/seerrng@sha256:abcd1234... \
   --type cyclonedx \
-  --certificate-identity "https://github.com/YunoHost-Apps/seerrng/.github/workflows/release.yml@refs/tags/v0.1.0" \
+  --certificate-identity "https://github.com/snapetech/seerrng/.github/workflows/release.yml@refs/tags/v0.1.0" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
 :::info Successful Verification Example
-Verification for `ghcr.io/yunohost-apps/seerrng@sha256:abcd1234...`
+Verification for `ghcr.io/snapetech/seerrng@sha256:abcd1234...`
 
 The following checks were performed:
 
@@ -194,9 +194,9 @@ The following checks were performed:
 #### Extract the SBOM for Inspection
 
 ```bash
-cosign verify-attestation ghcr.io/yunohost-apps/seerrng@sha256:abcd1234... \
+cosign verify-attestation ghcr.io/snapetech/seerrng@sha256:abcd1234... \
   --type cyclonedx \
-  --certificate-identity "https://github.com/YunoHost-Apps/seerrng/.github/workflows/release.yml@refs/tags/v0.1.0" \
+  --certificate-identity "https://github.com/snapetech/seerrng/.github/workflows/release.yml@refs/tags/v0.1.0" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" | jq -r '.payload | @base64d' > sbom.json
 ```
 
@@ -209,13 +209,13 @@ You can open `sbom.json` in a CycloneDX viewer or analyse it with [Trivy](https:
 The expected certificate identity for all signed Seerr images is:
 
 ```
-https://github.com/YunoHost-Apps/seerrng/.github/workflows/release.yml@refs/tags/v*
+https://github.com/snapetech/seerrng/.github/workflows/release.yml@refs/tags/v*
 ```
 
 This confirms that the image was:
 
 - Built by the official SeerrNG Release workflow
-- Produced from the YunoHost-Apps/seerrng repository
+- Produced from the snapetech/seerrng repository
 - Signed using GitHub’s OIDC identity via Sigstore Fulcio
 
 ---
@@ -226,15 +226,15 @@ This confirms that the image was:
   <TabItem value="docker" label="Docker">
 
 ```bash
-DIGEST=$(docker buildx imagetools inspect ghcr.io/yunohost-apps/seerrng:latest --format '{{json .Manifest.Digest}}' | tr -d '"')
+DIGEST=$(docker buildx imagetools inspect ghcr.io/snapetech/seerrng:latest --format '{{json .Manifest.Digest}}' | tr -d '"')
 
-cosign verify ghcr.io/yunohost-apps/seerrng@"$DIGEST" \
-  --certificate-identity-regexp "https://github.com/YunoHost-Apps/seerrng/.github/workflows/release.yml@refs/tags/v.*" \
+cosign verify ghcr.io/snapetech/seerrng@"$DIGEST" \
+  --certificate-identity-regexp "https://github.com/snapetech/seerrng/.github/workflows/release.yml@refs/tags/v.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
-cosign verify-attestation ghcr.io/yunohost-apps/seerrng@"$DIGEST" \
+cosign verify-attestation ghcr.io/snapetech/seerrng@"$DIGEST" \
   --type cyclonedx \
-  --certificate-identity-regexp "https://github.com/YunoHost-Apps/seerrng/.github/workflows/release.yml@refs/tags/v.*" \
+  --certificate-identity-regexp "https://github.com/snapetech/seerrng/.github/workflows/release.yml@refs/tags/v.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
   </TabItem>
@@ -242,10 +242,10 @@ cosign verify-attestation ghcr.io/yunohost-apps/seerrng@"$DIGEST" \
   <TabItem value="podman" label="Podman / Skopeo">
 
 ```bash
-DIGEST=$(skopeo inspect docker://ghcr.io/yunohost-apps/seerrng:latest --format '{{.Digest}}')
+DIGEST=$(skopeo inspect docker://ghcr.io/snapetech/seerrng:latest --format '{{.Digest}}')
 
-cosign verify ghcr.io/yunohost-apps/seerrng@"$DIGEST" \
-  --certificate-identity-regexp "https://github.com/YunoHost-Apps/seerrng/.github/workflows/release.yml@refs/tags/v.*" \
+cosign verify ghcr.io/snapetech/seerrng@"$DIGEST" \
+  --certificate-identity-regexp "https://github.com/snapetech/seerrng/.github/workflows/release.yml@refs/tags/v.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
   </TabItem>
@@ -257,9 +257,9 @@ cosign verify ghcr.io/yunohost-apps/seerrng@"$DIGEST" \
 
 Official Seerr helm charts are available from:
 
-- GitHub Container Registry (GHCR): `ghcr.io/yunohost-apps/seerrng/seerr-chart:<tag>`
+- GitHub Container Registry (GHCR): `ghcr.io/snapetech/seerrng/seerr-chart:<tag>`
 
-You can view all available tags on the [Seerr Releases page](https://github.com/YunoHost-Apps/seerrng/pkgs/container/seerrng%2Fseerr-chart).
+You can view all available tags on the [Seerr Releases page](https://github.com/snapetech/seerrng/pkgs/container/seerrng%2Fseerr-chart).
 
 ---
 
@@ -274,14 +274,14 @@ Verification should always be performed using the image digest (SHA256).
   <TabItem value="docker" label="Docker">
 
 ```bash
-docker buildx imagetools inspect ghcr.io/yunohost-apps/seerrng/seerr-chart:0.1.0 --format '{{json .Manifest.Digest}}' | tr -d '"'
+docker buildx imagetools inspect ghcr.io/snapetech/seerrng/seerr-chart:0.1.0 --format '{{json .Manifest.Digest}}' | tr -d '"'
 ```
   </TabItem>
 
   <TabItem value="podman" label="Podman / Skopeo">
 
 ```bash
-skopeo inspect docker://ghcr.io/yunohost-apps/seerrng/seerr-chart:0.1.0 --format '{{.Digest}}'
+skopeo inspect docker://ghcr.io/snapetech/seerrng/seerr-chart:0.1.0 --format '{{.Digest}}'
 ```
   </TabItem>
 </Tabs>
@@ -297,13 +297,13 @@ sha256:abcd1234...
 #### Verify the Helm Chart Signature
 
 ```bash
-cosign verify ghcr.io/yunohost-apps/seerrng/seerr-chart@sha256:abcd1234... \
-  --certificate-identity "https://github.com/YunoHost-Apps/seerrng/.github/workflows/helm.yml@refs/heads/main" \
+cosign verify ghcr.io/snapetech/seerrng/seerr-chart@sha256:abcd1234... \
+  --certificate-identity "https://github.com/snapetech/seerrng/.github/workflows/helm.yml@refs/heads/main" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
 
 :::info Successful Verification Example
-Verification for `ghcr.io/yunohost-apps/seerrng/seerr-chart@sha256:abcd1234...`
+Verification for `ghcr.io/snapetech/seerrng/seerr-chart@sha256:abcd1234...`
 
 The following checks were performed:
 
@@ -319,13 +319,13 @@ The following checks were performed:
 The expected certificate identity for all signed Seerr charts is:
 
 ```
-https://github.com/YunoHost-Apps/seerrng/.github/workflows/helm.yml@refs/heads/main
+https://github.com/snapetech/seerrng/.github/workflows/helm.yml@refs/heads/main
 ```
 
 This confirms that the chart was:
 
 - Built by the official SeerrNG Release workflow
-- Produced from the YunoHost-Apps/seerrng repository
+- Produced from the snapetech/seerrng repository
 - Signed using GitHub’s OIDC identity via Sigstore Fulcio
 
 ---
@@ -336,15 +336,15 @@ This confirms that the chart was:
   <TabItem value="docker" label="Docker">
 
 ```bash
-DIGEST=$(docker buildx imagetools inspect ghcr.io/yunohost-apps/seerrng/seerr-chart:0.1.0 --format '{{json .Manifest.Digest}}' | tr -d '"')
+DIGEST=$(docker buildx imagetools inspect ghcr.io/snapetech/seerrng/seerr-chart:0.1.0 --format '{{json .Manifest.Digest}}' | tr -d '"')
 
-cosign verify ghcr.io/yunohost-apps/seerrng/seerr-chart@"$DIGEST" \
-  --certificate-identity-regexp "https://github.com/YunoHost-Apps/seerrng/.github/workflows/helm.yml@refs/heads/main" \
+cosign verify ghcr.io/snapetech/seerrng/seerr-chart@"$DIGEST" \
+  --certificate-identity-regexp "https://github.com/snapetech/seerrng/.github/workflows/helm.yml@refs/heads/main" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
-cosign verify-attestation ghcr.io/yunohost-apps/seerrng/seerr-chart@"$DIGEST" \
+cosign verify-attestation ghcr.io/snapetech/seerrng/seerr-chart@"$DIGEST" \
   --type cyclonedx \
-  --certificate-identity-regexp "https://github.com/YunoHost-Apps/seerrng/.github/workflows/helm.yml@refs/heads/main" \
+  --certificate-identity-regexp "https://github.com/snapetech/seerrng/.github/workflows/helm.yml@refs/heads/main" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
   </TabItem>
@@ -352,10 +352,10 @@ cosign verify-attestation ghcr.io/yunohost-apps/seerrng/seerr-chart@"$DIGEST" \
   <TabItem value="podman" label="Podman / Skopeo">
 
 ```bash
-DIGEST=$(skopeo inspect docker://ghcr.io/yunohost-apps/seerrng/seerr-chart:0.1.0 --format '{{.Digest}}')
+DIGEST=$(skopeo inspect docker://ghcr.io/snapetech/seerrng/seerr-chart:0.1.0 --format '{{.Digest}}')
 
-cosign verify ghcr.io/yunohost-apps/seerrng/seerr-chart@"$DIGEST" \
-  --certificate-identity-regexp "https://github.com/YunoHost-Apps/seerrng/.github/workflows/helm.yml@refs/heads/main" \
+cosign verify ghcr.io/snapetech/seerrng/seerr-chart@"$DIGEST" \
+  --certificate-identity-regexp "https://github.com/snapetech/seerrng/.github/workflows/helm.yml@refs/heads/main" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
   </TabItem>
@@ -383,4 +383,4 @@ cosign verify ghcr.io/yunohost-apps/seerrng/seerr-chart@"$DIGEST" \
 - [Skopeo Documentation](https://github.com/containers/skopeo)
 - [Podman Documentation](https://podman.io/get-started/)
 - [Docker Documentation](https://docs.docker.com/)
-- [Seerr GitHub Repository](https://github.com/YunoHost-Apps/seerrng)
+- [Seerr GitHub Repository](https://github.com/snapetech/seerrng)

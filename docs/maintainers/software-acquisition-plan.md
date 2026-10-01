@@ -90,7 +90,7 @@ Its MIT license makes a separate fork technically straightforward, but ongoing f
 
 If an upstream project will not accept a required change and SeerrNG decides to maintain a fork, use the upstream application name with `NG` appended (for example, `QuestarrNG`, `GamarrNG`, or `ROMarrNG`). Keep the fork as a separate project and preserve the upstream license and attribution requirements.
 
-The fork's README and user/developer documentation must identify the upstream project, state the specific SeerrNG capability the fork exists to provide, describe the maintained changes, and link both to the upstream project and to the main [SeerrNG repository](https://github.com/YunoHost-Apps/seerrng). Keep those documents current with the fork's behavior and release changes. Apply this naming and documentation rule to every fork created for this plan; do not fork or rename a backend merely as a precaution.
+The fork's README and user/developer documentation must identify the upstream project, state the specific SeerrNG capability the fork exists to provide, describe the maintained changes, and link both to the upstream project and to the main [SeerrNG repository](https://github.com/snapetech/seerrng). Keep those documents current with the fork's behavior and release changes. Apply this naming and documentation rule to every fork created for this plan; do not fork or rename a backend merely as a precaution.
 
 ## SeerrNG architecture
 

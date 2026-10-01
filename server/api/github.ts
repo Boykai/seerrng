@@ -3,7 +3,7 @@ import logger from '@server/logger';
 import { getHttpErrorDetails } from '@server/utils/httpError';
 import ExternalAPI from './externalapi';
 
-const SEERRNG_REPO = '/repos/YunoHost-Apps/seerrng';
+const SEERRNG_REPO = '/repos/snapetech/seerrng';
 
 interface GitHubRelease {
   name: string;

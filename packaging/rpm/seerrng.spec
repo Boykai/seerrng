@@ -3,14 +3,14 @@ Version:        0.1.0
 Release:        1%{?dist}
 Summary:        Standalone media request and discovery service
 License:        MIT
-URL:            https://github.com/YunoHost-Apps/seerrng
+URL:            https://github.com/snapetech/seerrng
 Source0:        seerrng-v%{version}-linux-x64.tar.gz
 Source1:        seerrng.service
 Source2:        seerrng.env
 Source3:        seerrng.sysusers
 Source4:        seerrng.tmpfiles
 BuildArch:      x86_64
-Requires:       nodejs >= 22
+Requires:       nodejs >= 24.15.0
 %{?systemd_requires}
 
 # The release archive bundles native Node modules for multiple platforms.

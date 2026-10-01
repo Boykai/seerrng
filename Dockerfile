@@ -1,7 +1,7 @@
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 
-FROM public.ecr.aws/docker/library/node:22.22.2-alpine3.23@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f AS target-base
+FROM public.ecr.aws/docker/library/node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2 AS target-base
 ARG SOURCE_DATE_EPOCH
 ARG TARGETPLATFORM
 ENV TARGETPLATFORM=${TARGETPLATFORM:-linux/amd64}
@@ -40,7 +40,7 @@ RUN if [ -d node_modules/.pnpm ]; then \
   \) -exec rm -rf {} + || true; \
   fi
 
-FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/node:22.22.2-alpine3.23@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f AS build-base
+FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2 AS build-base
 ARG SOURCE_DATE_EPOCH
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
@@ -76,7 +76,7 @@ RUN pnpm i18n:check && pnpm build:next && pnpm build:server
 
 RUN rm -rf .next/cache
 
-FROM public.ecr.aws/docker/library/node:22.22.2-alpine3.23@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f
+FROM public.ecr.aws/docker/library/node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2
 ARG SOURCE_DATE_EPOCH
 ARG COMMIT_TAG
 ARG BUILD_VERSION=main

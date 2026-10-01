@@ -213,7 +213,7 @@ jobs:
           appimagetool_url='https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage'
           curl -fsSL --retry 5 "$appimagetool_url" -o appimagetool
           echo 'a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0  appimagetool' | sha256sum -c -
-          node_version='22.22.2'
+          node_version='24.21.0'
           node_archive="node-v${node_version}-linux-x64.tar.xz"
           node_base_url="https://nodejs.org/dist/v${node_version}"
           curl -fsSL --retry 5 "${node_base_url}/${node_archive}" -o "$node_archive"
@@ -236,6 +236,33 @@ jobs:
           cp appimage-packaging/public/android-chrome-512x512.png SeerrNG.AppDir/seerrng.png
           cp appimage-packaging/public/android-chrome-512x512.png SeerrNG.AppDir/usr/share/icons/hicolor/256x256/apps/seerrng.png
           app_dir='SeerrNG.AppDir/usr/lib/seerrng'
+          swc_wasm_version="$(node -e "console.log(require(process.argv[1]).version)" "$app_dir/node_modules/next/package.json")"
+          case "$swc_wasm_version" in
+            16.3.6)
+              swc_wasm_integrity='sha512-Qbh5QIWcyzZfp+neSFDxSaS0PjyCv7NUVipXcOaEp0+bCAynyGAoGnZirESQyPwpn/VXBncpZCVa0cnD+EWDmQ=='
+              ;;
+            *)
+              echo "No pinned Next.js WASM compiler checksum for version ${swc_wasm_version}." >&2
+              exit 1
+              ;;
+          esac
+          swc_wasm_archive="$RUNNER_TEMP/swc-wasm-nodejs-${swc_wasm_version}.tgz"
+          curl -fsSL --retry 5 \
+            "https://registry.npmjs.org/@next/swc-wasm-nodejs/-/swc-wasm-nodejs-${swc_wasm_version}.tgz" \
+            -o "$swc_wasm_archive"
+          actual_swc_wasm_integrity="sha512-$(openssl dgst -sha512 -binary "$swc_wasm_archive" | base64 -w0)"
+          if [ "$actual_swc_wasm_integrity" != "$swc_wasm_integrity" ]; then
+            echo 'Next.js WASM compiler checksum did not match its pinned integrity.' >&2
+            exit 1
+          fi
+          next_directory="$app_dir/node_modules/next"
+          if [ ! -f "$next_directory/package.json" ]; then
+            echo 'The AppImage release archive does not contain Next.js.' >&2
+            exit 1
+          fi
+          swc_wasm_directory="$next_directory/wasm/@next/swc-wasm-nodejs"
+          mkdir -p "$swc_wasm_directory"
+          tar -xzf "$swc_wasm_archive" --strip-components=1 -C "$swc_wasm_directory"
           find "$app_dir/node_modules/.pnpm" \
             -path '*/node_modules/@next/swc-linux-x64-gnu/*.node' \
             -type f -delete

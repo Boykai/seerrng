@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  GHCR_IMAGE: ghcr.io/yunohost-apps/seerrng
+  GHCR_IMAGE: ghcr.io/snapetech/seerrng
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

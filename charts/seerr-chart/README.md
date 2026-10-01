@@ -4,7 +4,7 @@
 
 SeerrNG Helm chart for Kubernetes
 
-**Homepage:** <https://github.com/YunoHost-Apps/seerrng>
+**Homepage:** <https://github.com/snapetech/seerrng>
 
 ## Maintainers
 
@@ -14,7 +14,7 @@ SeerrNG Helm chart for Kubernetes
 
 ## Source Code
 
-* <https://github.com/YunoHost-Apps/seerrng/tree/main/charts/seerr-chart>
+* <https://github.com/snapetech/seerrng/tree/main/charts/seerr-chart>
 
 ## Requirements
 
@@ -62,7 +62,7 @@ If `replicaCount` value was used - remove it. Helm update should work fine after
 | hostUsers | bool | `true` | docs: https://kubernetes.io/docs/concepts/workloads/pods/user-namespaces/ |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.registry | string | `"ghcr.io"` |  |
-| image.repository | string | `"yunohost-apps/seerrng"` |  |
+| image.repository | string | `"snapetech/seerrng"` |  |
 | image.sha | string | `""` |  |
 | image.tag | string | `""` | Overrides the image tag whose default is the chart appVersion. |
 | imagePullSecrets | list | `[]` |  |

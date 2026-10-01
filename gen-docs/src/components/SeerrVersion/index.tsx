@@ -7,7 +7,7 @@ export const SeerrVersion = () => {
     async function fetchVersion() {
       try {
         const response = await fetch(
-          'https://raw.githubusercontent.com/YunoHost-Apps/seerrng/main/package.json'
+          'https://raw.githubusercontent.com/snapetech/seerrng/main/package.json'
         );
 
         const data = await response.json();

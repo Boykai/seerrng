@@ -13,7 +13,7 @@
 
   languages.javascript = {
     enable = true;
-    package = pkgs.nodejs_22;
+    package = pkgs.nodejs_24;
     nodejs.enable = true;
     pnpm = {
       enable = true;

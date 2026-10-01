@@ -10,10 +10,10 @@ maintainers = ["snapetech"]
 
 [upstream]
 license = "MIT"
-website = "https://github.com/YunoHost-Apps/seerrng"
-userdoc = "https://github.com/YunoHost-Apps/seerrng/blob/main/docs/getting-started/third-parties/yunohost.mdx"
-admindoc = "https://github.com/YunoHost-Apps/seerrng/blob/main/docs/README.md"
-code = "https://github.com/YunoHost-Apps/seerrng"
+website = "https://github.com/snapetech/seerrng"
+userdoc = "https://github.com/snapetech/seerrng/blob/main/docs/getting-started/third-parties/yunohost.mdx"
+admindoc = "https://github.com/snapetech/seerrng/blob/main/docs/README.md"
+code = "https://github.com/snapetech/seerrng"
 
 [integration]
 yunohost = ">= 12.1.17"
@@ -44,9 +44,9 @@ ram.runtime = "512M"
     [resources.sources.main]
     in_subdir = true
     format = "tar.gz"
-    amd64.url = "https://github.com/YunoHost-Apps/seerrng/releases/download/v3.39.3/seerrng-v3.39.3-linux-x64.tar.gz"
+    amd64.url = "https://github.com/snapetech/seerrng/releases/download/v3.39.3/seerrng-v3.39.3-linux-x64.tar.gz"
     amd64.sha256 = "d984e06d4390f0858cca1b03bd90b407bd7c6fb9f411a0ed56e797c547b13f24"
-    arm64.url = "https://github.com/YunoHost-Apps/seerrng/releases/download/v3.39.3/seerrng-v3.39.3-linux-arm64.tar.gz"
+    arm64.url = "https://github.com/snapetech/seerrng/releases/download/v3.39.3/seerrng-v3.39.3-linux-arm64.tar.gz"
     arm64.sha256 = "66b4b85bc87aa0235e1cb4436cdc9b4b86e90e8666cf579fcdfb3f4fea72ad9c"
     autoupdate.strategy = "latest_github_release"
     autoupdate.asset.amd64 = "^seerrng-v.*-linux-x64\\.tar\\.gz$"
@@ -66,7 +66,7 @@ ram.runtime = "512M"
   main.default = 5055
 
   [resources.nodejs]
-  version = "22"
+  version = "24"
 
   [resources.apt]
   packages = "rsync"

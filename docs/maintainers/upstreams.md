@@ -1,6 +1,6 @@
 # Upstreams and Dependency Sync Runbook
 
-Confidence: high for dependency surfaces found in tracked files on 2026-06-16.
+Confidence: high for dependency surfaces found in tracked files on 2026-09-30.
 Confidence: moderate for external service taxonomy because provider contracts
 can change outside this repository.
 
@@ -21,7 +21,7 @@ fork divergence numbers are current.
 | Remote | Role | Current URL |
 | --- | --- | --- |
 | `upstream` | Product fork source for inherited upstream changes; remote default branch is `develop` | Inspect with `git remote get-url upstream` |
-| `origin` | Public SeerrNG GitHub fork | `https://github.com/YunoHost-Apps/seerrng.git` |
+| `origin` | Public SeerrNG GitHub fork | `https://github.com/snapetech/seerrng.git` |
 | `gitlab` | Internal GitLab remote / CI mirror | `git@gitlab.home:keith/seerrng.git` |
 
 There are no Git submodules in this checkout. Confidence: high.
@@ -36,15 +36,19 @@ Confidence: high.
 | Surface | Current pin/source |
 | --- | --- |
 | Root app `packageManager` | `pnpm@10.24.0` |
-| Root app engines | Node `^22.22.2`, pnpm `^10.0.0` |
+| Root app engines | Node `^24.15.0`, pnpm `^10.0.0` |
+| Root app Node type definitions | `@types/node@24.19.0` |
 | Docs app `packageManager` | `pnpm@10.24.0` |
 | Docs app engines | Node `>=22.0` |
 | Duplicate detector `packageManager` | `pnpm@10.24.0` |
 | Duplicate detector engines | Node `>=22.0` |
-| Production Docker base | `public.ecr.aws/docker/library/node:22.22.2-alpine3.23` |
-| Local Docker base | `node:22.22.2-alpine3.23` pinned by digest |
-| GitHub CI test containers | `node:22.22.2-alpine3.23` pinned by digest |
-| Release asset workflow Node | `22.22.2` |
+| Nix development shell | `pkgs.nodejs_24` (`24.20.0` via `devenv.lock`) |
+| SQLite runtime adapter | `better-sqlite3@13.0.3`; its TypeORM peer-range exception is recorded in `pnpm-workspace.yaml` |
+| Production Docker base | `public.ecr.aws/docker/library/node:24.21.0-alpine3.23` pinned by digest |
+| Local Docker base | `node:24.21.0-alpine3.23` pinned by digest |
+| GitHub CI test containers | `node:24.21.0-alpine3.23` pinned by digest |
+| Release asset workflow Node | `package.json` Node engine |
+| AppImage SWC fallback | `@next/swc-wasm-nodejs@16.3.6` with pinned SHA-512 integrity in the Linux package workflow |
 
 Keep these aligned when moving Node or pnpm. The Dockerfile, Dockerfile.local,
 GitHub Actions containers, release asset workflow, `package.json` engines, and
@@ -83,13 +87,13 @@ high.
 
 | Surface | Current upstream/pin |
 | --- | --- |
-| Published image | `ghcr.io/yunohost-apps/seerrng`, `docker.io/snapetech/seerrng` |
+| Published image | `ghcr.io/snapetech/seerrng`, `docker.io/snapetech/seerrng` |
 | Local Postgres compose | `postgres:18` |
 | Bookshelf compose | Digest-pinned BookshelfNG, PostgreSQL, and backend-specific `blampe/rreading-glasses` images |
-| Helm chart | `charts/seerr-chart`, image `ghcr.io/yunohost-apps/seerrng`, chart version/appVersion in `Chart.yaml` |
+| Helm chart | `charts/seerr-chart`, image `ghcr.io/snapetech/seerrng`, chart version/appVersion in `Chart.yaml` |
 | Snap | `packaging/snap/snapcraft.yaml`, base `core24` |
 | Flatpak | `org.freedesktop.Platform` runtime `24.08`, local `flatpak-src/node` and `flatpak-src/seerrng` sources |
-| Debian/RPM/AUR | Node package dependency `>= 22`, release assets from GitHub tags |
+| Debian/RPM/AUR | Node package dependency `>= 24.15.0`, release assets from GitHub tags |
 | AppImage | Bundled release asset layout and `packaging/appimage/AppRun` |
 
 Package recipes depend on release artifacts and image tags, not only npm
@@ -147,9 +151,9 @@ bash scripts/check-attribution.sh
 When changing Node or pnpm, update all matching pins together:
 
 ```bash
-rg -n "22\\.22\\.2|22\\.19\\.0|pnpm@10\\.24\\.0|pnpm: \\^10|node: \\^22|node: >=22|nodejs >= 22|nodejs>=22|core24|24\\.08" \
+rg -n "24\\.15\\.0|24\\.19\\.0|24\\.21\\.0|pnpm@10\\.24\\.0|pnpm: \\^10|node: \\^24|node: >=22|nodejs >= 24|nodejs>=24|core24|24\\.08" \
   package.json gen-docs/package.json bin/duplicate-detector/package.json \
-  Dockerfile Dockerfile.local .github .gitlab-ci.yml packaging charts
+  Dockerfile Dockerfile.local devenv.nix devenv.lock .github .gitlab-ci.yml packaging charts
 ```
 
 Then update the relevant files, reinstall each package universe, and rebuild any
