@@ -67,32 +67,26 @@ jobs:
             os: linux
             arch: x64
             pnpm_version: 10.24.0
-            package_json_file: package.json
           - runner: ubuntu-24.04-arm
             os: linux
             arch: arm64
             pnpm_version: 10.24.0
-            package_json_file: package.json
           - runner: macos-15
             os: macos
             arch: arm64
             pnpm_version: 10.24.0
-            package_json_file: package.json
           - runner: macos-15-intel
             os: macos
             arch: x64
             pnpm_version: 10.24.0
-            package_json_file: package.json
           - runner: windows-2022
             os: windows
             arch: x64
             pnpm_version: 11.25.0
-            package_json_file: .github/release-pnpm-tooling.json
           - runner: windows-11-arm
             os: windows
             arch: arm64
             pnpm_version: 11.25.0
-            package_json_file: .github/release-pnpm-tooling.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -115,7 +109,7 @@ jobs:
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: ${{ matrix.pnpm_version }}
-          package_json_file: ${{ matrix.package_json_file }}
+          package_json_file: ${{ matrix.os == 'windows' && '.github/release-pnpm-tooling.json' || 'package.json' }}
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
