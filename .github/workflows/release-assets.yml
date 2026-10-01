@@ -82,11 +82,13 @@ jobs:
           - runner: windows-2022
             os: windows
             arch: x64
-            pnpm_version: 11.25.0
-          - runner: windows-11-arm
+            pnpm_version: 10.24.0
+            msvs_version: auto
+          - runner: windows-11-vs2026-arm
             os: windows
             arch: arm64
-            pnpm_version: 11.25.0
+            pnpm_version: 10.24.0
+            msvs_version: '2026'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -124,7 +126,6 @@ jobs:
           set -euo pipefail
           case "$EXPECTED_PNPM_VERSION" in
             10.*) export npm_config_manage_package_manager_versions=false ;;
-            11.*) export pnpm_config_pm_on_fail=ignore ;;
             *) echo "Unsupported pnpm version for release build: $EXPECTED_PNPM_VERSION" >&2; exit 1 ;;
           esac
           actual_version="$(pnpm --version)"
@@ -158,18 +159,32 @@ jobs:
             exit 1
           }
 
+      - name: Install node-gyp for Visual Studio 2026
+        if: matrix.os == 'windows' && matrix.arch == 'arm64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global --ignore-scripts node-gyp@13.0.1
+          npm_root="$(npm root --global | tr -d '\r')"
+          node_gyp_js="$(cygpath -u "$npm_root")/node-gyp/bin/node-gyp.js"
+          test -f "$node_gyp_js"
+          node_gyp_version="$(node "$node_gyp_js" --version)"
+          printf 'Using node-gyp %s from %s\n' "$node_gyp_version" "$node_gyp_js"
+          [[ "$node_gyp_version" == 'v13.0.1' ]]
+          printf 'npm_config_node_gyp=%s\n' "$(cygpath -w "$node_gyp_js")" >> "$GITHUB_ENV"
+          printf 'npm_config_msvs_version=2026\n' >> "$GITHUB_ENV"
+
       - name: Build archive
         shell: bash
         env:
           EXPECTED_PNPM_VERSION: ${{ matrix.pnpm_version }}
           TAG: ${{ needs.resolve.outputs.tag }}
-          GYP_MSVS_VERSION: ${{ matrix.os == 'windows' && matrix.arch == 'arm64' && '2026' || 'auto' }}
-          npm_config_engine_strict: ${{ matrix.pnpm_version == '11.25.0' && 'false' || 'true' }}
+          GYP_MSVS_VERSION: ${{ matrix.msvs_version || 'auto' }}
+          npm_config_msvs_version: ${{ matrix.msvs_version || 'auto' }}
         run: |
           set -euo pipefail
           case "$EXPECTED_PNPM_VERSION" in
             10.*) export npm_config_manage_package_manager_versions=false ;;
-            11.*) export pnpm_config_pm_on_fail=ignore ;;
             *) echo "Unsupported pnpm version for release build: $EXPECTED_PNPM_VERSION" >&2; exit 1 ;;
           esac
           actual_version="$(pnpm --version)"
