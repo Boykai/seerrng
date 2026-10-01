@@ -31,6 +31,16 @@ The local `main` branch tracks `origin/main`. Upstream Seerr's default branch is
 `upstream/main` only when deliberately merging upstream release-line changes.
 Confidence: high.
 
+The SeerrNG upstream repository is `snapetech/seerrng`; YunoHost-Apps hosts
+only the installable package repository `YunoHost-Apps/seerrng_ynh`. Changes to
+`packaging/yunohost/` on SeerrNG `main` are mirrored by the post-commit hook to
+the sibling `seerrng_ynh` checkout's `testing` branch and pushed to its `origin`.
+The hook requires that checkout to be clean, on `testing`, and pointed at the
+YunoHost-Apps package repository. It preserves the package repository's
+generated root `README.md`, fast-forwards remote updates, and refuses local-only
+or diverged commits. Set `SEERRNG_YNH_REPO` if the package checkout is elsewhere.
+Confidence: high.
+
 ### JavaScript runtimes and package managers
 
 | Surface | Current pin/source |
