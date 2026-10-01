@@ -1181,6 +1181,11 @@ components:
           example: false
         cardTextVisibility:
           $ref: '#/components/schemas/CardTextVisibilitySettings'
+        requestRootFolders:
+          type: object
+          description: Per-user root-folder defaults keyed by service type and instance id, such as radarr:1.
+          additionalProperties:
+            type: string
         detailDisclosureCastPinned:
           type: boolean
           description: 'Keep Cast open by default on supported detail pages'
@@ -9592,6 +9597,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserSettings'
+  /user/{userId}/settings/request-root-folders:
+    get:
+      summary: Get a user's default request folders
+      description: Returns root-folder preferences for that user. Other users' preferences are visible to request managers and user managers.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Request-folder preferences returned
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        '403':
+          description: Caller may not view this user's preferences
+        '404':
+          description: User not found
   /user/{userId}/settings/preferred-languages:
     get:
       summary: Get preferred languages for a user
@@ -13695,6 +13725,25 @@ paths:
                 $ref: '#/components/schemas/SoftwareRequestDetailResponse'
         '404':
           description: Request not found or caller may not view it
+    delete:
+      summary: Clear a cancelled software request
+      description: Permanently removes the caller's cancelled software request and saved status history. Request managers may clear any cancelled request.
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '204':
+          description: Cancelled software request cleared
+        '404':
+          description: Request not found or caller may not clear it
+        '409':
+          description: Request is not cancelled
   /request/software/status/{id}/approve:
     post:
       summary: Approve a software request

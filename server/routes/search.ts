@@ -742,7 +742,7 @@ searchRoutes.get('/', async (req, res, next) => {
         booksEnabled &&
         bookSearchFailed
       ) {
-        return next({
+        return res.status(503).json({
           status: 503,
           message:
             bookFormat === 'audiobook'
