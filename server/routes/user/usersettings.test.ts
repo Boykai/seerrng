@@ -212,3 +212,86 @@ describe('POST /user/:id/settings/advanced-theme', () => {
     assert.strictEqual(reset.body.advancedThemeOverrides, null);
   });
 });
+
+describe('request root folder settings', () => {
+  it('saves and returns per-service defaults, including long cross-platform paths', async () => {
+    const { sessionCookie, userId } = await loginAs(
+      'demo@seerr.dev',
+      'test1234'
+    );
+    const route = `/user/${userId}/settings/main`;
+    const user = await getRepository(User).findOneOrFail({
+      where: { id: userId },
+    });
+    const requestRootFolders = {
+      'radarr:0': '/media/Movies/David',
+      'sonarr:2': 'D:\\Media\\Series\\David',
+      'lidarr:3': '\\\\nas\\media\\Music',
+      'comic-kapowarr:4': `/${'x'.repeat(4095)}`,
+    };
+
+    const saved = await request(app)
+      .post(route)
+      .set('X-Forwarded-Proto', 'https')
+      .set('Cookie', sessionCookie)
+      .send({ username: user.username, requestRootFolders });
+
+    assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
+    assert.deepEqual(saved.body.requestRootFolders, requestRootFolders);
+
+    const loaded = await request(app)
+      .get(`/user/${userId}/settings/request-root-folders`)
+      .set('X-Forwarded-Proto', 'https')
+      .set('Cookie', sessionCookie);
+
+    assert.strictEqual(loaded.status, 200);
+    assert.deepEqual(loaded.body, requestRootFolders);
+  });
+
+  it('rejects invalid service keys and malformed or oversized paths', async () => {
+    const { sessionCookie, userId } = await loginAs(
+      'demo@seerr.dev',
+      'test1234'
+    );
+    const route = `/user/${userId}/settings/main`;
+    const user = await getRepository(User).findOneOrFail({
+      where: { id: userId },
+    });
+    const invalidValues = [
+      { 'plex:0': '/media/Movies' },
+      { 'radarr:0': '' },
+      { 'radarr:0': '/media/Movies\n' },
+      { 'radarr:0': `/${'x'.repeat(4096)}` },
+      Object.fromEntries(
+        Array.from({ length: 101 }, (_, index) => [
+          `radarr:${index}`,
+          `/media/${index}`,
+        ])
+      ),
+    ];
+
+    for (const requestRootFolders of invalidValues) {
+      const response = await request(app)
+        .post(route)
+        .set('X-Forwarded-Proto', 'https')
+        .set('Cookie', sessionCookie)
+        .send({ username: user.username, requestRootFolders });
+
+      assert.strictEqual(response.status, 400);
+    }
+  });
+
+  it('does not expose another user’s folder defaults to an ordinary user', async () => {
+    const { sessionCookie } = await loginAs('friend@seerr.dev', 'test1234');
+    const targetUser = await getRepository(User).findOneOrFail({
+      where: { email: 'demo@seerr.dev' },
+    });
+
+    const response = await request(app)
+      .get(`/user/${targetUser.id}/settings/request-root-folders`)
+      .set('X-Forwarded-Proto', 'https')
+      .set('Cookie', sessionCookie);
+
+    assert.strictEqual(response.status, 403);
+  });
+});

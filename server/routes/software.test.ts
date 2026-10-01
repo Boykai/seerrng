@@ -16,6 +16,7 @@ import SoftwareRequest, {
   type SoftwareRequestProvider,
   type SoftwareRequestStatus,
 } from '@server/entity/SoftwareRequest';
+import SoftwareRequestStatusEvent from '@server/entity/SoftwareRequestStatusEvent';
 import { User } from '@server/entity/User';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
@@ -209,6 +210,75 @@ afterEach(() => {
 });
 
 describe('software request routes', () => {
+  it('lets the requester clear a cancelled request and its status history', async () => {
+    const saved = await createSoftwareRequest({
+      status: 'cancelled',
+      externalRequestId: 'seerrng:software:clear-cancelled',
+    });
+    await getRepository(SoftwareRequestStatusEvent).save({
+      requestId: saved.id,
+      requestedById: saved.requestedById,
+      status: 'cancelled',
+      message: 'The acquisition was cancelled.',
+      percent: null,
+      fingerprint: 'cancelled:clear-test',
+      createdAt: new Date(),
+    });
+
+    const response = await request(createApp()).delete(
+      `/request/software/status/${saved.id}`
+    );
+
+    assert.strictEqual(response.status, 204);
+    assert.strictEqual(
+      await getRepository(SoftwareRequest).countBy({ id: saved.id }),
+      0
+    );
+    assert.strictEqual(
+      await getRepository(SoftwareRequestStatusEvent).countBy({
+        requestId: saved.id,
+      }),
+      0
+    );
+  });
+
+  it('only lets request owners or managers clear cancelled requests', async () => {
+    const cancelled = await createSoftwareRequest({
+      status: 'cancelled',
+      externalRequestId: 'seerrng:software:clear-owner',
+    });
+    const managerTarget = await createSoftwareRequest({
+      status: 'cancelled',
+      externalRequestId: 'seerrng:software:clear-manager',
+    });
+    const active = await createSoftwareRequest({
+      status: 'searching',
+      externalRequestId: 'seerrng:software:clear-active',
+    });
+
+    const outsiderResponse = await request(
+      createApp(3, Permission.REQUEST)
+    ).delete(`/request/software/status/${cancelled.id}`);
+    const managerResponse = await request(
+      createApp(1, Permission.MANAGE_REQUESTS)
+    ).delete(`/request/software/status/${managerTarget.id}`);
+    const activeResponse = await request(createApp()).delete(
+      `/request/software/status/${active.id}`
+    );
+
+    assert.strictEqual(outsiderResponse.status, 404);
+    assert.strictEqual(managerResponse.status, 204);
+    assert.strictEqual(activeResponse.status, 409);
+    assert.strictEqual(
+      await getRepository(SoftwareRequest).countBy({ id: cancelled.id }),
+      1
+    );
+    assert.strictEqual(
+      await getRepository(SoftwareRequest).countBy({ id: active.id }),
+      1
+    );
+  });
+
   it('reconciles tracked requests using the effective last-check order', async () => {
     const saved = await createSoftwareRequest({
       status: 'approved',
