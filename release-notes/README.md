@@ -50,3 +50,8 @@ For an internal-only commit pushed directly to `main` (including a merge whose
 new diff contains only internal work), add `release-note: none` to the commit
 message. Push validation uses the commit message when no pull-request body is
 available.
+
+Dependabot prefixes ordinary dependency-update titles with the same marker so
+push validation retains it after a merge. Grouped CodeQL-action updates use the
+`release-note-none-codeql-action` group identifier because Dependabot builds
+grouped pull-request titles from the group name.
