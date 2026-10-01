@@ -83,7 +83,7 @@ const messages = defineMessages('components.RequestList.RequestItem', {
   partialBookService: 'Partial Bookshelf link',
   watchAheadTitle: 'Episode Queue',
   watchAheadDescription:
-    'After this TV request is approved, SeerrNG follows your linked media server playback and keeps up to {count} upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
+    'This optional queue is Off by default for every TV request. If you turn it on, SeerrNG follows your linked media server playback and keeps up to {count} upcoming episodes requested in Sonarr after the request is approved. Episodes use the parent approval and do not count against your request quota. Turning it off stops future additions but does not cancel episodes already requested.',
   watchAheadOff: 'Off',
   watchAheadEpisodes: '{count, plural, one {# episode} other {# episodes}}',
   saveWatchAhead: 'Save',

@@ -221,7 +221,7 @@ const messages = defineMessages('components.Requests', {
   modifyFailed: 'Unable to update this request.',
   watchAheadLabel: 'Episode Queue',
   watchAheadDescription:
-    'After this TV request is approved, SeerrNG follows your linked media server playback and keeps this many upcoming episodes requested in Sonarr. Generated episode requests use the parent approval and do not count against your request quota. Turning this off does not cancel episodes already requested.',
+    'This optional queue is Off by default for every TV request. If you turn it on, SeerrNG follows your linked media server playback and keeps this many upcoming episodes requested in Sonarr after the request is approved. Episodes use the parent approval and do not count against your request quota. Turning it off stops future additions but does not cancel episodes already requested.',
   watchAheadOff: 'Off',
   watchAheadOption: '{count, plural, one {# episode} other {# episodes}}',
   watchAheadUpdated: 'Requested episode queue updated.',
