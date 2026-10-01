@@ -6,6 +6,7 @@ import {
   changedReleaseNoteFiles,
   formatCuratedNotes,
   isReleaseNoteShipped,
+  isShippedReleaseNoteChanged,
   readReleaseNotes,
 } from './release-notes.mjs';
 
@@ -31,7 +32,8 @@ if (!base || !head) {
 
 const entries = changedReleaseNoteFiles(base, head);
 const modified = entries.filter(
-  (entry) => entry.status !== 'A' && isReleaseNoteShipped(entry.file, head)
+  (entry) =>
+    entry.status !== 'A' && isShippedReleaseNoteChanged(entry.file, head)
 );
 const updatedUnshipped = entries
   .filter(

@@ -196,6 +196,39 @@ export function isReleaseNoteShipped(file, head, cwd = process.cwd()) {
   }
 }
 
+export function isShippedReleaseNoteChanged(file, head, cwd = process.cwd()) {
+  let latestTag;
+  try {
+    latestTag = execFileSync(
+      'git',
+      ['describe', '--tags', '--abbrev=0', '--match', 'v3.*', head],
+      { cwd, encoding: 'utf8' }
+    ).trim();
+  } catch {
+    return false;
+  }
+
+  let shippedContent;
+  try {
+    shippedContent = execFileSync('git', ['show', `${latestTag}:${file}`], {
+      cwd,
+      encoding: 'utf8',
+    });
+  } catch {
+    return false;
+  }
+
+  try {
+    const currentContent = execFileSync('git', ['show', `${head}:${file}`], {
+      cwd,
+      encoding: 'utf8',
+    });
+    return currentContent !== shippedContent;
+  } catch {
+    return true;
+  }
+}
+
 export function readReleaseNotes(entries, cwd = process.cwd()) {
   const notes = [];
   const errors = [];
