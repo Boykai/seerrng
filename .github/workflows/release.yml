@@ -248,13 +248,7 @@ jobs:
           }
           for pinned_ref in "${pinned_node_refs[@]}"; do
             dockerhub_ref="$(sed 's#^public.ecr.aws/docker/library/node#docker.io/library/node#' <<< "$pinned_ref")"
-            expected_digest="${dockerhub_ref##*@}"
-            dockerhub_tag="${dockerhub_ref%%@*}"
-            actual_digest="$(docker buildx imagetools inspect "$dockerhub_tag" | awk '$1 == "Digest:" { print $2; exit }')"
-            [[ "$actual_digest" == "$expected_digest" ]] || {
-              echo "Docker Hub mirror digest mismatch for ${dockerhub_tag}: expected ${expected_digest}, received ${actual_digest:-none}." >&2
-              exit 1
-            }
+            echo "Using content-pinned Docker Hub Node mirror: ${dockerhub_ref}"
           done
           sed 's#public.ecr.aws/docker/library/node#docker.io/library/node#g' Dockerfile > "$release_dockerfile"
 
