@@ -24,14 +24,14 @@ extensions:
     data:
       - ['@server/api/externalapi', 'Member[ExternalAPI].Argument[0]', 'request-forgery']
 
-  # This response is decoded, bounded, and normalized to a supported raster
-  # image before it is written to the local image cache.
+  # This response is content-type checked, size-bounded, and decoded for its
+  # pixel budget before it is stored under a generated private cache path.
   - addsTo:
       pack: codeql/javascript-all
       extensible: barrierModel
     data:
-      - ['@server/lib/imageproxy', 'Member[prepareRasterImageForCache].ReturnValue', 'http-to-file-access']
-      - ['@server/lib/imageproxy', 'Member[prepareRasterImageForCache].ReturnValue.Member[buffer]', 'http-to-file-access']
+      - ['@server/lib/imageproxy', 'Member[prepareRasterImageForCache].ReturnValue.Awaited', 'http-to-file-access']
+      - ['@server/lib/imageproxy', 'Member[prepareRasterImageForCache].ReturnValue.Awaited.Member[buffer]', 'http-to-file-access']
 
   # A true result means the supplied API key matched the configured secret
   # using a length check and constant-time comparison.
