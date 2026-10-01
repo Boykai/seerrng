@@ -11,7 +11,7 @@ multi-architecture runtime:
 | --- | --- | --- | --- |
 | Container | GHCR and Docker Hub stable releases | `linux/amd64`, `linux/arm64` | Published and signed by `release.yml` |
 | Container | GHCR `main` and `preview-*` | `linux/amd64`, `linux/arm64` | Published by CI/preview; not release-signed |
-| Native archive | Linux tarball | `x64`, `arm64`, `arm` (armv7, built under QEMU emulation) | GitHub Release asset with SHA-256 sidecar |
+| Native archive | Linux tarball | `x64`, `arm64` | GitHub Release asset with SHA-256 sidecar |
 | Native archive | macOS tarball | `arm64`, `x64` | GitHub Release asset with SHA-256 sidecar |
 | Native archive | Windows ZIP | `x64`, `arm64` | GitHub Release asset with SHA-256 sidecar |
 | Windows package | Chocolatey Community Repository | `x64` | Submitted by the release workflow; each package version passes repository moderation |
@@ -29,11 +29,9 @@ or AUR package channels. Those are intentionally unsupported until each format
 has a native build and post-publish smoke test. The package-smoke harness must
 reject those combinations rather than imply that they exist.
 
-Linux armv7 has no GitHub-hosted native runner, so its tarball is built by
-cross-compiling under QEMU emulation (`docker/setup-qemu-action` plus a
-`linux/arm/v7` container) rather than on a native host like every other native
-archive. Treat it as higher-risk than the natively-built architectures until
-it has shipped in a real release.
+Linux armv7 archives are unsupported while SeerrNG requires Node.js 24.15 or
+newer: Node.js 24 no longer provides armv7 binaries, and no release workflow
+can validate an archive against the required runtime on that architecture.
 
 The inherited Nix, Unraid, and Synology documentation describes upstream or
 third-party installation paths; this repository has no corresponding package
@@ -48,7 +46,7 @@ complete:
 
 1. Both registries expose an OCI index containing exactly `linux/amd64` and
    `linux/arm64`.
-2. The GitHub Release contains all seven native archives (Linux x64/arm64/arm,
+2. The GitHub Release contains all six native archives (Linux x64/arm64,
    macOS arm64/x64, Windows x64/arm64) and a valid SHA-256 sidecar for each,
    plus sidecars for Debian, RPM, AppImage, and Flatpak assets.
 3. Every enabled package-channel workflow completed successfully and did not

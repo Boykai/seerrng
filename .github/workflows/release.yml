@@ -703,8 +703,6 @@ jobs:
               "seerrng-${TAG}-linux-x64.sha256"
               "seerrng-${TAG}-linux-arm64.tar.gz"
               "seerrng-${TAG}-linux-arm64.sha256"
-              "seerrng-${TAG}-linux-arm.tar.gz"
-              "seerrng-${TAG}-linux-arm.sha256"
               "seerrng-${TAG}-macos-arm64.tar.gz"
               "seerrng-${TAG}-macos-arm64.sha256"
               "seerrng-${TAG}-macos-x64.tar.gz"

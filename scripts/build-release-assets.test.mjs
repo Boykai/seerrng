@@ -265,7 +265,7 @@ describe('release asset construction', () => {
     assert.match(listing, /start\.cmd/);
   });
 
-  it('builds a linux-arm archive for a 32-bit ARMv7 runner', async () => {
+  it('rejects Linux ARMv7 without a supported Node.js 24 runtime', async () => {
     const fixture = await createFixture();
     const distribution = path.join(fixture.root, 'dist-release');
     await fs.writeFile(
@@ -276,13 +276,11 @@ describe('release asset construction', () => {
 
     const result = await run(fixture, ['v1.2.3', distribution]);
 
-    assert.equal(result.code, 0, result.output);
-    const archive = path.join(distribution, 'seerrng-v1.2.3-linux-arm.tar.gz');
-    assert.equal((await fs.stat(archive)).mode & 0o777, 0o644);
-    assert.equal(
-      (await fs.stat(`${archive.replace(/\.tar\.gz$/, '')}.sha256`)).mode &
-        0o777,
-      0o644
+    assert.notEqual(result.code, 0);
+    assert.match(result.output, /Unsupported release architecture: armv7l/);
+    await assert.rejects(
+      fs.stat(path.join(distribution, 'seerrng-v1.2.3-linux-arm.tar.gz')),
+      { code: 'ENOENT' }
     );
   });
 

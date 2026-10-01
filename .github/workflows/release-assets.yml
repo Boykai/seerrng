@@ -66,21 +66,27 @@ jobs:
           - runner: ubuntu-latest
             os: linux
             arch: x64
+            pnpm_version: 10.24.0
           - runner: ubuntu-24.04-arm
             os: linux
             arch: arm64
+            pnpm_version: 10.24.0
           - runner: macos-15
             os: macos
             arch: arm64
-          - runner: macos-13
+            pnpm_version: 10.24.0
+          - runner: macos-15-intel
             os: macos
             arch: x64
-          - runner: windows-latest
+            pnpm_version: 10.24.0
+          - runner: windows-2022
             os: windows
             arch: x64
+            pnpm_version: 10.24.0
           - runner: windows-11-arm
             os: windows
             arch: arm64
+            pnpm_version: 11.25.0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -90,6 +96,8 @@ jobs:
 
       - name: Pnpm Setup
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: ${{ matrix.pnpm_version }}
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -125,60 +133,13 @@ jobs:
         run: ./scripts/build-release-assets.sh "${TAG}" dist-release
         env:
           TAG: ${{ needs.resolve.outputs.tag }}
+          GYP_MSVS_VERSION: ${{ matrix.os == 'windows' && matrix.arch == 'arm64' && '2026' || 'auto' }}
+          npm_config_engine_strict: ${{ matrix.pnpm_version == '11.25.0' && 'false' || 'true' }}
+          npm_config_manage_package_manager_versions: 'false'
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: seerrng-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist-release/seerrng-*
-
-  # No GitHub-hosted runner offers a 32-bit ARM (armv7) host, so this job
-  # cross-builds under QEMU emulation instead, reusing the same packaging
-  # script every other native archive uses. Emulated native-module
-  # compilation (better-sqlite3, sharp) is substantially slower than a
-  # native build, hence the generous timeout.
-  build-linux-arm:
-    name: Build linux arm
-    needs: resolve
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.resolve.outputs.tag }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-        with:
-          platforms: arm
-
-      - name: Build archive under armv7 emulation
-        shell: bash
-        env:
-          TAG: ${{ needs.resolve.outputs.tag }}
-        run: |
-          set -euo pipefail
-          docker run --rm --platform linux/arm/v7 \
-            -v "${PWD}:/workspace" -w /workspace \
-            -e "TAG=${TAG}" \
-            node:24-bookworm \
-            bash -c '
-              set -euo pipefail
-              apt-get update -qq
-              apt-get install -y -qq --no-install-recommends python3 build-essential >/dev/null
-              ./scripts/build-release-assets.sh "$TAG" dist-release
-            '
-
-      - name: Reclaim host ownership of build output
-        if: always()
-        run: sudo chown -R "$(id -u):$(id -g)" dist-release
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: seerrng-linux-arm
           path: dist-release/seerrng-*
 
   build-jellyfin-plugin:
@@ -263,7 +224,7 @@ jobs:
 
   publish:
     name: Upload release assets
-    needs: [resolve, build, build-linux-arm, build-jellyfin-plugin]
+    needs: [resolve, build, build-jellyfin-plugin]
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -285,7 +246,6 @@ jobs:
           expected=(
             "seerrng-${TAG}-linux-x64.tar.gz"
             "seerrng-${TAG}-linux-arm64.tar.gz"
-            "seerrng-${TAG}-linux-arm.tar.gz"
             "seerrng-${TAG}-macos-arm64.tar.gz"
             "seerrng-${TAG}-macos-x64.tar.gz"
             "seerrng-${TAG}-windows-x64.zip"

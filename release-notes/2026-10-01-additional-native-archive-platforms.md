@@ -5,4 +5,4 @@ area: distribution
 action: none
 breaking: false
 ---
-Release downloads now also include native archives for macOS Intel (x64), Windows on Arm (arm64), and 32-bit Arm Linux (armv7), alongside the existing Linux, macOS Apple Silicon, and Windows x64 builds.
+Release downloads now also include native archives for macOS Intel (x64) and Windows on Arm (arm64), alongside the existing Linux x64 and Arm64, macOS Apple Silicon, and Windows x64 builds.

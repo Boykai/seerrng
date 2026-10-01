@@ -427,50 +427,56 @@ test('release assets support trusted reuse and main-only manual dispatch', () =>
   );
 });
 
-test('release assets build macOS x64, Windows arm64, and an emulated Linux arm archive', () => {
+test('release assets build supported native archive platforms', () => {
   const assets = readWorkflow('release-assets.yml');
   const build = assets.jobs.build;
-  const linuxArm = assets.jobs['build-linux-arm'];
   const publish = assets.jobs.publish;
   const verifyInventory = publish.steps.find(
     (step) => step.name === 'Verify archive inventory and checksums'
   ).run;
 
   assert.deepEqual(build.strategy.matrix.include, [
-    { runner: 'ubuntu-latest', os: 'linux', arch: 'x64' },
-    { runner: 'ubuntu-24.04-arm', os: 'linux', arch: 'arm64' },
-    { runner: 'macos-15', os: 'macos', arch: 'arm64' },
-    { runner: 'macos-13', os: 'macos', arch: 'x64' },
-    { runner: 'windows-latest', os: 'windows', arch: 'x64' },
-    { runner: 'windows-11-arm', os: 'windows', arch: 'arm64' },
+    {
+      runner: 'ubuntu-latest',
+      os: 'linux',
+      arch: 'x64',
+      pnpm_version: '10.24.0',
+    },
+    {
+      runner: 'ubuntu-24.04-arm',
+      os: 'linux',
+      arch: 'arm64',
+      pnpm_version: '10.24.0',
+    },
+    {
+      runner: 'macos-15',
+      os: 'macos',
+      arch: 'arm64',
+      pnpm_version: '10.24.0',
+    },
+    {
+      runner: 'macos-15-intel',
+      os: 'macos',
+      arch: 'x64',
+      pnpm_version: '10.24.0',
+    },
+    {
+      runner: 'windows-2022',
+      os: 'windows',
+      arch: 'x64',
+      pnpm_version: '10.24.0',
+    },
+    {
+      runner: 'windows-11-arm',
+      os: 'windows',
+      arch: 'arm64',
+      pnpm_version: '11.25.0',
+    },
   ]);
 
-  assert.ok(
-    linuxArm,
-    'expected a build-linux-arm job for the emulated archive'
-  );
-  assert.equal(linuxArm.needs, 'resolve');
-  assert.equal(linuxArm['runs-on'], 'ubuntu-latest');
-  assert.ok(
-    linuxArm['timeout-minutes'] >= 60,
-    'emulated native-module compilation needs materially more time than a native build'
-  );
-  const qemuStep = linuxArm.steps.find((step) => step.name === 'Set up QEMU');
-  assert.ok(qemuStep);
-  assert.equal(qemuStep.with.platforms, 'arm');
-  const buildStep = linuxArm.steps.find(
-    (step) => step.name === 'Build archive under armv7 emulation'
-  );
-  assert.match(buildStep.run, /--platform linux\/arm\/v7/u);
-  assert.match(buildStep.run, /\.\/scripts\/build-release-assets\.sh/u);
-  const uploadStep = linuxArm.steps.find(
-    (step) => step.uses && step.uses.startsWith('actions/upload-artifact')
-  );
-  assert.equal(uploadStep.with.name, 'seerrng-linux-arm');
-
-  assert.ok(publish.needs.includes('build-linux-arm'));
+  assert.equal(assets.jobs['build-linux-arm'], undefined);
+  assert.deepEqual(publish.needs, ['resolve', 'build', 'build-jellyfin-plugin']);
   for (const archive of [
-    'seerrng-${TAG}-linux-arm.tar.gz',
     'seerrng-${TAG}-macos-x64.tar.gz',
     'seerrng-${TAG}-windows-arm64.zip',
   ]) {
@@ -485,7 +491,6 @@ test('release assets build macOS x64, Windows arm64, and an emulated Linux arm a
     (step) => step.name === 'Verify release package assets'
   ).run;
   for (const archive of [
-    'seerrng-${TAG}-linux-arm.tar.gz',
     'seerrng-${TAG}-macos-x64.tar.gz',
     'seerrng-${TAG}-windows-arm64.zip',
   ]) {
