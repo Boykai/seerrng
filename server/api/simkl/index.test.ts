@@ -48,6 +48,58 @@ describe('Simkl account response caching', () => {
   });
 });
 
+describe('Simkl catalog path safety', () => {
+  afterEach(() => {
+    mock.restoreAll();
+    cacheManager.getCache('simkl').flush();
+  });
+
+  it('rejects catalog paths that could redirect the request to another host', async () => {
+    const account = new SimklAPI({
+      clientId: 'client-id',
+      accessToken: 'token',
+    });
+    const rawRequest = mock.method(
+      (account as unknown as { rawAxios: AxiosInstance }).rawAxios,
+      'get',
+      async () => ({ data: {} })
+    );
+
+    for (const unsafePath of [
+      '//evil.example.com/x',
+      'https://evil.example.com/x',
+      '.evil.example.com/x',
+      '@evil.example.com/x',
+      '/sync\\all-items',
+    ]) {
+      await assert.rejects(account.getCatalog(unsafePath));
+      await assert.rejects(account.getCdnCatalog(unsafePath));
+    }
+    assert.equal(rawRequest.mock.callCount(), 0);
+  });
+
+  it('still allows ordinary catalog paths through to the request layer', async () => {
+    const account = new SimklAPI({
+      clientId: 'client-id',
+      accessToken: 'token',
+    });
+    const rawRequest = mock.method(
+      (account as unknown as { rawAxios: AxiosInstance }).rawAxios,
+      'get',
+      async () => ({ data: { ok: true } })
+    );
+
+    assert.deepEqual(await account.getCatalog('/sync/all-items/movies'), {
+      ok: true,
+    });
+    assert.deepEqual(
+      await account.getCdnCatalog('/discover/trending/tv/week_100.json'),
+      { ok: true }
+    );
+    assert.equal(rawRequest.mock.callCount(), 2);
+  });
+});
+
 describe('Simkl episode history payloads', () => {
   it('keeps catalog coordinates and opts into TVDB anime numbering only when requested', () => {
     assert.deepEqual(

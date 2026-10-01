@@ -18,6 +18,24 @@ import { createHash } from 'node:crypto';
 const SIMKL_BASE_URL = 'https://api.simkl.com';
 const simklRequestSlots = new Map<string, number>();
 
+/**
+ * `getCatalog`/`getCdnCatalog` build request URLs by string-concatenating
+ * `path` outside the hardened `ExternalAPI` client. Reject anything that
+ * could change the request's target host (an absolute/protocol-relative
+ * URL, embedded userinfo, or a backslash) before it reaches `rawAxios`.
+ */
+const assertSafeSimklCatalogPath = (path: string): void => {
+  if (
+    !path.startsWith('/') ||
+    path.startsWith('//') ||
+    /:\/\//.test(path) ||
+    path.includes('@') ||
+    path.includes('\\')
+  ) {
+    throw new Error('Unsafe Simkl catalog path.');
+  }
+};
+
 export class SimklNotConfiguredError extends Error {
   constructor() {
     super('Simkl application Client ID is not configured');
@@ -274,6 +292,7 @@ export default class SimklAPI extends ExternalAPI {
     path: string,
     params: Record<string, string | number | boolean> = {}
   ): Promise<unknown> {
+    assertSafeSimklCatalogPath(path);
     const query = new URLSearchParams(
       Object.entries(params).map(([key, value]) => [key, String(value)])
     );
@@ -294,6 +313,7 @@ export default class SimklAPI extends ExternalAPI {
   }
 
   public async getCdnCatalog(path: string): Promise<unknown> {
+    assertSafeSimklCatalogPath(path);
     await this.pace(false);
     const requiredParameters = new URLSearchParams({
       client_id: this.clientId,

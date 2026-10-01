@@ -11,6 +11,7 @@ import SonarrAPI from '@server/api/servarr/sonarr';
 import TautulliAPI, { isTautulliNoDataError } from '@server/api/tautulli';
 import TheMovieDb from '@server/api/themoviedb';
 import { MediaStatus, MediaType } from '@server/constants/media';
+import type { MediaCategoryKey } from '@server/constants/mediaCategories';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import Season from '@server/entity/Season';
@@ -27,6 +28,7 @@ import {
   libraryServiceType,
   resolveLibraryRemoval,
 } from '@server/lib/libraryRemoval';
+import { areMediaCategoriesEnabled } from '@server/lib/mediaCategories';
 import { runMediaEntityMutation } from '@server/lib/mediaMutation';
 import { Permission } from '@server/lib/permissions';
 import {
@@ -83,6 +85,27 @@ const mediaListPermissions: Permission[] = [
   Permission.MANAGE_REQUESTS,
   Permission.RECENT_VIEW,
 ];
+const mediaTypeCategories: Record<
+  MediaType,
+  { categories: MediaCategoryKey[]; mode?: 'all' | 'any' }
+> = {
+  [MediaType.MOVIE]: { categories: ['movie'] },
+  [MediaType.TV]: { categories: ['tv'] },
+  [MediaType.MUSIC]: { categories: ['music'] },
+  [MediaType.BOOK]: { categories: ['ebook', 'audiobook'], mode: 'any' },
+  [MediaType.COMIC]: { categories: ['comic'] },
+  [MediaType.MAGAZINE]: { categories: ['magazine'] },
+};
+const isMediaTypeCategoryEnabled = (mediaType: MediaType): boolean => {
+  const config = mediaTypeCategories[mediaType];
+  return config
+    ? areMediaCategoriesEnabled(config.categories, config.mode ?? 'all')
+    : true;
+};
+const areAllMediaTypeCategoriesEnabled = (mediaType: MediaType): boolean => {
+  const config = mediaTypeCategories[mediaType];
+  return config ? areMediaCategoriesEnabled(config.categories) : true;
+};
 
 const projectMediaListItem = (media: Media): MediaListItem => ({
   id: media.id,
@@ -270,6 +293,12 @@ mediaRoutes.get(
     if ('error' in parsedMediaTypes) {
       return next({ status: 400, message: parsedMediaTypes.error });
     }
+    if (
+      parsedMediaTypes.value?.some((type) => !isMediaTypeCategoryEnabled(type))
+    ) {
+      return res.status(404).json({ status: 404, message: 'Not found.' });
+    }
+    const enabledMediaTypes = mediaListTypes.filter(isMediaTypeCategoryEnabled);
     const filter = parsedFilter.value;
     const sort = parsedSort.value;
 
@@ -334,6 +363,20 @@ mediaRoutes.get(
         parsedMediaTypes.value.length === 1
           ? parsedMediaTypes.value[0]
           : In(parsedMediaTypes.value);
+    } else if (enabledMediaTypes.length < mediaListTypes.length) {
+      if (enabledMediaTypes.length === 0) {
+        return res.status(200).json({
+          pageInfo: {
+            pages: 0,
+            pageSize,
+            results: 0,
+            page: 1,
+          },
+          results: [],
+        } as MediaResultsResponse);
+      }
+      whereClause = whereClause ?? {};
+      whereClause.mediaType = In(enabledMediaTypes);
     }
 
     try {
@@ -395,7 +438,7 @@ mediaRoutes.post<
       where: { id: mediaId },
       relations: { identifiers: true },
     });
-    if (!initialMedia) {
+    if (!initialMedia || !isMediaTypeCategoryEnabled(initialMedia.mediaType)) {
       return next({ status: 404, message: 'Media does not exist.' });
     }
 
@@ -505,6 +548,9 @@ mediaRoutes.delete(
         where: { id: mediaId },
         relations: { identifiers: true },
       });
+      if (!isMediaTypeCategoryEnabled(initialMedia.mediaType)) {
+        return next({ status: 404, message: 'Media not found' });
+      }
       return await runAuthorizedUserSecurityMutation(
         req.user!.id,
         req.user!.id,
@@ -558,6 +604,8 @@ mediaRoutes.get(
         })
       : null;
     if (!media) return next({ status: 404, message: 'Media not found.' });
+    if (!isMediaTypeCategoryEnabled(media.mediaType))
+      return next({ status: 404, message: 'Media not found.' });
     try {
       return await runWithServarrServiceCollectionMutationAdmission(
         libraryServiceType(media.mediaType, media.comicServiceType),
@@ -592,6 +640,8 @@ mediaRoutes.delete(
         where: { id },
         relations: { identifiers: true },
       });
+      if (!areAllMediaTypeCategoriesEnabled(initial.mediaType))
+        return next({ status: 404, message: 'Media not found.' });
       return await runAuthorizedUserSecurityMutation(
         req.user!.id,
         req.user!.id,
@@ -704,6 +754,9 @@ mediaRoutes.delete(
         where: { id: mediaId },
         relations: { identifiers: true },
       });
+      if (!isMediaTypeCategoryEnabled(initialMedia.mediaType)) {
+        return next({ status: 404, message: 'Media not found' });
+      }
       return await runAuthorizedUserSecurityMutation(
         req.user!.id,
         req.user!.id,
@@ -739,6 +792,14 @@ mediaRoutes.delete(
               return next({ status: 400, message: parsedBookFormat.error });
             }
             const bookFormat = parsedBookFormat.value ?? 'both';
+            if (
+              isBook &&
+              !areMediaCategoriesEnabled(
+                bookFormat === 'both' ? ['ebook', 'audiobook'] : [bookFormat]
+              )
+            ) {
+              return next({ status: 404, message: 'Media not found.' });
+            }
 
             const specificServiceId = is4k
               ? media.serviceId4k
@@ -1172,6 +1233,9 @@ mediaRoutes.get<{ id: string }, MediaWatchDataResponse>(
     });
 
     if (!media) {
+      return next({ status: 404, message: 'Media does not exist.' });
+    }
+    if (!isMediaTypeCategoryEnabled(media.mediaType)) {
       return next({ status: 404, message: 'Media does not exist.' });
     }
 

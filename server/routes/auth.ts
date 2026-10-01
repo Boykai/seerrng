@@ -1861,10 +1861,11 @@ authRoutes.post(
         }
       }
 
-      // Set session
-      if (req.session) {
-        req.session.userId = user.id;
-      }
+      await establishAuthenticatedSession(
+        req,
+        user.id,
+        user.passwordChangedAt?.getTime() ?? 0
+      );
 
       return res.status(200).json(user?.filter() ?? {});
     } catch (e) {

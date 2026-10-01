@@ -3,9 +3,41 @@ import { describe, it } from 'node:test';
 
 import {
   ALL_NOTIFICATIONS,
+  UserSettings,
   deserializeNotificationTypes,
   serializeNotificationTypes,
 } from './UserSettings';
+
+describe('UserSettings.filter/toJSON secret redaction', () => {
+  it('never includes notification-agent credentials in the general settings payload', () => {
+    const settings = new UserSettings({
+      id: 1,
+      locale: 'en',
+      pgpKey: 'secret-pgp-key',
+      pushbulletAccessToken: 'secret-pushbullet-token',
+      pushoverApplicationToken: 'secret-pushover-app-token',
+      pushoverUserKey: 'secret-pushover-user-key',
+      spotifyAccessToken: 'secret-spotify-access-token',
+      spotifyRefreshToken: 'secret-spotify-refresh-token',
+    });
+
+    for (const payload of [settings.filter(), settings.toJSON()]) {
+      for (const secretKey of [
+        'pgpKey',
+        'pushbulletAccessToken',
+        'pushoverApplicationToken',
+        'pushoverUserKey',
+        'spotifyAccessToken',
+        'spotifyRefreshToken',
+      ] as const) {
+        assert.ok(
+          !(secretKey in payload),
+          `${secretKey} must not be present in the filtered settings payload`
+        );
+      }
+    }
+  });
+});
 
 describe('deserializeNotificationTypes', () => {
   it('preserves valid values and supplies defaults', () => {
