@@ -100,6 +100,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Prepare isolated pnpm package metadata
+        if: matrix.os == 'windows'
+        shell: bash
+        run: |
+          cat > .github/release-pnpm-tooling.json <<'JSON'
+          {
+            "name": "seerrng-release-tooling",
+            "private": true
+          }
+          JSON
+
       - name: Pnpm Setup
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
