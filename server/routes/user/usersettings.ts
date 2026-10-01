@@ -12,6 +12,7 @@ import type {
   CardTextVisibility,
   DetailDisclosureMediaType,
   UserPreferredLanguages,
+  UserRequestRootFolders,
   UserSettingsCardTextResponse,
   UserSettingsDetailDisclosureResponse,
   UserSettingsGeneralResponse,
@@ -62,6 +63,7 @@ import {
 import { parsePositiveRouteId } from '@server/utils/routeId';
 import {
   getRateLimitKey,
+  hasAsciiControlCharacters,
   preserveRedactedSecrets,
   redactSecrets,
 } from '@server/utils/security';
@@ -538,6 +540,44 @@ const parsePreferredLanguages = (
   return { value: parsed };
 };
 
+const MAX_REQUEST_ROOT_FOLDER_SERVICE_ID = 1_000_000_000;
+const requestRootFolderKeyPattern =
+  /^(?:radarr|sonarr|lidarr|readarr|comic-kapowarr):(0|[1-9]\d{0,9})$/;
+const parseRequestRootFolders = (
+  input: unknown
+): { value: UserRequestRootFolders } | { error: string } => {
+  if (input === null || input === undefined) return { value: {} };
+  if (typeof input !== 'object' || Array.isArray(input)) {
+    return { error: 'requestRootFolders must be an object.' };
+  }
+
+  const entries = Object.entries(input as Record<string, unknown>);
+  if (entries.length > 100) {
+    return {
+      error: 'requestRootFolders cannot contain more than 100 entries.',
+    };
+  }
+
+  const value: UserRequestRootFolders = {};
+  for (const [key, rawPath] of entries) {
+    const keyMatch = requestRootFolderKeyPattern.exec(key);
+    if (!keyMatch || Number(keyMatch[1]) > MAX_REQUEST_ROOT_FOLDER_SERVICE_ID) {
+      return { error: 'requestRootFolders contains an invalid service key.' };
+    }
+    if (
+      typeof rawPath !== 'string' ||
+      rawPath.length > 4096 ||
+      rawPath.trim().length === 0 ||
+      hasAsciiControlCharacters(rawPath)
+    ) {
+      return { error: 'requestRootFolders paths must be valid folder paths.' };
+    }
+    value[key] = rawPath;
+  }
+
+  return { value };
+};
+
 const parseGeneralSettingsBody = (
   body: unknown
 ):
@@ -683,6 +723,16 @@ const parseGeneralSettingsBody = (
     }
 
     value.cardTextVisibility = parsedCardTextVisibility.value;
+  }
+
+  if (hasOwn(bodyObject, 'requestRootFolders')) {
+    const parsedRequestRootFolders = parseRequestRootFolders(
+      bodyObject.requestRootFolders
+    );
+    if ('error' in parsedRequestRootFolders) {
+      return parsedRequestRootFolders;
+    }
+    value.requestRootFolders = parsedRequestRootFolders.value;
   }
 
   return { value };
@@ -945,6 +995,40 @@ userSettingsRoutes.get<
   }
 });
 
+userSettingsRoutes.get<
+  { id: string },
+  UserRequestRootFolders | { status: number; message: string }
+>('/request-root-folders', isAuthenticated(), async (req, res, next) => {
+  const userId = parseUserSettingsRouteId(req.params.id);
+  if (!userId) {
+    return res.status(404).json({ status: 404, message: 'User not found.' });
+  }
+
+  const actor = req.user!;
+  if (
+    actor.id !== userId &&
+    !actor.hasPermission(
+      [Permission.MANAGE_USERS, Permission.MANAGE_REQUESTS],
+      { type: 'or' }
+    )
+  ) {
+    return res.status(403).json({ status: 403, message: 'Access denied.' });
+  }
+
+  try {
+    const targetUser = await getRepository(User).findOne({
+      where: { id: userId },
+    });
+    if (!targetUser) {
+      return res.status(404).json({ status: 404, message: 'User not found.' });
+    }
+
+    return res.status(200).json(targetUser.settings?.requestRootFolders ?? {});
+  } catch {
+    return next({ status: 500, message: 'Unable to read request folders.' });
+  }
+});
+
 userSettingsRoutes.get<{ id: string }, UserSettingsGeneralResponse>(
   '/main',
   isOwnProfileOrAdmin(),
@@ -1017,6 +1101,7 @@ userSettingsRoutes.get<{ id: string }, UserSettingsGeneralResponse>(
             watchlistSyncComics: user.settings?.watchlistSyncComics,
             watchlistSyncMagazines: user.settings?.watchlistSyncMagazines,
             cardTextVisibility: serializeCardTextVisibility(user.settings),
+            requestRootFolders: user.settings?.requestRootFolders ?? {},
           });
         }
       );
@@ -1168,6 +1253,10 @@ userSettingsRoutes.post<
               user.settings.cardTextVisibilityBook;
           }
 
+          if (hasOwn(body, 'requestRootFolders')) {
+            user.settings.requestRootFolders = body.requestRootFolders ?? {};
+          }
+
           const savedUser = await userRepository.save(user);
 
           return res.status(200).json({
@@ -1185,6 +1274,7 @@ userSettingsRoutes.post<
             watchlistSyncComics: savedUser.settings?.watchlistSyncComics,
             watchlistSyncMagazines: savedUser.settings?.watchlistSyncMagazines,
             cardTextVisibility: serializeCardTextVisibility(savedUser.settings),
+            requestRootFolders: savedUser.settings?.requestRootFolders ?? {},
             email: savedUser.email,
           });
         }

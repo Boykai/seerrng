@@ -5,6 +5,7 @@ import PageTitle from '@app/components/Common/PageTitle';
 import LanguageSelector from '@app/components/LanguageSelector';
 import QuotaSelector from '@app/components/QuotaSelector';
 import RegionSelector from '@app/components/RegionSelector';
+import RequestRootFolderSettings from '@app/components/UserProfile/UserSettings/UserGeneralSettings/RequestRootFolderSettings';
 import { availableLanguages } from '@app/context/LanguageContext';
 import useLocale from '@app/hooks/useLocale';
 import useSettings from '@app/hooks/useSettings';
@@ -297,6 +298,7 @@ const UserGeneralSettings = () => {
           cardTextVisibilityTv: data?.cardTextVisibility?.tv ?? 'hover',
           cardTextVisibilityAlbum: data?.cardTextVisibility?.album ?? 'always',
           cardTextVisibilityBook: data?.cardTextVisibility?.book ?? 'always',
+          requestRootFolders: data?.requestRootFolders ?? {},
         }}
         validationSchema={UserGeneralSettingsSchema}
         enableReinitialize
@@ -377,6 +379,7 @@ const UserGeneralSettings = () => {
                 album: values.cardTextVisibilityAlbum,
                 book: values.cardTextVisibilityBook,
               },
+              requestRootFolders: values.requestRootFolders,
             });
 
             if (currentUser?.id === user?.id && setLocale) {
@@ -1226,6 +1229,16 @@ const UserGeneralSettings = () => {
                   </div>
                 </div>
               </div>
+              <RequestRootFolderSettings
+                canEdit={currentHasPermission(
+                  [Permission.MANAGE_REQUESTS, Permission.REQUEST_ADVANCED],
+                  { type: 'or' }
+                )}
+                value={values.requestRootFolders ?? {}}
+                onChange={(requestRootFolders) =>
+                  void setFieldValue('requestRootFolders', requestRootFolders)
+                }
+              />
               <div className="actions">
                 <div className="flex justify-end">
                   <span className="ml-3 inline-flex rounded-md shadow-sm">

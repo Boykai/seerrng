@@ -15,7 +15,10 @@ import type {
   ServiceCommonServer,
   ServiceCommonServerWithDetails,
 } from '@server/interfaces/api/serviceInterfaces';
-import type { UserPreferredLanguages } from '@server/interfaces/api/userSettingsInterfaces';
+import type {
+  UserPreferredLanguages,
+  UserRequestRootFolders,
+} from '@server/interfaces/api/userSettingsInterfaces';
 import type { OverrideRulesResult } from '@server/lib/overrideRules';
 import {
   getPreferredLanguage,
@@ -269,6 +272,7 @@ const AdvancedRequester = ({
   const [selectedFolder, setSelectedFolder] = useState<string>(
     defaultOverrides?.folder ?? ''
   );
+  const folderManuallySelected = useRef(false);
 
   const [selectedLanguage, setSelectedLanguage] = useState<number>(
     defaultOverrides?.language ?? -1
@@ -317,6 +321,20 @@ const AdvancedRequester = ({
       ? `/api/v1/user/${preferenceUserId}/settings/preferred-languages`
       : null
   );
+  const { data: requestUserRootFolders } = useSWR<UserRequestRootFolders>(
+    preferenceUserId
+      ? `/api/v1/user/${preferenceUserId}/settings/request-root-folders`
+      : null
+  );
+  const folderSelectionContextRef = useRef({
+    selectedServer,
+    serviceType,
+    userId: preferenceUserId,
+  });
+  const selectRequestFolder = (path: string) => {
+    folderManuallySelected.current = true;
+    setSelectedFolder(path);
+  };
   const preferredLanguage = getPreferredLanguage(requestUserLanguages, type);
   const bookServiceType = bookFormat === 'audiobook' ? 'audiobook' : 'ebook';
   const serviceOverridesEnabled = type !== 'book' || bookFormat !== 'both';
@@ -389,6 +407,20 @@ const AdvancedRequester = ({
   }, [data, bookServiceType, serviceServers, type]);
 
   useEffect(() => {
+    const previousContext = folderSelectionContextRef.current;
+    if (
+      previousContext.selectedServer !== selectedServer ||
+      previousContext.serviceType !== serviceType ||
+      previousContext.userId !== preferenceUserId
+    ) {
+      folderManuallySelected.current = false;
+      folderSelectionContextRef.current = {
+        selectedServer,
+        serviceType,
+        userId: preferenceUserId,
+      };
+    }
+
     if (serverData) {
       const defaultProfile = serverData.profiles.find(
         (profile) =>
@@ -403,6 +435,11 @@ const AdvancedRequester = ({
           (isAnime && serverData.server.activeAnimeDirectory
             ? serverData.server.activeAnimeDirectory
             : serverData.server.activeDirectory)
+      );
+      const preferredFolder = serverData.rootFolders.find(
+        (folder) =>
+          folder.path ===
+          requestUserRootFolders?.[`${serviceType}:${serverData.server.id}`]
       );
       const defaultLanguage = serverData.languageProfiles?.find(
         (language) =>
@@ -443,12 +480,14 @@ const AdvancedRequester = ({
         setSelectedMetadataProfile(defaultMetadataProfile.id);
       }
 
+      const defaultRequestFolderPath =
+        (preferredFolder ?? defaultFolder)?.path ?? '';
       if (
-        defaultFolder &&
-        defaultFolder.path !== selectedFolder &&
+        defaultRequestFolderPath !== selectedFolder &&
+        !folderManuallySelected.current &&
         (!applyOverrides || !defaultOverrides.folder)
       ) {
-        setSelectedFolder(defaultFolder.path ?? '');
+        setSelectedFolder(defaultRequestFolderPath);
       }
 
       if (
@@ -468,7 +507,15 @@ const AdvancedRequester = ({
         setSelectedTags(defaultTags);
       }
     }
-  }, [serverData]);
+  }, [
+    defaultOverrides?.folder,
+    isAnime,
+    preferenceUserId,
+    requestUserRootFolders,
+    selectedServer,
+    serverData,
+    serviceType,
+  ]);
 
   useEffect(() => {
     if (!serverData || !preferredLanguage) return;
@@ -566,6 +613,10 @@ const AdvancedRequester = ({
       previousSelectedUserIdRef.current !== selectedUserId;
     previousSelectedUserIdRef.current = selectedUserId;
 
+    if (selectedUserChanged) {
+      folderManuallySelected.current = false;
+    }
+
     if (!isIgnoreQuotaVisible || selectedUserChanged) {
       setIgnoreQuota(false);
     }
@@ -644,6 +695,7 @@ const AdvancedRequester = ({
             return;
           }
           if (!defaultOverrides?.folder && override.rootFolder) {
+            folderManuallySelected.current = true;
             setSelectedFolder(override.rootFolder);
           }
           if (!defaultOverrides?.profile && override.profileId) {
@@ -721,11 +773,18 @@ const AdvancedRequester = ({
   const defaultMetadataProfileId =
     serverData?.server.activeMetadataProfileId ??
     serverData?.metadataProfiles?.[0]?.id;
-  const defaultFolderPath = serverData
-    ? isAnime && serverData.server.activeAnimeDirectory
-      ? serverData.server.activeAnimeDirectory
-      : serverData.server.activeDirectory
-    : undefined;
+  const selectedServiceFolderPath = serverData?.rootFolders.find(
+    (folder) =>
+      folder.path ===
+      requestUserRootFolders?.[`${serviceType}:${serverData.server.id}`]
+  )?.path;
+  const defaultFolderPath =
+    selectedServiceFolderPath ??
+    (serverData
+      ? isAnime && serverData.server.activeAnimeDirectory
+        ? serverData.server.activeAnimeDirectory
+        : serverData.server.activeDirectory
+      : undefined);
   const defaultLanguageId = serverData
     ? isAnime && serverData.server.activeAnimeLanguageProfileId
       ? serverData.server.activeAnimeLanguageProfileId
@@ -982,7 +1041,7 @@ const AdvancedRequester = ({
                         space: formatBytes(folder.freeSpace ?? 0),
                       }),
                     }))}
-                    onChange={setSelectedFolder}
+                    onChange={selectRequestFolder}
                     active={
                       defaultFolderPath !== undefined &&
                       selectedFolder !== defaultFolderPath
@@ -1053,7 +1112,7 @@ const AdvancedRequester = ({
                           type="button"
                           key={`folder-card-${folder.id}`}
                           data-button-help="off"
-                          onClick={() => setSelectedFolder(folder.path ?? '')}
+                          onClick={() => selectRequestFolder(folder.path ?? '')}
                           className={`col-span-2 grid grid-cols-subgrid rounded border px-1 py-1 text-left transition focus:ring-2 focus:ring-indigo-400 focus:outline-none ${
                             isSelected
                               ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200'

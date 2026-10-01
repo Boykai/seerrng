@@ -15,10 +15,11 @@ import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { ComicServiceOption } from '@server/interfaces/api/serviceInterfaces';
 import type { QuotaResponse } from '@server/interfaces/api/userInterfaces';
+import type { UserRequestRootFolders } from '@server/interfaces/api/userSettingsInterfaces';
 import { Permission, hasAutoApprovePermission } from '@server/lib/permissions';
 import type { ComicDetails } from '@server/models/Comic';
 import axios from 'axios';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR, { mutate } from 'swr';
 
@@ -81,12 +82,16 @@ const ComicRequestModal = ({
     initialServerId
   );
   const [selectedRootFolder, setSelectedRootFolder] = useState('');
+  const rootFolderManuallySelected = useRef(false);
   const { data, error } = useSWR<ComicDetails>(
     `/api/v1/comic/${encodeApiPathSegment(comicId)}`,
     { revalidateOnMount: true }
   );
   const { data: quota } = useSWR<QuotaResponse>(
     user ? `/api/v1/user/${user.id}/quota` : null
+  );
+  const { data: requestUserRootFolders } = useSWR<UserRequestRootFolders>(
+    user ? `/api/v1/user/${user.id}/settings/request-root-folders` : null
   );
   const { data: comicServices } = useSWR<ComicServiceOption[]>(
     '/api/v1/service/comic'
@@ -123,8 +128,32 @@ const ComicRequestModal = ({
     useSWR<KapowarrRootFoldersResponse>(rootFoldersEndpoint);
 
   useEffect(() => {
+    rootFolderManuallySelected.current = false;
     setSelectedRootFolder('');
-  }, [selectedServerId]);
+  }, [selectedServerId, user?.id]);
+
+  useEffect(() => {
+    if (
+      !kapowarrFolders ||
+      rootFolderManuallySelected.current ||
+      !requestService ||
+      requestService.backendType !== 'kapowarr'
+    ) {
+      return;
+    }
+
+    const preferredFolder =
+      requestUserRootFolders?.[`comic-kapowarr:${requestService.id}`];
+    if (
+      preferredFolder &&
+      preferredFolder !== kapowarrFolders.defaultRootFolder &&
+      kapowarrFolders.rootFolders.some(
+        (folder) => folder.path === preferredFolder
+      )
+    ) {
+      setSelectedRootFolder(preferredFolder);
+    }
+  }, [kapowarrFolders, requestService, requestUserRootFolders]);
 
   const sendRequest = useCallback(async () => {
     if (requestCovered) {
@@ -402,7 +431,10 @@ const ComicRequestModal = ({
               <select
                 className="request-form-control compact-control rounded-md border px-2 text-[11px] font-medium"
                 value={selectedRootFolder}
-                onChange={(event) => setSelectedRootFolder(event.target.value)}
+                onChange={(event) => {
+                  rootFolderManuallySelected.current = true;
+                  setSelectedRootFolder(event.target.value);
+                }}
                 disabled={!kapowarrFolders}
                 aria-label={intl.formatMessage(messages.rootFolder)}
               >

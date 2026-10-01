@@ -49,6 +49,8 @@ export interface UserSettingsCardTextResponse {
   book?: CardTextVisibility;
 }
 
+export type UserRequestRootFolders = Record<string, string>;
+
 export type DetailDisclosurePin =
   | 'cast'
   | 'crew'
@@ -124,6 +126,7 @@ export interface UserSettingsGeneralResponse {
   watchlistSyncComics?: boolean;
   watchlistSyncMagazines?: boolean;
   cardTextVisibility?: UserSettingsCardTextResponse;
+  requestRootFolders?: UserRequestRootFolders;
 }
 
 export type NotificationAgentTypes = Record<NotificationAgentKey, number>;

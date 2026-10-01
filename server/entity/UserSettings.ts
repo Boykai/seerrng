@@ -3,6 +3,7 @@ import type {
   NotificationAgentTypes,
   UserMediaFilterPins,
   UserPreferredLanguages,
+  UserRequestRootFolders,
   UserSettingsDetailDisclosuresByMedia,
 } from '@server/interfaces/api/userSettingsInterfaces';
 import { Notification, hasNotificationType } from '@server/lib/notifications';
@@ -229,6 +230,9 @@ export class UserSettings {
 
   @Column({ type: 'simple-json', nullable: true })
   public advancedThemeOverrides?: AdvancedThemeOverrides | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  public requestRootFolders?: UserRequestRootFolders;
 
   @Column({
     type: 'text',
