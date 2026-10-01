@@ -41,6 +41,7 @@ connects to.
 - [Configure media and automation services](/using-seerr/settings/services/)
 - [Choose available media categories](/using-seerr/settings/media-categories/)
 - [Configure media-server libraries](/using-seerr/settings/mediaserver)
+- [Choose companion services and SeerrNG NG forks](/using-seerr/companion-services)
 - [Enable built-in HTTPS](/using-seerr/advanced/built-in-tls)
 - [Create override rules](/using-seerr/override-rules/)
 - [Bookshelf backend setup](/using-seerr/bookshelf-backend/)

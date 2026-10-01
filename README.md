@@ -32,6 +32,7 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
   - [Move Bookshelf media paths](./docs/using-seerr/bookshelf-media-path-migration.md)
   - [Configure comics](./docs/using-seerr/comics-backend.md)
   - [Configure magazines](./docs/using-seerr/magazines-backend.md)
+  - [Companion services and SeerrNG NG forks](./docs/using-seerr/companion-services.md)
   - [Indexer searches by media category](./docs/using-seerr/indexer-searches.md)
   - [Configure services](./docs/using-seerr/settings/services.md)
 - [Screenshots](#screenshots)
@@ -224,6 +225,25 @@ Software requests:
 - Software requests support global and per-user quotas. Requesters can withdraw pending requests and cancel active QuestarrNG work that is linked to their request. ROMarrNG requests can be cancelled before download-client handoff; active transfers must be stopped in ROMarrNG or the download client.
 - Provider hostnames and ports must be reachable from the SeerrNG server or container. Use each provider's SeerrNG integration API key; keys stay server-side.
 - See the [software requests guide](./docs/using-seerr/software-acquisition.md) for provider setup, request targets, status, retries, notifications, and downloads. See [Request Status](./docs/using-seerr/request-status.md) for the shared Download copy workflow.
+
+## Companion services
+
+Media servers and acquisition tools run as separate optional services; they
+are not bundled into the SeerrNG container. Use only the providers for the
+categories you enable. For book and software workflows that depend on
+SeerrNG-specific API behavior, the recommended Snapetech NG forks are
+[BookshelfNG](https://github.com/snapetech/bookshelfng),
+[ChaptarrNG](https://github.com/snapetech/chaptarrng),
+[QuestarrNG](https://github.com/snapetech/QuestarrNG), and
+[ROMarrNG](https://github.com/snapetech/ROMarrNG). BookshelfNG or ChaptarrNG
+can each handle Book and Audiobook formats; one BookshelfNG instance can serve
+both. QuestarrNG handles PC game acquisition, while ROMarrNG handles emulation
+systems and ROM acquisition.
+
+Radarr, Sonarr, Lidarr, LazyLibrarian, Mylar3, Kapowarr, and BackIssue are
+separate upstream or third-party integrations. They are not NG forks. The
+[companion services guide](./docs/using-seerr/companion-services.md) compares
+providers and explains when each NG fork is needed.
 
 ## Bookshelf and Hardcover
 
