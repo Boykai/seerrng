@@ -1,21 +1,41 @@
 #!/bin/bash
 
-source _common.sh
+#=================================================
+# IMPORT GENERIC HELPERS
+#=================================================
 
-ynh_script_progression "Installing SeerrNG release files..."
+source _common.sh
+source /usr/share/yunohost/helpers
+
+#=================================================
+# DOWNLOAD, CHECK AND UNPACK SOURCE
+#=================================================
+ynh_script_progression "Installing SeerrNG source files..."
 ynh_setup_source --dest_dir="$install_dir"
 chown -R "$app:$app" "$install_dir"
 
+#=================================================
+# APP INITIAL CONFIGURATION
+#=================================================
 ynh_script_progression "Preparing persistent settings and proxy-aware client IP handling..."
 seerrng_seed_settings
 
+#=================================================
+# SYSTEM CONFIGURATION
+#=================================================
 ynh_script_progression "Configuring the Nginx reverse proxy and systemd service..."
 seerrng_prepare_service
-
-ynh_script_progression "Starting SeerrNG..."
-ynh_systemctl --service="$app" --action="start" \
-	--line_match="Server ready on" \
-	--log_path="$data_dir/logs/seerr.log"
 seerrng_register_service
 
-ynh_script_progression "SeerrNG installation completed"
+#=================================================
+# START SYSTEMD SERVICE
+#=================================================
+ynh_script_progression "Starting SeerrNG..."
+ynh_systemctl --service="$app" --action="start" \
+	--wait_until="Server ready on" \
+	--log_path="$data_dir/logs/seerr.log"
+
+#=================================================
+# END OF SCRIPT
+#=================================================
+ynh_script_progression "Installation of $app completed"

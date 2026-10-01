@@ -1,6 +1,11 @@
 #!/bin/bash
 
+#=================================================
+# IMPORT GENERIC HELPERS
+#=================================================
+
 source ../settings/scripts/_common.sh
+source /usr/share/yunohost/helpers
 
 service_was_active=false
 
@@ -22,12 +27,18 @@ finish_backup() {
 # runs YunoHost cleanup after the service has been restarted.
 trap finish_backup EXIT
 
+#=================================================
+# STOP THE SERVICE FOR A CONSISTENT DATABASE BACKUP
+#=================================================
 if systemctl is-active --quiet "$app"; then
 	service_was_active=true
 	ynh_script_progression "Stopping SeerrNG for a consistent database backup..."
 	ynh_systemctl --service="$app" --action="stop"
 fi
 
+#=================================================
+# BACKUP PERSISTENT DATA
+#=================================================
 ynh_script_progression "Snapshotting SeerrNG data..."
 mkdir -p "$YNH_APP_BACKUP_DIR/data"
 rsync --archive --delete \
@@ -35,9 +46,18 @@ rsync --archive --delete \
 	--exclude="/logs/" \
 	"$data_dir/" "$YNH_APP_BACKUP_DIR/data/"
 
-ynh_print_info "Declaring SeerrNG files for backup..."
-ynh_backup --src_path="$install_dir"
-ynh_backup --src_path="/etc/nginx/conf.d/$domain.d/$app.conf"
-ynh_backup --src_path="/etc/systemd/system/$app.service"
+#=================================================
+# BACKUP THE APP MAIN DIR
+#=================================================
+ynh_backup "$install_dir"
 
+#=================================================
+# BACKUP SYSTEM CONFIGURATION
+#=================================================
+ynh_backup "/etc/nginx/conf.d/$domain.d/$app.conf"
+ynh_backup "/etc/systemd/system/$app.service"
+
+#=================================================
+# END OF SCRIPT
+#=================================================
 ynh_print_info "SeerrNG backup declaration completed"
