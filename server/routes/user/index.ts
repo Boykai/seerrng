@@ -1584,17 +1584,20 @@ router.put<Record<string, never>, Partial<User>[], UserBulkUpdateRequest>(
           );
 
     if (
-      (body.permissions !== undefined &&
-        (parsedPermissions === undefined ||
-          !isValidPermissionValue(parsedPermissions))) ||
-      (parsedPermissions === undefined && !settings)
+      body.permissions !== undefined &&
+      (parsedPermissions === undefined ||
+        !isValidPermissionValue(parsedPermissions))
     ) {
       return next({
         status: 400,
-        message:
-          parsedPermissions === undefined && !settings
-            ? 'At least one bulk user update is required.'
-            : 'permissions is invalid.',
+        message: 'permissions is invalid.',
+      });
+    }
+
+    if (parsedPermissions === undefined && !settings) {
+      return next({
+        status: 400,
+        message: 'At least one bulk user update is required.',
       });
     }
 
