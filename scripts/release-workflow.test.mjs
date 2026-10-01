@@ -253,6 +253,8 @@ test('multi-architecture publishers perform the real build once and verify the i
   assert.equal(ci.jobs.build, undefined);
   assert.equal(ci.jobs.publish.if, "github.ref == 'refs/heads/main'");
   assert.equal(ci.jobs.publish.needs, undefined);
+  assert.equal(ci.on.workflow_dispatch.inputs.deploy_main.default, true);
+  assert.equal(ci.on.workflow_dispatch.inputs.deploy_main.type, 'boolean');
   assert.equal(
     ci.jobs.publish.outputs.image_digest,
     '${{ steps.resolve-digest.outputs.image_digest }}'
@@ -281,7 +283,7 @@ test('multi-architecture publishers perform the real build once and verify the i
   );
   assert.equal(
     ci.jobs['deploy-main'].if,
-    "github.ref == 'refs/heads/main' && needs.preflight-deploy.outputs.ready == 'true'"
+    "github.ref == 'refs/heads/main' && needs.preflight-deploy.outputs.ready == 'true' && (github.event_name != 'workflow_dispatch' || inputs.deploy_main)"
   );
   assert.match(
     ci.jobs.publish.steps.find(
