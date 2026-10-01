@@ -240,17 +240,17 @@ jobs:
           release_dockerfile="Dockerfile.release"
 
           mapfile -t pinned_node_refs < <(
-            grep -Eo 'public\.ecr\.aws/docker/library/node:[^[:space:]]+' Dockerfile | sort -u
+            grep -Eo '(public\.ecr\.aws/docker/library/node|mirror\.gcr\.io/library/node):[^[:space:]]+' Dockerfile | sort -u
           )
           ((${#pinned_node_refs[@]} > 0)) || {
-            echo 'The release Dockerfile has no pinned public ECR Node base image.' >&2
+            echo 'The release Dockerfile has no digest-pinned Node base image.' >&2
             exit 1
           }
           for pinned_ref in "${pinned_node_refs[@]}"; do
-            dockerhub_ref="$(sed 's#^public.ecr.aws/docker/library/node#docker.io/library/node#' <<< "$pinned_ref")"
-            echo "Using content-pinned Docker Hub Node mirror: ${dockerhub_ref}"
+            mirror_ref="$(sed 's#^public.ecr.aws/docker/library/node#mirror.gcr.io/library/node#' <<< "$pinned_ref")"
+            echo "Using digest-pinned Node base image: ${mirror_ref}"
           done
-          sed 's#public.ecr.aws/docker/library/node#docker.io/library/node#g' Dockerfile > "$release_dockerfile"
+          sed 's#public.ecr.aws/docker/library/node#mirror.gcr.io/library/node#g' Dockerfile > "$release_dockerfile"
 
           build_args=(
             --file "./${release_dockerfile}"
