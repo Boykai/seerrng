@@ -18,6 +18,7 @@ import {
   runWithRequestAdmission,
 } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
+import { MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE } from '@server/interfaces/api/watchlistCreate';
 import {
   isValidExternalMediaId,
   isValidMusicBrainzResourceId,
@@ -135,6 +136,12 @@ export class Watchlist {
       securityGranted?: boolean;
     } = {}
   ): Promise<Watchlist> {
+    // Checked before identifier normalization, which treats unknown types as
+    // Open Library book IDs.
+    if (watchlistRequest.mediaType === MediaType.MANGA) {
+      throw new Error(MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE);
+    }
+
     watchlistRequest = {
       ...watchlistRequest,
       mbId: watchlistRequest.mbId

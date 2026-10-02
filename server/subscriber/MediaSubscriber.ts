@@ -114,6 +114,12 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
     databaseEvent: Media,
     is4k: boolean
   ) {
+    if (event.mediaType === MediaType.MANGA) {
+      // Manga has no availability-driven completion yet; its requests stay as
+      // they are when the media status changes.
+      return;
+    }
+
     const requestRepository = manager.getRepository(MediaRequest);
     const seasonRequestRepository = manager.getRepository(SeasonRequest);
 

@@ -31,6 +31,12 @@ export enum MediaIdentifierProvider {
   MYLAR = 'mylar',
   KAPOWARR = 'kapowarr',
   LAZYLIBRARIAN = 'lazylibrarian',
+  // Manga: AniList is the canonical identity; the others are optional
+  // cross-references and are deliberately not unique.
+  ANILIST = 'anilist',
+  MAL = 'mal',
+  MANGADEX = 'mangadex',
+  MANGAUPDATES = 'mangaupdates',
 }
 
 @Entity()
@@ -47,6 +53,10 @@ export enum MediaIdentifierProvider {
 @Index('UQ_media_identifier_canonical_magazine', ['provider', 'value'], {
   unique: true,
   where: `"provider" = 'lazylibrarian'`,
+})
+@Index('UQ_media_identifier_canonical_manga', ['provider', 'value'], {
+  unique: true,
+  where: `"provider" = 'anilist'`,
 })
 class MediaIdentifier {
   @PrimaryGeneratedColumn()

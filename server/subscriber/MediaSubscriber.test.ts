@@ -253,4 +253,37 @@ describe('MediaSubscriber', () => {
       MediaRequestStatus.COMPLETED
     );
   });
+
+  it('leaves approved manga requests unchanged when the media becomes available', async () => {
+    const user = await getRepository(User).findOneByOrFail({ id: 1 });
+    const media = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.PROCESSING,
+        status4k: MediaStatus.UNKNOWN,
+      })
+    );
+    const request = await getRepository(MediaRequest).save(
+      new MediaRequest({
+        type: MediaType.MANGA,
+        media,
+        requestedBy: user,
+        status: MediaRequestStatus.APPROVED,
+        is4k: false,
+      })
+    );
+
+    const savedMedia = await getRepository(Media).findOneByOrFail({
+      id: media.id,
+    });
+    savedMedia.status = MediaStatus.AVAILABLE;
+    await getRepository(Media).save(savedMedia);
+
+    assert.strictEqual(
+      (await getRepository(MediaRequest).findOneByOrFail({ id: request.id }))
+        .status,
+      MediaRequestStatus.APPROVED
+    );
+  });
 });

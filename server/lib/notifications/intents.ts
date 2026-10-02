@@ -22,6 +22,41 @@ import { Notification } from '.';
 import type { NotificationPayload } from './agents/agent';
 import type { NotificationOutboxIntent } from './outbox';
 
+// Manga details stay network-free until manga metadata exists: the AniList
+// identifier names the series.
+const getMangaDetails = async (
+  media: Media
+): Promise<{ anilistId?: string; title: string }> => {
+  const identifiers =
+    media.identifiers ??
+    (await getRepository(MediaIdentifier).find({
+      where: { media: { id: media.id } },
+    }));
+  const anilistId = identifiers.find(
+    ({ provider }) => provider === MediaIdentifierProvider.ANILIST
+  )?.value;
+  return { anilistId, title: anilistId ? `AniList ${anilistId}` : 'Manga' };
+};
+
+const getRequestMediaTypeLabel = (type: MediaType): string => {
+  switch (type) {
+    case MediaType.MOVIE:
+      return 'Movie';
+    case MediaType.TV:
+      return 'Series';
+    case MediaType.MUSIC:
+      return 'Music';
+    case MediaType.BOOK:
+      return 'Book';
+    case MediaType.COMIC:
+      return 'Comic';
+    case MediaType.MAGAZINE:
+      return 'Magazine';
+    case MediaType.MANGA:
+      return 'Manga';
+  }
+};
+
 const getMediaDetails = async (
   media: Media
 ): Promise<{ title: string; image: string }> => {
@@ -109,6 +144,10 @@ const getMediaDetails = async (
       image: '',
     };
   }
+  if (media.mediaType === MediaType.MANGA) {
+    const { title } = await getMangaDetails(media);
+    return { title, image: '' };
+  }
   return { title: media.mbId ?? String(media.tmdbId), image: '' };
 };
 
@@ -117,18 +156,7 @@ export const buildMediaRequestNotificationPayload = async (
   media: Media,
   type: Notification
 ): Promise<NotificationPayload> => {
-  const mediaType =
-    entity.type === MediaType.MOVIE
-      ? 'Movie'
-      : entity.type === MediaType.TV
-        ? 'Series'
-        : entity.type === MediaType.MUSIC
-          ? 'Music'
-          : entity.type === MediaType.COMIC
-            ? 'Comic'
-            : entity.type === MediaType.MAGAZINE
-              ? 'Magazine'
-              : 'Book';
+  const mediaType = getRequestMediaTypeLabel(entity.type);
   let event: string | undefined;
   let notifyAdmin = true;
   let notifySystem = true;
@@ -302,6 +330,20 @@ export const buildMediaRequestNotificationPayload = async (
       subject: title,
       message: `${mediaType} request details are available in SeerrNG.`,
       image,
+    };
+  }
+  if (entity.type === MediaType.MANGA) {
+    const { anilistId, title } = await getMangaDetails(media);
+    return {
+      ...base,
+      mediaUrl:
+        notificationMediaUrl(
+          anilistId && /^\d+$/.test(anilistId)
+            ? `/manga/${encodeURIComponent(anilistId)}`
+            : ''
+        ) || undefined,
+      subject: title,
+      message: `${mediaType} request details are available in SeerrNG.`,
     };
   }
   throw new Error(`Unsupported media notification request ${entity.id}.`);

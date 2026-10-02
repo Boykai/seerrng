@@ -26,6 +26,7 @@ export interface QuotaResponse {
   book: QuotaStatus;
   comic: QuotaStatus;
   magazine: QuotaStatus;
+  manga: QuotaStatus;
   software: QuotaStatus;
 }
 

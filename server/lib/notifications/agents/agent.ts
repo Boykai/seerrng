@@ -138,6 +138,8 @@ export const getMediaTypeLabel = (
       return intl.formatMessage(globalMessages.comic);
     case MediaType.MAGAZINE:
       return intl.formatMessage(globalMessages.magazine);
+    case MediaType.MANGA:
+      return intl.formatMessage(globalMessages.manga);
     default:
       return intl.formatMessage(globalMessages.series);
   }
@@ -197,6 +199,16 @@ export const getNotificationMediaUrl = (
       )?.value;
     return magazineId
       ? `/magazine/${encodeURIComponent(magazineId)}`
+      : undefined;
+  }
+
+  if (payload.media.mediaType === 'manga') {
+    const anilistId = payload.media.identifiers?.find(
+      (identifier) => identifier.provider === 'anilist'
+    )?.value;
+
+    return anilistId && /^\d+$/.test(anilistId)
+      ? `/manga/${encodeURIComponent(anilistId)}`
       : undefined;
   }
 

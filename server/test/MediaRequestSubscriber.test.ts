@@ -34,7 +34,9 @@ import SeasonRequest from '@server/entity/SeasonRequest';
 import { User } from '@server/entity/User';
 import { runMediaEntityMutation } from '@server/lib/mediaMutation';
 import notificationManager from '@server/lib/notifications';
-import requestDispatchManager from '@server/lib/requestDispatch';
+import requestDispatchManager, {
+  MAX_REQUEST_DISPATCH_RETRY_DELAY_MS,
+} from '@server/lib/requestDispatch';
 import { runWithServarrServiceMutationAdmission } from '@server/lib/serviceAdmission';
 import { getSettings } from '@server/lib/settings';
 import {
@@ -138,6 +140,48 @@ describe('MediaRequestSubscriber service dispatch', () => {
     assert.strictEqual(
       clampReadarrProviderRetryDelay(Number.MAX_SAFE_INTEGER),
       3_600_000
+    );
+  });
+
+  it('keeps approved manga requests queued without any service dispatch', async () => {
+    const sendCalls: string[] = [];
+    const recordSend = (name: string) => async () => {
+      sendCalls.push(name);
+      return undefined;
+    };
+    const prototype = MediaRequestSubscriber.prototype;
+    mock.method(prototype, 'sendToRadarr', recordSend('radarr'));
+    mock.method(prototype, 'sendToSonarr', recordSend('sonarr'));
+    mock.method(prototype, 'sendToLidarr', recordSend('lidarr'));
+    mock.method(prototype, 'sendToReadarr', recordSend('readarr'));
+    mock.method(prototype, 'sendToComicBackend', recordSend('comic'));
+    mock.method(prototype, 'sendToMagazineBackend', recordSend('magazine'));
+    const media = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.UNKNOWN,
+        status4k: MediaStatus.UNKNOWN,
+      })
+    );
+    const request = await createApprovedRequest(media, await getRequester());
+    await getRepository(MediaRequest).save(request);
+
+    // Manga skips Servarr service selection, which throws for manga.
+    const outcome = await new MediaRequestSubscriber().dispatchRequestById(
+      request.id
+    );
+
+    assert.strictEqual(MAX_REQUEST_DISPATCH_RETRY_DELAY_MS, 6 * 60 * 60_000);
+    assert.deepStrictEqual(outcome, {
+      delivered: false,
+      retryAfterMs: MAX_REQUEST_DISPATCH_RETRY_DELAY_MS,
+    });
+    assert.deepStrictEqual(sendCalls, []);
+    assert.strictEqual(
+      (await getRepository(MediaRequest).findOneByOrFail({ id: request.id }))
+        .status,
+      MediaRequestStatus.APPROVED
     );
   });
 

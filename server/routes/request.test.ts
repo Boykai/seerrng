@@ -26,6 +26,7 @@ import MediaIdentifier, {
   MediaIdentifierProvider,
 } from '@server/entity/MediaIdentifier';
 import {
+  MANGA_REQUESTS_UNAVAILABLE_MESSAGE,
   MAX_BOOK_REQUEST_IDENTIFIER_CANDIDATES,
   MediaRequest,
 } from '@server/entity/MediaRequest';
@@ -3288,6 +3289,61 @@ describe('POST /request', () => {
       assert.strictEqual(both.status, 403);
       assert.match(both.body.message, /Book requests are disabled/);
       assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+    } finally {
+      settings.main.enabledMediaCategories = originalCategories;
+    }
+  });
+
+  it('refuses manga requests with the category off, missing or on', async () => {
+    const settings = getSettings();
+    const originalCategories = { ...settings.main.enabledMediaCategories };
+    const categoriesWithoutManga: Partial<typeof originalCategories> = {
+      ...originalCategories,
+    };
+    delete categoriesWithoutManga.manga;
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const requestManga = () =>
+      agent
+        .post('/request')
+        .send({ mediaType: MediaType.MANGA, mediaId: 30013 });
+
+    try {
+      settings.main.enabledMediaCategories = {
+        ...originalCategories,
+        manga: false,
+      };
+      const disabled = await requestManga();
+
+      // An older settings file has no manga key; manga must stay off.
+      settings.main.enabledMediaCategories =
+        categoriesWithoutManga as typeof originalCategories;
+      const missing = await requestManga();
+
+      settings.main.enabledMediaCategories = {
+        ...originalCategories,
+        manga: true,
+      };
+      const enabled = await requestManga();
+
+      for (const response of [disabled, missing]) {
+        assert.strictEqual(response.status, 403);
+        assert.strictEqual(
+          response.body.message,
+          'Manga requests are disabled by the administrator.'
+        );
+      }
+      assert.strictEqual(enabled.status, 400);
+      assert.strictEqual(
+        enabled.body.message,
+        MANGA_REQUESTS_UNAVAILABLE_MESSAGE
+      );
+      assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+      assert.strictEqual(
+        await getRepository(Media).count({
+          where: { mediaType: MediaType.MANGA },
+        }),
+        0
+      );
     } finally {
       settings.main.enabledMediaCategories = originalCategories;
     }

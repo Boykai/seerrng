@@ -11,7 +11,7 @@ import SonarrAPI from '@server/api/servarr/sonarr';
 import TautulliAPI, { isTautulliNoDataError } from '@server/api/tautulli';
 import TheMovieDb from '@server/api/themoviedb';
 import { MediaStatus, MediaType } from '@server/constants/media';
-import type { MediaCategoryKey } from '@server/constants/mediaCategories';
+import type { MediaAvailabilityCategoryKey } from '@server/constants/mediaCategories';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import Season from '@server/entity/Season';
@@ -87,7 +87,7 @@ const mediaListPermissions: Permission[] = [
 ];
 const mediaTypeCategories: Record<
   MediaType,
-  { categories: MediaCategoryKey[]; mode?: 'all' | 'any' }
+  { categories: MediaAvailabilityCategoryKey[]; mode?: 'all' | 'any' }
 > = {
   [MediaType.MOVIE]: { categories: ['movie'] },
   [MediaType.TV]: { categories: ['tv'] },
@@ -95,6 +95,7 @@ const mediaTypeCategories: Record<
   [MediaType.BOOK]: { categories: ['ebook', 'audiobook'], mode: 'any' },
   [MediaType.COMIC]: { categories: ['comic'] },
   [MediaType.MAGAZINE]: { categories: ['magazine'] },
+  [MediaType.MANGA]: { categories: ['manga'] },
 };
 const isMediaTypeCategoryEnabled = (mediaType: MediaType): boolean => {
   const config = mediaTypeCategories[mediaType];

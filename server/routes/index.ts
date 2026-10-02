@@ -5,7 +5,7 @@ import type {
   TmdbMovieResult,
   TmdbTvResult,
 } from '@server/api/themoviedb/interfaces';
-import type { MediaCategoryKey } from '@server/constants/mediaCategories';
+import type { MediaAvailabilityCategoryKey } from '@server/constants/mediaCategories';
 import dataSource, { getRepository } from '@server/datasource';
 import DiscoverSlider from '@server/entity/DiscoverSlider';
 import { User } from '@server/entity/User';
@@ -89,9 +89,10 @@ const maxTmdbId = 1_000_000_000;
 const MAX_PUSHOVER_TOKEN_LENGTH = 256;
 const MAX_WATCH_REGION_LENGTH = 16;
 
-const categoryAvailabilityGuard =
+// Exported so later category-gated route groups reuse the same 404 behavior.
+export const categoryAvailabilityGuard =
   (
-    categories: readonly MediaCategoryKey[],
+    categories: readonly MediaAvailabilityCategoryKey[],
     mode: 'all' | 'any' = 'all'
   ): RequestHandler =>
   (_req, res, next) => {

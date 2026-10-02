@@ -580,6 +580,8 @@ const resolveRequestAssets = async (
             ? getMylarAssets(request, assets)
             : Promise.resolve(),
     [MediaType.MAGAZINE]: () => getLazyLibrarianAssets(request, assets),
+    // Manga has no download backend yet, so it lists no local copies.
+    [MediaType.MANGA]: () => Promise.resolve(),
   };
   const resolve = providers[request.type];
   if (!resolve) return assets;

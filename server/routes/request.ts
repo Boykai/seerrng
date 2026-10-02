@@ -7,7 +7,7 @@ import {
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
-import type { MediaCategoryKey } from '@server/constants/mediaCategories';
+import type { MediaAvailabilityCategoryKey } from '@server/constants/mediaCategories';
 import dataSource, { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import MediaIdentifier, {
@@ -16,6 +16,7 @@ import MediaIdentifier, {
 import {
   BlocklistedMediaError,
   DuplicateMediaRequestError,
+  MANGA_REQUESTS_UNAVAILABLE_MESSAGE,
   MediaRequest,
   NoSeasonsAvailableError,
   QuotaRestrictedError,
@@ -400,30 +401,42 @@ const getRequestLogBody = (body: Partial<MediaRequestBody> | undefined) => ({
   userId: body?.userId,
 });
 
+const getRequestCategories = (
+  mediaType: MediaType,
+  format?: MediaRequestBody['format']
+): MediaAvailabilityCategoryKey[] => {
+  switch (mediaType) {
+    case MediaType.MOVIE:
+      return ['movie'];
+    case MediaType.TV:
+      return ['tv'];
+    case MediaType.MUSIC:
+      return ['music'];
+    case MediaType.BOOK:
+      return format === 'both'
+        ? ['ebook', 'audiobook']
+        : [format === 'audiobook' ? 'audiobook' : 'ebook'];
+    case MediaType.COMIC:
+      return ['comic'];
+    case MediaType.MAGAZINE:
+      return ['magazine'];
+    case MediaType.MANGA:
+      return ['manga'];
+  }
+};
+
 const getDisabledCategoryForRequest = (
   mediaType: MediaType,
   format?: MediaRequestBody['format']
-): MediaCategoryKey | undefined => {
-  const categories: MediaCategoryKey[] =
-    mediaType === MediaType.MOVIE
-      ? ['movie']
-      : mediaType === MediaType.TV
-        ? ['tv']
-        : mediaType === MediaType.MUSIC
-          ? ['music']
-          : mediaType === MediaType.COMIC
-            ? ['comic']
-            : mediaType === MediaType.MAGAZINE
-              ? ['magazine']
-              : format === 'both'
-                ? ['ebook', 'audiobook']
-                : [format === 'audiobook' ? 'audiobook' : 'ebook'];
+): MediaAvailabilityCategoryKey | undefined =>
+  getRequestCategories(mediaType, format).find(
+    (category) => !isMediaCategoryEnabled(category)
+  );
 
-  return categories.find((category) => !isMediaCategoryEnabled(category));
-};
-
-const getMediaCategoryLabel = (category: MediaCategoryKey): string => {
-  const labels: Record<MediaCategoryKey, string> = {
+const getMediaCategoryLabel = (
+  category: MediaAvailabilityCategoryKey
+): string => {
+  const labels: Record<MediaAvailabilityCategoryKey, string> = {
     movie: 'Movie',
     tv: 'Series',
     music: 'Music',
@@ -434,6 +447,7 @@ const getMediaCategoryLabel = (category: MediaCategoryKey): string => {
     retro: 'Retro emulation',
     modern: 'Modern emulation',
     game: 'PC game',
+    manga: 'Manga',
   };
   return labels[category];
 };
@@ -1645,6 +1659,10 @@ const validateExternalServiceConfiguration = (
         'The selected LazyLibrarian server no longer exists.'
       );
     }
+  }
+
+  if (requestType === MediaType.MANGA) {
+    throw new ServiceConfigurationError(MANGA_REQUESTS_UNAVAILABLE_MESSAGE);
   }
 };
 

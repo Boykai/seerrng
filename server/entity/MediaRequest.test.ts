@@ -7,8 +7,11 @@ import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import {
   DuplicateMediaRequestError,
+  MANGA_REQUESTS_UNAVAILABLE_MESSAGE,
   MediaRequest,
   QuotaRestrictedError,
+  ServiceConfigurationError,
+  hasMediaRequestPermission,
 } from '@server/entity/MediaRequest';
 import SeasonRequest from '@server/entity/SeasonRequest';
 import { User } from '@server/entity/User';
@@ -200,6 +203,77 @@ describe('MediaRequest.request', () => {
         where: { tmdbId: 88888, mediaType: MediaType.MOVIE },
       }),
       1
+    );
+  });
+
+  it('rejects manga requests before writing any media or request row', async () => {
+    const requester = await createRequester(
+      'manga@seerr.dev',
+      Permission.REQUEST + Permission.REQUEST_MANGA
+    );
+    const admin = await getRepository(User).findOneOrFail({
+      where: { email: 'admin@seerr.dev' },
+    });
+
+    for (const user of [requester, admin]) {
+      await assert.rejects(
+        () =>
+          MediaRequest.request(
+            { mediaId: 12345, mediaType: MediaType.MANGA, is4k: false },
+            user
+          ),
+        (error: unknown) =>
+          error instanceof ServiceConfigurationError &&
+          error.message === MANGA_REQUESTS_UNAVAILABLE_MESSAGE
+      );
+    }
+
+    assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+    assert.strictEqual(await getRepository(Media).count(), 0);
+    assert.strictEqual(externalApiGetMock.callCount(), 0);
+  });
+});
+
+describe('hasMediaRequestPermission', () => {
+  const userWith = (permissions: number) =>
+    new User({ email: 'permissions@seerr.dev', permissions, avatar: '' });
+
+  it('allows manga requests with the general or the manga request permission', () => {
+    assert.strictEqual(
+      hasMediaRequestPermission(userWith(Permission.REQUEST), MediaType.MANGA),
+      true
+    );
+    assert.strictEqual(
+      hasMediaRequestPermission(
+        userWith(Permission.REQUEST_MANGA),
+        MediaType.MANGA
+      ),
+      true
+    );
+    assert.strictEqual(
+      hasMediaRequestPermission(userWith(Permission.ADMIN), MediaType.MANGA),
+      true
+    );
+  });
+
+  it('keeps the manga and book request permissions separate', () => {
+    assert.strictEqual(
+      hasMediaRequestPermission(
+        userWith(Permission.REQUEST_BOOK + Permission.REQUEST_COMIC),
+        MediaType.MANGA
+      ),
+      false
+    );
+    assert.strictEqual(
+      hasMediaRequestPermission(
+        userWith(Permission.REQUEST_MANGA),
+        MediaType.BOOK
+      ),
+      false
+    );
+    assert.strictEqual(
+      hasMediaRequestPermission(userWith(Permission.NONE), MediaType.MANGA),
+      false
     );
   });
 });

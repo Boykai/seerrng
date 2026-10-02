@@ -13,6 +13,7 @@ export enum MediaType {
   BOOK = 'book',
   COMIC = 'comic',
   MAGAZINE = 'magazine',
+  MANGA = 'manga',
 }
 
 export enum MediaStatus {

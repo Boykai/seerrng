@@ -17,6 +17,7 @@ import {
 import { User } from '@server/entity/User';
 import { UserSettings } from '@server/entity/UserSettings';
 import { Watchlist } from '@server/entity/Watchlist';
+import { MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE } from '@server/interfaces/api/watchlistCreate';
 import { Permission } from '@server/lib/permissions';
 import requestAdmissionCoordinator from '@server/lib/requestAdmission';
 import { getSettings } from '@server/lib/settings';
@@ -280,6 +281,34 @@ describe('POST /watchlist', () => {
 
     assert.strictEqual(res.status, 400);
     assert.strictEqual(await getRepository(Watchlist).count(), 0);
+  });
+
+  it('refuses manga watchlist items over HTTP and for internal callers', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/watchlist').send({
+      mediaType: MediaType.MANGA,
+      externalId: '30013',
+      title: 'Manga Series',
+    });
+
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.body.message, MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE);
+    await assert.rejects(
+      Watchlist.createWatchlist({
+        watchlistRequest: {
+          mediaType: MediaType.MANGA,
+          externalId: '30013',
+          title: 'Manga Series',
+        },
+        user: await getRepository(User).findOneByOrFail({ id: 1 }),
+      }),
+      { message: MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE }
+    );
+    assert.strictEqual(await getRepository(Watchlist).count(), 0);
+    assert.strictEqual(
+      await getRepository(Media).countBy({ mediaType: MediaType.MANGA }),
+      0
+    );
   });
 
   it('terminates the request when downstream code throws a non-error', async () => {

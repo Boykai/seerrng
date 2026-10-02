@@ -11,6 +11,7 @@ import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import SeasonRequest from '@server/entity/SeasonRequest';
 import { User } from '@server/entity/User';
+import { getSettings } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
 
 setupTestDb();
@@ -129,4 +130,79 @@ test('failed and declined requests do not consume retry quota', async () => {
   assert.strictEqual(quota.tv.used, 1);
   assert.strictEqual(quota.music.used, 1);
   assert.strictEqual(quota.book.used, 1);
+});
+
+test('manga quota counts only active manga requests and falls back to the global default', async () => {
+  const userRepository = getRepository(User);
+  const user = await userRepository.findOneByOrFail({ id: 2 });
+  Object.assign(user, { mangaQuotaLimit: 2, mangaQuotaDays: 7 });
+  await userRepository.save(user);
+  const mediaRepository = getRepository(Media);
+  const requestRepository = getRepository(MediaRequest);
+  const mangaMedia = await mediaRepository.save(
+    new Media({
+      mediaType: MediaType.MANGA,
+      tmdbId: 0,
+      status: MediaStatus.UNKNOWN,
+      status4k: MediaStatus.UNKNOWN,
+    })
+  );
+  const bookMedia = await mediaRepository.save(
+    new Media({
+      mediaType: MediaType.BOOK,
+      tmdbId: 0,
+      status: MediaStatus.UNKNOWN,
+      status4k: MediaStatus.UNKNOWN,
+    })
+  );
+  for (const status of [
+    MediaRequestStatus.PENDING,
+    MediaRequestStatus.DECLINED,
+  ]) {
+    await requestRepository.save(
+      new MediaRequest({
+        type: MediaType.MANGA,
+        status,
+        media: mangaMedia,
+        requestedBy: user,
+        is4k: false,
+      })
+    );
+  }
+  await requestRepository.save(
+    new MediaRequest({
+      type: MediaType.BOOK,
+      status: MediaRequestStatus.PENDING,
+      media: bookMedia,
+      requestedBy: user,
+      is4k: false,
+      bookFormat: 'ebook',
+    })
+  );
+
+  assert.deepStrictEqual((await user.getQuota()).manga, {
+    days: 7,
+    limit: 2,
+    used: 1,
+    remaining: 1,
+    restricted: false,
+  });
+
+  const defaultQuotas = getSettings().main.defaultQuotas;
+  const previousDefault = defaultQuotas.manga;
+  try {
+    defaultQuotas.manga = { quotaLimit: 1, quotaDays: 3 };
+    user.mangaQuotaLimit = undefined;
+    user.mangaQuotaDays = undefined;
+
+    assert.deepStrictEqual((await user.getQuota()).manga, {
+      days: 3,
+      limit: 1,
+      used: 1,
+      remaining: 0,
+      restricted: true,
+    });
+  } finally {
+    defaultQuotas.manga = previousDefault;
+  }
 });

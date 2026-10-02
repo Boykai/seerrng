@@ -22,6 +22,7 @@ import session from 'express-session';
 import request from 'supertest';
 import authRoutes from './auth';
 import blocklistRoutes, {
+  MANGA_BLOCKLIST_UNAVAILABLE_MESSAGE,
   MAX_BLOCKLIST_COLLECTION_PARTS,
   parseBlocklistCollectionParts,
 } from './blocklist';
@@ -241,6 +242,21 @@ describe('POST /blocklist', () => {
     assert.strictEqual(res.status, 400);
     assert.match(res.body.message, /Invalid blocklist payload/);
     assert.strictEqual(await getRepository(Blocklist).count(), 0);
+  });
+
+  it('refuses manga blocklist entries before persistence', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/blocklist').send({
+      mediaType: MediaType.MANGA,
+      externalId: '30013',
+      externalProvider: MediaIdentifierProvider.ANILIST,
+      title: 'Manga Series',
+    });
+
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.body.message, MANGA_BLOCKLIST_UNAVAILABLE_MESSAGE);
+    assert.strictEqual(await getRepository(Blocklist).count(), 0);
+    assert.strictEqual(await getRepository(Media).count(), 0);
   });
 
   it('rejects oversized external blocklist identifiers', async () => {

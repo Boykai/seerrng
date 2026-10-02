@@ -1,7 +1,10 @@
 import { IssueType } from '@server/constants/issue';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { getIssueOptionsForMediaType } from './constants';
+import {
+  getIssueOptionsForMediaType,
+  getIssueSubtypeOptionsForMediaType,
+} from './constants';
 
 describe('Report an Issue type options', () => {
   it('keeps all four required Movie and Series issue types', () => {
@@ -31,5 +34,13 @@ describe('Report an Issue type options', () => {
         [IssueType.OTHER]
       );
     }
+  });
+
+  it('limits manga issues to Other without media-specific subtypes', () => {
+    assert.deepStrictEqual(
+      getIssueOptionsForMediaType('manga').map((option) => option.issueType),
+      [IssueType.OTHER]
+    );
+    assert.deepStrictEqual(getIssueSubtypeOptionsForMediaType('manga'), []);
   });
 });
