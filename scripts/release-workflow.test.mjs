@@ -29,7 +29,10 @@ test('release assets build while image verification runs, then package channels 
     'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
   );
   assert.equal(assetBuild.uses, './.github/workflows/release-assets.yml');
-  assert.deepEqual(assetBuild.needs, ['validate-main-tag', 'create-draft-release']);
+  assert.deepEqual(assetBuild.needs, [
+    'validate-main-tag',
+    'create-draft-release',
+  ]);
   assert.equal(assetBuild.needs.includes('verify'), false);
   assert.equal(assetBuild.with.tag, '${{ inputs.tag || github.ref_name }}');
   assert.equal(assetBuild.permissions.actions, 'read');
@@ -38,8 +41,14 @@ test('release assets build while image verification runs, then package channels 
   assert.match(dispatchScript, /--ref main/u);
   assert.match(dispatchScript, /release-chocolatey\.yml/u);
   assert.match(dispatchScript, /release-linux-packages\.yml/u);
-  assert.match(dispatchScript, /required_workflows=\([\s\S]*release-copr\.yml/u);
-  assert.match(dispatchScript, /optional_workflows=\([\s\S]*release-snap\.yml/u);
+  assert.match(
+    dispatchScript,
+    /required_workflows=\([\s\S]*release-copr\.yml/u
+  );
+  assert.match(
+    dispatchScript,
+    /optional_workflows=\([\s\S]*release-snap\.yml/u
+  );
   assert.match(dispatchScript, /watch-github-run\.mjs/u);
   assert.match(
     dispatchScript,
@@ -460,7 +469,10 @@ test('release assets support trusted reuse and main-only manual dispatch', () =>
   assert.match(resolve.if, /github\.event_name != 'workflow_dispatch'/u);
   assert.match(resolve.if, /github\.ref == 'refs\/heads\/main'/u);
   assert.equal(workflowCall.inputs.reuse_windows_x64_artifact.type, 'boolean');
-  assert.equal(workflowCall.inputs.reuse_windows_arm64_artifact.type, 'boolean');
+  assert.equal(
+    workflowCall.inputs.reuse_windows_arm64_artifact.type,
+    'boolean'
+  );
   assert.equal(workflowCall.inputs.reuse_windows_arm64_artifact.default, false);
   assert.match(
     resolve.steps.find((step) => step.name === 'Resolve version').env
@@ -527,7 +539,10 @@ test('release recovery validates reusable artifacts and repairs the failed relea
   assert.match(imageReuse.if, /inputs\.reuse_published_image == true/u);
   assert.match(imageReuse.run, /org\.opencontainers\.image\.revision/u);
   assert.match(imageReuse.run, /EXPECTED_SHA/u);
-  assert.deepEqual(assetBuild.needs, ['validate-main-tag', 'create-draft-release']);
+  assert.deepEqual(assetBuild.needs, [
+    'validate-main-tag',
+    'create-draft-release',
+  ]);
   assert.match(
     assetBuild.with.reuse_windows_x64_artifact,
     /needs\.validate-main-tag\.outputs\.reuse_windows_x64_artifact/u
@@ -660,13 +675,19 @@ test('release assets build supported native archive platforms', () => {
   assert.equal(downloadAssets.with.path, 'dist-release/downloaded');
   assert.equal(downloadAssets.with['merge-multiple'], undefined);
   assert.match(flattenAssets.run, /Unexpected file in release artifact/u);
-  assert.match(flattenAssets.run, /Duplicate release asset filename.*collides with/u);
+  assert.match(
+    flattenAssets.run,
+    /Duplicate release asset filename.*collides with/u
+  );
   assert.match(flattenAssets.run, /windows-arm64.*expected_archive/u);
   assert.match(flattenAssets.run, /find "\$downloads" -type f/u);
   assert.match(releaseTooling.with.ref, /github\.sha/u);
   assert.equal(releaseTooling.with.path, '.release-tooling');
   assert.equal(releaseTooling.with['sparse-checkout'], 'scripts');
-  assert.match(archiveBuild.run, /\.release-tooling\/scripts\/build-release-assets\.sh/u);
+  assert.match(
+    archiveBuild.run,
+    /\.release-tooling\/scripts\/build-release-assets\.sh/u
+  );
   assert.match(buildScript, /node -p 'process\.arch'/u);
   assert.doesNotMatch(buildScript, /uname -m/u);
   assert.match(verifyInventory, /sha256sum -c/u);
