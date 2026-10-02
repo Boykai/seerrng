@@ -938,10 +938,11 @@ components:
               isbn,
               comicvine,
               lazylibrarian,
+              anilist,
             ]
         mediaType:
           type: string
-          enum: [movie, tv, music, book, comic, magazine]
+          enum: [movie, tv, music, book, comic, magazine, manga]
         media:
           $ref: '#/components/schemas/MediaInfo'
         userId:
@@ -5293,7 +5294,7 @@ components:
                 type: string
               mediaType:
                 type: string
-                enum: [movie, tv, music, book]
+                enum: [movie, tv, music, book, manga]
               id:
                 oneOf:
                   - type: integer
@@ -9308,7 +9309,7 @@ paths:
           name: mediaType
           schema:
             type: string
-            enum: [all, movie, tv, music, book, comic, magazine]
+            enum: [all, movie, tv, music, book, comic, magazine, manga]
             default: all
         - in: query
           name: sort
@@ -9404,6 +9405,7 @@ paths:
               - book
               - comic
               - magazine
+              - manga
       responses:
         '200':
           description: Blocklist details in JSON
@@ -9431,6 +9433,7 @@ paths:
               - book
               - comic
               - magazine
+              - manga
       responses:
         '204':
           description: Succesfully removed media item
@@ -9906,7 +9909,7 @@ paths:
   /user/{userId}/settings/detail-disclosures/{mediaType}:
     get:
       summary: Get pinned detail disclosure settings for one media category
-      description: Returns persistent disclosure pins scoped independently to Movie, Series, Music, or Book details. Requires `MANAGE_USERS` permission if viewing another user.
+      description: Returns persistent disclosure pins scoped independently to Movie, Series, Music, Book, or Manga details. Requires `MANAGE_USERS` permission if viewing another user.
       tags:
         - users
       parameters:
@@ -9920,7 +9923,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [movie, tv, music, book, comic]
+            enum: [movie, tv, music, book, comic, manga]
       responses:
         '200':
           description: Category-scoped detail disclosure settings returned
@@ -9944,7 +9947,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [movie, tv, music, book, comic]
+            enum: [movie, tv, music, book, comic, manga]
       requestBody:
         required: true
         content:
@@ -9997,6 +10000,7 @@ paths:
                       audiobook,
                       comic,
                       magazine,
+                      manga,
                       author,
                       software,
                       null,
@@ -10662,7 +10666,7 @@ paths:
                         properties:
                           mediaType:
                             type: string
-                            enum: [music, book]
+                            enum: [music, book, manga]
                           id:
                             type: string
                             minLength: 1

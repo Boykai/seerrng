@@ -365,6 +365,7 @@ const detailDisclosureMediaTypes: DetailDisclosureMediaType[] = [
   'tv',
   'music',
   'book',
+  'manga',
 ];
 
 const isDetailDisclosureMediaType = (
@@ -1430,6 +1431,9 @@ userSettingsRoutes.post<
               break;
             case 'book':
               nextPins.book = updatedPins;
+              break;
+            case 'manga':
+              nextPins.manga = updatedPins;
               break;
           }
           user.settings.detailDisclosurePins = nextPins;

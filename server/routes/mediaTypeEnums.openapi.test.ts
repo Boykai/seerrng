@@ -49,8 +49,6 @@ const MEDIA_SERVER_LIBRARY_TYPES =
   'Media-server library section types, not SeerrNG media types.';
 const COLLECTION_CATALOG =
   'TV franchise and artist album collections; manga collections are outside the MVP.';
-const BLOCKLIST =
-  'L1 refuses manga blocklisting; the catalog UI adds the blocklist action.';
 const WATCHLIST =
   'L1 refuses manga watchlist items; manga watchlist support is planned follow-up work.';
 const RELEASE_CALENDAR =
@@ -83,35 +81,6 @@ const MANGA_ENUM_EXCLUSIONS: Record<string, Exclusion> = {
     owner: 'post-MVP',
     reason:
       'Bulk requests cover music and book selections; manga requests are single-title in the MVP.',
-  },
-  'schema Blocklist mediaType': { owner: 'L3', reason: BLOCKLIST },
-  'GET /blocklist query mediaType': { owner: 'L3', reason: BLOCKLIST },
-  'GET /blocklist/{tmdbId} query mediaType': { owner: 'L3', reason: BLOCKLIST },
-  'DELETE /blocklist/{tmdbId} query mediaType': {
-    owner: 'L3',
-    reason: BLOCKLIST,
-  },
-  'GET /user/{userId}/settings/detail-disclosures/{mediaType} path mediaType': {
-    owner: 'L3',
-    reason: 'Detail-page disclosure pins follow the manga details page.',
-  },
-  'POST /user/{userId}/settings/detail-disclosures/{mediaType} path mediaType':
-    {
-      owner: 'L3',
-      reason: 'Detail-page disclosure pins follow the manga details page.',
-    },
-  'POST /user/{userId}/settings/media-filter-pins/{scope} body value': {
-    owner: 'L3',
-    reason: 'Media filter pins follow the manga catalog filters.',
-  },
-  'schema DiscoverHomeState items[].mediaType': {
-    owner: 'L3',
-    reason: 'Discover home state follows the manga sliders.',
-  },
-  'POST /discover/home/state body items[].oneOf[1].mediaType': {
-    owner: 'L3',
-    reason:
-      'Non-TMDB Discover items; the manga sliders choose the identifier variant.',
   },
   'GET /issue query mediaType': {
     owner: 'L12',

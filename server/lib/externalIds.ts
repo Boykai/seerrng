@@ -2,6 +2,7 @@ import { MediaType } from '@server/constants/media';
 import { MediaIdentifierProvider } from '@server/entity/MediaIdentifier';
 import { normalizeValidIsbn } from '@server/lib/isbn';
 import { normalizeMagazineTitle } from '@server/lib/magazineIdentity';
+import { parsePositiveRouteId } from '@server/utils/routeId';
 
 export const normalizeMusicBrainzId = (id: string): string =>
   id.trim().toLowerCase();
@@ -79,6 +80,14 @@ export const normalizeExternalBookId = (
   return id.trim();
 };
 
+// Manga identity is the AniList id in the same String(n) form the catalog
+// uses for MediaIdentifier lookups, so "0042" and "42" are the same title.
+export const normalizeAnilistMangaId = (id: string): string => {
+  const trimmed = id.trim();
+  const parsed = parsePositiveRouteId(trimmed);
+  return parsed === undefined ? trimmed : String(parsed);
+};
+
 export const normalizeExternalMediaId = (
   id: string,
   mediaType: MediaType,
@@ -90,7 +99,9 @@ export const normalizeExternalMediaId = (
       ? normalizeExternalBookId(id, provider)
       : mediaType === MediaType.MAGAZINE
         ? normalizeMagazineTitle(id)
-        : id.trim();
+        : mediaType === MediaType.MANGA
+          ? normalizeAnilistMangaId(id)
+          : id.trim();
 
 export const isValidExternalMediaId = (
   id: string,
@@ -110,6 +121,14 @@ export const isValidExternalMediaId = (
       (provider === undefined ||
         provider === MediaIdentifierProvider.COMICVINE) &&
       /^\d+$/.test(id.trim())
+    );
+  }
+
+  if (mediaType === MediaType.MANGA) {
+    return (
+      (provider === undefined ||
+        provider === MediaIdentifierProvider.ANILIST) &&
+      parsePositiveRouteId(id.trim()) !== undefined
     );
   }
 

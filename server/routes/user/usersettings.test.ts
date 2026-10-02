@@ -296,6 +296,65 @@ describe('request root folder settings', () => {
   });
 });
 
+describe('manga detail disclosure and media filter pins', () => {
+  it('accepts manga through the API schema and keeps its pins separate', async () => {
+    const admin = await loginAs('admin@seerr.dev', 'test1234');
+    const route = `/user/${admin.userId}/settings`;
+    const get = (path: string) =>
+      request(app)
+        .get(`${route}${path}`)
+        .set('X-Forwarded-Proto', 'https')
+        .set('Cookie', admin.sessionCookie);
+    const post = (path: string, body: Record<string, unknown>) =>
+      request(app)
+        .post(`${route}${path}`)
+        .set('X-Forwarded-Proto', 'https')
+        .set('Cookie', admin.sessionCookie)
+        .send(body);
+
+    const saved = await post('/detail-disclosures/manga', {
+      details: true,
+      advancedOptions: true,
+    });
+    assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
+    assert.deepStrictEqual(saved.body, {
+      details: true,
+      cast: false,
+      crew: false,
+      artists: false,
+      subjectTags: false,
+      advancedOptions: true,
+    });
+    const loaded = await get('/detail-disclosures/manga');
+    assert.strictEqual(loaded.status, 200);
+    assert.deepStrictEqual(loaded.body, saved.body);
+    const book = await get('/detail-disclosures/book');
+    assert.strictEqual(book.body.details, false);
+    const user = await getRepository(User).findOneOrFail({
+      where: { id: admin.userId },
+    });
+    assert.deepStrictEqual(
+      user.settings?.detailDisclosurePins?.manga,
+      saved.body
+    );
+
+    const searchPin = await post('/media-filter-pins/search', {
+      value: 'manga',
+    });
+    const blocklistPin = await post('/media-filter-pins/blocklist', {
+      value: 'manga',
+    });
+    const invalidPin = await post('/media-filter-pins/search', {
+      value: 'mangas',
+    });
+    assert.strictEqual(searchPin.status, 200, JSON.stringify(searchPin.body));
+    assert.strictEqual(searchPin.body.search, 'manga');
+    assert.strictEqual(blocklistPin.status, 200);
+    assert.strictEqual(blocklistPin.body.blocklist, 'manga');
+    assert.strictEqual(invalidPin.status, 400);
+  });
+});
+
 describe('manga quota settings', () => {
   it('saves manga quota overrides from a user manager and returns the global default', async () => {
     const settings = getSettings();
