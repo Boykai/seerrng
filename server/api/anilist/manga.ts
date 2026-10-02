@@ -96,6 +96,19 @@ export const MANGA_PAGE_QUERY = `
   }
 `;
 
+export const ANILIST_MAL_LOOKUP_PAGE_SIZE = 50;
+
+// Exact links for library matching. One MyAnimeList ID can belong to more
+// than one AniList entry, so a batch can span several pages.
+export const MANGA_IDS_BY_MAL_QUERY = `
+  query MangaIdsByMal($page: Int, $malIds: [Int]) {
+    Page(page: $page, perPage: ${ANILIST_MAL_LOOKUP_PAGE_SIZE}) {
+      pageInfo { hasNextPage }
+      media(idMal_in: $malIds, type: MANGA, sort: [ID]) { id idMal }
+    }
+  }
+`;
+
 export interface AnilistMangaContentPolicy {
   includeAdult: boolean;
   includeNovels: boolean;
@@ -449,3 +462,53 @@ export const sanitizeAnilistMangaPage = (
     }),
   };
 };
+
+const MAX_INT32 = 2_147_483_647;
+
+export interface AnilistMalLinkPage {
+  hasNextPage: boolean;
+  links: { anilistId: number; malId: number }[];
+}
+
+/**
+ * Undefined when the page is malformed, so the caller can leave the whole
+ * batch unchecked. Rows for IDs that were not requested are dropped.
+ */
+export const sanitizeAnilistMalLinkPage = (
+  value: unknown,
+  requested: ReadonlySet<number>
+): AnilistMalLinkPage | undefined => {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.pageInfo) ||
+    typeof value.pageInfo.hasNextPage !== 'boolean' ||
+    !Array.isArray(value.media) ||
+    value.media.length > ANILIST_MAL_LOOKUP_PAGE_SIZE
+  ) {
+    return undefined;
+  }
+  const links: AnilistMalLinkPage['links'] = [];
+  for (const item of value.media) {
+    if (!isRecord(item)) {
+      return undefined;
+    }
+    const anilistId = boundedInteger(item.id, 1, MAX_INT32);
+    if (anilistId === undefined) {
+      return undefined;
+    }
+    const malId = boundedInteger(item.idMal, 1, MAX_INT32);
+    if (malId !== undefined && requested.has(malId)) {
+      links.push({ anilistId, malId });
+    }
+  }
+  return { hasNextPage: value.pageInfo.hasNextPage, links };
+};
+
+/** Undefined when the reply is not a page of media at all. */
+export const sanitizeAnilistMangaSearch = (
+  value: unknown,
+  policy: AnilistMangaContentPolicy
+): AnilistMangaSummary[] | undefined =>
+  isRecord(value) && Array.isArray(value.media)
+    ? sanitizeAnilistMangaPage(value, policy).media
+    : undefined;

@@ -475,6 +475,150 @@ describe('AniList manga catalog requests', () => {
   });
 });
 
+describe('AniList library matching requests', () => {
+  const malPage = (
+    media: unknown[],
+    pageInfo: unknown = { hasNextPage: false }
+  ): StubResponse => ({ data: { data: { Page: { pageInfo, media } } } });
+
+  it('reads one page of MyAnimeList links and keeps only requested IDs', async () => {
+    const api = new AnilistAPI();
+    const bodies = stubAnilist(api, () =>
+      malPage(
+        [
+          { id: 10, idMal: 55 },
+          { id: 11, idMal: 55 },
+          { id: 12, idMal: 99 },
+          { id: 13, idMal: null },
+        ],
+        { hasNextPage: true }
+      )
+    );
+
+    const page = await api.getMangaIdsByMalIds([55, 56], 2);
+
+    assert.match(bodies[0].query, /idMal_in: \$malIds, type: MANGA/);
+    assert.match(bodies[0].query, /perPage: 50/);
+    assert.deepEqual(bodies[0].variables, { page: 2, malIds: [55, 56] });
+    assert.deepEqual(page, {
+      hasNextPage: true,
+      links: [
+        { anilistId: 10, malId: 55 },
+        { anilistId: 11, malId: 55 },
+      ],
+    });
+  });
+
+  it('rejects malformed MyAnimeList link pages', async () => {
+    const replies: StubResponse[] = [
+      { data: { data: { Page: null } } },
+      malPage([], {}),
+      malPage([], { hasNextPage: 'false' }),
+      { data: { data: { Page: { pageInfo: { hasNextPage: false } } } } },
+      malPage([{ id: 0, idMal: 55 }]),
+      malPage([{ id: '10', idMal: 55 }]),
+      malPage([{ id: 2_147_483_648, idMal: 55 }]),
+      malPage(['row']),
+      malPage(
+        Array.from({ length: 51 }, (_, index) => ({ id: index + 1, idMal: 55 }))
+      ),
+    ];
+    for (const reply of replies) {
+      const api = new AnilistAPI();
+      stubAnilist(api, () => reply);
+      await assert.rejects(
+        api.getMangaIdsByMalIds([55], 1),
+        (error: unknown) =>
+          error instanceof Error && error.name === 'AnilistBadResponseError'
+      );
+    }
+  });
+
+  it('sends every MyAnimeList lookup and honors cancel and rate limits', async () => {
+    const api = new AnilistAPI();
+    const bodies = stubAnilist(api, () => malPage([{ id: 10, idMal: 55 }]));
+
+    await api.getMangaIdsByMalIds([55], 1);
+    await api.getMangaIdsByMalIds([55], 1);
+    assert.equal(bodies.length, 2);
+
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(
+      api.getMangaIdsByMalIds([55], 1, { signal: controller.signal }),
+      (error: unknown) => axios.isCancel(error)
+    );
+    assert.equal(bodies.length, 2);
+
+    const limited = new AnilistAPI();
+    stubAnilist(limited, () => ({
+      status: 429,
+      data: {},
+      headers: { 'retry-after': '30' },
+    }));
+    await assert.rejects(
+      limited.getMangaIdsByMalIds([55], 1),
+      rateLimited(30, true)
+    );
+  });
+
+  it('searches titles under the content policy without caching', async () => {
+    const api = new AnilistAPI();
+    const bodies = stubAnilist(api, () =>
+      mangaPage([
+        mangaFixture({ id: 1 }),
+        mangaFixture({ id: 2, isAdult: true }),
+        mangaFixture({ id: 3, format: 'NOVEL' }),
+      ])
+    );
+    const policy = { includeAdult: false, includeNovels: false };
+
+    const first = await api.searchMangaTitles('Fake Title', policy);
+    await api.searchMangaTitles('Fake Title', policy);
+
+    assert.equal(bodies.length, 2);
+    assert.deepEqual(bodies[0].variables, {
+      page: 1,
+      perPage: 5,
+      sort: ['SEARCH_MATCH'],
+      search: 'Fake Title',
+      formatNotIn: ['NOVEL'],
+      isAdult: false,
+    });
+    assert.deepEqual(
+      first.map((manga) => manga.id),
+      [1]
+    );
+
+    const open = new AnilistAPI();
+    const openBodies = stubAnilist(open, () =>
+      mangaPage([mangaFixture({ id: 2, isAdult: true })])
+    );
+    const all = await open.searchMangaTitles('Fake Title', {
+      includeAdult: true,
+      includeNovels: true,
+    });
+    assert.deepEqual(openBodies[0].variables, {
+      page: 1,
+      perPage: 5,
+      sort: ['SEARCH_MATCH'],
+      search: 'Fake Title',
+    });
+    assert.deepEqual(
+      all.map((manga) => manga.id),
+      [2]
+    );
+
+    const broken = new AnilistAPI();
+    stubAnilist(broken, () => ({ data: { data: { Page: {} } } }));
+    await assert.rejects(
+      broken.searchMangaTitles('Fake Title', policy),
+      (error: unknown) =>
+        error instanceof Error && error.name === 'AnilistBadResponseError'
+    );
+  });
+});
+
 describe('manga detail mapping', () => {
   const details = {
     id: 30013,

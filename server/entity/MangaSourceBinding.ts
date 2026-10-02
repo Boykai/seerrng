@@ -29,6 +29,8 @@ export enum MangaBindingState {
 
 export const MANGA_BINDING_ORIGIN_LIBRARY_SCAN = 'library-scan';
 export const MANGA_MATCHED_BY_ANILIST_TRACKER = 'anilist-tracker';
+export const MANGA_MATCHED_BY_MAL_TRACKER = 'mal-tracker';
+export const MANGA_MATCHED_BY_MANGADEX_LINK = 'mangadex-link';
 
 /** The `urlHash` of bindings and candidates: SHA-256 of the URL, in hex. */
 export const hashMangaSourceUrl = (url: string): string =>

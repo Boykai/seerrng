@@ -26,6 +26,7 @@ import { proxyRequestInterceptor } from '@server/utils/customProxyAgent';
 import axios from 'axios';
 import {
   AnilistAuthError,
+  AnilistBadResponseError,
   AnilistGraphQLError,
   AnilistOutageError,
   AnilistRateLimitedError,
@@ -33,18 +34,24 @@ import {
   firstAnilistGraphQlError,
 } from './failures';
 import type {
+  AnilistMalLinkPage,
+  AnilistMangaContentPolicy,
   AnilistMangaDetails,
   AnilistMangaPage,
   AnilistMangaPageOptions,
+  AnilistMangaSummary,
 } from './manga';
 import {
   ANILIST_MANGA_DETAILS_TTL_SECONDS,
   ANILIST_MANGA_PAGE_TTL_SECONDS,
   MANGA_DETAILS_QUERY,
+  MANGA_IDS_BY_MAL_QUERY,
   MANGA_PAGE_QUERY,
   buildAnilistMangaPageVariables,
+  sanitizeAnilistMalLinkPage,
   sanitizeAnilistMangaDetails,
   sanitizeAnilistMangaPage,
+  sanitizeAnilistMangaSearch,
 } from './manga';
 import {
   ANILIST_DEFAULT_MAX_WAIT_MS,
@@ -54,6 +61,7 @@ import {
 
 export {
   AnilistAuthError,
+  AnilistBadResponseError,
   AnilistGraphQLError,
   AnilistOutageError,
   AnilistRateLimitedError,
@@ -61,6 +69,7 @@ export {
 } from './failures';
 
 const ANILIST_PAGE_SIZE = 20;
+const ANILIST_TITLE_SEARCH_SIZE = 5;
 const ANILIST_TOKEN_TTL_FALLBACK_SECONDS = 365 * 24 * 60 * 60;
 const PUBLIC_PAGE_CACHE_TTL_SECONDS = 300;
 
@@ -442,6 +451,51 @@ class AnilistAPI extends ExternalAPI {
     return sanitizeAnilistMangaPage(data.Page, options);
   }
 
+  /**
+   * One page of the AniList manga linked to these MyAnimeList IDs, for
+   * library matching. An exact link ignores the content policy; nothing is
+   * cached or shared with another caller.
+   */
+  async getMangaIdsByMalIds(
+    malIds: readonly number[],
+    page: number,
+    options: { signal?: AbortSignal } = {}
+  ): Promise<AnilistMalLinkPage> {
+    const data = await this.graphql<{ Page?: unknown }>(
+      MANGA_IDS_BY_MAL_QUERY,
+      { page, malIds },
+      0,
+      options.signal
+    );
+    const result = sanitizeAnilistMalLinkPage(data.Page, new Set(malIds));
+    if (!result) {
+      throw new AnilistBadResponseError();
+    }
+    return result;
+  }
+
+  /** The best title matches for library matching, uncached. */
+  async searchMangaTitles(
+    search: string,
+    policy: AnilistMangaContentPolicy,
+    options: { signal?: AbortSignal } = {}
+  ): Promise<AnilistMangaSummary[]> {
+    const data = await this.graphql<{ Page?: unknown }>(
+      MANGA_PAGE_QUERY,
+      buildAnilistMangaPageVariables(
+        { ...policy, page: 1, sort: ['SEARCH_MATCH'], search },
+        ANILIST_TITLE_SEARCH_SIZE
+      ),
+      0,
+      options.signal
+    );
+    const media = sanitizeAnilistMangaSearch(data.Page, policy);
+    if (!media) {
+      throw new AnilistBadResponseError();
+    }
+    return media;
+  }
+
   async saveMediaListEntry(options: {
     mediaId: number;
     status?: AnilistMediaListStatus;
@@ -516,15 +570,17 @@ class AnilistAPI extends ExternalAPI {
   private async graphql<T>(
     query: string,
     variables: Record<string, unknown>,
-    ttl: number
+    ttl: number,
+    signal?: AbortSignal
   ): Promise<T> {
     try {
+      const auth = this.accessToken
+        ? { headers: { Authorization: `Bearer ${this.accessToken}` } }
+        : undefined;
       const response = await this.post<GraphQLResponse<T>>(
         '',
         { query, variables },
-        this.accessToken
-          ? { headers: { Authorization: `Bearer ${this.accessToken}` } }
-          : undefined,
+        signal ? { ...auth, signal } : auth,
         ttl
       );
 

@@ -7,9 +7,20 @@ import { DataSource, type QueryRunner } from 'typeorm';
 import { AddMangaIdentityUniqueness1790986402000 } from './1790986402000-AddMangaIdentityUniqueness';
 import { AddMangaQuota1790986403000 } from './1790986403000-AddMangaQuota';
 import { AddMangaLibraryBindings1790986404000 } from './1790986404000-AddMangaLibraryBindings';
+import { AddMangaMatchProposals1790986405000 } from './1790986405000-AddMangaMatchProposals';
 
 const postgresUrl = process.env.SEERR_TEST_POSTGRES_URL;
 const postgresTest = postgresUrl ? test : test.skip;
+
+const MATCH_PROPOSAL_COLUMNS = [
+  { name: 'malId', type: 'integer' },
+  { name: 'malCheckedAt', type: 'timestamp with time zone' },
+  { name: 'mangadexCheckedAt', type: 'timestamp with time zone' },
+  { name: 'titleCheckedAt', type: 'timestamp with time zone' },
+  { name: 'proposedAnilistId', type: 'integer' },
+  { name: 'proposalConfidence', type: 'character varying(16)' },
+  { name: 'proposalScore', type: 'integer' },
+];
 
 const recordStatements = async (
   run: (queryRunner: QueryRunner) => Promise<void>
@@ -81,6 +92,34 @@ test('PostgreSQL manga library migration creates the SQLite indexes and drops bo
     [
       `DROP TABLE IF EXISTS "manga_match_candidate"`,
       `DROP TABLE IF EXISTS "manga_source_binding"`,
+    ]
+  );
+});
+
+test('PostgreSQL manga match proposal migration adds and drops its columns', async () => {
+  const migration = new AddMangaMatchProposals1790986405000();
+
+  assert.equal(migration.name, 'AddMangaMatchProposals1790986405000');
+  assert.deepStrictEqual(
+    await recordStatements(async (queryRunner) => {
+      await migration.up(queryRunner);
+      await migration.down(queryRunner);
+    }),
+    [
+      `ALTER TABLE "manga_match_candidate" ADD "malId" integer`,
+      `ALTER TABLE "manga_match_candidate" ADD "malCheckedAt" TIMESTAMP WITH TIME ZONE`,
+      `ALTER TABLE "manga_match_candidate" ADD "mangadexCheckedAt" TIMESTAMP WITH TIME ZONE`,
+      `ALTER TABLE "manga_match_candidate" ADD "titleCheckedAt" TIMESTAMP WITH TIME ZONE`,
+      `ALTER TABLE "manga_match_candidate" ADD "proposedAnilistId" integer`,
+      `ALTER TABLE "manga_match_candidate" ADD "proposalConfidence" character varying(16)`,
+      `ALTER TABLE "manga_match_candidate" ADD "proposalScore" integer`,
+      `ALTER TABLE "manga_match_candidate" DROP COLUMN "proposalScore"`,
+      `ALTER TABLE "manga_match_candidate" DROP COLUMN "proposalConfidence"`,
+      `ALTER TABLE "manga_match_candidate" DROP COLUMN "proposedAnilistId"`,
+      `ALTER TABLE "manga_match_candidate" DROP COLUMN "titleCheckedAt"`,
+      `ALTER TABLE "manga_match_candidate" DROP COLUMN "mangadexCheckedAt"`,
+      `ALTER TABLE "manga_match_candidate" DROP COLUMN "malCheckedAt"`,
+      `ALTER TABLE "manga_match_candidate" DROP COLUMN "malId"`,
     ]
   );
 });
@@ -225,6 +264,59 @@ postgresTest(
       assert.deepStrictEqual(
         await queryRunner.query(`SELECT "id" FROM "user"`),
         [{ id: 1 }]
+      );
+    });
+  }
+);
+
+postgresTest(
+  'PostgreSQL manga match proposal migration adds nullable columns reversibly',
+  async () => {
+    await withPostgresQueryRunner(async (queryRunner) => {
+      await queryRunner.query(
+        `CREATE TEMPORARY TABLE "manga_match_candidate" (
+          "id" integer PRIMARY KEY,
+          "title" varchar(512) NOT NULL
+        )`
+      );
+      await queryRunner.query(
+        `INSERT INTO "manga_match_candidate" ("id", "title") VALUES (1, 'Fake Library Title 1')`
+      );
+      const addedColumns = async () =>
+        queryRunner.query(
+          `SELECT a."attname" AS "name",
+                  format_type(a."atttypid", a."atttypmod") AS "type",
+                  a."attnotnull" AS "notNull"
+           FROM pg_attribute a
+           WHERE a."attrelid" = 'pg_temp."manga_match_candidate"'::regclass
+             AND a."attnum" > 0
+             AND NOT a."attisdropped"
+             AND a."attname" NOT IN ('id', 'title')
+           ORDER BY a."attnum"`
+        );
+
+      const migration = new AddMangaMatchProposals1790986405000();
+      await migration.up(queryRunner);
+
+      assert.deepStrictEqual(
+        await addedColumns(),
+        MATCH_PROPOSAL_COLUMNS.map((column) => ({ ...column, notNull: false }))
+      );
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "malId", "titleCheckedAt", "proposalConfidence" FROM "manga_match_candidate"`
+        ),
+        [{ malId: null, titleCheckedAt: null, proposalConfidence: null }]
+      );
+
+      await migration.down(queryRunner);
+
+      assert.deepStrictEqual(await addedColumns(), []);
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "id", "title" FROM "manga_match_candidate"`
+        ),
+        [{ id: 1, title: 'Fake Library Title 1' }]
       );
     });
   }
