@@ -676,15 +676,25 @@ describe('ReadarrAPI.addBook', () => {
       'post',
       async () => existingBook({ id: 10 })
     );
-    const searchMock = mock.method(api, 'searchBook', async () => {});
+    const commandPostMock = mock.fn(async () => ({
+      data: { id: 101, name: 'BookSearch', status: 'started' },
+    }));
+    (
+      api as unknown as {
+        axios: { post: typeof commandPostMock };
+      }
+    ).axios.post = commandPostMock;
 
     const result = await api.addBook(bookOptions);
 
     assert.strictEqual(result.id, 9);
     assert.strictEqual(getMock.mock.calls.length, 1);
     assert.strictEqual(postMock.mock.calls.length, 0);
-    assert.strictEqual(searchMock.mock.calls.length, 1);
-    assert.strictEqual(searchMock.mock.calls[0].arguments[0], 9);
+    assert.strictEqual(commandPostMock.mock.calls.length, 1);
+    assert.deepStrictEqual(commandPostMock.mock.calls[0].arguments[1], {
+      name: 'BookSearch',
+      bookIds: [9],
+    });
   });
 
   it('matches existing books with normalized ISBNs', async () => {
