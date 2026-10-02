@@ -69,6 +69,22 @@ const queueStatus = (state: string, chapterIds: number[] = []) => ({
 
 const STATUS = { downloadStatus: { state: 'STARTED' } };
 
+/** One ReverseIndex page holding an entry per request ID. */
+const indexPage = (
+  endCursor: unknown,
+  hasNextPage = true,
+  requestIds: number[] = []
+) =>
+  graphqlData({
+    metas: {
+      pageInfo: { hasNextPage, endCursor },
+      nodes: requestIds.map((id) => ({
+        key: `seerrng.request.${id}`,
+        value: String(id),
+      })),
+    },
+  });
+
 afterEach(async () => {
   mock.restoreAll();
   await Promise.all(servers.splice(0).map((server) => server.close()));
@@ -380,7 +396,7 @@ describe('SuwayomiAPI request meta', () => {
       }),
       graphqlData({
         metas: {
-          pageInfo: { hasNextPage: true, endCursor: 'cursor-1' },
+          pageInfo: { hasNextPage: false, endCursor: 'cursor-2' },
           nodes: [{ key: 'seerrng.request.44', value: '9' }],
         },
       })
@@ -403,6 +419,72 @@ describe('SuwayomiAPI request meta', () => {
     assert.deepEqual(server.operations('DeleteRequestIndex')[0].variables, {
       key: 'seerrng.request.42',
     });
+  });
+
+  it('refuses a next page without a usable cursor', async () => {
+    const server = await start();
+    const missing = [null, undefined, '', 42];
+    server.onOperation(
+      'ReverseIndex',
+      ...missing.map((cursor) => indexPage(cursor, true, [1]))
+    );
+    const api = connect(server);
+    for (const cursor of missing) {
+      await assert.rejects(
+        api.listRequestIndex(),
+        { code: 'BAD_RESPONSE' },
+        String(cursor)
+      );
+    }
+    assert.equal(server.operations('ReverseIndex').length, missing.length);
+  });
+
+  it('refuses a cursor longer than 256 characters', async () => {
+    const server = await start();
+    server.onOperation(
+      'ReverseIndex',
+      indexPage('c'.repeat(256), true, [1]),
+      indexPage(null, false, [2]),
+      indexPage('c'.repeat(257), true, [3])
+    );
+    const api = connect(server);
+    assert.deepEqual(await api.listRequestIndex(), [
+      { requestId: '1', value: '1' },
+      { requestId: '2', value: '2' },
+    ]);
+    await assert.rejects(api.listRequestIndex(), { code: 'BAD_RESPONSE' });
+  });
+
+  it('refuses a cursor it has already followed', async () => {
+    const server = await start();
+    server.onOperation(
+      'ReverseIndex',
+      indexPage('cursor-1', true, [1]),
+      indexPage('cursor-2', true, [2]),
+      indexPage('cursor-1', true, [3])
+    );
+    await assert.rejects(connect(server).listRequestIndex(), {
+      code: 'BAD_RESPONSE',
+    });
+    assert.deepEqual(
+      server.operations('ReverseIndex').map(({ variables }) => variables.after),
+      [null, 'cursor-1', 'cursor-2']
+    );
+  });
+
+  it('reads 100 pages and refuses an index that needs more', async () => {
+    const server = await start();
+    let pages = 100;
+    let page = 0;
+    server.onOperation('ReverseIndex', ({ variables }) => {
+      page = variables.after === null ? 1 : page + 1;
+      return indexPage(`cursor-${page}`, page < pages, [page]);
+    });
+    const api = connect(server);
+    assert.equal((await api.listRequestIndex()).length, 100);
+    pages = 101;
+    await assert.rejects(api.listRequestIndex(), { code: 'BAD_RESPONSE' });
+    assert.equal(server.operations('ReverseIndex').length, 200);
   });
 
   it('reads and writes the instance marker', async () => {

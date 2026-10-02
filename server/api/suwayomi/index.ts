@@ -94,6 +94,7 @@ const THUMBNAIL_TYPES = new Set([
 ]);
 const MAX_IDS_PER_CALL = 100;
 const MAX_INDEX_PAGES = 100;
+const MAX_CURSOR_LENGTH = 256;
 const MAX_INT = 2_147_483_647;
 const MAX_LONG = 9_223_372_036_854_775_807n;
 const REQUEST_ID_PATTERN = /^[1-9]\d{0,9}$/;
@@ -667,11 +668,16 @@ class SuwayomiAPI extends ExternalAPI {
     await this.deleteMeta(op, { key: requestIndexKey(requestId, op) }, options);
   }
 
+  /**
+   * Reads every request-index entry. A page list that cannot be followed to
+   * its end fails with BAD_RESPONSE instead of returning a partial index.
+   */
   async listRequestIndex(
     options: SuwayomiCallOptions = {}
   ): Promise<SuwayomiRequestIndexEntry[]> {
     const op = 'ReverseIndex';
     const entries: SuwayomiRequestIndexEntry[] = [];
+    const followed = new Set<string>();
     let after: string | null = null;
     for (let page = 0; page < MAX_INDEX_PAGES; page += 1) {
       const next: string | undefined = await this.run(
@@ -695,19 +701,21 @@ class SuwayomiAPI extends ExternalAPI {
             }
           }
           const pageInfo = isRecord(metas.pageInfo) ? metas.pageInfo : {};
+          if (pageInfo.hasNextPage !== true) return undefined;
           const cursor = pageInfo.endCursor;
-          return pageInfo.hasNextPage === true &&
-            typeof cursor === 'string' &&
-            cursor.length <= 256 &&
-            cursor !== after
+          return typeof cursor === 'string' &&
+            cursor !== '' &&
+            cursor.length <= MAX_CURSOR_LENGTH &&
+            !followed.has(cursor)
             ? cursor
-            : undefined;
+            : badResponse(op);
         }
       );
-      if (next === undefined) break;
+      if (next === undefined) return entries;
+      followed.add(next);
       after = next;
     }
-    return entries;
+    throw reportSuwayomiError(new SuwayomiError('BAD_RESPONSE', op));
   }
 
   async getInstanceMarker(
