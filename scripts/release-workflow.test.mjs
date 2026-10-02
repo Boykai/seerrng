@@ -152,6 +152,30 @@ test('AppImage uses the current launcher and excludes binaries above its glibc b
     build.run,
     /sha512-Qbh5QIWcyzZfp\+neSFDxSaS0PjyCv7NUVipXcOaEp0\+bCAynyGAoGnZirESQyPwpn\/VXBncpZCVa0cnD\+EWDmQ==/u
   );
+  assert.match(
+    build.run,
+    /manylinux_2_28_x86_64@sha256:[a-f0-9]{64}/u,
+    'AppImage native modules must be rebuilt in the pinned glibc 2.28 environment'
+  );
+  assert.match(
+    build.run,
+    /node-gyp rebuild --release --force_build=1 --nodedir=\/node-runtime/u,
+    'AppImage must compile better-sqlite3 from source for its Node runtime'
+  );
+  assert.match(
+    build.run,
+    /npm install --global --prefix \/tmp\/node-tooling/u,
+    'AppImage must keep node-gyp installation outside its read-only Node runtime mount'
+  );
+  assert.match(
+    build.run,
+    /install -m 0644 build\/Release\/better_sqlite3\.node prebuilds\/linux-x64\.node/u,
+    'AppImage must replace the incompatible upstream x64 SQLite prebuild'
+  );
+  assert.ok(
+    build.run.includes("sed -n 's/^[[:space:]]*Machine:[[:space:]]*//p'"),
+    'AppImage compatibility checks must ignore ELF binaries for other architectures'
+  );
   assert.match(build.run, /dpkg --compare-versions[\s\S]*gt 2\.29/u);
   assert.match(smoke.run, /--appimage-extract-and-run/u);
   assert.match(smoke.run, /api\/v1\/settings\/public/u);

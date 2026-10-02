@@ -222,9 +222,7 @@ jobs:
             > node.sha256
           sha256sum --check node.sha256
           mkdir -p node-runtime
-          tar -xJf "$node_archive" -C node-runtime --strip-components=1 \
-            "node-v${node_version}-linux-x64/bin/node" \
-            "node-v${node_version}-linux-x64/LICENSE"
+          tar -xJf "$node_archive" -C node-runtime --strip-components=1
           chmod +x appimagetool appimage-packaging/packaging/appimage/AppRun
           mkdir -p SeerrNG.AppDir/usr/bin SeerrNG.AppDir/usr/lib/seerrng SeerrNG.AppDir/usr/share/applications SeerrNG.AppDir/usr/share/icons/hicolor/256x256/apps SeerrNG.AppDir/usr/share/licenses/nodejs
           tar -xzf "seerrng-${{ steps.version.outputs.tag }}-linux-x64.tar.gz" --strip-components=1 -C SeerrNG.AppDir/usr/lib/seerrng
@@ -236,6 +234,20 @@ jobs:
           cp appimage-packaging/public/android-chrome-512x512.png SeerrNG.AppDir/seerrng.png
           cp appimage-packaging/public/android-chrome-512x512.png SeerrNG.AppDir/usr/share/icons/hicolor/256x256/apps/seerrng.png
           app_dir='SeerrNG.AppDir/usr/lib/seerrng'
+          manylinux_image='quay.io/pypa/manylinux_2_28_x86_64@sha256:c2261579b9c2e5d45aa93312f73e2a302182e3e977b558581a1838d6fed3d8e6'
+          docker run --rm \
+            --volume "$PWD/$app_dir:/app" \
+            --volume "$PWD/node-runtime:/node-runtime:ro" \
+            --workdir '/app/node_modules/.pnpm/better-sqlite3@13.0.3/node_modules/better-sqlite3' \
+            "$manylinux_image" \
+            /bin/bash -euc '
+              export PATH="/node-runtime/bin:$PATH"
+              npm install --global --prefix /tmp/node-tooling --ignore-scripts node-gyp@13.0.1
+              export PATH="/tmp/node-tooling/bin:$PATH"
+              node-gyp rebuild --release --force_build=1 --nodedir=/node-runtime
+              install -m 0644 build/Release/better_sqlite3.node prebuilds/linux-x64.node
+              rm -rf build
+            '
           swc_wasm_version="$(node -e "console.log(require(require('node:path').resolve(process.argv[1])).version)" "$app_dir/node_modules/next/package.json")"
           case "$swc_wasm_version" in
             16.3.6)
@@ -274,6 +286,11 @@ jobs:
           fi
           while IFS= read -r -d '' binary; do
             if ! readelf -h "$binary" >/dev/null 2>&1; then
+              continue
+            fi
+            machine="$(readelf -h "$binary" \
+              | sed -n 's/^[[:space:]]*Machine:[[:space:]]*//p')"
+            if [ "$machine" != 'Advanced Micro Devices X86-64' ]; then
               continue
             fi
             required_glibc="$(readelf --version-info "$binary" \
