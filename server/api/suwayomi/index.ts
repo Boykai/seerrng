@@ -66,6 +66,7 @@ import type {
 } from '@server/api/suwayomi/types';
 import logger from '@server/logger';
 import type { AxiosResponse } from 'axios';
+import { ClientRequest } from 'node:http';
 import { Readable, Transform } from 'node:stream';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -1131,7 +1132,7 @@ class SuwayomiAPI extends ExternalAPI {
     if (response.status !== 401 || !this.#tokens) {
       return response;
     }
-    discard(response.data);
+    discard(response);
     const token = await this.#tokens.renew(
       authorization?.slice(BEARER.length),
       signal
@@ -1223,11 +1224,17 @@ const invalidPayload = (
   );
 };
 
-const discard = (data: unknown): void => {
+/**
+ * Drops a response nobody will read. Axios wraps a capped stream in
+ * `Readable.from`, and destroying that wrapper neither reads nor closes the
+ * response underneath, so the request is destroyed to release its socket.
+ */
+const discard = ({ data, request }: AxiosResponse<unknown>): void => {
   if (data instanceof Readable) {
     data.on('error', () => undefined);
     data.destroy();
   }
+  if (request instanceof ClientRequest) request.destroy();
 };
 
 /** Copies `body` with backpressure and fails once more than `limit` bytes arrive. */

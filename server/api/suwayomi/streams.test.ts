@@ -13,8 +13,10 @@ import {
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { globalAgent } from 'node:http';
 import type { Readable } from 'node:stream';
 import { afterEach, describe, it, mock } from 'node:test';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 const USERNAME = 'fake-user';
 const PASSWORD = randomUUID();
@@ -53,6 +55,12 @@ const readAll = async (stream: Readable) => {
   }
   return Buffer.concat(chunks);
 };
+
+/** Counts the default agent's sockets for one origin in `pool`. */
+const pooled = (pool: NodeJS.ReadOnlyDict<unknown[]>, server: FakeSuwayomi) =>
+  Object.entries(pool)
+    .filter(([name]) => name.startsWith(`${new URL(server.url).host}:`))
+    .reduce((total, [, sockets]) => total + (sockets?.length ?? 0), 0);
 
 const archive = (body: Buffer, headers: Record<string, string> = {}) => ({
   status: 200,
@@ -229,6 +237,25 @@ describe('SuwayomiAPI chapter archive download', () => {
     assert.equal(sent[0], sent[1]);
     assert.notEqual(sent[1], sent[2]);
     assert.equal(server.refreshes, 1);
+  });
+
+  it('closes the rejected request instead of holding its connection', async () => {
+    const server = await start();
+    server.onRoute('GET', ARCHIVE, archive(Buffer.from('PK')));
+    const api = connect(server);
+    await readAll((await api.streamChapterArchive('11')).stream);
+    server.expireAccessTokens();
+    await readAll((await api.streamChapterArchive('11')).stream);
+    assert.equal(routeRequests(server, ARCHIVE).length, 3);
+    // An unread 401 body would otherwise keep its socket busy until the
+    // server's idle timeout, which is several seconds.
+    const deadline = Date.now() + 1_000;
+    while (pooled(globalAgent.sockets, server) > 0 && Date.now() < deadline) {
+      await sleep(20);
+    }
+    assert.equal(pooled(globalAgent.sockets, server), 0);
+    // The completed requests went back to this pool, so it was the one in use.
+    assert.ok(pooled(globalAgent.freeSockets, server) > 0);
   });
 
   it('stops waiting for a token renewal when the caller aborts', async () => {
