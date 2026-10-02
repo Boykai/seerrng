@@ -719,7 +719,7 @@ jobs:
 
   build-release-assets:
     name: Build release assets
-    needs: [validate-main-tag, verify]
+    needs: [validate-main-tag, create-draft-release]
     uses: ./.github/workflows/release-assets.yml
     with:
       tag: ${{ inputs.tag || github.ref_name }}

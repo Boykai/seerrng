@@ -15,7 +15,7 @@ const workflowDirectory = path.join(rootDirectory, '.github', 'workflows');
 const readWorkflow = (name) =>
   yaml.load(fs.readFileSync(path.join(workflowDirectory, name), 'utf8'));
 
-test('release package channels wait for the reusable release asset build', () => {
+test('release assets build while image verification runs, then package channels wait for both', () => {
   const release = readWorkflow('release.yml');
   const assetBuild = release.jobs['build-release-assets'];
   const packageDispatch = release.jobs['dispatch-package-channels'];
@@ -29,7 +29,8 @@ test('release package channels wait for the reusable release asset build', () =>
     'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
   );
   assert.equal(assetBuild.uses, './.github/workflows/release-assets.yml');
-  assert.deepEqual(assetBuild.needs, ['validate-main-tag', 'verify']);
+  assert.deepEqual(assetBuild.needs, ['validate-main-tag', 'create-draft-release']);
+  assert.equal(assetBuild.needs.includes('verify'), false);
   assert.equal(assetBuild.with.tag, '${{ inputs.tag || github.ref_name }}');
   assert.equal(assetBuild.permissions.actions, 'read');
   assert.deepEqual(packageDispatch.needs, ['verify', 'build-release-assets']);
@@ -475,7 +476,7 @@ test('release recovery validates reusable artifacts and repairs the failed relea
   assert.match(imageReuse.if, /inputs\.reuse_published_image == true/u);
   assert.match(imageReuse.run, /org\.opencontainers\.image\.revision/u);
   assert.match(imageReuse.run, /EXPECTED_SHA/u);
-  assert.deepEqual(assetBuild.needs, ['validate-main-tag', 'verify']);
+  assert.deepEqual(assetBuild.needs, ['validate-main-tag', 'create-draft-release']);
   assert.match(
     assetBuild.with.reuse_windows_x64_artifact,
     /needs\.validate-main-tag\.outputs\.reuse_windows_x64_artifact/u
