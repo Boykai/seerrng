@@ -126,10 +126,6 @@ const TmdbTitleCard = ({
     </div>
   );
 
-  if (!title && hasFallback) {
-    return renderFallback();
-  }
-
   if (!title && !error) {
     return (
       <div ref={ref}>
@@ -139,30 +135,34 @@ const TmdbTitleCard = ({
   }
 
   if (!title) {
-    if (!axios.isAxiosError(error) || error.response?.status !== 404) {
-      return (
-        <div ref={ref}>
-          <TitleCard
-            id={tmdbId}
-            title={fallbackTitleText}
-            mediaType={type}
-            summary={unavailableSummary}
-            canExpand={canExpand}
-            isAddedToWatchlist={isAddedToWatchlist}
-            mutateParent={mutateParent}
-          />
-        </div>
-      );
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return hasPermission(Permission.ADMIN) ? (
+        <TitleCard.ErrorCard
+          id={id}
+          tmdbId={tmdbId}
+          tvdbId={tvdbId}
+          type={type}
+        />
+      ) : null;
     }
 
-    return hasPermission(Permission.ADMIN) ? (
-      <TitleCard.ErrorCard
-        id={id}
-        tmdbId={tmdbId}
-        tvdbId={tvdbId}
-        type={type}
-      />
-    ) : null;
+    if (hasFallback) {
+      return renderFallback();
+    }
+
+    return (
+      <div ref={ref}>
+        <TitleCard
+          id={tmdbId}
+          title={fallbackTitleText}
+          mediaType={type}
+          summary={unavailableSummary}
+          canExpand={canExpand}
+          isAddedToWatchlist={isAddedToWatchlist}
+          mutateParent={mutateParent}
+        />
+      </div>
+    );
   }
 
   return isMovie(title) ? (
