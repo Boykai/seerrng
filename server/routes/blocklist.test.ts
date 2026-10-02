@@ -260,10 +260,12 @@ describe('POST /blocklist', () => {
     assert.strictEqual(created.status, 201);
     assert.strictEqual(duplicate.status, 412);
 
-    const [list, detail] = await Promise.all([
-      agent.get('/blocklist').query({ mediaType: MediaType.MANGA }),
-      agent.get('/blocklist/030013').query({ mediaType: MediaType.MANGA }),
-    ]);
+    const list = await agent
+      .get('/blocklist')
+      .query({ mediaType: MediaType.MANGA });
+    const detail = await agent
+      .get('/blocklist/030013')
+      .query({ mediaType: MediaType.MANGA });
     assert.strictEqual(list.status, 200);
     assert.deepStrictEqual(
       list.body.results.map((item: Blocklist) => item.title),
@@ -306,24 +308,25 @@ describe('POST /blocklist', () => {
 
   it('rejects malformed manga identities before persistence', async () => {
     const agent = await loginAs('admin@seerr.dev', 'test1234');
-    const responses = await Promise.all(
-      [
-        { externalId: 'abc' },
-        { externalId: '0' },
-        { externalId: '1000000001' },
-        {},
-        { externalId: '30013', tmdbId: 30013 },
-        {
-          externalId: '30013',
-          externalProvider: MediaIdentifierProvider.COMICVINE,
-        },
-      ].map((body) =>
-        agent.post('/blocklist').send({ mediaType: MediaType.MANGA, ...body })
-      )
-    );
+    const malformedIdentities = [
+      { externalId: 'abc' },
+      { externalId: '0' },
+      { externalId: '1000000001' },
+      {},
+      { externalId: '30013', tmdbId: 30013 },
+      {
+        externalId: '30013',
+        externalProvider: MediaIdentifierProvider.COMICVINE,
+      },
+    ];
 
-    for (const response of responses) {
-      assert.strictEqual(response.status, 400);
+    // One request at a time: supertest closes the agent's server when the
+    // request that started it finishes, which can reset concurrent requests.
+    for (const identity of malformedIdentities) {
+      const response = await agent
+        .post('/blocklist')
+        .send({ mediaType: MediaType.MANGA, ...identity });
+      assert.strictEqual(response.status, 400, JSON.stringify(identity));
       assert.strictEqual(response.body.message, 'Invalid manga identity.');
     }
     assert.strictEqual(await getRepository(Blocklist).count(), 0);
