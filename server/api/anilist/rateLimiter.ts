@@ -73,7 +73,8 @@ class AnilistRateLimiter {
       const slot = this.nextSlot(now);
       if (slot > deadline) {
         throw new AnilistRateLimitedError(
-          Math.max(1, Math.ceil((slot - now) / 1000))
+          Math.max(1, Math.ceil((slot - now) / 1000)),
+          { requestSent: false }
         );
       }
       this.starts.push(slot);

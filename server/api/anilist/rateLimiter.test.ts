@@ -30,6 +30,7 @@ const useFakeClock = () => {
 const assertRateLimited = (retryAfterSeconds: number) => (error: unknown) => {
   assert.ok(error instanceof AnilistRateLimitedError);
   assert.equal(error.retryAfterSeconds, retryAfterSeconds);
+  assert.equal(error.requestSent, false);
   return true;
 };
 

@@ -5,4 +5,4 @@ area: anilist
 action: none
 breaking: false
 ---
-AniList requests now share one budget of about 30 per minute across every AniList feature. SeerrNG honors AniList's Retry-After, and a request that would wait more than about 10 seconds now fails fast with a 429 instead of hanging.
+AniList requests now share one budget of about 30 per minute across every AniList feature. After AniList answers with a rate limit, SeerrNG sends nothing more until AniList's Retry-After time has passed. A request that would wait more than about 10 seconds for the budget fails fast with a rate-limit error asking you to try again later.

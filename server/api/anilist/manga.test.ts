@@ -121,11 +121,13 @@ const pageOptions = (
   ...overrides,
 });
 
-const rateLimited = (retryAfterSeconds: number) => (error: unknown) => {
-  assert.ok(error instanceof AnilistRateLimitedError);
-  assert.equal(error.retryAfterSeconds, retryAfterSeconds);
-  return true;
-};
+const rateLimited =
+  (retryAfterSeconds: number, requestSent: boolean) => (error: unknown) => {
+    assert.ok(error instanceof AnilistRateLimitedError);
+    assert.equal(error.retryAfterSeconds, retryAfterSeconds);
+    assert.equal(error.requestSent, requestSent);
+    return true;
+  };
 
 beforeEach(() => {
   now = 1_000_000;
@@ -168,8 +170,11 @@ describe('AniList shared request budget', () => {
     }));
     const animeBodies = stubAnilist(anime, animePage);
 
-    await assert.rejects(manga.getMangaPage(pageOptions()), rateLimited(120));
-    await assert.rejects(anime.getTrending(1), rateLimited(120));
+    await assert.rejects(
+      manga.getMangaPage(pageOptions()),
+      rateLimited(120, true)
+    );
+    await assert.rejects(anime.getTrending(1), rateLimited(120, false));
     assert.equal(animeBodies.length, 0);
 
     now += 120_000;
@@ -187,7 +192,7 @@ describe('AniList shared request budget', () => {
 
     await assert.rejects(
       searchClient.getMangaPage(pageOptions({ page: 2 })),
-      rateLimited(5)
+      rateLimited(5, false)
     );
     await client.getMangaPage(pageOptions({ page: 3 }));
     assert.deepEqual(sleeps, [5_000]);
@@ -247,13 +252,13 @@ describe('AniList shared request budget', () => {
 
     await assert.rejects(
       AnilistAPI.exchangePinCode('client-id', 'client-secret', 'code'),
-      rateLimited(90)
+      rateLimited(90, true)
     );
     mock.restoreAll();
 
     const api = new AnilistAPI();
     const bodies = stubAnilist(api, animePage);
-    await assert.rejects(api.getTrending(1), rateLimited(90));
+    await assert.rejects(api.getTrending(1), rateLimited(90, false));
     assert.equal(bodies.length, 0);
   });
 });

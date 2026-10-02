@@ -2,11 +2,15 @@
 // See NOTICE.md for attribution and license terms.
 export class AnilistRateLimitedError extends Error {
   public readonly retryAfterSeconds: number;
+  // False when the shared limiter refused the call before it was sent, so
+  // AniList never received it.
+  public readonly requestSent: boolean;
 
-  constructor(retryAfterSeconds = 60) {
+  constructor(retryAfterSeconds = 60, options: { requestSent?: boolean } = {}) {
     super(`AniList API rate limited; retry after ${retryAfterSeconds}s`);
     this.name = 'AnilistRateLimitedError';
     this.retryAfterSeconds = retryAfterSeconds;
+    this.requestSent = options.requestSent ?? true;
   }
 }
 
