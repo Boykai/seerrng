@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   createServer,
   type IncomingHttpHeaders,
@@ -186,7 +187,7 @@ export const startFakeSuwayomi = async (
 ): Promise<FakeSuwayomi> => {
   const mode = options.mode ?? 'UI_LOGIN';
   const username = options.username ?? 'fake-user';
-  const password = options.password ?? 'fake-password';
+  const password = options.password ?? randomUUID();
   const basePath = (options.basePath ?? '/').replace(/\/?$/, '/');
   const tokens = new Map<
     string,
