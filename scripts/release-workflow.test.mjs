@@ -25,6 +25,10 @@ test('release assets build while image verification runs, then package channels 
   ).run;
 
   assert.equal(
+    release.on.workflow_dispatch.inputs.reuse_package_workflow_runs.default,
+    '{}'
+  );
+  assert.equal(
     packageDispatch.steps[0].uses,
     'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
   );
@@ -50,6 +54,26 @@ test('release assets build while image verification runs, then package channels 
     /optional_workflows=\([\s\S]*release-snap\.yml/u
   );
   assert.match(dispatchScript, /watch-github-run\.mjs/u);
+  assert.match(dispatchScript, /REUSE_PACKAGE_WORKFLOW_RUNS/u);
+  assert.match(
+    dispatchScript,
+    /repos\/\$REPO\/actions\/runs\/\$reused_run_id/u,
+    'reused package runs must be fetched from this repository'
+  );
+  assert.match(
+    dispatchScript,
+    /\.status == "completed" and[\s\S]*\.conclusion == "success"/u,
+    'only successful completed package runs may be reused'
+  );
+  assert.match(
+    dispatchScript,
+    /RELEASE_TAG: \$TAG/u,
+    'reused package runs must prove they built the requested release tag'
+  );
+  assert.match(
+    dispatchScript,
+    /Skipping optional Chocolatey and Snap workflows during release recovery/u
+  );
   assert.match(
     dispatchScript,
     /node scripts\/watch-github-run\.mjs[\s\S]*\) &/u,

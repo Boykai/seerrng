@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: ''
+      reuse_package_workflow_runs:
+        description: JSON map of required package workflow filenames to successful run IDs for this exact tag
+        required: false
+        type: string
+        default: '{}'
       reuse_published_image:
         description: Reuse the image only after its revision label matches this tag
         required: false
@@ -777,6 +782,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag || github.ref_name }}
+          REUSE_FROM_RUN_ID: ${{ inputs.reuse_from_run_id || '' }}
+          REUSE_PACKAGE_WORKFLOW_RUNS: ${{ inputs.reuse_package_workflow_runs || '{}' }}
         run: |
           set -euo pipefail
           if [[ "$TAG" == *-* ]]; then
@@ -795,22 +802,67 @@ jobs:
             release-snap.yml
           )
           declare -A dispatch_started=()
+          required_names=()
+          required_run_ids=()
+          pending_names=()
+          allowed_reuse_workflows="$(printf '%s\n' "${required_workflows[@]}" | jq -R . | jq -s .)"
+          jq -e --argjson allowed "$allowed_reuse_workflows" '
+            type == "object" and
+            (keys - $allowed | length == 0) and
+            all(.[]; (tostring | test("^[0-9]+$")))
+          ' <<<"$REUSE_PACKAGE_WORKFLOW_RUNS" >/dev/null || {
+            echo 'Reusable package workflows must be a JSON object of required workflow names to numeric run IDs.' >&2
+            exit 1
+          }
 
-          for workflow in "${required_workflows[@]}" "${optional_workflows[@]}"; do
+          for workflow in "${required_workflows[@]}"; do
+            reused_run_id="$(jq -r --arg workflow "$workflow" '.[$workflow] // empty' <<<"$REUSE_PACKAGE_WORKFLOW_RUNS")"
+            if [[ -n "$reused_run_id" ]]; then
+              run_json="$(gh api "repos/$REPO/actions/runs/$reused_run_id")"
+              workflow_path=".github/workflows/$workflow"
+              jq -e --arg workflow_path "$workflow_path" '
+                .path == $workflow_path and
+                .event == "workflow_dispatch" and
+                .head_branch == "main" and
+                .status == "completed" and
+                .conclusion == "success"
+              ' <<<"$run_json" >/dev/null || {
+                echo "Refusing to reuse unsuccessful or mismatched package workflow run $reused_run_id for $workflow." >&2
+                exit 1
+              }
+              run_logs="$(gh run view "$reused_run_id" --repo "$REPO" --log)"
+              grep -Fq "RELEASE_TAG: $TAG" <<<"$run_logs" || {
+                echo "Refusing to reuse $workflow run $reused_run_id because its logs do not confirm tag $TAG." >&2
+                exit 1
+              }
+              echo "Reusing verified $workflow run $reused_run_id for $TAG."
+              required_names+=("$workflow")
+              required_run_ids+=("$reused_run_id")
+              continue
+            fi
+
             dispatch_started["$workflow"]="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             if ! gh workflow run "$workflow" --repo "$REPO" --ref main -f "tag=$TAG"; then
-              if [[ "$workflow" == "release-snap.yml" || "$workflow" == "release-chocolatey.yml" ]]; then
-                echo "::warning::Optional package workflow $workflow could not be dispatched; continuing."
-                continue
-              fi
               exit 1
             fi
             echo "Dispatched $workflow for $TAG."
+            pending_names+=("$workflow")
           done
 
-          required_names=()
-          required_run_ids=()
-          for workflow in "${required_workflows[@]}"; do
+          if [[ -z "$REUSE_FROM_RUN_ID" ]]; then
+            for workflow in "${optional_workflows[@]}"; do
+              dispatch_started["$workflow"]="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              if ! gh workflow run "$workflow" --repo "$REPO" --ref main -f "tag=$TAG"; then
+                echo "::warning::Optional package workflow $workflow could not be dispatched; continuing."
+                continue
+              fi
+              echo "Dispatched optional $workflow for $TAG."
+            done
+          else
+            echo 'Skipping optional Chocolatey and Snap workflows during release recovery.'
+          fi
+
+          for workflow in "${pending_names[@]}"; do
             run_id=""
             for attempt in {1..60}; do
               runs_json="$(gh api "repos/$REPO/actions/workflows/$workflow/runs?event=workflow_dispatch&branch=main&per_page=20")"
