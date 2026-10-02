@@ -21,7 +21,10 @@ import {
   type SonarrSettings,
 } from '@server/lib/settings';
 import { rankTmdbTvResults } from '@server/lib/tmdbRank';
-import { getAggregatedTvMetadata } from '@server/lib/videoMetadataCatalog';
+import {
+  getAggregatedTvMetadata,
+  VideoMetadataNotFoundError,
+} from '@server/lib/videoMetadataCatalog';
 import logger from '@server/logger';
 import { mapTvResult } from '@server/models/Search';
 import { mapSeasonWithEpisodes, mapTvDetails } from '@server/models/Tv';
@@ -293,6 +296,9 @@ tvRoutes.get('/:id', async (req, res, next) => {
 
     return res.status(200).json(filterEntityResponse(data, req.user));
   } catch (e) {
+    if (e instanceof VideoMetadataNotFoundError) {
+      return next({ status: 404, message: 'Series not found.', cause: e });
+    }
     logger.debug('Something went wrong retrieving series', {
       label: 'API',
       errorMessage: e.message,

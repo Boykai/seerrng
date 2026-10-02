@@ -58,6 +58,13 @@ export interface AggregatedTvMetadata {
   provenance: VideoMetadataProvenance;
 }
 
+export class VideoMetadataNotFoundError extends Error {
+  constructor() {
+    super('No cached or provider metadata is available for this title');
+    this.name = 'VideoMetadataNotFoundError';
+  }
+}
+
 interface VideoMetadataIdentity {
   tmdbId?: number;
   tvdbId?: number;
@@ -85,6 +92,21 @@ const SOURCE_REFRESH_AGE_MS: Record<VideoMetadataSource, number> = {
   [VideoMetadataSource.TVDB]: 30 * 24 * 60 * 60 * 1000,
   [VideoMetadataSource.TVMAZE]: 7 * 24 * 60 * 60 * 1000,
   [VideoMetadataSource.WIKIDATA]: 30 * 24 * 60 * 60 * 1000,
+};
+
+const errorHasHttpStatus = (error: unknown, status: number): boolean => {
+  const seen = new Set<object>();
+  let current: unknown = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    const candidate = current as {
+      cause?: unknown;
+      response?: { status?: unknown };
+    };
+    if (candidate.response?.status === status) return true;
+    current = candidate.cause;
+  }
+  return false;
 };
 
 const getTmdbSnapshotId = (tmdbId: number, language?: string): string =>
@@ -530,44 +552,38 @@ const decodeRecord = (
 const saveSourceDraft = async (
   draft: SourceDraft,
   now = new Date()
-): Promise<VideoMetadataSourceRecord> => {
+): Promise<void> => {
   const repository = getRepository(VideoMetadataSourceRecord);
   const sourceId = draft.sourceId.slice(0, 256);
-  const current = await repository.findOne({
-    where: {
+  const expiresAt = getVideoMetadataExpiry(now);
+  await repository.upsert(
+    {
       mediaType: draft.mediaType,
       provider: draft.provider,
       sourceId,
+      tmdbId: draft.tmdbId ?? null,
+      tvdbId: draft.tvdbId ?? null,
+      imdbId: draft.imdbId ?? null,
+      tvmazeId: draft.tvmazeId ?? null,
+      wikidataId: draft.wikidataId ?? null,
+      payload: JSON.stringify({
+        fields: draft.fields,
+        ...(draft.details ? { details: draft.details } : {}),
+      } satisfies NormalizedSnapshot),
+      attributionUrl:
+        draft.attributionUrl ??
+        getSourceLink(draft.provider, draft.mediaType, draft, sourceId),
+      fetchedAt: now,
+      refreshAt: new Date(
+        Math.min(
+          now.getTime() + SOURCE_REFRESH_AGE_MS[draft.provider],
+          expiresAt.getTime()
+        )
+      ),
+      expiresAt,
     },
-  });
-  const record = current ?? repository.create();
-  const expiresAt = getVideoMetadataExpiry(now);
-  Object.assign(record, {
-    mediaType: draft.mediaType,
-    provider: draft.provider,
-    sourceId,
-    tmdbId: draft.tmdbId ?? null,
-    tvdbId: draft.tvdbId ?? null,
-    imdbId: draft.imdbId ?? null,
-    tvmazeId: draft.tvmazeId ?? null,
-    wikidataId: draft.wikidataId ?? null,
-    payload: JSON.stringify({
-      fields: draft.fields,
-      ...(draft.details ? { details: draft.details } : {}),
-    } satisfies NormalizedSnapshot),
-    attributionUrl:
-      draft.attributionUrl ??
-      getSourceLink(draft.provider, draft.mediaType, draft, sourceId),
-    fetchedAt: now,
-    refreshAt: new Date(
-      Math.min(
-        now.getTime() + SOURCE_REFRESH_AGE_MS[draft.provider],
-        expiresAt.getTime()
-      )
-    ),
-    expiresAt,
-  });
-  return repository.save(record);
+    ['mediaType', 'provider', 'sourceId']
+  );
 };
 
 const loadVideoSourceRecords = async (
@@ -1432,6 +1448,7 @@ const aggregateVideoMetadata = async ({
     cachedTitles.alternateTitle ?? titleFromCache.originalTitle ?? undefined;
   const releaseDate = cachedTitles.releaseDate ?? titleFromCache.releaseDate;
 
+  let tmdbConfirmedMissing = false;
   const tmdbRefreshPromise =
     cachedTmdb && cachedTmdb.refreshAt > now
       ? Promise.resolve(undefined)
@@ -1454,6 +1471,9 @@ const aggregateVideoMetadata = async ({
             }
             return draft;
           } catch (error) {
+            if (errorHasHttpStatus(error, 404)) {
+              tmdbConfirmedMissing = true;
+            }
             logProviderRefreshFailure(
               VideoMetadataSource.TMDB,
               mediaType,
@@ -1666,6 +1686,7 @@ const aggregateVideoMetadata = async ({
       TmdbMovieDetails | TmdbTvDetails | undefined);
 
   if (!merged.fields.title && !tmdbDetails) {
+    if (tmdbConfirmedMissing) throw new VideoMetadataNotFoundError();
     throw new Error(
       'No cached or provider metadata is available for this title'
     );

@@ -15,7 +15,10 @@ import { Watchlist } from '@server/entity/Watchlist';
 import { upsertMediaSearchMetadata } from '@server/lib/mediaSearchMetadata';
 import { getSettings, type RadarrSettings } from '@server/lib/settings';
 import { rankTmdbMovieResults } from '@server/lib/tmdbRank';
-import { getAggregatedMovieMetadata } from '@server/lib/videoMetadataCatalog';
+import {
+  getAggregatedMovieMetadata,
+  VideoMetadataNotFoundError,
+} from '@server/lib/videoMetadataCatalog';
 import logger from '@server/logger';
 import { mapMovieDetails } from '@server/models/Movie';
 import { mapMovieResult } from '@server/models/Search';
@@ -229,6 +232,9 @@ movieRoutes.get('/:id', async (req, res, next) => {
 
     return res.status(200).json(filterEntityResponse(data, req.user));
   } catch (e) {
+    if (e instanceof VideoMetadataNotFoundError) {
+      return next({ status: 404, message: 'Movie not found.', cause: e });
+    }
     logger.debug('Something went wrong retrieving movie', {
       label: 'API',
       errorMessage: e.message,

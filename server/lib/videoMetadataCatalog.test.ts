@@ -16,6 +16,7 @@ import {
   getAggregatedTvMetadata,
   getVideoMetadataExpiry,
   pruneExpiredVideoMetadata,
+  VideoMetadataNotFoundError,
 } from './videoMetadataCatalog';
 
 const tmdbMovieId = 50123;
@@ -30,6 +31,17 @@ const tvdbRecord: TvdbVideoMetadataRecord = {
   companies: { production: [{ name: 'TVDB Studios' }] },
   remoteIds: [{ id: String(tmdbMovieId), sourceName: 'The Movie Database' }],
 };
+
+const mockPrivateMethod = mock.method as (
+  object: object,
+  methodName: string,
+  implementation: (...args: unknown[]) => unknown
+) => unknown;
+const mockPrivate = (
+  object: object,
+  methodName: string,
+  implementation: (...args: unknown[]) => unknown
+) => mockPrivateMethod.call(mock, object, methodName, implementation);
 
 describe('video metadata catalog', () => {
   before(async () => {
@@ -66,7 +78,7 @@ describe('video metadata catalog', () => {
   });
 
   it('merges independent source records when TMDB is unavailable and prunes them after expiry', async () => {
-    mock.method(ExternalAPI.prototype, 'get', async () => {
+    mockPrivate(ExternalAPI.prototype, 'get', async () => {
       throw new Error('TMDB is offline');
     });
 
@@ -159,6 +171,108 @@ describe('video metadata catalog', () => {
     assert.equal(clearedSearchMetadata.videoMetadataExpiresAt, null);
   });
 
+  it('upserts concurrent provider refreshes for the same source identity', async () => {
+    mockPrivate(ExternalAPI.prototype, 'get', async () => ({
+      id: tmdbMovieId,
+      title: 'Fallback Film',
+      original_title: 'Fallback Film',
+      overview: 'A TMDB description.',
+      release_date: '2020-06-01',
+      genres: [],
+      production_companies: [],
+      credits: { cast: [], crew: [] },
+      external_ids: { wikidata_id: 'Q201' },
+    }));
+
+    const tvdb = {
+      getVideoMetadataByTmdbId: async () => tvdbRecord,
+      searchVideoMetadata: async () => [tvdbRecord],
+    } as unknown as Tvdb;
+    mock.method(Tvdb, 'getInstance', async () => tvdb);
+
+    mock.method(
+      WikidataVideoMetadataAPI.prototype,
+      'searchItemsByExternalId',
+      async () => [{ id: 'Q201', label: 'Fallback Film' }]
+    );
+    mock.method(
+      WikidataVideoMetadataAPI.prototype,
+      'getVideoMetadata',
+      async () => ({
+        id: 'Q201',
+        title: 'Fallback Film',
+        overview: 'A Wikidata description.',
+        releaseDate: '2020-06-01',
+        genres: ['Drama'],
+        directors: [],
+        writers: [],
+        studios: [],
+        tmdbId: tmdbMovieId,
+      })
+    );
+
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        getAggregatedMovieMetadata(tmdbMovieId, 'en-US')
+      )
+    );
+    assert.equal(results.length, 4);
+    const records = await getRepository(VideoMetadataSourceRecord).find();
+    assert.deepEqual(
+      records.map(({ provider, sourceId }) => `${provider}:${sourceId}`).sort(),
+      ['tmdb:50123:en-us', 'tvdb:8801', 'wikidata:Q201'].sort()
+    );
+  });
+
+  it('reports a confirmed TMDB 404 as missing when no source has metadata', async () => {
+    mockPrivate(ExternalAPI.prototype, 'get', async () => {
+      throw Object.assign(new Error('TMDB not found'), {
+        response: { status: 404 },
+      });
+    });
+
+    const tvdb = {
+      getVideoMetadataByTmdbId: async () => undefined,
+      searchVideoMetadata: async () => [],
+    } as unknown as Tvdb;
+    mock.method(Tvdb, 'getInstance', async () => tvdb);
+    mock.method(
+      WikidataVideoMetadataAPI.prototype,
+      'searchItemsByExternalId',
+      async () => []
+    );
+
+    await assert.rejects(
+      getAggregatedMovieMetadata(998814, 'en-US'),
+      (error: unknown) => error instanceof VideoMetadataNotFoundError
+    );
+  });
+
+  it('keeps provider outages distinct from confirmed missing titles', async () => {
+    mockPrivate(ExternalAPI.prototype, 'get', async () => {
+      throw Object.assign(new Error('TMDB unavailable'), {
+        response: { status: 503 },
+      });
+    });
+
+    const tvdb = {
+      getVideoMetadataByTmdbId: async () => undefined,
+      searchVideoMetadata: async () => [],
+    } as unknown as Tvdb;
+    mock.method(Tvdb, 'getInstance', async () => tvdb);
+    mock.method(
+      WikidataVideoMetadataAPI.prototype,
+      'searchItemsByExternalId',
+      async () => []
+    );
+
+    await assert.rejects(
+      getAggregatedMovieMetadata(998815, 'en-US'),
+      (error: unknown) =>
+        error instanceof Error && !(error instanceof VideoMetadataNotFoundError)
+    );
+  });
+
   it('falls back to exact TVDB title and year matching after a direct ID lookup fails', async () => {
     const media = await getRepository(Media).save(
       new Media({
@@ -177,7 +291,7 @@ describe('video metadata catalog', () => {
       searchText: 'known series',
     });
 
-    mock.method(ExternalAPI.prototype, 'get', async () => {
+    mockPrivate(ExternalAPI.prototype, 'get', async () => {
       throw new Error('TMDB is offline');
     });
 
@@ -238,7 +352,7 @@ describe('video metadata catalog', () => {
 
   it('matches Wikidata TMDB identifiers for the requested media type', async () => {
     const seriesId = 667;
-    mock.method(ExternalAPI.prototype, 'get', async () => {
+    mockPrivate(ExternalAPI.prototype, 'get', async () => {
       throw new Error('TMDB is offline');
     });
 
@@ -318,7 +432,7 @@ describe('video metadata catalog', () => {
       searchText: 'tvmaze fallback series',
     });
 
-    mock.method(ExternalAPI.prototype, 'get', async () => {
+    mockPrivate(ExternalAPI.prototype, 'get', async () => {
       throw new Error('TMDB is offline');
     });
     const tvdb = {
