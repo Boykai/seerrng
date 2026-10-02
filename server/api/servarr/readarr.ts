@@ -1840,7 +1840,7 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
           }
         );
 
-        if (this.isChaptarr() && options.addOptions?.searchForNewBook) {
+        if (options.addOptions?.searchForNewBook) {
           await this.searchBook(existingBook.id);
         }
 
