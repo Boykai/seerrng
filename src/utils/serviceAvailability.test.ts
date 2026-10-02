@@ -1,10 +1,54 @@
+import { MEDIA_CATEGORY_KEYS } from '@server/constants/mediaCategories';
 import { strictEqual } from 'node:assert';
 import { describe, it } from 'node:test';
 import {
+  isConfiguredMediaCategoryEnabled,
   isDiscoverMediaTypeEnabled,
   isDiscoverWatchlistTypeEnabled,
   isOptionalCatalogPathEnabled,
 } from './serviceAvailability';
+
+describe('isConfiguredMediaCategoryEnabled', () => {
+  it('keeps manga off and existing categories on when the server omits them', () => {
+    strictEqual(isConfiguredMediaCategoryEnabled('manga', {}), false);
+    strictEqual(
+      isConfiguredMediaCategoryEnabled('manga', {
+        enabledMediaCategories: { movie: true },
+      }),
+      false
+    );
+    for (const category of MEDIA_CATEGORY_KEYS) {
+      strictEqual(isConfiguredMediaCategoryEnabled(category, {}), true);
+      strictEqual(
+        isConfiguredMediaCategoryEnabled(category, {
+          enabledMediaCategories: {},
+        }),
+        true
+      );
+    }
+  });
+
+  it('honours an explicit category setting', () => {
+    strictEqual(
+      isConfiguredMediaCategoryEnabled('manga', {
+        enabledMediaCategories: { manga: true },
+      }),
+      true
+    );
+    strictEqual(
+      isConfiguredMediaCategoryEnabled('manga', {
+        enabledMediaCategories: { manga: false },
+      }),
+      false
+    );
+    strictEqual(
+      isConfiguredMediaCategoryEnabled('comic', {
+        enabledMediaCategories: { comic: false, manga: true },
+      }),
+      false
+    );
+  });
+});
 
 describe('isOptionalCatalogPathEnabled', () => {
   it('hides optional catalogs without a configured backend service', () => {

@@ -295,3 +295,74 @@ describe('request root folder settings', () => {
     assert.strictEqual(response.status, 403);
   });
 });
+
+describe('manga quota settings', () => {
+  it('saves manga quota overrides from a user manager and returns the global default', async () => {
+    const settings = getSettings();
+    const originalMangaQuota = { ...settings.main.defaultQuotas.manga };
+    const admin = await loginAs('admin@seerr.dev', 'test1234');
+    const friend = await loginAs('friend@seerr.dev', 'test1234');
+    const route = `/user/${friend.userId}/settings/main`;
+    const postAs = (sessionCookie: string, body: Record<string, unknown>) =>
+      request(app)
+        .post(route)
+        .set('X-Forwarded-Proto', 'https')
+        .set('Cookie', sessionCookie)
+        .send(body);
+    const loadQuota = async () => {
+      const user = await getRepository(User).findOneOrFail({
+        where: { id: friend.userId },
+      });
+      return { limit: user.mangaQuotaLimit, days: user.mangaQuotaDays };
+    };
+
+    try {
+      settings.main.defaultQuotas.manga = { quotaLimit: 2, quotaDays: 7 };
+
+      const saved = await postAs(admin.sessionCookie, {
+        mangaQuotaLimit: 4,
+        mangaQuotaDays: 9,
+      });
+      assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
+      assert.deepStrictEqual(await loadQuota(), { limit: 4, days: 9 });
+
+      const loaded = await request(app)
+        .get(route)
+        .set('X-Forwarded-Proto', 'https')
+        .set('Cookie', admin.sessionCookie);
+      assert.strictEqual(loaded.status, 200);
+      assert.strictEqual(loaded.body.mangaQuotaLimit, 4);
+      assert.strictEqual(loaded.body.mangaQuotaDays, 9);
+      assert.strictEqual(loaded.body.globalMangaQuotaLimit, 2);
+      assert.strictEqual(loaded.body.globalMangaQuotaDays, 7);
+
+      const invalid = await postAs(admin.sessionCookie, {
+        mangaQuotaLimit: -1,
+      });
+      assert.strictEqual(invalid.status, 400);
+      assert.match(
+        invalid.body.message,
+        /mangaQuotaLimit must be a valid non-negative integer/
+      );
+
+      // Users cannot change their own quota.
+      const selfUpdate = await postAs(friend.sessionCookie, {
+        mangaQuotaLimit: 99,
+      });
+      assert.strictEqual(selfUpdate.status, 200);
+      assert.deepStrictEqual(await loadQuota(), { limit: 4, days: 9 });
+
+      const cleared = await postAs(admin.sessionCookie, {
+        mangaQuotaLimit: null,
+        mangaQuotaDays: null,
+      });
+      assert.strictEqual(cleared.status, 200);
+      assert.deepStrictEqual(await loadQuota(), {
+        limit: null,
+        days: null,
+      });
+    } finally {
+      settings.main.defaultQuotas.manga = originalMangaQuota;
+    }
+  });
+});

@@ -1,0 +1,54 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Manga Checks
+# Fork-only checks for the manga media type. The migrations job builds both
+# databases from empty with migrations, runs the manga migration round trip and
+# fails on entity/migration drift outside the reviewed allowlist.
+
+on:
+  pull_request:
+    branches:
+      - '*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migrations:
+    name: Migrations (SQLite and PostgreSQL)
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+
+      - name: Pnpm Setup
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Install dependencies
+        env:
+          CI: true
+          CYPRESS_INSTALL_BINARY: '0'
+        run: pnpm install --frozen-lockfile
+
+      - name: SQLite from empty, round trip and drift check
+        run: node scripts/manga-migration-checks.mjs sqlite
+
+      # The script starts a digest-pinned PostgreSQL container on 127.0.0.1
+      # with a random, masked password and always removes it with its volume.
+      - name: PostgreSQL from empty, round trip and drift check
+        run: node scripts/manga-migration-checks.mjs postgres

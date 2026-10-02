@@ -201,6 +201,69 @@ describe('MediaRequest.sendNotification', () => {
     );
     assert.strictEqual(savedPayload.mediaUrl, '/requests/status?requestId=21');
   });
+
+  it('builds manga payloads from the AniList identifier without network lookups', async (t) => {
+    const getWorkMock = mock.method(OpenLibraryAPI.prototype, 'getWork', () => {
+      throw new Error('Manga notifications must not query Open Library.');
+    });
+    t.after(() => getWorkMock.mock.restore());
+
+    const media = new Media({
+      mediaType: MediaType.MANGA,
+      tmdbId: 0,
+      status: MediaStatus.PENDING,
+      status4k: MediaStatus.UNKNOWN,
+      identifiers: [
+        new MediaIdentifier({
+          provider: MediaIdentifierProvider.ANILIST,
+          value: '30013',
+          canonical: true,
+        }),
+      ],
+    });
+    const entity = new MediaRequest({
+      type: MediaType.MANGA,
+      media,
+      requestedBy: createUser(),
+      status: MediaRequestStatus.APPROVED,
+      is4k: false,
+    });
+
+    const payload = await buildMediaRequestNotificationPayload(
+      entity,
+      media,
+      Notification.MEDIA_APPROVED
+    );
+    assert.strictEqual(payload.event, 'Manga Request Approved');
+    assert.strictEqual(payload.subject, 'AniList 30013');
+    assert.strictEqual(
+      payload.message,
+      'Manga request details are available in SeerrNG.'
+    );
+    assert.strictEqual(payload.mediaUrl, '/manga/30013');
+    assert.strictEqual(payload.image, undefined);
+
+    const unresolved = new Media({
+      mediaType: MediaType.MANGA,
+      tmdbId: 0,
+      identifiers: [],
+    });
+    const unresolvedPayload = await buildMediaRequestNotificationPayload(
+      new MediaRequest({
+        type: MediaType.MANGA,
+        media: unresolved,
+        requestedBy: createUser(),
+        status: MediaRequestStatus.PENDING,
+        is4k: false,
+      }),
+      unresolved,
+      Notification.MEDIA_PENDING
+    );
+    assert.strictEqual(unresolvedPayload.event, 'New Manga Request');
+    assert.strictEqual(unresolvedPayload.subject, 'Manga');
+    assert.strictEqual(unresolvedPayload.mediaUrl, undefined);
+    assert.strictEqual(getWorkMock.mock.callCount(), 0);
+  });
 });
 
 describe('notification media URLs', () => {

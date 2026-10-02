@@ -32,6 +32,8 @@ const blocklistRoutes = Router();
 const maxBlocklistId = 1_000_000_000;
 const maxBlocklistTextLength = 512;
 export const MAX_BLOCKLIST_COLLECTION_PARTS = 250;
+export const MANGA_BLOCKLIST_UNAVAILABLE_MESSAGE =
+  'Manga blocklisting is not available yet.';
 
 const strictPositiveInteger = z.preprocess(
   (value) =>
@@ -360,6 +362,12 @@ blocklistRoutes.post(
       const parsedBody = blocklistAdd.safeParse(req.body);
       if (!parsedBody.success) {
         return next({ status: 400, message: 'Invalid blocklist payload.' });
+      }
+      if (parsedBody.data.mediaType === MediaType.MANGA) {
+        return next({
+          status: 400,
+          message: MANGA_BLOCKLIST_UNAVAILABLE_MESSAGE,
+        });
       }
       const values = {
         ...parsedBody.data,

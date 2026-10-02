@@ -55,6 +55,7 @@ import { runMediaEntityMutation } from '@server/lib/mediaMutation';
 import { getLidarrAlbumMediaStatus } from '@server/lib/musicAvailability';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import requestDispatchManager, {
+  MAX_REQUEST_DISPATCH_RETRY_DELAY_MS,
   type RequestDispatchOutcome,
 } from '@server/lib/requestDispatch';
 import {
@@ -238,6 +239,14 @@ const getRequestDispatchServiceSelection = (
       serviceType: 'lazylibrarian',
       serviceIds: uniqueIds([selected?.id]),
     };
+  }
+  if (request.type === MediaType.MANGA) {
+    // dispatchWithServiceAuthority handles manga before any service selection.
+    throw new Error('Manga requests have no Servarr dispatch service.');
+  }
+  if (request.type !== MediaType.BOOK) {
+    const unsupportedType: never = request.type;
+    throw new Error(`Unsupported request type: ${String(unsupportedType)}`);
   }
 
   const format = request.bookFormat ?? 'ebook';
@@ -658,6 +667,11 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
   private async dispatchWithServiceAuthority(
     request: MediaRequest
   ): Promise<RequestDispatchOutcome> {
+    if (request.type === MediaType.MANGA) {
+      // Manga has no Servarr service, so it skips service admission entirely.
+      return this.dispatchApprovedRequest(request);
+    }
+
     const selection = await runWithServarrServiceCollectionAdmission(
       getRequestDispatchServiceSelection(request).serviceType,
       async () => getRequestDispatchServiceSelection(request)
@@ -752,7 +766,16 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       if (retryAfterMs !== undefined) {
         return { delivered: false, retryAfterMs };
       }
+    } else if (request.type === MediaType.MANGA) {
+      // No manga backend exists yet: keep the request queued at the longest
+      // retry delay instead of handing it to a book service.
+      return {
+        delivered: false,
+        retryAfterMs: MAX_REQUEST_DISPATCH_RETRY_DELAY_MS,
+      };
     } else {
+      const unsupportedType: never = request.type;
+      void unsupportedType;
       return { delivered: true };
     }
     const updated = await getRepository(MediaRequest).findOne({

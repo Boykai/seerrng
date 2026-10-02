@@ -81,4 +81,25 @@ describe('canRetryRequest', () => {
       })
     ).toBe(true);
   });
+
+  it('requires a manga request permission to retry manga requests', () => {
+    const retryManga = (permissions: number) =>
+      canRetryRequest({
+        requestType: 'manga',
+        is4k: false,
+        requestedById: 12,
+        userId: 12,
+        permissions,
+      });
+
+    expect(retryManga(Permission.REQUEST_MANGA)).toBe(true);
+    expect(retryManga(Permission.REQUEST)).toBe(true);
+    expect(
+      retryManga(
+        Permission.REQUEST_BOOK +
+          Permission.REQUEST_COMIC +
+          Permission.REQUEST_MAGAZINE
+      )
+    ).toBe(false);
+  });
 });

@@ -639,6 +639,24 @@ describe('GET /media', () => {
 });
 
 describe('GET /media/:id/watch_data', () => {
+  it('hides manga media while the manga category is off by default', async () => {
+    const media = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.AVAILABLE,
+      })
+    );
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const response = await agent.get(`/media/${media.id}/watch_data`);
+
+    assert.strictEqual(response.status, 404);
+    assert.match(response.body.message, /Media does not exist/);
+    assert.strictEqual(getMediaWatchStatsMock.mock.callCount(), 0);
+    assert.strictEqual(getMediaWatchUsersMock.mock.callCount(), 0);
+  });
+
   it('hides media from an administrator-disabled category', async () => {
     const settings = getSettings();
     const originalCategories = { ...settings.main.enabledMediaCategories };

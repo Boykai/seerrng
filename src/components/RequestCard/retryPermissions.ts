@@ -1,7 +1,7 @@
 import { hasPermission, Permission } from '@server/lib/permissions';
 
 export type RetryRequestMediaType =
-  'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine';
+  'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'manga';
 
 interface RetryRequestPermissionInput {
   requestType: RetryRequestMediaType;
@@ -10,6 +10,32 @@ interface RetryRequestPermissionInput {
   userId?: number;
   permissions: number;
 }
+
+const getRetryRequestPermissions = (
+  requestType: RetryRequestMediaType,
+  is4k: boolean
+): Permission[] => {
+  switch (requestType) {
+    case 'movie':
+      return is4k
+        ? [Permission.REQUEST_4K, Permission.REQUEST_4K_MOVIE]
+        : [Permission.REQUEST, Permission.REQUEST_MOVIE];
+    case 'tv':
+      return is4k
+        ? [Permission.REQUEST_4K, Permission.REQUEST_4K_TV]
+        : [Permission.REQUEST, Permission.REQUEST_TV];
+    case 'music':
+      return [Permission.REQUEST, Permission.REQUEST_MUSIC];
+    case 'book':
+      return [Permission.REQUEST, Permission.REQUEST_BOOK];
+    case 'comic':
+      return [Permission.REQUEST, Permission.REQUEST_COMIC];
+    case 'magazine':
+      return [Permission.REQUEST, Permission.REQUEST_MAGAZINE];
+    case 'manga':
+      return [Permission.REQUEST, Permission.REQUEST_MANGA];
+  }
+};
 
 export const canRetryRequest = ({
   requestType,
@@ -26,22 +52,9 @@ export const canRetryRequest = ({
     return false;
   }
 
-  const requestPermissions =
-    requestType === 'movie'
-      ? is4k
-        ? [Permission.REQUEST_4K, Permission.REQUEST_4K_MOVIE]
-        : [Permission.REQUEST, Permission.REQUEST_MOVIE]
-      : requestType === 'tv'
-        ? is4k
-          ? [Permission.REQUEST_4K, Permission.REQUEST_4K_TV]
-          : [Permission.REQUEST, Permission.REQUEST_TV]
-        : requestType === 'music'
-          ? [Permission.REQUEST, Permission.REQUEST_MUSIC]
-          : requestType === 'book'
-            ? [Permission.REQUEST, Permission.REQUEST_BOOK]
-            : requestType === 'comic'
-              ? [Permission.REQUEST, Permission.REQUEST_COMIC]
-              : [Permission.REQUEST, Permission.REQUEST_MAGAZINE];
-
-  return hasPermission(requestPermissions, permissions, { type: 'or' });
+  return hasPermission(
+    getRetryRequestPermissions(requestType, is4k),
+    permissions,
+    { type: 'or' }
+  );
 };

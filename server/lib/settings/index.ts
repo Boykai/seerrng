@@ -258,6 +258,7 @@ export interface MainSettings {
     book: Quota;
     comic: Quota;
     magazine: Quota;
+    manga: Quota;
     software: Quota;
   };
   enabledMediaCategories: EnabledMediaCategories;
@@ -607,6 +608,7 @@ class Settings {
           book: {},
           comic: {},
           magazine: {},
+          manga: {},
           software: {},
         },
         enabledMediaCategories: { ...DEFAULT_ENABLED_MEDIA_CATEGORIES },
@@ -1485,6 +1487,7 @@ class Settings {
           book: {},
           comic: {},
           magazine: {},
+          manga: {},
           software: {},
         },
         enabledMediaCategories: { ...DEFAULT_ENABLED_MEDIA_CATEGORIES },

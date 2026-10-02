@@ -1201,6 +1201,43 @@ describe('Settings route input validation', () => {
     }
   });
 
+  it('saves the manga category flag and manga default quota', async () => {
+    const settings = getSettings();
+    const originalCategories = { ...settings.main.enabledMediaCategories };
+    const originalMangaQuota = { ...settings.main.defaultQuotas.manga };
+
+    try {
+      const enabled = await request(app)
+        .post('/settings/main')
+        .send({ enabledMediaCategories: { manga: true } });
+      const invalidFlag = await request(app)
+        .post('/settings/main')
+        .send({ enabledMediaCategories: { manga: 'true' } });
+      const quota = await request(app)
+        .post('/settings/main')
+        .send({ defaultQuotas: { manga: { quotaLimit: 5, quotaDays: 14 } } });
+
+      assert.strictEqual(enabled.status, 200);
+      assert.strictEqual(enabled.body.enabledMediaCategories.manga, true);
+      assert.strictEqual(settings.main.enabledMediaCategories.manga, true);
+      assert.strictEqual(
+        settings.main.enabledMediaCategories.movie,
+        originalCategories.movie
+      );
+      assert.strictEqual(invalidFlag.status, 400);
+      assert.match(
+        invalidFlag.body.message,
+        /enabledMediaCategories\.manga must be a boolean/
+      );
+      assert.strictEqual(quota.status, 200);
+      assert.strictEqual(settings.main.defaultQuotas.manga.quotaLimit, 5);
+      assert.strictEqual(settings.main.defaultQuotas.manga.quotaDays, 14);
+    } finally {
+      settings.main.enabledMediaCategories = originalCategories;
+      settings.main.defaultQuotas.manga = originalMangaQuota;
+    }
+  });
+
   it('rejects unsafe Tautulli external URLs before saving', async () => {
     const settings = getSettings();
     const saveMock = mock.method(settings, 'save', async () => undefined);

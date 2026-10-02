@@ -102,6 +102,10 @@ export class NoSeasonsAvailableError extends Error {}
 export class BlocklistedMediaError extends Error {}
 export class ServiceConfigurationError extends Error {}
 
+// Manga has no request backend yet; the request layer replaces this refusal.
+export const MANGA_REQUESTS_UNAVAILABLE_MESSAGE =
+  'Manga requests are not available yet.';
+
 export type MediaRequestServiceTarget = {
   serviceType: ServarrServiceType;
   format:
@@ -227,6 +231,11 @@ export const hasMediaRequestPermission = (
     case MediaType.MAGAZINE:
       return user.hasPermission(
         [Permission.REQUEST, Permission.REQUEST_MAGAZINE],
+        { type: 'or' }
+      );
+    case MediaType.MANGA:
+      return user.hasPermission(
+        [Permission.REQUEST, Permission.REQUEST_MANGA],
         { type: 'or' }
       );
   }
@@ -379,6 +388,12 @@ export class MediaRequest {
     options: InternalMediaRequestOptions = {}
   ): Promise<MediaRequest> {
     requestBody = { ...requestBody, is4k: requestBody.is4k ?? false };
+
+    if (requestBody.mediaType === MediaType.MANGA) {
+      return Promise.reject(
+        new ServiceConfigurationError(MANGA_REQUESTS_UNAVAILABLE_MESSAGE)
+      );
+    }
 
     // Lock the requested target even when the actor's loaded permission snapshot
     // says they cannot select it. Permissions are reloaded under the security
@@ -564,6 +579,14 @@ export class MediaRequest {
       throw new RequestPermissionError(
         'You do not have permission to make magazine requests.'
       );
+    } else if (
+      requestBody.mediaType === MediaType.MANGA &&
+      !isManagedRequestForAnotherUser &&
+      !hasMediaRequestPermission(requestUser, requestBody.mediaType)
+    ) {
+      throw new RequestPermissionError(
+        'You do not have permission to make manga requests.'
+      );
     }
 
     if (requestBody.mediaType === MediaType.MAGAZINE) {
@@ -642,6 +665,8 @@ export class MediaRequest {
           return quotas.comic;
         case MediaType.MAGAZINE:
           return quotas.magazine;
+        case MediaType.MANGA:
+          return quotas.manga;
         default:
           return undefined;
       }
@@ -686,6 +711,11 @@ export class MediaRequest {
         quotas.magazine.restricted
       ) {
         throw new QuotaRestrictedError('Magazine Quota exceeded.');
+      } else if (
+        requestBody.mediaType === MediaType.MANGA &&
+        quotas.manga.restricted
+      ) {
+        throw new QuotaRestrictedError('Manga Quota exceeded.');
       }
     }
 

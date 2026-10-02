@@ -2574,6 +2574,8 @@ components:
               type: boolean
             game:
               type: boolean
+            manga:
+              type: boolean
     MovieResult:
       type: object
       required:
@@ -9120,6 +9122,8 @@ paths:
                   comic:
                     $ref: '#/components/schemas/QuotaStatus'
                   magazine:
+                    $ref: '#/components/schemas/QuotaStatus'
+                  manga:
                     $ref: '#/components/schemas/QuotaStatus'
                   software:
                     $ref: '#/components/schemas/QuotaStatus'

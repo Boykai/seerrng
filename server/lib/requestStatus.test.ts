@@ -687,3 +687,56 @@ test('request failures and declines remain visible as terminal attention states'
   assert.equal(deleted.stage, RequestStatusStage.UNAVAILABLE);
   assert.equal(deleted.needsAttention, true);
 });
+
+test('manga requests never borrow book progress, service names or links', () => {
+  const bookProgress = mock.method(downloadTracker, 'getBookProgress', () => [
+    download({ mediaType: MediaType.BOOK }),
+  ]);
+  try {
+    // Linked service fields prove manga does not fall through to book state.
+    const manga = request({
+      type: MediaType.MANGA,
+      media: {
+        ...request().media,
+        mediaType: MediaType.MANGA,
+        audiobookServiceId: 11,
+        audiobookExternalServiceId: 21,
+      },
+    });
+
+    const approved = getRequestStatus(manga);
+    assert.equal(approved.stage, RequestStatusStage.SEARCHING);
+    assert.equal(approved.downloadCount, 0);
+    assert.equal(approved.percent, null);
+    assert.equal(approved.service, null);
+
+    const unavailable = getRequestStatus(manga, {
+      latestEvent: {
+        id: 1,
+        requestId: 1,
+        requestedById: 2,
+        mediaId: 3,
+        mediaType: MediaType.MANGA,
+        stage: RequestStatusStage.UNAVAILABLE,
+        attempt: 1,
+        format: null,
+        service: null,
+        fingerprint: 'unavailable:1',
+        message: 'Manga requests are not available yet.',
+        percent: null,
+        size: null,
+        sizeLeft: null,
+        estimatedCompletionTime: null,
+        downloadCount: 0,
+        downloadId: null,
+        createdAt: new Date(date.getTime() + 1_000),
+      },
+    });
+    assert.equal(unavailable.stage, RequestStatusStage.UNAVAILABLE);
+    assert.equal(unavailable.service, null);
+    assert.equal(unavailable.retryable, true);
+    assert.equal(bookProgress.mock.callCount(), 0);
+  } finally {
+    bookProgress.mock.restore();
+  }
+});

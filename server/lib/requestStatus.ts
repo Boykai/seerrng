@@ -274,6 +274,11 @@ const getMusicTarget = (
 };
 
 const hasRequestedServiceLink = (request: RequestLike): boolean => {
+  // Manga has no request service until its backend exists.
+  if (request.type === MediaType.MANGA) {
+    return false;
+  }
+
   if (request.type === MediaType.BOOK) {
     if (request.bookFormat === 'audiobook') {
       return hasRequestedBookFormat(request.media, 'audiobook');
@@ -533,6 +538,9 @@ const getDownloadItems = (request: RequestLike): DownloadingItem[] => {
         )
       : [];
   }
+  if (request.type === MediaType.MANGA) {
+    return [];
+  }
 
   const ebookDownloads =
     media.serviceId !== null &&
@@ -618,6 +626,10 @@ const getServarrHistoryEvidence = (
 };
 
 const getServiceName = (request: RequestLike): string | null => {
+  if (request.type === MediaType.MANGA) {
+    return null;
+  }
+
   const settings = getExternalRuntimeConfig();
   const names = new Set<string>();
   const add = (name: string | undefined) => {

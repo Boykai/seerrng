@@ -1535,7 +1535,7 @@ const RequestStatusCard = ({
 
   return (
     <>
-      {showEditModal && (
+      {showEditModal && item.request.type !== 'manga' && (
         <RequestModal
           show
           tmdbId={

@@ -9,6 +9,7 @@ import {
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
+import type { EnabledMediaCategories } from '@server/constants/mediaCategories';
 import dataSource, { getRepository } from '@server/datasource';
 import DiscoverSlider from '@server/entity/DiscoverSlider';
 import Media from '@server/entity/Media';
@@ -28,6 +29,7 @@ import request from 'supertest';
 import router, {
   EXTERNAL_METADATA_RATE_LIMIT,
   PUBLIC_BACKDROPS_RATE_LIMIT,
+  categoryAvailabilityGuard,
   getCommitUpdateStatus,
   getReleaseUpdateStatus,
 } from './index';
@@ -587,5 +589,68 @@ describe('Top-level API route validation', () => {
 
     assert.strictEqual(res.status, 400);
     assert.match(res.body.message, /Watch region/);
+  });
+});
+
+describe('categoryAvailabilityGuard', () => {
+  const requestGuarded = (
+    ...guardArgs: Parameters<typeof categoryAvailabilityGuard>
+  ) => {
+    const guardedApp = express();
+    guardedApp.get(
+      '/guarded',
+      categoryAvailabilityGuard(...guardArgs),
+      (_req, res) => {
+        res.status(200).json({ reached: true });
+      }
+    );
+    return request(guardedApp).get('/guarded');
+  };
+
+  const withCategories = async (
+    overrides: Partial<EnabledMediaCategories>,
+    run: () => Promise<void>
+  ) => {
+    const settings = getSettings();
+    const originalCategories = { ...settings.main.enabledMediaCategories };
+    settings.main.enabledMediaCategories = {
+      ...originalCategories,
+      ...overrides,
+    };
+    try {
+      await run();
+    } finally {
+      settings.main.enabledMediaCategories = originalCategories;
+    }
+  };
+
+  it('hides manga routes until an administrator enables manga', async () => {
+    await withCategories({ manga: false }, async () => {
+      const response = await requestGuarded(['manga']);
+      assert.strictEqual(response.status, 404);
+      assert.deepStrictEqual(response.body, {
+        status: 404,
+        message: 'Not found.',
+      });
+    });
+
+    await withCategories({ manga: true }, async () => {
+      const response = await requestGuarded(['manga']);
+      assert.strictEqual(response.status, 200);
+      assert.deepStrictEqual(response.body, { reached: true });
+    });
+  });
+
+  it('combines manga with existing categories in all and any modes', async () => {
+    await withCategories({ manga: false, comic: true }, async () => {
+      assert.strictEqual(
+        (await requestGuarded(['manga', 'comic'])).status,
+        404
+      );
+      assert.strictEqual(
+        (await requestGuarded(['manga', 'comic'], 'any')).status,
+        200
+      );
+    });
   });
 });
