@@ -248,6 +248,22 @@ describe('SuwayomiAPI catalog and library', () => {
     await assert.rejects(api.fetchMangaAndChapters('7'), { code: 'TIMEOUT' });
   });
 
+  it('reports an abort during the timeout read-back as ABORTED', async () => {
+    const server = await start();
+    const controller = new AbortController();
+    server.onOperation('FetchMangaAndChapters', { hang: true });
+    server.onOperation('MangaDetails', () => {
+      controller.abort();
+      return { hang: true };
+    });
+    const api = connect(server, { timeouts: { query: 5_000, source: 100 } });
+    await assert.rejects(
+      api.fetchMangaAndChapters('7', { signal: controller.signal }),
+      { code: 'ABORTED' }
+    );
+    assert.equal(server.operations('MangaDetails').length, 1);
+  });
+
   it('gives source calls the longer source timeout', async () => {
     const server = await start();
     server.onOperation('SearchSource', {

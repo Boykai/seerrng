@@ -478,7 +478,8 @@ class SuwayomiAPI extends ExternalAPI {
   /**
    * Fetches from the source. Cached data that Suwayomi returns alongside an
    * error is reported with `fresh: false`; a client timeout is confirmed by
-   * reading the stored manga back before it counts as a failure.
+   * reading the stored manga back before it counts as a failure. Cancelling
+   * that read-back still reports ABORTED.
    */
   async fetchMangaAndChapters(
     mangaId: string,
@@ -518,7 +519,11 @@ class SuwayomiAPI extends ExternalAPI {
     } catch (error) {
       if (failureCode(error) !== 'TIMEOUT') throw error;
       const manga = await this.getMangaDetails(mangaId, options).catch(
-        () => undefined
+        (readError: unknown) => {
+          const readFailure = toSuwayomiError(readError, op);
+          if (readFailure.code === 'ABORTED') throw readFailure;
+          return undefined;
+        }
       );
       if (!manga) throw error;
       return { fresh: false, issue: 'TIMEOUT', manga };
