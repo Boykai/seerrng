@@ -117,6 +117,16 @@ const projectMediaListItem = (media: Media): MediaListItem => ({
   ...(media.imdbId != null ? { imdbId: media.imdbId } : {}),
   ...(media.mbId != null ? { mbId: media.mbId } : {}),
   ...(media.mediaAddedAt != null ? { mediaAddedAt: media.mediaAddedAt } : {}),
+  ...(media.searchMetadata?.title ? { title: media.searchMetadata.title } : {}),
+  ...(media.searchMetadata?.overview
+    ? { overview: media.searchMetadata.overview }
+    : {}),
+  ...(media.searchMetadata?.posterPath
+    ? { posterPath: media.searchMetadata.posterPath }
+    : {}),
+  ...(media.searchMetadata?.releaseDate
+    ? { releaseDate: media.searchMetadata.releaseDate }
+    : {}),
 });
 
 export const parseTautulliPlexUserIds = (value: unknown): number[] => {
@@ -383,6 +393,7 @@ mediaRoutes.get(
       const [media, mediaCount] = await mediaRepository.findAndCount({
         order: sortFilter,
         where: whereClause,
+        relations: { searchMetadata: true },
         take: pageSize,
         skip,
       });

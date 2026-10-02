@@ -188,6 +188,8 @@ movieRoutes.get('/:id', async (req, res, next) => {
 
     await upsertMediaSearchMetadata(media?.id, {
       title: data.title,
+      overview: data.overview,
+      posterPath: data.posterPath,
       alternateTitle: data.originalTitle,
       releaseDate: data.releaseDate,
       genres: data.genres.map((genre) => genre.name).join(', '),

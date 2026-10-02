@@ -3482,6 +3482,8 @@
   "components.TitleCard.magazineTracked": "Tracked",
   "components.TitleCard.magazineTrackedReason": "This title is already tracked by LazyLibrarian.",
   "components.TitleCard.mediaerror": "{mediaType} Not Found",
+  "components.TitleCard.metadataFallback": "{provider} lookup failed. Showing saved details.",
+  "components.TitleCard.metadataUnavailable": "{provider} lookup failed. Try again later.",
   "components.TitleCard.requestBookFormat": "Request {format}",
   "components.TitleCard.tmdbid": "TMDB ID",
   "components.TitleCard.tvdbid": "TheTVDB ID",

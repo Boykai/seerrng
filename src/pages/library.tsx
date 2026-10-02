@@ -543,6 +543,7 @@ export default function LibraryPage() {
                 tmdbId={item.tmdbId}
                 type={item.mediaType}
                 title={item.title}
+                posterPath={item.imageUrl}
               />
             ) : (
               <>

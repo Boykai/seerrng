@@ -206,6 +206,8 @@ tvRoutes.get('/:id', async (req, res, next) => {
 
     await upsertMediaSearchMetadata(media?.id, {
       title: data.name,
+      overview: data.overview,
+      posterPath: data.posterPath,
       alternateTitle: data.originalName,
       releaseDate: data.firstAirDate,
       genres: data.genres.map((genre) => genre.name).join(', '),

@@ -584,6 +584,7 @@ const UserProfile = () => {
                       id={item.tmdbId}
                       tmdbId={item.tmdbId}
                       type={item.mediaType === 'tv' ? 'tv' : 'movie'}
+                      title={item.title}
                     />
                   ) : null}
                 </div>
@@ -617,6 +618,10 @@ const UserProfile = () => {
                     tmdbId={item.tmdbId}
                     tvdbId={item.tvdbId}
                     type={item.mediaType === 'tv' ? 'tv' : 'movie'}
+                    title={item.searchMetadata?.title ?? undefined}
+                    posterPath={item.searchMetadata?.posterPath ?? undefined}
+                    summary={item.searchMetadata?.overview ?? undefined}
+                    year={item.searchMetadata?.releaseDate?.slice(0, 4)}
                   />
                 ))}
             />

@@ -25,6 +25,12 @@ export class MediaSearchMetadata {
   public title?: string | null;
 
   @Column({ type: 'text', nullable: true })
+  public overview?: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  public posterPath?: string | null;
+
+  @Column({ type: 'text', nullable: true })
   public alternateTitle?: string | null;
 
   @Column({ type: 'text', nullable: true })

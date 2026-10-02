@@ -70,6 +70,10 @@ const PROXIED_IMAGE_PREFIXES = {
     source: /^https:\/\/artworks\.thetvdb\.com\//,
     target: '/imageproxy/tvdb/',
   },
+  tvmaze: {
+    source: /^https:\/\/static\.tvmaze\.com\//,
+    target: '/imageproxy/tvmaze/',
+  },
   musicCoverArtArchive: {
     source: /^https:\/\/coverartarchive\.org\//,
     target: '/imageproxy/coverartarchive/',

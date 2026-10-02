@@ -6,6 +6,8 @@ export type MediaSearchMetadataInput = Partial<
   Pick<
     MediaSearchMetadata,
     | 'title'
+    | 'overview'
+    | 'posterPath'
     | 'alternateTitle'
     | 'releaseDate'
     | 'genres'
@@ -70,6 +72,16 @@ export const upsertMediaSearchMetadata = async (
     const repository = getRepository(MediaSearchMetadata);
     const existing = await repository.findOne({ where: { mediaId } });
     const next = existing ?? repository.create({ mediaId, searchText: '' });
+
+    const overview = clean(input.overview);
+    if (overview) {
+      next.overview = overview;
+    }
+
+    const posterPath = clean(input.posterPath);
+    if (posterPath) {
+      next.posterPath = posterPath;
+    }
 
     for (const field of searchableFields) {
       const value = clean(input[field]);
