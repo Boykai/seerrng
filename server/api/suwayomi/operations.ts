@@ -50,17 +50,19 @@ export const SUWAYOMI_OPERATIONS = {
     'public',
     'query Probe { aboutServer { name version buildType } }'
   ),
+  // Suwayomi refuses introspection that selects `__schema`, `__type` or
+  // `__Type.fields` more than once per request, so one `types` list carries
+  // the root, manga and chapter field names.
   Capabilities: op(
     'query',
     'user',
     `query Capabilities {
       aboutServer { name version buildType }
       __schema {
-        queryType { fields(includeDeprecated: true) { name } }
-        mutationType { fields(includeDeprecated: true) { name } }
+        queryType { name }
+        mutationType { name }
+        types { name fields(includeDeprecated: true) { name } }
       }
-      mangaType: __type(name: "MangaType") { fields(includeDeprecated: true) { name } }
-      chapterType: __type(name: "ChapterType") { fields(includeDeprecated: true) { name } }
     }`
   ),
   AuthTest: op('query', 'user', 'query AuthTest { downloadStatus { state } }'),

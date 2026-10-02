@@ -12,7 +12,11 @@ import {
   toSuwayomiError,
 } from '@server/api/suwayomi/errors';
 import {
+  mapChapter,
   mapHealth,
+  mapMangaDetails,
+  mapMangaSummary,
+  mapQueue,
   mapSource,
   sanitizeVersion,
   text,
@@ -20,13 +24,24 @@ import {
 } from '@server/api/suwayomi/mappers';
 import { ROOT_FIELDS } from '@server/api/suwayomi/operations';
 import logger from '@server/logger';
-import { syntheticFailure } from '@server/test/fakeSuwayomi';
+import { nullValueError, syntheticFailure } from '@server/test/fakeSuwayomi';
 import { AxiosError, CanceledError } from 'axios';
 import assert from 'node:assert/strict';
 import { afterEach, describe, it, mock } from 'node:test';
 
 const OP = 'Test';
 const badResponse = { name: 'SuwayomiError', code: 'BAD_RESPONSE' };
+
+const summary = {
+  id: 7,
+  sourceId: '9223372036854775807',
+  url: '/title/fake-7',
+  title: ' Fake\r\nTitle ',
+  author: 'Fake Author',
+  status: 'ONGOING',
+  inLibrary: true,
+  initialized: true,
+};
 
 const fields = (names: readonly string[]) => ({
   fields: names.map((name) => ({ name })),
@@ -65,6 +80,138 @@ describe('Suwayomi response mapping', () => {
     assert.equal(text('   '), undefined);
     assert.equal(text('x'.repeat(600))?.length, 512);
     assert.equal(text(5), undefined);
+  });
+
+  it('maps a manga summary', () => {
+    assert.deepEqual(mapMangaSummary(summary, OP), {
+      id: '7',
+      sourceId: '9223372036854775807',
+      url: '/title/fake-7',
+      title: 'Fake  Title',
+      author: 'Fake Author',
+      status: 'ONGOING',
+      inLibrary: true,
+      initialized: true,
+    });
+    assert.equal(
+      mapMangaSummary({ ...summary, status: 'NEW' }, OP).status,
+      'UNKNOWN'
+    );
+  });
+
+  it('rejects summaries without a usable identity', () => {
+    for (const patch of [
+      { id: undefined },
+      { id: -3 },
+      { sourceId: 'abc' },
+      { url: '' },
+      { url: '/a\r\nb' },
+      { url: 'x'.repeat(2_049) },
+    ]) {
+      assert.throws(
+        () => mapMangaSummary({ ...summary, ...patch }, OP),
+        badResponse
+      );
+    }
+    assert.throws(() => mapMangaSummary(null, OP), badResponse);
+  });
+
+  it('maps details and keeps only seerrng meta', () => {
+    const details = mapMangaDetails(
+      {
+        ...summary,
+        description: ' line one\r\nline two\u0007 ',
+        genre: ['Action', 7, ' Drama\n', ...Array(60).fill('Extra')],
+        inLibraryAt: 0,
+        lastFetchedAt: '1700000000',
+        chaptersLastFetchedAt: 1_700_000_001,
+        downloadCount: 3,
+        unreadCount: 'many',
+        hasDuplicateChapters: true,
+        chapters: { totalCount: 12 },
+        meta: [
+          { key: 'seerrng.request', value: '{"requestId":"1"}' },
+          { key: 'other.app', value: 'ignored' },
+          { key: 'seerrng.big', value: 'x'.repeat(4_097) },
+          { key: 'seerrng.number', value: 5 },
+        ],
+      },
+      OP
+    );
+    assert.equal(details.description, 'line one\nline two');
+    assert.equal(details.genre.length, 50);
+    assert.deepEqual(details.genre.slice(0, 2), ['Action', 'Drama']);
+    assert.equal(details.inLibraryAt, undefined);
+    assert.equal(details.lastFetchedAt, '1700000000');
+    assert.equal(details.chaptersLastFetchedAt, '1700000001');
+    assert.equal(details.downloadCount, 3);
+    assert.equal(details.unreadCount, 0);
+    assert.equal(details.chapterCount, 12);
+    assert.deepEqual(details.meta, { 'seerrng.request': '{"requestId":"1"}' });
+  });
+
+  it('maps chapters with safe defaults', () => {
+    const chapter = mapChapter(
+      {
+        id: 11,
+        mangaId: 7,
+        url: '/chapter/11',
+        name: 'Chapter 1',
+        sourceOrder: 1,
+        pageCount: -1,
+        isDownloaded: 'yes',
+      },
+      OP
+    );
+    assert.equal(chapter.id, '11');
+    assert.equal(chapter.chapterNumber, -1);
+    assert.equal(chapter.pageCount, undefined);
+    assert.equal(chapter.isDownloaded, false);
+    assert.throws(() => mapChapter({ id: 11, url: '/c' }, OP), badResponse);
+  });
+
+  it('maps the download queue', () => {
+    assert.deepEqual(
+      mapQueue(
+        {
+          state: 'STARTED',
+          queue: [
+            {
+              state: 'DOWNLOADING',
+              progress: 0.5,
+              tries: 1,
+              chapter: { id: 3, mangaId: 7 },
+            },
+            { state: 'PAUSED', chapter: { id: 4, mangaId: 7 } },
+          ],
+        },
+        OP
+      ),
+      {
+        state: 'STARTED',
+        items: [
+          {
+            chapterId: '3',
+            mangaId: '7',
+            state: 'DOWNLOADING',
+            progress: 0.5,
+            tries: 1,
+          },
+          {
+            chapterId: '4',
+            mangaId: '7',
+            state: 'UNKNOWN',
+            progress: undefined,
+            tries: undefined,
+          },
+        ],
+      }
+    );
+    assert.throws(
+      () => mapQueue({ state: 'STARTED', queue: [{}] }, OP),
+      badResponse
+    );
+    assert.throws(() => mapQueue({ state: 'STARTED' }, OP), badResponse);
   });
 
   it('maps sources without trusting their flags', () => {
@@ -253,6 +400,41 @@ describe('Suwayomi error classification', () => {
       'UPSTREAM_ERROR'
     );
     assert.equal(classifyGraphQLErrors(['Unauthorized', 5]), 'UPSTREAM_ERROR');
+  });
+
+  it('reads a lookup that found nothing as NOT_FOUND', () => {
+    assert.equal(
+      classifyGraphQLErrors([nullValueError(['meta'])]),
+      'NOT_FOUND'
+    );
+    assert.throws(
+      () =>
+        interpretGraphQLResponse(
+          OP,
+          {
+            status: 200,
+            headers: {},
+            data: { data: null, errors: [nullValueError(['manga'])] },
+          },
+          'UI_LOGIN'
+        ),
+      { code: 'NOT_FOUND', errorCount: 1 }
+    );
+    // Below a lookup, on any other root, or without a path: a server fault.
+    for (const error of [
+      nullValueError(['manga', 'chapters', 'totalCount']),
+      nullValueError(['enqueueChapterDownloads']),
+      { message: nullValueError(['meta']).message },
+    ]) {
+      assert.equal(classifyGraphQLErrors([error]), 'UPSTREAM_ERROR');
+    }
+    assert.equal(
+      classifyGraphQLErrors([
+        nullValueError(['meta']),
+        { message: 'Unauthorized' },
+      ]),
+      'AUTH_REQUIRED'
+    );
   });
 
   it('reads auth failures from errors on HTTP 200', () => {

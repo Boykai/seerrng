@@ -1,3 +1,5 @@
+import { ROOT_FIELDS } from '@server/api/suwayomi/operations';
+import { parse, visit, type DocumentNode } from 'graphql';
 import { randomUUID } from 'node:crypto';
 import {
   createServer,
@@ -109,6 +111,140 @@ export const graphqlErrors = (
 /** A synthetic upstream failure with a stack fragment and CRLF breaks. */
 export const syntheticFailure = (detail = 'synthetic failure') =>
   `com.example.FakeFailureException: ${detail}\r\n\tat com.example.Fake.run(Fake.kt:1)\r\n`;
+
+/** graphql-java's error when a non-null field resolved to null. */
+export const nullValueError = (path: string[]) => ({
+  message: `The field at path '/${path.join('/')}' was declared as a non null type, but the code involved in retrieving data has wrongly returned a null value.`,
+  locations: [],
+  path,
+});
+
+/** How a root lookup such as `manga(id:)` or `meta(key:)` reports a miss. */
+export const missingLookup = (field: string): FakeReply => ({
+  body: { data: null, errors: [nullValueError([field])] },
+});
+
+export interface FakeSchema {
+  version?: string;
+  buildType?: string;
+  queryTypeName?: string;
+  mutationTypeName?: string;
+  queryFields?: readonly string[];
+  mutationFields?: readonly string[];
+  /** `null` leaves the type out, as a server without it would. */
+  mangaFields?: readonly string[] | null;
+  chapterFields?: readonly string[] | null;
+}
+
+/**
+ * A Capabilities reply in the shape the client's introspection asks for. The
+ * defaults describe the pinned release: every root field the client uses and
+ * no per-user download state.
+ */
+export const capabilitiesData = ({
+  version = FAKE_VERSION,
+  buildType = 'Stable',
+  queryTypeName = 'Query',
+  mutationTypeName = 'Mutation',
+  queryFields = ROOT_FIELDS.query,
+  mutationFields = ROOT_FIELDS.mutation,
+  mangaFields = ['id', 'title'],
+  chapterFields = ['id', 'name'],
+}: FakeSchema = {}): FakeReply => {
+  const type = (name: string, names: readonly string[]) => ({
+    name,
+    fields: names.map((field) => ({ name: field })),
+  });
+  return graphqlData({
+    aboutServer: { name: 'Suwayomi-Server', version, buildType },
+    __schema: {
+      queryType: { name: queryTypeName },
+      mutationType: { name: mutationTypeName },
+      types: [
+        type(queryTypeName, queryFields),
+        type(mutationTypeName, mutationFields),
+        ...(mangaFields ? [type('MangaType', mangaFields)] : []),
+        ...(chapterFields ? [type('ChapterType', chapterFields)] : []),
+        { name: 'String', fields: null },
+      ],
+    },
+  });
+};
+
+// The pinned Suwayomi-Server v2.4.2366 ships graphql-java's
+// GoodFaithIntrospection. It refuses a request with a root `__schema` or
+// `__type` that selects any of these coordinates more than once, or more than
+// 500 fields, or fields deeper than 20 levels.
+const GOOD_FAITH_ROOTS = ['__schema', '__type'];
+const GOOD_FAITH_TYPE_FIELDS = [
+  'fields',
+  'inputFields',
+  'interfaces',
+  'possibleTypes',
+];
+const GOOD_FAITH_COORDINATES = [
+  ...GOOD_FAITH_ROOTS.map((field) => `Query.${field}`),
+  ...GOOD_FAITH_TYPE_FIELDS.map((field) => `__Type.${field}`),
+];
+const GOOD_FAITH_MAX_FIELDS = 500;
+const GOOD_FAITH_MAX_DEPTH = 20;
+
+/**
+ * Lists the good-faith introspection limits a fragment-free document breaks,
+ * in a fixed order. It counts written fields; the server merges repeated ones
+ * and expands those of an interface or union for each possible type.
+ */
+export const goodFaithViolations = (document: string): string[] => {
+  let ast: DocumentNode;
+  try {
+    ast = parse(document);
+  } catch {
+    return [];
+  }
+  const counts = new Map<string, number>();
+  let introspects = false;
+  let insideIntrospection = false;
+  let depth = 0;
+  let deepest = 0;
+  let total = 0;
+  visit(ast, {
+    Field: {
+      enter(node) {
+        depth += 1;
+        total += 1;
+        deepest = Math.max(deepest, depth);
+        const name = node.name.value;
+        if (depth === 1) {
+          insideIntrospection = GOOD_FAITH_ROOTS.includes(name);
+          introspects ||= insideIntrospection;
+        }
+        const coordinate =
+          depth === 1 && insideIntrospection
+            ? `Query.${name}`
+            : insideIntrospection && GOOD_FAITH_TYPE_FIELDS.includes(name)
+              ? `__Type.${name}`
+              : undefined;
+        if (coordinate) {
+          counts.set(coordinate, (counts.get(coordinate) ?? 0) + 1);
+        }
+      },
+      leave() {
+        depth -= 1;
+      },
+    },
+  });
+  if (!introspects) return [];
+  const violations = GOOD_FAITH_COORDINATES.filter(
+    (coordinate) => (counts.get(coordinate) ?? 0) > 1
+  );
+  if (total > GOOD_FAITH_MAX_FIELDS) {
+    violations.push(`more than ${GOOD_FAITH_MAX_FIELDS} fields`);
+  }
+  if (deepest > GOOD_FAITH_MAX_DEPTH) {
+    violations.push(`deeper than ${GOOD_FAITH_MAX_DEPTH} levels`);
+  }
+  return violations;
+};
 
 const base64url = (value: string) =>
   Buffer.from(value, 'utf8').toString('base64url');
@@ -355,6 +491,16 @@ export const startFakeSuwayomi = async (
       const rejection = authorize(request, true);
       if (rejection) {
         await send(response, rejection);
+        return;
+      }
+      const violations = request.query
+        ? goodFaithViolations(request.query)
+        : [];
+      if (violations.length > 0) {
+        await send(
+          response,
+          graphqlErrors([`Bad-faith introspection: ${violations.join(', ')}`])
+        );
         return;
       }
       const scripted = nextReply(operationReplies, request.operationName ?? '');

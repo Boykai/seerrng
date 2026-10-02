@@ -1,13 +1,39 @@
 import { SuwayomiError, isRecord } from '@server/api/suwayomi/errors';
 import type {
+  SuwayomiAvailability,
+  SuwayomiCategory,
+  SuwayomiChapter,
+  SuwayomiChapterState,
   SuwayomiHealth,
+  SuwayomiMangaDetails,
+  SuwayomiMangaSummary,
+  SuwayomiQueue,
   SuwayomiSource,
 } from '@server/api/suwayomi/types';
 
 // Responses are validated field by field; nothing upstream is trusted as typed.
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+// eslint-disable-next-line no-control-regex
+export const HAS_CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/;
+const CONTROL_CHARACTERS_EXCEPT_NEWLINE =
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g;
+const MANGA_STATUSES = [
+  'UNKNOWN',
+  'ONGOING',
+  'COMPLETED',
+  'LICENSED',
+  'PUBLISHING_FINISHED',
+  'CANCELLED',
+  'ON_HIATUS',
+] as const;
 const DOWNLOADER_STATES = ['STARTED', 'STOPPED'] as const;
+const QUEUE_STATES = ['QUEUED', 'DOWNLOADING', 'FINISHED', 'ERROR'] as const;
+const META_PREFIX = 'seerrng.';
+
+export const META_KEY_LIMIT = 256;
+export const META_VALUE_LIMIT = 4_096;
 
 export const badResponse = (operation: string): never => {
   throw new SuwayomiError('BAD_RESPONSE', operation);
@@ -43,6 +69,24 @@ export const text = (value: unknown, max = 512): string | undefined =>
     ? value.replace(CONTROL_CHARACTERS, ' ').trim().slice(0, max) || undefined
     : undefined;
 
+const multilineText = (value: unknown, max: number): string | undefined =>
+  typeof value === 'string'
+    ? value
+        .replace(/\r\n?/g, '\n')
+        .replace(CONTROL_CHARACTERS_EXCEPT_NEWLINE, '')
+        .trim()
+        .slice(0, max) || undefined
+    : undefined;
+
+/** Natural-key URLs must round-trip unchanged, so they are checked, not cleaned. */
+const sourceUrl = (value: unknown, operation: string): string =>
+  typeof value === 'string' &&
+  value.length > 0 &&
+  value.length <= 2_048 &&
+  !HAS_CONTROL_CHARACTER.test(value)
+    ? value
+    : badResponse(operation);
+
 const int = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isSafeInteger(value) ? value : undefined;
 
@@ -52,16 +96,162 @@ const finite = (value: unknown): number | undefined =>
 const bool = (value: unknown): boolean | undefined =>
   typeof value === 'boolean' ? value : undefined;
 
+/** Epoch timestamps as digit strings; zero means "never". */
+const timestamp = (value: unknown): string | undefined => {
+  const digits = toIdString(value);
+  return digits && !/^0+$/.test(digits) ? digits : undefined;
+};
+
 const oneOf = <T extends string, F extends string>(
   value: unknown,
   allowed: readonly T[],
   fallback: F
 ): T | F => allowed.find((item) => item === value) ?? fallback;
 
+const totalCount = (value: unknown): number =>
+  (isRecord(value) ? int(value.totalCount) : undefined) ?? 0;
+
 export const sanitizeVersion = (value: unknown): string | undefined =>
   typeof value === 'string' && /^[\w.+-]{1,64}$/.test(value)
     ? value
     : undefined;
+
+/** Keeps only this application's meta keys. */
+const seerrngMeta = (value: unknown): Record<string, string> => {
+  const meta: Record<string, string> = {};
+  for (const entry of Array.isArray(value) ? value : []) {
+    if (
+      isRecord(entry) &&
+      typeof entry.key === 'string' &&
+      typeof entry.value === 'string' &&
+      entry.key.startsWith(META_PREFIX) &&
+      entry.key.length <= META_KEY_LIMIT &&
+      entry.value.length <= META_VALUE_LIMIT
+    ) {
+      meta[entry.key] = entry.value;
+    }
+  }
+  return meta;
+};
+
+export const mapMangaSummary = (
+  value: unknown,
+  operation: string
+): SuwayomiMangaSummary => {
+  const raw = record(value, operation);
+  return {
+    id: id(raw.id, operation),
+    sourceId: id(raw.sourceId, operation),
+    url: sourceUrl(raw.url, operation),
+    title: text(raw.title) ?? '',
+    author: text(raw.author),
+    status: oneOf(raw.status, MANGA_STATUSES, 'UNKNOWN'),
+    inLibrary: raw.inLibrary === true,
+    initialized: raw.initialized === true,
+  };
+};
+
+export const mapMangaDetails = (
+  value: unknown,
+  operation: string
+): SuwayomiMangaDetails => {
+  const raw = record(value, operation);
+  return {
+    ...mapMangaSummary(raw, operation),
+    artist: text(raw.artist),
+    description: multilineText(raw.description, 10_000),
+    genre: (Array.isArray(raw.genre) ? raw.genre : [])
+      .map((genre) => text(genre, 64))
+      .filter((genre): genre is string => genre !== undefined)
+      .slice(0, 50),
+    inLibraryAt: timestamp(raw.inLibraryAt),
+    lastFetchedAt: timestamp(raw.lastFetchedAt),
+    chaptersLastFetchedAt: timestamp(raw.chaptersLastFetchedAt),
+    downloadCount: int(raw.downloadCount) ?? 0,
+    unreadCount: int(raw.unreadCount) ?? 0,
+    hasDuplicateChapters: raw.hasDuplicateChapters === true,
+    chapterCount: totalCount(raw.chapters),
+    meta: seerrngMeta(raw.meta),
+  };
+};
+
+export const mapAvailability = (
+  value: unknown,
+  operation: string
+): SuwayomiAvailability => {
+  const raw = record(value, operation);
+  return {
+    id: id(raw.id, operation),
+    inLibrary: raw.inLibrary === true,
+    status: oneOf(raw.status, MANGA_STATUSES, 'UNKNOWN'),
+    downloadCount: int(raw.downloadCount) ?? 0,
+    hasDuplicateChapters: raw.hasDuplicateChapters === true,
+    chaptersLastFetchedAt: timestamp(raw.chaptersLastFetchedAt),
+    chapterCount: totalCount(raw.chapters),
+  };
+};
+
+export const mapChapterState = (
+  value: unknown,
+  operation: string
+): SuwayomiChapterState => {
+  const raw = record(value, operation);
+  return {
+    id: id(raw.id, operation),
+    mangaId: id(raw.mangaId, operation),
+    isDownloaded: raw.isDownloaded === true,
+  };
+};
+
+export const mapChapter = (
+  value: unknown,
+  operation: string
+): SuwayomiChapter => {
+  const raw = record(value, operation);
+  const pageCount = int(raw.pageCount);
+  return {
+    ...mapChapterState(raw, operation),
+    url: sourceUrl(raw.url, operation),
+    name: text(raw.name) ?? '',
+    chapterNumber: finite(raw.chapterNumber) ?? -1,
+    scanlator: text(raw.scanlator, 256),
+    uploadDate: timestamp(raw.uploadDate),
+    sourceOrder: int(raw.sourceOrder) ?? 0,
+    pageCount:
+      pageCount !== undefined && pageCount >= 0 ? pageCount : undefined,
+  };
+};
+
+export const mapQueue = (value: unknown, operation: string): SuwayomiQueue => {
+  const raw = record(value, operation);
+  return {
+    state: oneOf(raw.state, DOWNLOADER_STATES, 'UNKNOWN'),
+    items: list(raw.queue, operation).map((item) => {
+      const entry = record(item, operation);
+      const chapter = record(entry.chapter, operation);
+      return {
+        chapterId: id(chapter.id, operation),
+        mangaId: id(chapter.mangaId, operation),
+        state: oneOf(entry.state, QUEUE_STATES, 'UNKNOWN'),
+        progress: finite(entry.progress),
+        tries: int(entry.tries),
+      };
+    }),
+  };
+};
+
+export const mapCategory = (
+  value: unknown,
+  operation: string
+): SuwayomiCategory => {
+  const raw = record(value, operation);
+  return {
+    id: id(raw.id, operation),
+    name: text(raw.name, 256) ?? '',
+    includeInUpdate: text(raw.includeInUpdate, 16),
+    includeInDownload: text(raw.includeInDownload, 16),
+  };
+};
 
 export const mapSource = (
   value: unknown,
