@@ -3,37 +3,64 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  INTERRUPT_SIGNALS,
   POSTGRES_ENTITY_DATABASE,
   POSTGRES_IMAGE,
   POSTGRES_MIGRATION_TESTS,
   UsageError,
   actionsMaskCommand,
+  createCleanups,
   databaseEnvironment,
   parseArguments,
   parsePublishedPort,
   postgresCreateDatabaseArguments,
+  postgresReadyArguments,
+  postgresRemoveArguments,
   postgresRunArguments,
   postgresTestUrl,
   runMigrationChecks,
+  signalExitCode,
 } from './manga-migration-checks.mjs';
 
 const PASSWORD = 'fixture-password/+=';
+const CONTAINER = 'seerrng-manga-migrations-fixture';
 
+// interruptOnBuild sends a signal while the database is built from empty,
+// interruptOnWait sends one while PostgreSQL is not ready yet, and
+// interruptOnRemove sends one while the container is being removed. The fake
+// exit only records the status, so the code after it keeps running; `events`
+// shows the order of the cleanup steps and exits.
 const fakeDependencies = ({
   env = {},
   failWhen = () => false,
   notReadyAttempts = 0,
+  interruptOnBuild,
+  interruptOnWait,
+  interruptOnRemove,
 } = {}) => {
   const calls = [];
   const logs = [];
   const removed = [];
+  const events = [];
+  const handlers = [];
+  let listener;
   let readyChecks = 0;
   let waits = 0;
+
+  const interrupt = (signal) => {
+    handlers.push(listener(signal));
+  };
 
   return {
     calls,
     logs,
     removed,
+    events,
+    // Settles when every signal handler has finished.
+    handlersDone: () => Promise.all(handlers),
+    get listening() {
+      return listener !== undefined;
+    },
     get waits() {
       return waits;
     },
@@ -41,14 +68,41 @@ const fakeDependencies = ({
       env,
       log: (message) => logs.push(message),
       createPassword: () => PASSWORD,
-      createContainerName: () => 'seerrng-manga-migrations-fixture',
+      createContainerName: () => CONTAINER,
       makeConfigDirectory: () => 'config-fixture',
-      removeConfigDirectory: (directory) => removed.push(directory),
+      removeConfigDirectory: (directory) => {
+        removed.push(directory);
+        events.push(`remove ${directory}`);
+      },
       wait: async () => {
         waits += 1;
+        if (interruptOnWait) {
+          interrupt(interruptOnWait);
+        }
+      },
+      onInterrupt: (handler) => {
+        listener = handler;
+        return () => {
+          listener = undefined;
+        };
+      },
+      exit: (code) => {
+        events.push(`exit ${code}`);
       },
       run: (command, args, options = {}) => {
         calls.push({ command, args, env: options.env });
+        if (
+          interruptOnBuild &&
+          args.includes('server/scripts/prepareTestDb.ts')
+        ) {
+          interrupt(interruptOnBuild);
+        }
+        if (command === 'docker' && args[0] === 'rm') {
+          events.push('docker rm');
+          if (interruptOnRemove) {
+            interrupt(interruptOnRemove);
+          }
+        }
         if (failWhen(command, args)) {
           return { status: 3, stdout: '', stderr: 'fixture failure' };
         }
@@ -180,6 +234,7 @@ test('the SQLite check builds from empty, then runs the round trip and drift che
     path.join('config-fixture', 'entities.sqlite3')
   );
   assert.deepStrictEqual(fake.removed, ['config-fixture']);
+  assert.equal(fake.listening, false);
 });
 
 test('a failing step stops the run and still removes the config directory', async () => {
@@ -225,7 +280,7 @@ test('the PostgreSQL check waits for readiness, runs the tests and removes the c
   );
   assert.deepStrictEqual(
     fake.calls[createdb].args,
-    postgresCreateDatabaseArguments('seerrng-manga-migrations-fixture')
+    postgresCreateDatabaseArguments(CONTAINER)
   );
   assert.equal(fake.calls[createdb - 1].args[0], 'port');
   assert.equal(
@@ -255,12 +310,10 @@ test('the PostgreSQL check waits for readiness, runs the tests and removes the c
   assert.equal(nodeCalls[2].env.DB_TYPE, undefined);
   assert.equal(nodeCalls[2].env.DRIFT_ENTITY_DATABASE, undefined);
 
-  assert.deepStrictEqual(fake.calls.at(-1).args, [
-    'rm',
-    '--force',
-    '--volumes',
-    'seerrng-manga-migrations-fixture',
-  ]);
+  assert.deepStrictEqual(
+    fake.calls.at(-1).args,
+    postgresRemoveArguments(CONTAINER)
+  );
   assert.deepStrictEqual(fake.removed, ['config-fixture']);
 });
 
@@ -306,4 +359,114 @@ test('writing the allowlist formats it and skips the migration tests', async () 
     'server/scripts/migration-drift-allowlist/postgres.json',
   ]);
   assert.equal(nodeCalls.length, 3);
+});
+
+test('cleanups run newest first and once each, even when asked twice at once', async () => {
+  const logs = [];
+  const ran = [];
+  let finishRemoval;
+  const removalFinished = new Promise((resolve) => {
+    finishRemoval = resolve;
+  });
+  const cleanups = createCleanups((message) => logs.push(message));
+  cleanups.add(() => ran.push('config directory'));
+  cleanups.add(() => {
+    throw new Error('fixture failure');
+  });
+  cleanups.add(async () => {
+    await removalFinished;
+    ran.push('container');
+  });
+
+  // The second caller waits for the cleanup in progress instead of starting
+  // the remaining tasks early.
+  const both = Promise.all([cleanups.run(), cleanups.run()]);
+  finishRemoval();
+  await both;
+  await cleanups.run();
+
+  assert.deepStrictEqual(ran, ['container', 'config directory']);
+  assert.deepStrictEqual(logs, ['Cleanup failed: fixture failure']);
+});
+
+test('an interrupt cleans up once, then exits with the signal status', async () => {
+  assert.deepStrictEqual(
+    INTERRUPT_SIGNALS.map(signalExitCode),
+    [129, 130, 143]
+  );
+  const fake = fakeDependencies({
+    notReadyAttempts: 1,
+    interruptOnWait: 'SIGINT',
+  });
+
+  await assert.rejects(
+    runMigrationChecks(
+      { driver: 'postgres', writeAllowlist: false },
+      fake.dependencies
+    ),
+    /Interrupted by SIGINT\./
+  );
+  await fake.handlersDone();
+
+  // The handler and the finally block both asked for the cleanup: each task
+  // ran once, and the exit came after both. Nothing else ran after the
+  // interrupt.
+  assert.deepStrictEqual(fake.events, [
+    'docker rm',
+    'remove config-fixture',
+    'exit 130',
+  ]);
+  assert.deepStrictEqual(
+    fake.calls.map((call) => call.args),
+    [
+      postgresRunArguments(CONTAINER),
+      postgresReadyArguments(CONTAINER),
+      postgresRemoveArguments(CONTAINER),
+    ]
+  );
+  assert.equal(fake.listening, false);
+});
+
+test('an interrupt during a step stops the run before the next step', async () => {
+  const fake = fakeDependencies({ interruptOnBuild: 'SIGTERM' });
+
+  await assert.rejects(
+    runMigrationChecks(
+      { driver: 'sqlite', writeAllowlist: false },
+      fake.dependencies
+    ),
+    /Interrupted by SIGTERM\./
+  );
+  await fake.handlersDone();
+
+  assert.deepStrictEqual(fake.calls.map(scriptOf), [
+    'server/scripts/prepareTestDb.ts',
+  ]);
+  assert.deepStrictEqual(fake.events, ['remove config-fixture', 'exit 143']);
+  assert.equal(fake.listening, false);
+});
+
+test('a second signal during the cleanup exits without waiting for it', async () => {
+  const fake = fakeDependencies({
+    notReadyAttempts: 1,
+    interruptOnWait: 'SIGINT',
+    interruptOnRemove: 'SIGTERM',
+  });
+
+  await assert.rejects(
+    runMigrationChecks(
+      { driver: 'postgres', writeAllowlist: false },
+      fake.dependencies
+    ),
+    /Interrupted by SIGINT\./
+  );
+  await fake.handlersDone();
+
+  // A real exit would end the process at 'exit 143'.
+  assert.deepStrictEqual(fake.events, [
+    'docker rm',
+    'exit 143',
+    'remove config-fixture',
+    'exit 130',
+  ]);
 });

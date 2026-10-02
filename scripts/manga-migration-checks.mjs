@@ -8,16 +8,23 @@
 //   node scripts/manga-migration-checks.mjs postgres [--write-allowlist]
 //
 // PostgreSQL runs in a disposable container from a digest-pinned public image.
-// It is published on 127.0.0.1 only, uses a random password that never
-// appears on a command line, and is always removed with its volume.
+// It is published on 127.0.0.1 only and uses a random password that never
+// appears on a command line. The container, its volume and the temporary
+// config directory are removed when the run ends, fails or is interrupted by
+// SIGHUP, SIGINT or SIGTERM. Steps run synchronously, so a signal sent to
+// this process alone takes effect when the current step ends; Ctrl+C also
+// stops the step itself.
 
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
+import { constants, tmpdir } from 'node:os';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
+import {
+  setTimeout as delay,
+  setImmediate as nextTurn,
+} from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const POSTGRES_IMAGE =
@@ -166,6 +173,45 @@ export const databaseEnvironment = ({ baseEnv, configDirectory, postgres }) => {
 export const postgresTestUrl = ({ port, password }) =>
   `postgres://${POSTGRES_USER}:${encodeURIComponent(password)}@127.0.0.1:${port}/${POSTGRES_DATABASE}`;
 
+export const INTERRUPT_SIGNALS = ['SIGHUP', 'SIGINT', 'SIGTERM'];
+
+// The status a shell reports for a process that a signal ended.
+export const signalExitCode = (signal) => 128 + constants.signals[signal];
+
+// Cleanup tasks run newest first and at most once each. When an interrupt and
+// the end of the run both ask for them, the second caller waits for the
+// cleanup already in progress. A failing task is logged and the rest still
+// run, so a cleanup error never hides the result of the checks.
+export const createCleanups = (log) => {
+  const tasks = [];
+  let running;
+
+  const drain = async () => {
+    while (tasks.length > 0) {
+      const task = tasks.pop();
+      try {
+        await task();
+      } catch (error) {
+        log(
+          `Cleanup failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+  };
+
+  return {
+    add: (task) => {
+      tasks.push(task);
+    },
+    run: () => {
+      running ??= drain().finally(() => {
+        running = undefined;
+      });
+      return running;
+    },
+  };
+};
+
 const tsNodeArguments = (script, scriptArguments = []) => [
   require.resolve('ts-node/dist/bin.js'),
   '-r',
@@ -206,14 +252,29 @@ const defaultDependencies = () => ({
   removeConfigDirectory: (directory) =>
     rmSync(directory, { recursive: true, force: true }),
   wait: () => delay(1000),
+  onInterrupt: (listener) => {
+    for (const signal of INTERRUPT_SIGNALS) {
+      process.on(signal, listener);
+    }
+    return () => {
+      for (const signal of INTERRUPT_SIGNALS) {
+        process.off(signal, listener);
+      }
+    };
+  },
+  exit: (code) => process.exit(code),
 });
 
-const runStep = (dependencies, label, command, args, options) => {
-  const inActions = dependencies.env.GITHUB_ACTIONS === 'true';
-  dependencies.log(inActions ? `::group::${label}` : `==> ${label}`);
-  const result = dependencies.run(command, args, options);
+const runStep = async (context, label, command, args, options) => {
+  // Lets Node deliver a pending signal before the next blocking step.
+  await nextTurn();
+  context.interruption.throwIfAborted();
+
+  const inActions = context.env.GITHUB_ACTIONS === 'true';
+  context.log(inActions ? `::group::${label}` : `==> ${label}`);
+  const result = context.run(command, args, options);
   if (inActions) {
-    dependencies.log('::endgroup::');
+    context.log('::endgroup::');
   }
 
   if (result.status !== 0) {
@@ -226,21 +287,21 @@ const runStep = (dependencies, label, command, args, options) => {
   return result;
 };
 
-const runDatabaseChecks = (
-  dependencies,
+const runDatabaseChecks = async (
+  context,
   { driver, writeAllowlist },
   env,
   entityDatabase
 ) => {
-  runStep(
-    dependencies,
+  await runStep(
+    context,
     `${driver}: build the database from empty with migrations`,
     process.execPath,
     tsNodeArguments('server/scripts/prepareTestDb.ts'),
     { env }
   );
-  runStep(
-    dependencies,
+  await runStep(
+    context,
     writeAllowlist
       ? `${driver}: write the drift allowlist`
       : `${driver}: migration round trip and drift check`,
@@ -253,8 +314,8 @@ const runDatabaseChecks = (
   );
 
   if (writeAllowlist) {
-    runStep(
-      dependencies,
+    await runStep(
+      context,
       `${driver}: format the drift allowlist`,
       process.execPath,
       [
@@ -273,17 +334,18 @@ const runDatabaseChecks = (
   }
 };
 
-const waitForPostgres = async (dependencies, containerName) => {
+const waitForPostgres = async (context, containerName) => {
   for (let attempt = 1; attempt <= READY_ATTEMPTS; attempt += 1) {
-    const result = dependencies.run(
+    context.interruption.throwIfAborted();
+    const result = context.run(
       'docker',
       postgresReadyArguments(containerName),
-      { env: dependencies.env, capture: true }
+      { env: context.env, capture: true }
     );
     if (result.status === 0) {
       return;
     }
-    await dependencies.wait();
+    await context.wait();
   }
 
   throw new Error(
@@ -291,83 +353,87 @@ const waitForPostgres = async (dependencies, containerName) => {
   );
 };
 
-const runPostgresChecks = async (dependencies, options, configDirectory) => {
-  const password = dependencies.createPassword();
-  const containerName = dependencies.createContainerName();
-  const mask = actionsMaskCommand(password, dependencies.env);
+const runPostgresChecks = async (context, options, configDirectory) => {
+  const password = context.createPassword();
+  const containerName = context.createContainerName();
+  const mask = actionsMaskCommand(password, context.env);
   if (mask) {
-    dependencies.log(mask);
+    context.log(mask);
   }
 
-  try {
-    runStep(
-      dependencies,
-      `postgres: start ${POSTGRES_IMAGE} on 127.0.0.1`,
-      'docker',
-      postgresRunArguments(containerName),
-      {
-        env: { ...dependencies.env, POSTGRES_PASSWORD: password },
-        capture: true,
-      }
-    );
-    await waitForPostgres(dependencies, containerName);
-    const port = parsePublishedPort(
-      runStep(
-        dependencies,
-        'postgres: read the loopback port',
-        'docker',
-        ['port', containerName, '5432/tcp'],
-        { env: dependencies.env, capture: true }
-      ).stdout
-    );
-    const postgres = { port, password };
-    runStep(
-      dependencies,
-      'postgres: create the empty entity database',
-      'docker',
-      postgresCreateDatabaseArguments(containerName),
-      { env: dependencies.env, capture: true }
-    );
-
-    runDatabaseChecks(
-      dependencies,
-      options,
-      databaseEnvironment({
-        baseEnv: dependencies.env,
-        configDirectory,
-        postgres,
-      }),
-      POSTGRES_ENTITY_DATABASE
-    );
-
-    if (!options.writeAllowlist) {
-      runStep(
-        dependencies,
-        'postgres: manga migration tests',
-        process.execPath,
-        ['server/test/index.mts', ...POSTGRES_MIGRATION_TESTS],
-        {
-          env: {
-            ...databaseEnvironment({
-              baseEnv: dependencies.env,
-              configDirectory,
-            }),
-            SEERR_TEST_POSTGRES_URL: postgresTestUrl(postgres),
-          },
-        }
-      );
-    }
-  } finally {
-    const removal = dependencies.run(
+  // Registered before docker run: an interrupted start can still leave the
+  // container behind.
+  context.cleanups.add(() => {
+    const removal = context.run(
       'docker',
       postgresRemoveArguments(containerName),
-      { env: dependencies.env, capture: true }
+      { env: context.env, capture: true }
     );
     if (removal.status !== 0) {
-      dependencies.log(
+      context.log(
         `Could not remove container ${containerName}: ${removal.stderr.trim()}`
       );
     }
+  });
+
+  await runStep(
+    context,
+    `postgres: start ${POSTGRES_IMAGE} on 127.0.0.1`,
+    'docker',
+    postgresRunArguments(containerName),
+    {
+      env: { ...context.env, POSTGRES_PASSWORD: password },
+      capture: true,
+    }
+  );
+  await waitForPostgres(context, containerName);
+  const port = parsePublishedPort(
+    (
+      await runStep(
+        context,
+        'postgres: read the loopback port',
+        'docker',
+        ['port', containerName, '5432/tcp'],
+        { env: context.env, capture: true }
+      )
+    ).stdout
+  );
+  const postgres = { port, password };
+  await runStep(
+    context,
+    'postgres: create the empty entity database',
+    'docker',
+    postgresCreateDatabaseArguments(containerName),
+    { env: context.env, capture: true }
+  );
+
+  await runDatabaseChecks(
+    context,
+    options,
+    databaseEnvironment({
+      baseEnv: context.env,
+      configDirectory,
+      postgres,
+    }),
+    POSTGRES_ENTITY_DATABASE
+  );
+
+  if (!options.writeAllowlist) {
+    await runStep(
+      context,
+      'postgres: manga migration tests',
+      process.execPath,
+      ['server/test/index.mts', ...POSTGRES_MIGRATION_TESTS],
+      {
+        env: {
+          ...databaseEnvironment({
+            baseEnv: context.env,
+            configDirectory,
+          }),
+          SEERR_TEST_POSTGRES_URL: postgresTestUrl(postgres),
+        },
+      }
+    );
   }
 };
 
@@ -375,21 +441,46 @@ export const runMigrationChecks = async (
   options,
   dependencies = defaultDependencies()
 ) => {
-  const configDirectory = dependencies.makeConfigDirectory();
+  const cleanups = createCleanups(dependencies.log);
+  const interruption = new AbortController();
+  const context = {
+    ...dependencies,
+    cleanups,
+    interruption: interruption.signal,
+  };
+  const stopListening = dependencies.onInterrupt(async (signal) => {
+    // Another signal while the cleanup runs exits without waiting for it.
+    if (interruption.signal.aborted) {
+      dependencies.exit(signalExitCode(signal));
+      return;
+    }
+
+    interruption.abort(new Error(`Interrupted by ${signal}.`));
+    dependencies.log(`${signal} received; cleaning up before exiting.`);
+    await cleanups.run();
+    dependencies.exit(signalExitCode(signal));
+  });
 
   try {
+    const configDirectory = dependencies.makeConfigDirectory();
+    cleanups.add(() => dependencies.removeConfigDirectory(configDirectory));
+
     if (options.driver === 'postgres') {
-      await runPostgresChecks(dependencies, options, configDirectory);
+      await runPostgresChecks(context, options, configDirectory);
     } else {
-      runDatabaseChecks(
-        dependencies,
+      await runDatabaseChecks(
+        context,
         options,
         databaseEnvironment({ baseEnv: dependencies.env, configDirectory }),
         path.join(configDirectory, SQLITE_ENTITY_DATABASE)
       );
     }
   } finally {
-    dependencies.removeConfigDirectory(configDirectory);
+    await cleanups.run();
+    // A signal that arrived during the last step is still pending. Deliver it
+    // while the handler is registered rather than dropping it.
+    await nextTurn();
+    stopListening();
   }
 };
 

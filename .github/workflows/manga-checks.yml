@@ -52,6 +52,7 @@ jobs:
         run: node scripts/manga-migration-checks.mjs sqlite
 
       # The script starts a digest-pinned PostgreSQL container on 127.0.0.1
-      # with a random, masked password and always removes it with its volume.
+      # with a random, masked password. It removes the container and its
+      # volume when the run ends or fails, or on SIGHUP, SIGINT or SIGTERM.
       - name: PostgreSQL from empty, round trip and drift check
         run: node scripts/manga-migration-checks.mjs postgres
