@@ -172,6 +172,7 @@ that are not called out here.
 - **Metadata:** Movie and series cards now keep saved titles, descriptions, availability, and posters visible during metadata-provider failures, and only show “Not Found” for a confirmed missing record.
 - **Metadata:** Movie and series pages now mark a title as missing only when TMDB confirms it and other sources have no match. Concurrent refreshes also keep provider snapshots in the six-month cache.
 - **Metadata:** Cards for titles confirmed missing by TMDB now show the missing-title message even when the library retains request status; saved details remain available when a provider is temporarily unavailable.
+- **Metadata:** Provider-sourced movie and series titles now remain visible when their TMDB detail lookup returns 404, so valid external-ID matches are not replaced with a missing-title card.
 
 ### 🚀 Features
 - *(metadata)* Merge movie and series metadata sources - ([575e7f7](https://github.com/snapetech/seerrng/commit/575e7f72c8fba5c73de4029d04185fdae421f028))
@@ -180,6 +181,7 @@ that are not called out here.
 - *(release)* Publish Chocolatey only with live assets - ([ce4d802](https://github.com/snapetech/seerrng/commit/ce4d802b8e7af62e349dda221be7f81be7d34c39))
 - *(metadata)* Handle confirmed missing IDs and concurrent refreshes - ([12339f8](https://github.com/snapetech/seerrng/commit/12339f8f043fdab47f6c5c2c550c2c72cc7acf08))
 - *(metadata)* Show not-found state for confirmed missing titles - ([3b54e6b](https://github.com/snapetech/seerrng/commit/3b54e6b1a21762bd7f23420ed0c4f526ca8efc17))
+- *(metadata)* Preserve exact provider title fallbacks - ([950cef9](https://github.com/snapetech/seerrng/commit/950cef9dd98415a9cf4ee7cf18ea600bc577059c))
 - Preserve cached video metadata on provider failures - ([adfb47e](https://github.com/snapetech/seerrng/commit/adfb47e5401e0750c028eac26b8b69f73db4bcec))
 
 ## [3.45.3](https://github.com/snapetech/seerrng/compare/v3.45.2..v3.45.3) - 2026-10-02
