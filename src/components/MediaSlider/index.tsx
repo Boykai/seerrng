@@ -25,7 +25,7 @@ import {
   getDiscoverOverlayRequestKey,
   getDiscoverStateInputs,
 } from '@app/utils/discoverStateOverlay';
-import { isMangaResult } from '@app/utils/mangaResults';
+import { getMangaImageUrl } from '@app/utils/mangaImages';
 import {
   MEDIA_SLIDER_TITLE_LIMIT,
   hasMediaSliderResults,
@@ -34,6 +34,7 @@ import {
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
 import type { DiscoverHomeStateResponse } from '@server/interfaces/api/discoverHomeInterfaces';
+import type { MangaResult } from '@server/models/Manga';
 import type {
   AlbumResult,
   ArtistResult,
@@ -60,6 +61,7 @@ interface MixedResult {
     | AlbumResult
     | ArtistResult
     | BookResult
+    | MangaResult
   )[];
 }
 
@@ -81,7 +83,8 @@ type SliderTitle =
   | PersonResult
   | AlbumResult
   | ArtistResult
-  | BookResult;
+  | BookResult
+  | MangaResult;
 
 const getMediaResultKey = (item: SliderTitle): string =>
   `${item.mediaType}:${item.id}`;
@@ -313,10 +316,6 @@ const MediaSlider = ({
 
         resultKeys.add(resultKey);
 
-        if (isMangaResult(item)) {
-          continue;
-        }
-
         if (
           settings.currentSettings.hideAvailable &&
           'mediaInfo' in item &&
@@ -417,9 +416,11 @@ const MediaSlider = ({
       renderableTitles
         .slice(MEDIA_SLIDER_TITLE_LIMIT, MEDIA_SLIDER_TITLE_LIMIT + 4)
         .map((title) =>
-          title.mediaType !== 'person' && title.mediaType !== 'artist'
-            ? title.posterPath
-            : undefined
+          title.mediaType === 'manga'
+            ? getMangaImageUrl(title.posterPath)
+            : title.mediaType !== 'person' && title.mediaType !== 'artist'
+              ? title.posterPath
+              : undefined
         ),
     [renderableTitles]
   );
@@ -528,6 +529,19 @@ const MediaSlider = ({
               id={title.id}
               image={title.artistThumb ?? undefined}
               title={title.name}
+              mediaType={title.mediaType}
+              priority={prioritizeFirstRow && index < 3}
+            />
+          );
+        case 'manga':
+          return (
+            <TitleCard
+              key={title.id}
+              id={title.id}
+              image={getMangaImageUrl(title.posterPath)}
+              status={title.mediaInfo?.status}
+              title={title.title}
+              year={title.startYear?.toString()}
               mediaType={title.mediaType}
               priority={prioritizeFirstRow && index < 3}
             />

@@ -289,6 +289,44 @@ describe('isOptionalCatalogPathEnabled', () => {
     strictEqual(isDiscoverMediaTypeEnabled('book', availability), false);
     strictEqual(isDiscoverMediaTypeEnabled('audiobook', availability), true);
   });
+
+  it('shows manga pages only while the manga category is enabled', () => {
+    const availability = {
+      musicEnabled: true,
+      booksEnabled: true,
+      comicsEnabled: true,
+    };
+
+    for (const path of [
+      '/discover/manga',
+      '/discover/manga/trending',
+      '/manga/30013',
+      '/manga/[mangaId]',
+    ]) {
+      strictEqual(isOptionalCatalogPathEnabled(path, availability), false);
+      strictEqual(
+        isOptionalCatalogPathEnabled(path, {
+          ...availability,
+          enabledMediaCategories: { manga: false },
+        }),
+        false
+      );
+      strictEqual(
+        isOptionalCatalogPathEnabled(path, {
+          ...availability,
+          enabledMediaCategories: { manga: true },
+        }),
+        true
+      );
+    }
+    strictEqual(
+      isOptionalCatalogPathEnabled('/discover/comics', {
+        ...availability,
+        enabledMediaCategories: { manga: true, comic: false },
+      }),
+      false
+    );
+  });
 });
 
 describe('isDiscoverWatchlistTypeEnabled', () => {

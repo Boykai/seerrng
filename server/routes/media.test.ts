@@ -636,6 +636,44 @@ describe('GET /media', () => {
       settings.main.enabledMediaCategories = originalCategories;
     }
   });
+
+  for (const disabled of [undefined, 'movie'] as const) {
+    it(`keeps manga out of unfiltered listings with ${disabled ?? 'no'} category disabled`, async () => {
+      const settings = getSettings();
+      const originalCategories = { ...settings.main.enabledMediaCategories };
+      settings.main.enabledMediaCategories = {
+        ...originalCategories,
+        manga: true,
+        ...(disabled ? { [disabled]: false } : {}),
+      };
+      const [manga, movie, tv] = await getRepository(Media).save(
+        [MediaType.MANGA, MediaType.MOVIE, MediaType.TV].map(
+          (mediaType, index) =>
+            new Media({
+              tmdbId: mediaType === MediaType.MANGA ? 0 : 880 + index,
+              mediaType,
+              status: MediaStatus.AVAILABLE,
+              mediaAddedAt: new Date(`2026-03-0${index + 1}T00:00:00.000Z`),
+            })
+        )
+      );
+
+      try {
+        const agent = await loginAs('admin@seerr.dev', 'test1234');
+        const res = await agent.get(
+          '/media?filter=allavailable&sort=mediaAdded'
+        );
+
+        assert.strictEqual(res.status, 200);
+        const ids = res.body.results.map((item: { id: number }) => item.id);
+        assert.ok(!ids.includes(manga.id));
+        assert.strictEqual(ids.includes(movie.id), disabled === undefined);
+        assert.ok(ids.includes(tv.id));
+      } finally {
+        settings.main.enabledMediaCategories = originalCategories;
+      }
+    });
+  }
 });
 
 describe('GET /media/:id/watch_data', () => {

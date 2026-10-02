@@ -10,6 +10,7 @@ export type SearchFilterCategory =
   | 'author'
   | 'comic'
   | 'magazine'
+  | 'manga'
   | 'software';
 
 export const searchContextualFilterKeys = [
@@ -125,7 +126,8 @@ export const isSearchDataReady = ({
   (category === 'all' ||
   category === 'author' ||
   category === 'comic' ||
-  category === 'magazine'
+  category === 'magazine' ||
+  category === 'manga'
     ? Boolean(query)
     : true);
 

@@ -364,7 +364,9 @@ mediaRoutes.get(
         parsedMediaTypes.value.length === 1
           ? parsedMediaTypes.value[0]
           : In(parsedMediaTypes.value);
-    } else if (enabledMediaTypes.length < mediaListTypes.length) {
+    } else {
+      // Always name the listed types so media types without a list view
+      // (manga) stay out of an unfiltered list.
       if (enabledMediaTypes.length === 0) {
         return res.status(200).json({
           pageInfo: {

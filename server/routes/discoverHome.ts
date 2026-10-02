@@ -16,6 +16,7 @@ import type {
   DiscoverHomeStateResponse,
 } from '@server/interfaces/api/discoverHomeInterfaces';
 import {
+  normalizeAnilistMangaId,
   normalizeMusicBrainzId,
   normalizeOpenLibraryWorkId,
 } from '@server/lib/externalIds';
@@ -153,7 +154,7 @@ const numericItemSchema = z
   .strict();
 const externalItemSchema = z
   .object({
-    mediaType: z.enum([MediaType.MUSIC, MediaType.BOOK]),
+    mediaType: z.enum([MediaType.MUSIC, MediaType.BOOK, MediaType.MANGA]),
     id: z.string().trim().min(1).max(128),
   })
   .strict();
@@ -174,6 +175,9 @@ const normalizeInput = (item: StateInput): StateInput => {
   }
   if (item.mediaType === MediaType.BOOK) {
     return { ...item, id: normalizeOpenLibraryWorkId(item.id) };
+  }
+  if (item.mediaType === MediaType.MANGA) {
+    return { ...item, id: normalizeAnilistMangaId(item.id) };
   }
   return item;
 };
@@ -203,6 +207,9 @@ discoverHomeRoutes.post('/state', async (req, res) => {
     .map((item) => String(item.id));
   const bookIds = inputs
     .filter((item) => item.mediaType === MediaType.BOOK)
+    .map((item) => String(item.id));
+  const mangaIds = inputs
+    .filter((item) => item.mediaType === MediaType.MANGA)
     .map((item) => String(item.id));
   const movieIds = tmdbInputs
     .filter((item) => item.mediaType === MediaType.MOVIE)
@@ -250,7 +257,7 @@ discoverHomeRoutes.post('/state', async (req, res) => {
   ];
 
   const mediaRepository = getRepository(Media);
-  const [tmdbMedia, musicMedia, bookIdentifiers, watchlists] =
+  const [tmdbMedia, musicMedia, bookIdentifiers, mangaIdentifiers, watchlists] =
     await Promise.all([
       tmdbInputs.length
         ? mediaRepository.find({
@@ -269,12 +276,25 @@ discoverHomeRoutes.post('/state', async (req, res) => {
             relations: { media: true },
           })
         : [],
+      mangaIds.length
+        ? getRepository(MediaIdentifier).find({
+            where: {
+              provider: MediaIdentifierProvider.ANILIST,
+              value: In(mangaIds),
+            },
+            relations: { media: true },
+          })
+        : [],
       getRepository(Watchlist).find({ where: watchlistWhere }),
     ]);
+  const mangaLinked = mangaIdentifiers.filter(
+    (identifier) => identifier.media?.mediaType === MediaType.MANGA
+  );
   const allMedia = [
     ...tmdbMedia,
     ...musicMedia,
     ...bookIdentifiers.map((identifier) => identifier.media),
+    ...mangaLinked.map((identifier) => identifier.media),
   ];
   const mediaByKey = new Map<string, Media>();
   for (const media of allMedia) {
@@ -295,6 +315,9 @@ discoverHomeRoutes.post('/state', async (req, res) => {
       `${MediaType.BOOK}:${normalizeOpenLibraryWorkId(identifier.value)}`,
       identifier.media
     );
+  }
+  for (const identifier of mangaLinked) {
+    mediaByKey.set(`${MediaType.MANGA}:${identifier.value}`, identifier.media);
   }
 
   const mediaIds = [...new Set(allMedia.map((media) => media.id))];

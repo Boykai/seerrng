@@ -3,7 +3,7 @@ import BlocklistConfirmationModal from '@app/components/BlocklistConfirmationMod
 interface ExternalBlocklistModalProps {
   show: boolean;
   title: string;
-  type: 'book' | 'music' | 'comic' | 'magazine';
+  type: 'book' | 'music' | 'comic' | 'magazine' | 'manga';
   backdrop?: string | null;
   onComplete?: () => void;
   onCancel?: () => void;

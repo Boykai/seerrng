@@ -5,7 +5,7 @@ import SettingsFormRow from '@app/components/Settings/SettingsFormRow';
 import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
-import type { MediaCategoryKey } from '@server/constants/mediaCategories';
+import type { MediaAvailabilityCategoryKey } from '@server/constants/mediaCategories';
 import { DEFAULT_ENABLED_MEDIA_CATEGORIES } from '@server/constants/mediaCategories';
 import type { MainSettings } from '@server/lib/settings';
 import axios from 'axios';
@@ -30,6 +30,7 @@ const messages = defineMessages('components.Settings.SettingsCategories', {
   retro: 'Emulation (Retro)',
   modern: 'Emulation (Modern)',
   game: 'PC Games',
+  manga: 'Manga',
   movieDescription: 'Allow movie discovery and requests.',
   tvDescription: 'Allow series discovery and requests.',
   musicDescription: 'Allow music discovery and requests.',
@@ -40,12 +41,23 @@ const messages = defineMessages('components.Settings.SettingsCategories', {
   retroDescription: 'Allow retro ROM discovery and requests.',
   modernDescription: 'Allow modern emulation ROM discovery and requests.',
   gameDescription: 'Allow PC game discovery and requests.',
+  mangaDescription:
+    'Allow manga discovery with AniList metadata. Manga requests are not available yet.',
+  mangaContentTitle: 'Manga Content',
+  mangaContentDescription:
+    'Choose which AniList titles manga discovery, search and details include.',
+  mangaIncludeAdult: 'Include Adult Manga',
+  mangaIncludeAdultDescription:
+    'Include titles that AniList marks as adult. Off by default.',
+  mangaIncludeNovels: 'Include Novels',
+  mangaIncludeNovelsDescription:
+    'Include titles that AniList lists in the novel format. Off by default.',
   saveSuccess: 'Category settings saved.',
   saveFailure: 'Category settings could not be saved.',
 });
 
 const categories: {
-  key: MediaCategoryKey;
+  key: MediaAvailabilityCategoryKey;
   label: keyof typeof messages;
   description: keyof typeof messages;
 }[] = [
@@ -63,7 +75,19 @@ const categories: {
   { key: 'retro', label: 'retro', description: 'retroDescription' },
   { key: 'modern', label: 'modern', description: 'modernDescription' },
   { key: 'game', label: 'game', description: 'gameDescription' },
+  { key: 'manga', label: 'manga', description: 'mangaDescription' },
 ];
+
+const mangaContentSettings = [
+  {
+    key: 'mangaIncludeAdult',
+    description: 'mangaIncludeAdultDescription',
+  },
+  {
+    key: 'mangaIncludeNovels',
+    description: 'mangaIncludeNovelsDescription',
+  },
+] as const;
 
 const SettingsCategories = () => {
   const intl = useIntl();
@@ -98,12 +122,16 @@ const SettingsCategories = () => {
             ...DEFAULT_ENABLED_MEDIA_CATEGORIES,
             ...data?.enabledMediaCategories,
           },
+          mangaIncludeAdult: data?.mangaIncludeAdult ?? false,
+          mangaIncludeNovels: data?.mangaIncludeNovels ?? false,
         }}
         enableReinitialize
         onSubmit={async (values, { setSubmitting }) => {
           try {
             await axios.post('/api/v1/settings/main', {
               enabledMediaCategories: values.enabledMediaCategories,
+              mangaIncludeAdult: values.mangaIncludeAdult,
+              mangaIncludeNovels: values.mangaIncludeNovels,
             });
             await Promise.all([
               revalidate(),
@@ -149,6 +177,32 @@ const SettingsCategories = () => {
                       id={`enabledMediaCategories.${key}`}
                       name={`enabledMediaCategories.${key}`}
                       data-testid={`category-toggle-${key}`}
+                    />
+                  </SettingsFormRow>
+                ))}
+              </div>
+            </section>
+            <section className="settings-group-card">
+              <h3 className="settings-group-heading">
+                {intl.formatMessage(messages.mangaContentTitle)}
+              </h3>
+              <p className="settings-group-description">
+                {intl.formatMessage(messages.mangaContentDescription)}
+              </p>
+              <div className="settings-group-content">
+                {mangaContentSettings.map(({ key, description }) => (
+                  <SettingsFormRow
+                    key={key}
+                    htmlFor={key}
+                    label={intl.formatMessage(messages[key])}
+                    description={intl.formatMessage(messages[description])}
+                    labelClassName="checkbox-label"
+                  >
+                    <SettingsField
+                      type="checkbox"
+                      id={key}
+                      name={key}
+                      data-testid={`manga-content-toggle-${key}`}
                     />
                   </SettingsFormRow>
                 ))}

@@ -14,6 +14,7 @@ import type {
 } from '@server/api/anilist/manga';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import { Blocklist } from '@server/entity/Blocklist';
 import Media from '@server/entity/Media';
 import MediaIdentifier, {
   MediaIdentifierProvider,
@@ -471,6 +472,34 @@ describe('GET /discover/manga', () => {
     );
     assert.strictEqual(res.body.results[0].mediaInfo?.id, media.id);
     assert.strictEqual(res.body.results[1].mediaInfo, undefined);
+  });
+
+  it('marks titles blocklisted through the blocklist on discover and details', async () => {
+    await Blocklist.addToBlocklist({
+      blocklistRequest: {
+        mediaType: MediaType.MANGA,
+        externalId: '030013',
+        title: 'Sample Manga',
+      },
+    });
+    mock.method(AnilistAPI.prototype, 'getMangaPage', async () =>
+      page({ media: [summary(), summary({ id: 2 })] })
+    );
+    mock.method(AnilistAPI.prototype, 'getMangaDetails', async () => details());
+
+    const res = await discover();
+    const detail = await (
+      await loginAs('friend@seerr.dev')
+    ).get('/api/v1/manga/30013');
+
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(
+      res.body.results[0].mediaInfo?.status,
+      MediaStatus.BLOCKLISTED
+    );
+    assert.strictEqual(res.body.results[1].mediaInfo, undefined);
+    assert.strictEqual(detail.status, 200, JSON.stringify(detail.body));
+    assert.strictEqual(detail.body.mediaInfo?.status, MediaStatus.BLOCKLISTED);
   });
 
   it('bounds page totals to the pages AniList can serve', async () => {

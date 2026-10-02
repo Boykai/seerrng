@@ -34,6 +34,7 @@ export const mediaFilterValues = [
   'audiobook',
   'comic',
   'magazine',
+  'manga',
   'author',
   'software',
 ] as const;
@@ -63,7 +64,8 @@ export type DetailDisclosurePin =
   | 'mediaFilters'
   | 'sortBy';
 
-export type DetailDisclosureMediaType = 'movie' | 'tv' | 'music' | 'book';
+export type DetailDisclosureMediaType =
+  'movie' | 'tv' | 'music' | 'book' | 'manga';
 
 export interface UserSettingsDetailDisclosureResponse {
   details?: boolean;

@@ -20,6 +20,7 @@ import TheAudioDb from '@server/api/theaudiodb';
 import TmdbPersonMapper from '@server/api/themoviedb/personMapper';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import { Blocklist } from '@server/entity/Blocklist';
 import Media from '@server/entity/Media';
 import MediaIdentifier, {
   MediaIdentifierProvider,
@@ -1795,6 +1796,35 @@ describe('GET /search manga results', () => {
       message:
         'AniList, the service used for manga searches, timed out or is unavailable. Please try again.',
     });
+  });
+
+  it('marks blocklisted manga in typed and global search', async () => {
+    getSettings().lidarr = [];
+    getSettings().readarr = [];
+    await Blocklist.addToBlocklist({
+      blocklistRequest: {
+        mediaType: MediaType.MANGA,
+        externalId: '30013',
+        title: 'Sample Manga',
+      },
+    });
+    mock.method(AnilistAPI.prototype, 'getMangaPage', async () =>
+      mangaPage([mangaSummary()])
+    );
+    emptyTmdbSearch();
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    for (const query of [
+      { query: 'sample', type: 'manga' },
+      { query: 'sample' },
+    ]) {
+      const res = await agent.get('/search').query(query);
+      assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+      assert.strictEqual(
+        res.body.results[0]?.mediaInfo?.status,
+        MediaStatus.BLOCKLISTED
+      );
+    }
   });
 
   it('keeps global search working when AniList fails', async () => {

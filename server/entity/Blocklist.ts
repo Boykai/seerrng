@@ -23,6 +23,8 @@ import {
 } from 'typeorm';
 import type { ZodNumber, ZodOptional, ZodString } from 'zod';
 
+export class BlocklistIdentityConflictError extends Error {}
+
 @Entity()
 @Index('IDX_blocklist_external_media_type', ['externalId', 'mediaType'], {
   unique: true,
@@ -198,7 +200,15 @@ export class Blocklist implements BlocklistItem {
           blocklistRequest.tmdbId !== undefined ||
           (blocklistRequest.externalProvider !== undefined &&
             blocklistRequest.externalProvider !==
-              MediaIdentifierProvider.LAZYLIBRARIAN)))
+              MediaIdentifierProvider.LAZYLIBRARIAN))) ||
+      (blocklistRequest.mediaType === 'manga' &&
+        (!blocklistRequest.externalId ||
+          !isValidExternalMediaId(
+            blocklistRequest.externalId,
+            blocklistRequest.mediaType,
+            blocklistRequest.externalProvider
+          ) ||
+          blocklistRequest.tmdbId !== undefined))
     ) {
       throw new Error('Blocklist media identity is invalid.');
     }
@@ -234,6 +244,14 @@ export class Blocklist implements BlocklistItem {
       blocklistRequest = {
         ...blocklistRequest,
         externalProvider: MediaIdentifierProvider.LAZYLIBRARIAN,
+      };
+    } else if (
+      blocklistRequest.mediaType === 'manga' &&
+      blocklistRequest.externalProvider === undefined
+    ) {
+      blocklistRequest = {
+        ...blocklistRequest,
+        externalProvider: MediaIdentifierProvider.ANILIST,
       };
     }
 
@@ -310,6 +328,25 @@ export class Blocklist implements BlocklistItem {
         identifier?.media.mediaType === blocklistRequest.mediaType
           ? identifier.media
           : null;
+    } else if (
+      blocklistRequest.mediaType === 'manga' &&
+      blocklistRequest.externalId
+    ) {
+      const identifier = await em.getRepository(MediaIdentifier).findOne({
+        where: {
+          provider: MediaIdentifierProvider.ANILIST,
+          value: blocklistRequest.externalId,
+        },
+        relations: { media: true },
+      });
+      // AniList ids are unique per provider, so a second identifier must
+      // never be created for media of another type.
+      if (identifier && identifier.media.mediaType !== 'manga') {
+        throw new BlocklistIdentityConflictError(
+          'This AniList id already belongs to media of another type.'
+        );
+      }
+      media = identifier?.media ?? null;
     } else {
       media = await mediaRepository.findOne({
         where: {
@@ -368,7 +405,16 @@ export class Blocklist implements BlocklistItem {
                       canonical: true,
                     }),
                   ]
-                : undefined,
+                : blocklistRequest.mediaType === 'manga' &&
+                    blocklistRequest.externalId
+                  ? [
+                      new MediaIdentifier({
+                        provider: MediaIdentifierProvider.ANILIST,
+                        value: blocklistRequest.externalId,
+                        canonical: true,
+                      }),
+                    ]
+                  : undefined,
       });
 
       await mediaRepository.save(media);

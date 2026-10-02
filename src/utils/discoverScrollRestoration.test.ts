@@ -23,6 +23,9 @@ describe('discover scroll restoration', () => {
     strictEqual(isMediaDetailPath('/discover/books', 'book'), false);
     strictEqual(isMediaDetailPath('/comic/4050', 'comic'), true);
     strictEqual(isMediaDetailPath('/movie/4050', 'comic'), false);
+    strictEqual(isMediaDetailPath('/manga/30013?from=list', 'manga'), true);
+    strictEqual(isMediaDetailPath('/discover/manga', 'manga'), false);
+    strictEqual(isMediaDetailPath('/comic/30013', 'manga'), false);
   });
 
   it('reads valid restoration data only for the matching history entry', () => {
