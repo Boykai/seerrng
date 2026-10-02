@@ -1,7 +1,7 @@
 ---
 category: changed
 audience: users, operators
-area: anilist
+area: discovery-integrations
 action: none
 breaking: false
 ---
