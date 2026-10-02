@@ -501,8 +501,13 @@ const isMagazine = (details: MediaDetails): details is MagazineDetails =>
 
 const getBookId = (item: RequestStatusItem): string | undefined =>
   item.request.media.identifiers?.find(
-    (identifier) => identifier.provider === 'openlibrary'
+    (identifier) =>
+      identifier.provider === 'openlibrary' ||
+      identifier.provider === 'bookshelf'
   )?.value;
+
+const normalizeBookRouteId = (bookId: string): string =>
+  bookId.startsWith('bookshelf:') ? bookId : normalizeOpenLibraryWorkId(bookId);
 
 const getComicId = (item: RequestStatusItem): string | undefined =>
   item.request.media.identifiers?.find(
@@ -535,7 +540,7 @@ const getDetailsUrl = (item: RequestStatusItem): string | null => {
   }
   const bookId = getBookId(item);
   return bookId
-    ? `/api/v1/book/${encodeApiPathSegment(normalizeOpenLibraryWorkId(bookId))}`
+    ? `/api/v1/book/${encodeApiPathSegment(normalizeBookRouteId(bookId))}`
     : null;
 };
 
@@ -558,7 +563,7 @@ const getDetailHref = (item: RequestStatusItem): string | null => {
   const bookId = getBookId(item);
   const bookFormat = getRequestedBookFormat(item.request.bookFormat);
   return bookId
-    ? `/book/${encodeApiPathSegment(normalizeOpenLibraryWorkId(bookId))}?format=${bookFormat}`
+    ? `/book/${encodeApiPathSegment(normalizeBookRouteId(bookId))}?format=${bookFormat}`
     : null;
 };
 

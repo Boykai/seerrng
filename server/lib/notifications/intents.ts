@@ -11,12 +11,14 @@ import MediaIdentifier, {
   MediaIdentifierProvider,
 } from '@server/entity/MediaIdentifier';
 import { MediaRequest } from '@server/entity/MediaRequest';
+import { MediaSearchMetadata } from '@server/entity/MediaSearchMetadata';
 import { User } from '@server/entity/User';
 import {
   normalizeMusicBrainzId,
   normalizeOpenLibraryWorkId,
 } from '@server/lib/externalIds';
 import { Permission } from '@server/lib/permissions';
+import { parseBookshelfBookId } from '@server/utils/bookshelfCatalog';
 import { sortBy, truncate } from 'lodash';
 import { Notification } from '.';
 import type { NotificationPayload } from './agents/agent';
@@ -243,7 +245,36 @@ export const buildMediaRequestNotificationPayload = async (
       ({ provider }) => provider === MediaIdentifierProvider.OPENLIBRARY
     )?.value;
     if (!openLibraryId) {
-      throw new Error('Missing Open Library identifier for book request.');
+      const bookshelfId = mediaWithIdentifiers?.identifiers?.find(
+        ({ provider }) => provider === MediaIdentifierProvider.BOOKSHELF
+      )?.value;
+      const metadata =
+        mediaWithIdentifiers?.searchMetadata ??
+        (await getRepository(MediaSearchMetadata).findOne({
+          where: { mediaId: media.id },
+        }));
+      const bookshelfBook = bookshelfId
+        ? parseBookshelfBookId(bookshelfId)
+        : undefined;
+      const title = metadata?.title?.trim() || bookshelfBook?.foreignBookId;
+      const author = metadata?.author?.trim();
+
+      if (!bookshelfId || !bookshelfBook) {
+        throw new Error('Book request has no supported metadata identifier.');
+      }
+
+      return {
+        ...base,
+        mediaUrl: notificationMediaUrl(
+          `/book/${encodeURIComponent(bookshelfId)}`
+        ),
+        subject: title || 'Book request',
+        message: author || metadata?.publisher || undefined,
+        image: undefined,
+        extra: metadata?.publisher
+          ? [{ name: 'Publisher', value: metadata.publisher }]
+          : undefined,
+      };
     }
     const normalizedId = normalizeOpenLibraryWorkId(openLibraryId);
     const openLibrary = new OpenLibraryAPI();
@@ -313,7 +344,7 @@ const hydrateMediaRequestIntent = async (
 ): Promise<NotificationPayload | undefined> => {
   const request = await getRepository(MediaRequest).findOne({
     where: { id: requestId },
-    relations: { media: { identifiers: true } },
+    relations: { media: { identifiers: true, searchMetadata: true } },
   });
   // The request was deleted after its durable notification was queued. There
   // is no current payload to send, so the outbox should retire this stale row.
