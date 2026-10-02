@@ -95,6 +95,11 @@ const bookOptions: ReadarrBookOptions = {
   },
 };
 
+const bookOptionsWithoutSearch: ReadarrBookOptions = {
+  ...bookOptions,
+  addOptions: { searchForNewBook: false },
+};
+
 const existingBook = (overrides: Partial<ReadarrBook> = {}): ReadarrBook => ({
   id: 9,
   title: 'Test Book',
@@ -656,7 +661,7 @@ describe('ReadarrAPI.addBook', () => {
     mock.restoreAll();
   });
 
-  it('returns an existing monitored book without posting', async () => {
+  it('searches an existing monitored book when the request asks for acquisition', async () => {
     const api = new ReadarrAPI({
       url: 'http://localhost:8787/api/v1',
       apiKey: 'key',
@@ -671,12 +676,15 @@ describe('ReadarrAPI.addBook', () => {
       'post',
       async () => existingBook({ id: 10 })
     );
+    const searchMock = mock.method(api, 'searchBook', async () => {});
 
     const result = await api.addBook(bookOptions);
 
     assert.strictEqual(result.id, 9);
     assert.strictEqual(getMock.mock.calls.length, 1);
     assert.strictEqual(postMock.mock.calls.length, 0);
+    assert.strictEqual(searchMock.mock.calls.length, 1);
+    assert.strictEqual(searchMock.mock.calls[0].arguments[0], 9);
   });
 
   it('matches existing books with normalized ISBNs', async () => {
@@ -706,7 +714,7 @@ describe('ReadarrAPI.addBook', () => {
       async () => existingBook({ id: 10 })
     );
 
-    const result = await api.addBook(bookOptions);
+    const result = await api.addBook(bookOptionsWithoutSearch);
 
     assert.strictEqual(result.id, 9);
     assert.strictEqual(postMock.mock.calls.length, 0);
@@ -739,7 +747,7 @@ describe('ReadarrAPI.addBook', () => {
       async () => existingBook({ id: 10 })
     );
 
-    const result = await api.addBook(bookOptions);
+    const result = await api.addBook(bookOptionsWithoutSearch);
 
     assert.strictEqual(result.id, 9);
     assert.strictEqual(postMock.mock.calls.length, 0);
@@ -773,7 +781,7 @@ describe('ReadarrAPI.addBook', () => {
     );
 
     const result = await api.addBook({
-      ...bookOptions,
+      ...bookOptionsWithoutSearch,
       foreignBookId: 'OL123W',
       editions: [
         {
