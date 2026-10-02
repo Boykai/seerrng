@@ -15,6 +15,7 @@ import ExpandableCreditList from '@app/components/MediaDetails/ExpandableCreditL
 import MdblistRatingBadges from '@app/components/MediaDetails/MdblistRatingBadges';
 import MediaDetailArtwork from '@app/components/MediaDetails/MediaDetailArtwork';
 import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
+import MetadataAttribution from '@app/components/MediaDetails/MetadataAttribution';
 import SeriesSeasonEpisodeBrowser from '@app/components/MediaDetails/SeriesSeasonEpisodeBrowser';
 import { subjectTagClassName } from '@app/components/MediaDetails/subjectTagStyle';
 import MediaSlider from '@app/components/MediaSlider';
@@ -42,6 +43,8 @@ const messages = defineMessages('components.TvDetails.Layout', {
   creator: 'Creator',
   network: 'Network',
   seriesType: 'Series Type',
+  director: 'Director',
+  writers: 'Writers',
   hd: 'HD',
   ultraHd: '4K',
   watched: 'Watched',
@@ -208,6 +211,18 @@ const SeriesDetailsLayout = ({
     ...creators.map((person) => ({ ...person, job: 'Creator' })),
     ...sortedCrew,
   ].slice(0, 6);
+  const knownCrewNames = new Set(
+    [
+      ...creators.map((person) => person.name),
+      ...sortedCrew.map((person) => person.name),
+    ].map((name) => name.trim().toLocaleLowerCase())
+  );
+  const supplementalDirectors = (
+    data.supplementalMetadata?.directors ?? []
+  ).filter((name) => !knownCrewNames.has(name.trim().toLocaleLowerCase()));
+  const supplementalWriters = (data.supplementalMetadata?.writers ?? []).filter(
+    (name) => !knownCrewNames.has(name.trim().toLocaleLowerCase())
+  );
   const featuredCrewGroups = [0, 1, 2].map((column) =>
     [featuredCrew[column], featuredCrew[column + 3]].filter(Boolean)
   );
@@ -360,13 +375,15 @@ const SeriesDetailsLayout = ({
                         {intl.formatMessage(messages.network)}:
                       </dt>
                       <dd className="m-0 truncate">
-                        {data.networks[0] ? (
+                        {data.networks[0]?.id > 0 ? (
                           <Link
                             href={`/discover/tv/network/${data.networks[0].id}`}
                             className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                           >
                             {data.networks[0].name}
                           </Link>
+                        ) : data.networks[0] ? (
+                          data.networks[0].name
                         ) : (
                           unavailable
                         )}
@@ -388,14 +405,18 @@ const SeriesDetailsLayout = ({
                     >
                       {data.genres.length > 0
                         ? data.genres.map((genre, index) => (
-                            <span key={genre.id}>
+                            <span key={`${genre.id}-${genre.name}`}>
                               {index > 0 && ', '}
-                              <Link
-                                href={`/discover/tv?genre=${genre.id}`}
-                                className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                              >
-                                {genre.name}
-                              </Link>
+                              {genre.id > 0 ? (
+                                <Link
+                                  href={`/discover/tv?genre=${genre.id}`}
+                                  className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                                >
+                                  {genre.name}
+                                </Link>
+                              ) : (
+                                genre.name
+                              )}
                             </span>
                           ))
                         : unavailable}
@@ -472,6 +493,26 @@ const SeriesDetailsLayout = ({
               {data.overview ||
                 intl.formatMessage(messages.overviewUnavailable)}
             </p>
+
+            <MetadataAttribution sources={data.metadataSources} />
+
+            {(supplementalDirectors.length > 0 ||
+              supplementalWriters.length > 0) && (
+              <dl className="media-metadata-supplemental">
+                {supplementalDirectors.length > 0 && (
+                  <div>
+                    <dt>{intl.formatMessage(messages.director)}:</dt>
+                    <dd>{supplementalDirectors.slice(0, 4).join(', ')}</dd>
+                  </div>
+                )}
+                {supplementalWriters.length > 0 && (
+                  <div>
+                    <dt>{intl.formatMessage(messages.writers)}:</dt>
+                    <dd>{supplementalWriters.slice(0, 4).join(', ')}</dd>
+                  </div>
+                )}
+              </dl>
+            )}
 
             {featuredCrew.length > 0 && (
               <div className="detail-three-column-grid card:border-t-0 card:pt-0 mt-4 grid border-t border-gray-600 pt-3">
@@ -669,15 +710,21 @@ const SeriesDetailsLayout = ({
                   </dt>
                   <dd className="m-0 min-w-0">
                     {data.networks.length > 0
-                      ? data.networks.slice(0, 4).map((network) => (
-                          <Link
-                            key={network.id}
-                            href={`/discover/tv/network/${network.id}`}
-                            className="block truncate text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                          >
-                            {network.name}
-                          </Link>
-                        ))
+                      ? data.networks.slice(0, 4).map((network) =>
+                          network.id > 0 ? (
+                            <Link
+                              key={network.id}
+                              href={`/discover/tv/network/${network.id}`}
+                              className="block truncate text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                            >
+                              {network.name}
+                            </Link>
+                          ) : (
+                            <span className="block truncate" key={network.name}>
+                              {network.name}
+                            </span>
+                          )
+                        )
                       : unavailable}
                   </dd>
                 </dl>

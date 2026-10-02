@@ -17,6 +17,9 @@ const validSharedStyles = `
   .detail-disclosure-control {}
   .format-request-control {}
   .media-detail-column-divider {}
+  .media-metadata-attribution {}
+  .media-metadata-supplemental {}
+  .media-tmdb-attribution {}
   .media-rating-row {}
   .media-primary-action-row {}
   .scrollable-card {}

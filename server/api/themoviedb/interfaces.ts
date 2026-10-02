@@ -119,6 +119,7 @@ export interface TmdbExternalIds {
   freebase_mid?: string;
   freebase_id?: string;
   tvdb_id?: number;
+  wikidata_id?: string;
   tvrage_id?: string;
   facebook_id?: string;
   instagram_id?: string;

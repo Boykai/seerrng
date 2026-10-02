@@ -1282,6 +1282,101 @@
     --tw-prose-lead: rgb(var(--theme-control-text) / 0.82);
   }
 
+  .media-metadata-attribution {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.5rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid rgb(var(--theme-control-border) / 0.28);
+    padding-top: 0.5rem;
+    color: rgb(var(--theme-control-text) / 0.76);
+    font-size: 0.6875rem;
+    line-height: 1rem;
+  }
+
+  .media-metadata-attribution-label {
+    color: rgb(var(--theme-control-text) / 0.9);
+    font-weight: 600;
+  }
+
+  .media-metadata-attribution-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.625rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .media-metadata-attribution-link {
+    color: rgb(var(--color-indigo-300));
+    text-decoration: underline;
+    text-decoration-color: rgb(var(--color-indigo-300) / 0.5);
+    text-underline-offset: 2px;
+  }
+
+  .media-metadata-attribution-link:hover {
+    color: rgb(var(--color-indigo-200));
+    text-decoration-color: currentColor;
+  }
+
+  .media-metadata-attribution-link:focus-visible {
+    border-radius: 2px;
+    outline: 2px solid rgb(var(--color-indigo-400));
+    outline-offset: 2px;
+  }
+
+  .media-metadata-supplemental {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 0.25rem 0.75rem;
+    margin: 0.625rem 0 0;
+    color: rgb(var(--theme-control-text) / 0.78);
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
+  .media-metadata-supplemental dt {
+    color: rgb(var(--theme-control-text) / 0.92);
+    font-weight: 600;
+  }
+
+  .media-metadata-supplemental dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .media-tmdb-attribution {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    max-width: 64rem;
+    color: rgb(var(--theme-control-text) / 0.8);
+  }
+
+  .media-tmdb-attribution-logo {
+    display: block;
+    width: 4.5rem;
+    height: auto;
+  }
+
+  .media-tmdb-attribution-copy {
+    min-width: 0;
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.125rem;
+  }
+
+  @media (max-width: 30rem) {
+    .media-tmdb-attribution {
+      grid-template-columns: minmax(0, 1fr);
+      justify-items: start;
+    }
+  }
+
   .media-primary-action-row {
     @apply flex w-full flex-wrap items-center justify-between;
   }

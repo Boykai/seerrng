@@ -261,6 +261,13 @@ Use `CompactSelect`, `CompactRatingSelect`, `getFilterResetButtonClass`, and `ge
 - The user list is the first inset subcard and uses the shared data-table typography and two-pixel dark-blue heading divider. It displays ten 48-pixel user rows within a 512-pixel-high scroll region, keeps the heading row visible, and uses the shared selection circles instead of native checkboxes. Its content-based column widths fit an ordinary single-window card without horizontal scrolling; the table retains a smaller page-specific minimum width so horizontal scrolling appears only when the window becomes genuinely narrow.
 - The standard-size Create Local User, Import Media Server Users, and Bulk Edit actions form one right-justified wrapping row immediately beneath the table. The Users page is intentionally not paginated: do not render a page-size selector, page count, Previous button, Next button, or a page footer.
 
+## Metadata Source Attribution
+
+- Movie and series detail pages show a compact `Metadata sources` row beneath the overview. Each source name links directly to the source record; TVmaze is marked `adapted` and includes its `CC BY-SA 4.0` license link, while Wikidata includes its `CC0` label. Keep this row readable at narrow widths and visible without opening a disclosure.
+- The About page shows the approved TMDB logo beside the required non-endorsement notice: `This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.` Keep the logo small and secondary to SeerrNG branding.
+- TheTVDB receives a direct source link. Do not use TVDB or TVmaze artwork in attribution or metadata fallback unless their image-use terms are separately satisfied.
+- Source links and supplemental metadata use the shared `.media-metadata-attribution`, `.media-metadata-supplemental`, and `.media-tmdb-attribution` classes in `src/styles/globals.css`; do not recreate their appearance with local utility or inline styles.
+
 ## Accessibility and Behavior
 
 - Interactive controls retain a visible keyboard focus ring.

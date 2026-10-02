@@ -24,6 +24,7 @@ export type MediaSearchMetadataInput = Partial<
     | 'format'
     | 'provider'
     | 'externalIds'
+    | 'videoMetadataExpiresAt'
   >
 >;
 
@@ -88,6 +89,10 @@ export const upsertMediaSearchMetadata = async (
       if (value) {
         Object.assign(next, { [field]: value });
       }
+    }
+
+    if (input.videoMetadataExpiresAt instanceof Date) {
+      next.videoMetadataExpiresAt = input.videoMetadataExpiresAt;
     }
 
     next.searchText = searchableFields

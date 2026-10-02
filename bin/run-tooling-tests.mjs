@@ -18,6 +18,7 @@ const portableTests = [
   'scripts/check-workflow-boundaries.test.mjs',
   'scripts/sync-yunohost-package.test.mjs',
   'scripts/release-notes.test.mjs',
+  'scripts/latest-published-release-tag.test.mjs',
   'scripts/release-workflow.test.mjs',
   'scripts/watch-github-run.test.mjs',
   'scripts/wait-for-launchpad-ppa.test.mjs',

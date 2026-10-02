@@ -85,6 +85,9 @@ export class MediaSearchMetadata {
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public createdAt: Date;
 
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public videoMetadataExpiresAt?: Date | null;
+
   @UpdateDateColumn({
     type: resolveDbType('datetime'),
     default: () => 'CURRENT_TIMESTAMP',

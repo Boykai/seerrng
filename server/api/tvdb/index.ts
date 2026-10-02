@@ -14,6 +14,7 @@ import {
   type TvdbLoginResponse,
   type TvdbSeasonDetails,
   type TvdbTvDetails,
+  type TvdbVideoMetadataRecord,
 } from '@server/api/tvdb/interfaces';
 import cacheManager, { type AvailableCacheIds } from '@server/lib/cache';
 import logger from '@server/logger';
@@ -168,6 +169,110 @@ class Tvdb extends ExternalAPI implements TvShowProvider {
       this.handleError('Login failed', error);
       throw error;
     }
+  }
+
+  /** Fetch a source-native movie or series record without consulting TMDB. */
+  public async getVideoMetadataById({
+    mediaType,
+    id,
+  }: {
+    mediaType: 'movie' | 'tv';
+    id: number;
+  }): Promise<TvdbVideoMetadataRecord> {
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      throw new Error('Invalid TVDB metadata ID');
+    }
+
+    await this.refreshToken();
+    if (mediaType === 'tv') {
+      const response = await this.get<TvdbBaseResponse<TvdbTvDetails>>(
+        `/series/${id}/extended`,
+        { headers: { Authorization: `Bearer ${this.token}` } },
+        Tvdb.DEFAULT_CACHE_TTL
+      );
+      return response.data as unknown as TvdbVideoMetadataRecord;
+    }
+
+    const response = await this.get<TvdbBaseResponse<TvdbVideoMetadataRecord>>(
+      `/movies/${id}/extended`,
+      { headers: { Authorization: `Bearer ${this.token}` } },
+      Tvdb.DEFAULT_CACHE_TTL
+    );
+    return response.data;
+  }
+
+  /** Resolve a TMDB ID through TVDB's remote-ID index without calling TMDB. */
+  public async getVideoMetadataByTmdbId({
+    mediaType,
+    tmdbId,
+  }: {
+    mediaType: 'movie' | 'tv';
+    tmdbId: number;
+  }): Promise<TvdbVideoMetadataRecord | undefined> {
+    if (!Number.isSafeInteger(tmdbId) || tmdbId <= 0) {
+      throw new Error('Invalid TMDB metadata ID');
+    }
+
+    await this.refreshToken();
+    const response = await this.get<
+      TvdbBaseResponse<TvdbVideoMetadataRecord[]>
+    >(
+      `/search/remoteid/${tmdbId}`,
+      { headers: { Authorization: `Bearer ${this.token}` } },
+      Tvdb.DEFAULT_CACHE_TTL
+    );
+    const wantedType = mediaType === 'tv' ? 'series' : 'movie';
+    const matches = Array.isArray(response.data)
+      ? response.data.filter(
+          (item) =>
+            Number.isSafeInteger(item?.id) &&
+            item.id > 0 &&
+            item.type?.toLocaleLowerCase() === wantedType
+        )
+      : [];
+
+    return matches.length === 1 ? matches[0] : undefined;
+  }
+
+  /** Search TVDB's native catalogue; these results do not depend on TMDB. */
+  public async searchVideoMetadata({
+    query,
+    mediaType,
+  }: {
+    query: string;
+    mediaType: 'movie' | 'tv';
+  }): Promise<TvdbVideoMetadataRecord[]> {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery || normalizedQuery.length > 200) {
+      return [];
+    }
+
+    await this.refreshToken();
+    const response = await this.get<
+      TvdbBaseResponse<TvdbVideoMetadataRecord[]>
+    >(
+      '/search',
+      {
+        params: {
+          query: normalizedQuery,
+          type: mediaType === 'tv' ? 'series' : 'movie',
+        },
+        headers: { Authorization: `Bearer ${this.token}` },
+      },
+      Tvdb.DEFAULT_CACHE_TTL
+    );
+
+    return Array.isArray(response.data)
+      ? response.data
+          .filter(
+            (item) =>
+              Number.isSafeInteger(item?.id) &&
+              item.id > 0 &&
+              typeof item.name === 'string' &&
+              item.name.trim().length > 0
+          )
+          .slice(0, 20)
+      : [];
   }
 
   /** Official lists only: personal watchlists are not franchise metadata. */

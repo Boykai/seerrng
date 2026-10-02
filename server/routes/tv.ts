@@ -15,8 +15,13 @@ import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import { Watchlist } from '@server/entity/Watchlist';
 import { upsertMediaSearchMetadata } from '@server/lib/mediaSearchMetadata';
-import { getSettings, type SonarrSettings } from '@server/lib/settings';
+import {
+  getSettings,
+  MetadataProviderType,
+  type SonarrSettings,
+} from '@server/lib/settings';
 import { rankTmdbTvResults } from '@server/lib/tmdbRank';
+import { getAggregatedTvMetadata } from '@server/lib/videoMetadataCatalog';
 import logger from '@server/logger';
 import { mapTvResult } from '@server/models/Search';
 import { mapSeasonWithEpisodes, mapTvDetails } from '@server/models/Tv';
@@ -166,7 +171,6 @@ const getSeriesCoverService = (
 };
 
 tvRoutes.get('/:id', async (req, res, next) => {
-  const tmdb = new TheMovieDb();
   const tvId = parseTvRouteId(req.params.id);
   if (!tvId) {
     return next({ status: 404, message: 'Series not found.' });
@@ -178,18 +182,60 @@ tvRoutes.get('/:id', async (req, res, next) => {
   const language = parsedLanguage.value ?? req.locale;
 
   try {
-    const tmdbTv = await tmdb.getTvShow({
+    const { details: tmdbTv, provenance } = await getAggregatedTvMetadata(
       tvId,
-    });
-    const metadataProvider = tmdbTv.keywords.results.some(
+      language
+    );
+    const isAnime = tmdbTv.keywords.results.some(
       (keyword: TmdbKeyword) => keyword.id === ANIME_KEYWORD_ID
-    )
-      ? await getMetadataProvider('anime')
-      : await getMetadataProvider('tv');
-    const tv = await metadataProvider.getTvShow({
-      tvId,
-      language,
-    });
+    );
+    const metadataSettings = getSettings().metadataSettings;
+    let tv = tmdbTv;
+    if (
+      (isAnime ? metadataSettings.anime : metadataSettings.tv) ===
+      MetadataProviderType.TVDB
+    ) {
+      try {
+        tv = await (
+          await getMetadataProvider(isAnime ? 'anime' : 'tv')
+        ).getTvShow({
+          tvId,
+          language,
+        });
+        tv = {
+          ...tv,
+          name: tv.name || tmdbTv.name,
+          original_name: tv.original_name || tmdbTv.original_name,
+          overview: tv.overview || tmdbTv.overview,
+          first_air_date: tv.first_air_date || tmdbTv.first_air_date,
+          episode_run_time:
+            tv.episode_run_time?.length > 0
+              ? tv.episode_run_time
+              : tmdbTv.episode_run_time,
+          genres: tv.genres?.length > 0 ? tv.genres : tmdbTv.genres,
+          networks: tv.networks?.length > 0 ? tv.networks : tmdbTv.networks,
+          production_companies:
+            tv.production_companies?.length > 0
+              ? tv.production_companies
+              : tmdbTv.production_companies,
+          credits: tv.credits?.crew?.length > 0 ? tv.credits : tmdbTv.credits,
+          external_ids: {
+            ...tmdbTv.external_ids,
+            ...tv.external_ids,
+          },
+        };
+      } catch (error) {
+        logger.debug(
+          'Configured TV metadata provider failed; using the cached aggregate',
+          {
+            label: 'Video Metadata',
+            tvId,
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          }
+        );
+      }
+    }
     const media = await Media.getMedia(tv.id, MediaType.TV, req.user);
 
     const onUserWatchlist = req.user
@@ -226,19 +272,24 @@ tvRoutes.get('/:id', async (req, res, next) => {
         .join(', '),
       network: data.networks.map((network) => network.name).join(', '),
       format: 'Series',
-      provider: 'TMDB',
-      externalIds: [data.id, data.externalIds.imdbId, data.externalIds.tvdbId]
+      provider: provenance.sources
+        .map((source) => source.source.toUpperCase())
+        .join(' '),
+      videoMetadataExpiresAt: new Date(provenance.expiresAt),
+      externalIds: [
+        data.id,
+        data.externalIds.imdbId,
+        data.externalIds.tvdbId,
+        tmdbTv.external_ids.wikidata_id,
+      ]
         .filter(Boolean)
         .join(' '),
     });
 
-    // TMDB issue where it doesnt fallback to English when no overview is available in requested locale.
-    if (!data.overview) {
-      const tvEnglish = await metadataProvider.getTvShow({
-        tvId,
-      });
-      data.overview = tvEnglish.overview;
-    }
+    data.metadataSources = provenance.sources;
+    data.metadataProvenance = provenance.fields;
+    data.supplementalMetadata = provenance.supplemental;
+    data.metadataExpiresAt = provenance.expiresAt;
 
     return res.status(200).json(filterEntityResponse(data, req.user));
   } catch (e) {

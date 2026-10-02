@@ -11,6 +11,7 @@ import ExpandableCreditList from '@app/components/MediaDetails/ExpandableCreditL
 import MdblistRatingBadges from '@app/components/MediaDetails/MdblistRatingBadges';
 import MediaDetailArtwork from '@app/components/MediaDetails/MediaDetailArtwork';
 import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
+import MetadataAttribution from '@app/components/MediaDetails/MetadataAttribution';
 import MovieSummaryCard from '@app/components/MediaDetails/MovieSummaryCard';
 import { subjectTagClassName } from '@app/components/MediaDetails/subjectTagStyle';
 import MediaSlider from '@app/components/MediaSlider';
@@ -226,6 +227,8 @@ const MovieDetailsLayout = ({
           <MovieSummaryCard
             data={data}
             sortedCrew={sortedCrew}
+            supplementalDirectors={data.supplementalMetadata?.directors}
+            supplementalWriters={data.supplementalMetadata?.writers}
             show4kAvailability={show4kAvailability}
             watchedStatus={watchedStatus}
           />
@@ -242,6 +245,8 @@ const MovieDetailsLayout = ({
               {data.overview ||
                 intl.formatMessage(messages.overviewUnavailable)}
             </p>
+
+            <MetadataAttribution sources={data.metadataSources} />
 
             {featuredCrew.length > 0 && (
               <div className="detail-three-column-grid card:border-t-0 card:pt-0 mt-4 grid border-t border-gray-600 pt-3">
@@ -447,15 +452,21 @@ const MovieDetailsLayout = ({
                   </dt>
                   <dd className="m-0 min-w-0">
                     {data.productionCompanies.length > 0
-                      ? data.productionCompanies.slice(0, 4).map((studio) => (
-                          <Link
-                            key={studio.id}
-                            href={`/discover/movies/studio/${studio.id}`}
-                            className="block truncate text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                          >
-                            {studio.name}
-                          </Link>
-                        ))
+                      ? data.productionCompanies.slice(0, 4).map((studio) =>
+                          studio.id > 0 ? (
+                            <Link
+                              key={studio.id}
+                              href={`/discover/movies/studio/${studio.id}`}
+                              className="block truncate text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                            >
+                              {studio.name}
+                            </Link>
+                          ) : (
+                            <span className="block truncate" key={studio.name}>
+                              {studio.name}
+                            </span>
+                          )
+                        )
                       : unavailable}
                   </dd>
                 </dl>
