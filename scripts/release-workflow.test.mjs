@@ -436,6 +436,8 @@ test('release assets support trusted reuse and main-only manual dispatch', () =>
   assert.match(resolve.if, /github\.event_name != 'workflow_dispatch'/u);
   assert.match(resolve.if, /github\.ref == 'refs\/heads\/main'/u);
   assert.equal(workflowCall.inputs.reuse_windows_x64_artifact.type, 'boolean');
+  assert.equal(workflowCall.inputs.reuse_windows_arm64_artifact.type, 'boolean');
+  assert.equal(workflowCall.inputs.reuse_windows_arm64_artifact.default, false);
   assert.match(
     resolve.steps.find((step) => step.name === 'Resolve version').env
       .RELEASE_TAG,
@@ -472,6 +474,10 @@ test('release recovery validates reusable artifacts and repairs the failed relea
     release.jobs['validate-main-tag'].outputs.reuse_windows_x64_artifact,
     /steps\.recovery\.outputs/u
   );
+  assert.match(
+    release.jobs['validate-main-tag'].outputs.reuse_windows_arm64_artifact,
+    /steps\.recovery\.outputs/u
+  );
   assert.match(recoveryValidation.run, /\.head_sha == \$sha/u);
   assert.match(
     recoveryValidation.run,
@@ -486,6 +492,11 @@ test('release recovery validates reusable artifacts and repairs the failed relea
     /\["Dispatch package channels"\]/u,
     'a package-channel-only failure must be recoverable from verified assets'
   );
+  assert.match(
+    recoveryValidation.run,
+    /reuse_windows_arm64_artifact=true/u,
+    'package-only recovery must preserve the successful Windows ARM64 artifact'
+  );
   assert.match(recoveryValidation.run, /event == "workflow_dispatch"/u);
   assert.match(recoveryValidation.run, /\.expired == false/u);
   assert.match(imageBuild.if, /inputs\.reuse_published_image != true/u);
@@ -496,6 +507,10 @@ test('release recovery validates reusable artifacts and repairs the failed relea
   assert.match(
     assetBuild.with.reuse_windows_x64_artifact,
     /needs\.validate-main-tag\.outputs\.reuse_windows_x64_artifact/u
+  );
+  assert.match(
+    assetBuild.with.reuse_windows_arm64_artifact,
+    /needs\.validate-main-tag\.outputs\.reuse_windows_arm64_artifact/u
   );
   assert.equal(
     assetBuild.with.reuse_from_run_id,
@@ -510,8 +525,24 @@ test('release recovery validates reusable artifacts and repairs the failed relea
     /inputs\.reuse_windows_x64_artifact == true/u
   );
   assert.match(
+    reusedArtifactDownload.if,
+    /inputs\.reuse_windows_arm64_artifact == true/u
+  );
+  assert.match(
     assets.jobs.build.steps.find((step) => step.name === 'Build archive').if,
     /matrix\.arch == 'arm64'/u
+  );
+  assert.match(
+    assets.jobs.build.steps.find((step) => step.name === 'Build archive').if,
+    /inputs\.reuse_windows_arm64_artifact != true/u,
+    'recovery must skip a successful Windows ARM64 rebuild'
+  );
+  assert.match(
+    assets.jobs.build.steps.find(
+      (step) => step.name === 'Install node-gyp for Visual Studio 2026'
+    ).if,
+    /inputs\.reuse_windows_arm64_artifact != true/u,
+    'recovery must skip ARM64 build-tool setup when reusing its artifact'
   );
   assert.match(
     assets.jobs.build.steps.find((step) => step.name === 'Build archive').env

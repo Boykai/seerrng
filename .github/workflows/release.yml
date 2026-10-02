@@ -51,6 +51,7 @@ jobs:
       contents: read
     outputs:
       reuse_windows_x64_artifact: ${{ steps.recovery.outputs.reuse_windows_x64_artifact || 'false' }}
+      reuse_windows_arm64_artifact: ${{ steps.recovery.outputs.reuse_windows_arm64_artifact || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -119,6 +120,7 @@ jobs:
           fi
 
           jobs="$(gh api "repos/$REPO/actions/runs/$REUSE_FROM_RUN_ID/jobs?per_page=100")"
+          reuse_windows_arm64_artifact=false
           if jq -e '
             ([.jobs[] | select(.conclusion == "failure") | .name] ==
               ["Build release assets / Build windows x64"]) and
@@ -134,6 +136,7 @@ jobs:
             ] - [.jobs[] | select(.conclusion == "success") | .name]) | length == 0)
           ' <<<"$jobs" >/dev/null; then
             reuse_windows_x64_artifact=false
+            reuse_windows_arm64_artifact=true
           elif jq -e '
             ([.jobs[] | select(.conclusion == "failure") | .name] ==
               ["Build release assets / Upload release assets"]) and
@@ -151,6 +154,7 @@ jobs:
             ] - [.jobs[] | select(.conclusion == "success") | .name]) | length == 0)
           ' <<<"$jobs" >/dev/null; then
             reuse_windows_x64_artifact=true
+            reuse_windows_arm64_artifact=true
           elif jq -e '
             ([.jobs[] | select(.conclusion == "failure") | .name] ==
               ["Dispatch package channels"]) and
@@ -175,11 +179,13 @@ jobs:
             ] - [.jobs[] | select(.conclusion == "success") | .name]) | length == 0)
           ' <<<"$jobs" >/dev/null; then
             reuse_windows_x64_artifact=true
+            reuse_windows_arm64_artifact=true
           else
             echo 'The previous run did not fail at a supported recoverable release stage.' >&2
             exit 1
           fi
           echo "reuse_windows_x64_artifact=$reuse_windows_x64_artifact" >> "$GITHUB_OUTPUT"
+          echo "reuse_windows_arm64_artifact=$reuse_windows_arm64_artifact" >> "$GITHUB_OUTPUT"
 
           artifacts="$(gh api "repos/$REPO/actions/runs/$REUSE_FROM_RUN_ID/artifacts?per_page=100")"
           if [[ "$reuse_windows_x64_artifact" == true ]]; then
@@ -749,6 +755,7 @@ jobs:
       tag: ${{ inputs.tag || github.ref_name }}
       reuse_from_run_id: ${{ inputs.reuse_from_run_id || '' }}
       reuse_windows_x64_artifact: ${{ needs.validate-main-tag.outputs.reuse_windows_x64_artifact == 'true' }}
+      reuse_windows_arm64_artifact: ${{ needs.validate-main-tag.outputs.reuse_windows_arm64_artifact == 'true' }}
     permissions:
       actions: read
       contents: write
