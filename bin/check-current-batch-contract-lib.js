@@ -914,6 +914,22 @@ const validateCurrentBatchContract = (files) => {
     ],
     'available quality badges must use the shared poster opacity and green palette'
   );
+  requireCssRule(
+    '.poster-control.poster-control-type-manga',
+    [
+      'border-color: color-mix(in srgb, var(--palette-orange) 90%, transparent);',
+      'var(--poster-control-background-opacity)',
+    ],
+    'manga poster badges must use the shared poster opacity and orange palette'
+  );
+  requireCssRule(
+    '.app-button-media-type-manga',
+    [
+      'border-color: color-mix(in srgb, var(--palette-orange) 90%, transparent);',
+      'background-color: hsl(25 95% 10% / 0.35);',
+    ],
+    'manga media-type badges must use the shared badge transparency and orange palette'
+  );
   rejectText(
     'src/components/Common/StatusBadgeMini/index.tsx',
     'bg-green-700/70',

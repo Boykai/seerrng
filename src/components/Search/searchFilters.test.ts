@@ -80,6 +80,20 @@ describe('contextual global search filters', () => {
       }),
       false
     );
+    assert.equal(
+      isSearchDataReady({ routerReady: true, category: 'manga', query: '' }),
+      false
+    );
+    assert.equal(
+      isSearchDataReady({
+        routerReady: true,
+        category: 'manga',
+        query: 'monster',
+      }),
+      true
+    );
+    assert.equal(getSearchEndpoint('manga'), '/api/v1/search');
+    assert.equal(getSearchEndpoint('manga', 'monster', true), '/api/v1/search');
   });
 
   it('preserves the main query but removes stale contextual and sort state when media type changes', () => {

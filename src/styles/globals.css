@@ -3240,6 +3240,14 @@
     color: hsl(191 77% 75%);
   }
 
+  .poster-control.poster-control-type-manga {
+    border-color: color-mix(in srgb, var(--palette-orange) 90%, transparent);
+    background-color: hsl(
+      25 95% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(25 95% 77%);
+  }
+
   .app-button-media-type-movie,
   .app-button-media-type-collection {
     border-color: color-mix(in srgb, var(--palette-blue) 90%, transparent);
@@ -3281,6 +3289,12 @@
     border-color: color-mix(in srgb, var(--palette-aqua) 90%, transparent);
     background-color: hsl(191 77% 10% / 0.35);
     color: hsl(191 77% 75%);
+  }
+
+  .app-button-media-type-manga {
+    border-color: color-mix(in srgb, var(--palette-orange) 90%, transparent);
+    background-color: hsl(25 95% 10% / 0.35);
+    color: hsl(25 95% 77%);
   }
 
   .poster-control.poster-control-available {
@@ -4753,7 +4767,12 @@
     --john-accent-dark: var(--palette-blue-dark, #002b70);
   }
 
-  :root[data-theme-preset='john-redesign'] :is(.app-button-trailer) {
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-trailer,
+      .poster-control-type-manga,
+      .app-button-media-type-manga
+    ) {
     --john-accent: var(--palette-orange, #f97316);
     --john-accent-light: var(--palette-orange-light, #fb923c);
     --john-accent-dark: var(--palette-orange-dark, #c2410c);
@@ -4791,6 +4810,7 @@
       .poster-control-book-format,
       .poster-control-type-comic,
       .poster-control-type-magazine,
+      .poster-control-type-manga,
       .poster-control-available,
       .poster-control-pending,
       .poster-control-processing,
@@ -4803,7 +4823,8 @@
       .app-button-media-type-artist,
       .app-button-media-type-book,
       .app-button-media-type-comic,
-      .app-button-media-type-magazine
+      .app-button-media-type-magazine,
+      .app-button-media-type-manga
     ) {
     border-color: color-mix(in srgb, var(--john-accent) 90%, transparent);
     background-color: color-mix(
@@ -4839,6 +4860,7 @@
       .poster-control-book-format,
       .poster-control-type-comic,
       .poster-control-type-magazine,
+      .poster-control-type-manga,
       .poster-control-available,
       .poster-control-pending,
       .poster-control-processing,
@@ -4851,7 +4873,8 @@
       .app-button-media-type-artist,
       .app-button-media-type-book,
       .app-button-media-type-comic,
-      .app-button-media-type-magazine
+      .app-button-media-type-magazine,
+      .app-button-media-type-manga
     ):hover {
     border-color: color-mix(in srgb, var(--john-accent) 65%, white);
     background-color: color-mix(in srgb, var(--john-accent) 70%, transparent);
@@ -4883,6 +4906,7 @@
       .poster-control-book-format,
       .poster-control-type-comic,
       .poster-control-type-magazine,
+      .poster-control-type-manga,
       .poster-control-available,
       .poster-control-pending,
       .poster-control-processing,
@@ -4895,7 +4919,8 @@
       .app-button-media-type-artist,
       .app-button-media-type-book,
       .app-button-media-type-comic,
-      .app-button-media-type-magazine
+      .app-button-media-type-magazine,
+      .app-button-media-type-manga
     ):focus {
     border-color: color-mix(in srgb, var(--john-accent) 65%, white);
     --tw-ring-color: var(--john-accent);
@@ -4926,6 +4951,7 @@
       .poster-control-book-format,
       .poster-control-type-comic,
       .poster-control-type-magazine,
+      .poster-control-type-manga,
       .poster-control-available,
       .poster-control-pending,
       .poster-control-processing,
@@ -4938,7 +4964,8 @@
       .app-button-media-type-artist,
       .app-button-media-type-book,
       .app-button-media-type-comic,
-      .app-button-media-type-magazine
+      .app-button-media-type-magazine,
+      .app-button-media-type-manga
     ):active {
     border-color: color-mix(in srgb, var(--john-accent) 80%, white);
     background-color: color-mix(in srgb, var(--john-accent) 85%, transparent);

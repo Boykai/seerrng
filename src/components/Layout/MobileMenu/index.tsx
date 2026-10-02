@@ -7,6 +7,7 @@ import { isOptionalCatalogPathEnabled } from '@app/utils/serviceAvailability';
 import { Transition } from '@headlessui/react';
 import {
   BookOpenIcon,
+  ChatBubbleBottomCenterTextIcon,
   ClockIcon,
   CogIcon,
   CommandLineIcon,
@@ -24,6 +25,7 @@ import {
 } from '@heroicons/react/24/outline';
 import {
   BookOpenIcon as FilledBookOpenIcon,
+  ChatBubbleBottomCenterTextIcon as FilledChatBubbleBottomCenterTextIcon,
   ClockIcon as FilledClockIcon,
   CogIcon as FilledCogIcon,
   CommandLineIcon as FilledCommandLineIcon,
@@ -163,6 +165,15 @@ const MobileMenu = ({
         svgIcon: <NewspaperIcon className="h-6 w-6" />,
         svgIconSelected: <FilledNewspaperIcon className="h-6 w-6" />,
         activeRegExp: /^\/(?:discover\/magazines(?:\/.*)?|magazine\/)/,
+      },
+      {
+        href: '/discover/manga',
+        content: intl.formatMessage(menuMessages.browsemanga),
+        svgIcon: <ChatBubbleBottomCenterTextIcon className="h-6 w-6" />,
+        svgIconSelected: (
+          <FilledChatBubbleBottomCenterTextIcon className="h-6 w-6" />
+        ),
+        activeRegExp: /^\/(?:discover\/manga(?:\/.*)?|manga\/)/,
       },
       {
         href: '/software',

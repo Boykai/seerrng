@@ -104,4 +104,48 @@ describe('Discover state overlays', () => {
     );
     assert.equal(updated[0].results[1], pages[0].results[1]);
   });
+
+  it('sends manga by its AniList id string and applies its state', () => {
+    const pages = [
+      {
+        results: [
+          { id: 30013, mediaType: 'manga', title: 'Manga' },
+          { id: 30013, mediaType: 'manga', title: 'Manga' },
+          { id: 30013, mediaType: 'movie', title: 'Movie' },
+        ],
+      },
+    ];
+
+    assert.deepEqual(getDiscoverStateInputs(pages), [
+      { mediaType: MediaType.MANGA, id: '30013' },
+      { mediaType: MediaType.MOVIE, id: 30013 },
+    ]);
+
+    const updated = applyDiscoverStateOverlay(pages, {
+      revision: 'state-revision',
+      generatedAt: new Date(0).toISOString(),
+      items: [
+        {
+          key: `${MediaType.MANGA}:30013`,
+          mediaType: MediaType.MANGA,
+          id: '30013',
+          media: {
+            id: 11,
+            status: MediaStatus.BLOCKLISTED,
+            status4k: MediaStatus.UNKNOWN,
+            updatedAt: new Date(0).toISOString(),
+          },
+          request: null,
+          watchlisted: false,
+        },
+      ],
+    });
+
+    assert.equal(
+      (updated[0].results[0] as { mediaInfo?: { status?: MediaStatus } })
+        .mediaInfo?.status,
+      MediaStatus.BLOCKLISTED
+    );
+    assert.equal(updated[0].results[2], pages[0].results[2]);
+  });
 });

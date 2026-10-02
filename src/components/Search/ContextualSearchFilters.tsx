@@ -23,6 +23,7 @@ const messages = defineMessages('components.Search.ContextualFilters', {
   searchAll: 'Search All Media',
   searchComics: 'Filter Comic Results',
   searchMagazines: 'Filter Magazine Results',
+  searchManga: 'Filter Manga Results',
   searchAuthors: 'Search Authors',
 });
 
@@ -107,7 +108,11 @@ const LibrarySearchFilters = ({
 
   const renderKeywordSearch = (
     placeholder: (typeof messages)[
-      'searchAll' | 'searchAuthors' | 'searchComics' | 'searchMagazines']
+      | 'searchAll'
+      | 'searchAuthors'
+      | 'searchComics'
+      | 'searchMagazines'
+      | 'searchManga']
   ) => (
     <form
       className="discover-filter-control w-72 max-w-full flex-none"
@@ -173,7 +178,9 @@ const LibrarySearchFilters = ({
         ? messages.searchAuthors
         : category === 'comic'
           ? messages.searchComics
-          : messages.searchMagazines
+          : category === 'manga'
+            ? messages.searchManga
+            : messages.searchMagazines
     );
   }
 

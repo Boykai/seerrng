@@ -69,8 +69,7 @@ interface TitleCardProps {
   voteCount?: number;
   bookRatingAverage?: number;
   bookRatingCount?: number;
-  // Manga results have no title card yet; callers filter them out first.
-  mediaType: Exclude<MediaType, 'author' | 'manga'>;
+  mediaType: Exclude<MediaType, 'author'>;
   status?: MediaStatus;
   status4k?: MediaStatus;
   canExpand?: boolean;
@@ -305,16 +304,18 @@ const TitleCard = ({
           await axios.post(
             `/api/v1/blocklist/collection/${encodeApiPathSegment(id)}`
           );
-        } else if (isAlbum || isBook || isComic || isMagazine) {
+        } else if (isAlbum || isBook || isComic || isMagazine || isManga) {
           await axios.post('/api/v1/blocklist', {
-            externalId: actionId,
+            externalId: isManga ? String(actionId) : actionId,
             externalProvider: isAlbum
               ? 'musicbrainz'
               : isBook
                 ? 'openlibrary'
                 : isComic
                   ? 'comicvine'
-                  : 'lazylibrarian',
+                  : isManga
+                    ? 'anilist'
+                    : 'lazylibrarian',
             mediaType: isAlbum ? 'music' : mediaType,
             title,
             user: user?.id,
@@ -458,6 +459,7 @@ const TitleCard = ({
   const isBook = mediaType === 'book';
   const isComic = mediaType === 'comic';
   const isMagazine = mediaType === 'magazine';
+  const isManga = mediaType === 'manga';
   const canonicalId = normalizeExternalTitleId(mediaType, id);
   const artwork = useAlbumArtwork(
     isAlbum ? String(canonicalId) : undefined,
@@ -525,7 +527,9 @@ const TitleCard = ({
                 ? `/comic/${encodeApiPathSegment(canonicalId)}`
                 : mediaType === 'magazine'
                   ? `/magazine/${encodeApiPathSegment(canonicalId)}`
-                  : `/artist/${encodeApiPathSegment(canonicalId)}`;
+                  : isManga
+                    ? `/manga/${encodeApiPathSegment(canonicalId)}`
+                    : `/artist/${encodeApiPathSegment(canonicalId)}`;
   const displayImage = getTmdbPosterImageUrl(artwork);
   // Resolved provider artwork is routed by URL when image caching is enabled.
   const imageCacheType =
@@ -547,7 +551,9 @@ const TitleCard = ({
             ? Permission.REQUEST_COMIC
             : isMagazine
               ? Permission.REQUEST_MAGAZINE
-              : Permission.REQUEST_BOOK,
+              : isManga
+                ? Permission.REQUEST_MANGA
+                : Permission.REQUEST_BOOK,
   ];
 
   if (mediaType === 'movie') {
@@ -566,7 +572,12 @@ const TitleCard = ({
     hasPermission([Permission.MANAGE_BLOCKLIST], {
       type: 'or',
     }) &&
-    (canUseVideoActions || isAlbum || isBook || isComic || isMagazine);
+    (canUseVideoActions ||
+      isAlbum ||
+      isBook ||
+      isComic ||
+      isMagazine ||
+      isManga);
   const canRequest4k =
     ((mediaType === 'movie' && settings.currentSettings.movie4kEnabled) ||
       (mediaType === 'tv' && settings.currentSettings.series4kEnabled)) &&

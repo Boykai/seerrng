@@ -175,6 +175,14 @@ export const isOptionalCatalogPathEnabled = (
     );
   }
 
+  if (
+    path === '/discover/manga' ||
+    path.startsWith('/discover/manga/') ||
+    path.startsWith('/manga/')
+  ) {
+    return isConfiguredMediaCategoryEnabled('manga', availability);
+  }
+
   if (path === '/discover/audiobooks') {
     return isBookFormatEnabled('audiobook', availability);
   }
