@@ -222,6 +222,7 @@ class SuwayomiAPI extends ExternalAPI {
   readonly #timeouts: SuwayomiTimeouts;
   readonly #limits: { chapterArchiveBytes: number; thumbnailBytes: number };
   readonly #readback: { attempts: number; delayMs: number };
+  readonly #warnInsecureAuthMode: boolean;
 
   constructor(options: SuwayomiAPIOptions) {
     const baseUrl = parseBaseUrl(options?.url);
@@ -279,6 +280,7 @@ class SuwayomiAPI extends ExternalAPI {
       delayMs: configuredNumber(options.readback?.delayMs, 1_000, 0),
     };
     this.#origin = new URL(baseUrl).origin;
+    this.#warnInsecureAuthMode = options.warnInsecureAuthMode !== false;
     this.warnAboutMode(auth.mode);
   }
 
@@ -863,6 +865,10 @@ class SuwayomiAPI extends ExternalAPI {
   }
 
   private warnAboutMode(mode: string): void {
+    // A diagnostic client must not use up the once-per-server warning.
+    if (!this.#warnInsecureAuthMode) {
+      return;
+    }
     const key = `${mode} ${this.#origin}`;
     if ((mode !== 'NONE' && mode !== 'BASIC_AUTH') || warnedModes.has(key)) {
       return;

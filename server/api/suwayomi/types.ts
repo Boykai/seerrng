@@ -22,6 +22,13 @@ export interface SuwayomiAPIOptions {
   limits?: { chapterArchiveBytes?: number; thumbnailBytes?: number };
   /** Read state back after a queue mutation times out before failing it. */
   readback?: { attempts?: number; delayMs?: number };
+  /**
+   * Log the once-per-server warning about the NONE and BASIC_AUTH modes.
+   * Defaults to true. Set it to false for short-lived diagnostic clients,
+   * such as a settings connection test, so that they neither log the
+   * warning nor stop the long-lived client for that server from logging it.
+   */
+  warnInsecureAuthMode?: boolean;
 }
 
 export interface SuwayomiCallOptions {
