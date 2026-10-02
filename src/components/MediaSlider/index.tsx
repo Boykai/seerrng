@@ -25,6 +25,7 @@ import {
   getDiscoverOverlayRequestKey,
   getDiscoverStateInputs,
 } from '@app/utils/discoverStateOverlay';
+import { isMangaResult } from '@app/utils/mangaResults';
 import {
   MEDIA_SLIDER_TITLE_LIMIT,
   hasMediaSliderResults,
@@ -311,6 +312,10 @@ const MediaSlider = ({
         }
 
         resultKeys.add(resultKey);
+
+        if (isMangaResult(item)) {
+          continue;
+        }
 
         if (
           settings.currentSettings.hideAvailable &&

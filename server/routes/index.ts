@@ -69,6 +69,7 @@ import indexerSearchRoutes from './indexerSearch';
 import issueRoutes from './issue';
 import issueCommentRoutes from './issueComment';
 import magazineRoutes from './magazine';
+import mangaRoutes, { mangaDiscoverRoutes } from './manga';
 import mediaRoutes from './media';
 import movieRoutes from './movie';
 import musicRoutes from './music';
@@ -440,6 +441,14 @@ router.use(
   indexerSearchRoutes
 );
 router.use('/search', isAuthenticated(), searchRoutes);
+// Mounted ahead of /discover so the manga category guard owns this subtree.
+router.use(
+  '/discover/manga',
+  isAuthenticated(),
+  categoryAvailabilityGuard(['manga']),
+  externalMetadataRateLimit,
+  mangaDiscoverRoutes
+);
 router.use('/discover', isAuthenticated(), discoverRoutes);
 router.use('/request', isAuthenticated(), requestRoutes);
 router.use('/request/software', softwareRoutes);
@@ -508,6 +517,13 @@ router.use(
   categoryAvailabilityGuard(['magazine']),
   externalMetadataRateLimit,
   magazineRoutes
+);
+router.use(
+  '/manga',
+  isAuthenticated(),
+  categoryAvailabilityGuard(['manga']),
+  externalMetadataRateLimit,
+  mangaRoutes
 );
 router.use(
   '/artist',

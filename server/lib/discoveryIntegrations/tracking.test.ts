@@ -1,4 +1,8 @@
-import AnilistAPI from '@server/api/anilist';
+import AnilistAPI, { AnilistRateLimitedError } from '@server/api/anilist';
+import {
+  anilistRateLimiter,
+  resetAnilistRateLimiterForTests,
+} from '@server/api/anilist/rateLimiter';
 import ExternalAPI from '@server/api/externalapi';
 import SimklAPI from '@server/api/simkl';
 import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
@@ -403,4 +407,71 @@ it('validates AniList progress against the current episode total and updates nat
   assert.deepEqual(write.mock.calls[1].arguments, [
     { mediaId: 7, scoreRaw: 78 },
   ]);
+});
+it('forgets an AniList write that the shared rate limiter refused before sending it', async () => {
+  const userId = await account('anilist');
+  mock.method(AnilistAPI.prototype, 'getMedia', async () => ({
+    id: 7,
+    episodes: 12,
+    format: 'TV',
+  }));
+  const intent = parseTrackingIntent('anilist', {
+    requestId,
+    action: 'rating',
+    value: 8,
+    anilistId: 7,
+  });
+  anilistRateLimiter.noteRateLimited(120);
+  try {
+    await assert.rejects(
+      () => applyTrackingIntent(userId, 'anilist', intent, 'credential'),
+      (error: unknown) =>
+        error instanceof AnilistRateLimitedError && !error.requestSent
+    );
+  } finally {
+    resetAnilistRateLimiterForTests();
+  }
+  assert.equal(await getRepository(ProviderTrackingAction).count(), 0);
+
+  let anilistAnswer: 'rate-limited' | 'saved' = 'rate-limited';
+  const write = mock.method(
+    AnilistAPI.prototype,
+    'saveMediaListEntry',
+    async () => {
+      if (anilistAnswer === 'rate-limited') {
+        throw new AnilistRateLimitedError(30);
+      }
+      return { id: 5 };
+    }
+  );
+  // A rate limit answered by AniList itself keeps the uncertain outcome.
+  const answered = parseTrackingIntent('anilist', {
+    requestId: requestId.replace(/1$/, '2'),
+    action: 'rating',
+    value: 9,
+    anilistId: 7,
+  });
+  await assert.rejects(
+    () => applyTrackingIntent(userId, 'anilist', answered, 'credential'),
+    AnilistRateLimitedError
+  );
+  assert.equal(
+    (
+      await getRepository(ProviderTrackingAction).findOneByOrFail({
+        userId,
+        requestId: answered.requestId,
+      })
+    ).state,
+    'unknown'
+  );
+
+  anilistAnswer = 'saved';
+  const retried = await applyTrackingIntent(
+    userId,
+    'anilist',
+    intent,
+    'credential'
+  );
+  assert.equal(retried.state, 'succeeded');
+  assert.equal(write.mock.callCount(), 2);
 });

@@ -18,6 +18,7 @@ import useMediaFilterPin from '@app/hooks/useMediaFilterPin';
 import { setSearchActivity } from '@app/hooks/useSearchActivity';
 import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
+import { isMangaResult } from '@app/utils/mangaResults';
 import {
   isAnySoftwareCategoryEnabled,
   isConfiguredMediaCategoryEnabled,
@@ -535,6 +536,7 @@ const Search = () => {
   const visibleTitles = useMemo(
     () =>
       titles
+        .filter((title) => !isMangaResult(title))
         .filter((title) => matchesCategory(title, category))
         .filter((title) =>
           matchesSearchResultFilter(

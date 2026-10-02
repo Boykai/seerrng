@@ -84,14 +84,6 @@ const MANGA_ENUM_EXCLUSIONS: Record<string, Exclusion> = {
     reason:
       'Bulk requests cover music and book selections; manga requests are single-title in the MVP.',
   },
-  'GET /search query type': {
-    owner: 'L2',
-    reason: 'Manga search results arrive with the catalog API.',
-  },
-  'schema MediaInfo mediaType': {
-    owner: 'L2',
-    reason: 'Manga media records first appear in catalog API responses.',
-  },
   'schema Blocklist mediaType': { owner: 'L3', reason: BLOCKLIST },
   'GET /blocklist query mediaType': { owner: 'L3', reason: BLOCKLIST },
   'GET /blocklist/{tmdbId} query mediaType': { owner: 'L3', reason: BLOCKLIST },
