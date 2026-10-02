@@ -855,7 +855,8 @@ class SuwayomiAPI extends ExternalAPI {
 
   /**
    * Streams a chapter CBZ without buffering it. Destroying the returned
-   * stream, or aborting `signal`, cancels the upstream transfer.
+   * stream, or aborting `signal`, cancels the upstream transfer, and so does
+   * a stall longer than `timeouts.bytes` while the stream waits for data.
    */
   async streamChapterArchive(
     chapterId: string,
@@ -1218,12 +1219,19 @@ class SuwayomiAPI extends ExternalAPI {
       // which would crash the process without a listener.
       body?.on('error', () => undefined);
       const info = this.checkBytes(route, response, limit, archive);
+      // follow-redirects leaves the request timeout on the socket, where it
+      // destroys the body once a paused consumer holds it idle that long.
+      // limitStream's idle timer covers the body from here on.
+      if (response.request instanceof ClientRequest) {
+        response.request.socket?.setTimeout(0);
+      }
       return {
         ...info,
         stream: limitStream(
           route,
           body ?? badResponse(route),
           limit,
+          this.#timeouts.bytes,
           controller
         ),
       };
@@ -1262,16 +1270,38 @@ const discard = ({ data, request }: AxiosResponse<unknown>): void => {
   if (request instanceof ClientRequest) request.destroy();
 };
 
-/** Copies `body` with backpressure and fails once more than `limit` bytes arrive. */
+/**
+ * Copies `body` with backpressure and fails once more than `limit` bytes
+ * arrive, or once upstream sends nothing for `idleMs` while the stream waits
+ * for data. The request timeout no longer applies once the headers arrive. A
+ * consumer that stops reading stops the clock, so backpressure never times out.
+ */
 const limitStream = (
   route: string,
   body: Readable,
   limit: number,
+  idleMs: number,
   controller: AbortController
 ): Readable => {
   let received = 0;
+  let upstreamEnded = false;
+  let idle: NodeJS.Timeout | undefined;
+  const stall = () => {
+    output.destroy(reportSuwayomiError(new SuwayomiError('TIMEOUT', route)));
+    controller.abort();
+  };
   const output = new Transform({
+    // Readable calls this only when it wants more data than it holds.
+    read(size) {
+      clearTimeout(idle);
+      if (!upstreamEnded) {
+        idle = setTimeout(stall, idleMs);
+        idle.unref();
+      }
+      Transform.prototype._read.call(this, size);
+    },
     transform(chunk: Buffer, _encoding, callback) {
+      clearTimeout(idle);
       received += chunk.length;
       if (received > limit) {
         callback(
@@ -1283,13 +1313,22 @@ const limitStream = (
     },
   });
   output.once('close', () => {
+    clearTimeout(idle);
     if (!body.readableEnded) {
       controller.abort();
       body.destroy();
     }
   });
+  body.once('end', () => {
+    upstreamEnded = true;
+    clearTimeout(idle);
+  });
   body.on('error', (error) => {
-    output.destroy(reportSuwayomiError(toSuwayomiError(error, route)));
+    clearTimeout(idle);
+    // An abort that follows a stall or a cancel must not replace its error.
+    if (!output.destroyed) {
+      output.destroy(reportSuwayomiError(toSuwayomiError(error, route)));
+    }
   });
   body.pipe(output);
   return output;

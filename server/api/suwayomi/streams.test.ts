@@ -222,6 +222,51 @@ describe('SuwayomiAPI chapter archive download', () => {
     assert.ok(routeRequests(server, ARCHIVE).length <= 2);
   });
 
+  it(
+    'times out and releases the socket when the body stalls',
+    { timeout: 10_000 },
+    async () => {
+      const server = await start();
+      server.onRoute('GET', ARCHIVE, {
+        headers: { ...ZIP, 'Content-Length': '1000' },
+        chunks: [Buffer.alloc(100), Buffer.alloc(900)],
+        stallAfterChunks: 1,
+      });
+      const api = connect(server, { timeouts: { bytes: 200 } });
+      const { stream } = await api.streamChapterArchive('11');
+      const started = Date.now();
+      await assert.rejects(readAll(stream), (error: unknown) => {
+        assert.ok(error instanceof SuwayomiError);
+        assert.equal(error.code, 'TIMEOUT');
+        return true;
+      });
+      assert.ok(Date.now() - started >= 150);
+      assert.equal(await routeRequests(server, ARCHIVE)[0].closed, false);
+      const deadline = Date.now() + 1_000;
+      while (pooled(globalAgent.sockets, server) > 0 && Date.now() < deadline) {
+        await sleep(20);
+      }
+      assert.equal(pooled(globalAgent.sockets, server), 0);
+    }
+  );
+
+  it(
+    'never times out a consumer that pauses under backpressure',
+    { timeout: 10_000 },
+    async () => {
+      const server = await start();
+      const body = Buffer.alloc(1024 ** 2, 7);
+      server.onRoute('GET', ARCHIVE, archive(body));
+      const api = connect(server, { timeouts: { bytes: 500 } });
+      const { stream } = await api.streamChapterArchive('11');
+      await sleep(1_000);
+      assert.equal(stream.destroyed, false);
+      // The stream holds only part of the body, so the socket sits idle.
+      assert.ok(stream.readableLength < body.length);
+      assert.ok((await readAll(stream)).equals(body));
+    }
+  );
+
   it('renews an expired token and never falls back to Basic', async () => {
     const server = await start();
     server.onRoute('GET', ARCHIVE, archive(Buffer.from('PK')));

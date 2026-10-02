@@ -18,6 +18,7 @@ export type SuwayomiTimeouts = Record<SuwayomiCallClass, number>;
 export interface SuwayomiAPIOptions {
   url: string;
   auth: SuwayomiAuthConfig;
+  /** Milliseconds per call class; `bytes` also bounds each wait for body data. */
   timeouts?: Partial<SuwayomiTimeouts>;
   limits?: { chapterArchiveBytes?: number; thumbnailBytes?: number };
   /** Read state back after a queue mutation times out before failing it. */
@@ -232,6 +233,10 @@ export interface SuwayomiArchiveInfo {
 }
 
 export interface SuwayomiByteStream extends SuwayomiArchiveInfo {
-  /** Fails with `RESPONSE_TOO_LARGE` once more bytes than the limit arrive. */
+  /**
+   * Fails with `RESPONSE_TOO_LARGE` once more bytes than the limit arrive, and
+   * with `TIMEOUT` when Suwayomi sends nothing for `timeouts.bytes` while the
+   * stream waits for data.
+   */
   stream: Readable;
 }
