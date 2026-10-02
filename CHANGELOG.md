@@ -158,6 +158,23 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.46.1](https://github.com/snapetech/seerrng/compare/v3.46.0..v3.46.1) - 2026-10-02
+
+### User-facing changes
+
+#### Fixed
+
+- **Bookshelf:** Book requests now start a Bookshelf search even when the requested title is already monitored, so an existing entry cannot silently skip acquisition.
+
+### 🐛 Bug Fixes
+- *(bookshelf)* Search already monitored requests - ([137480f](https://github.com/snapetech/seerrng/commit/137480f5164ed71421a3edbae11ce51ea2f1b0d8))
+
+### 🧪 Testing
+- *(bookshelf)* Verify BookSearch dispatch for monitored requests - ([7ee1c55](https://github.com/snapetech/seerrng/commit/7ee1c556b01a0592ebf25a9008ee27a5b2e6d4b6))
+- *(bookshelf)* Cover search for monitored requests - ([22c80d9](https://github.com/snapetech/seerrng/commit/22c80d9c15bed507d42fda1f2d1eb4ad1d0d3acc))
+
 ## [3.46.0](https://github.com/snapetech/seerrng/compare/v3.45.3..v3.46.0) - 2026-10-02
 
 ### User-facing changes
