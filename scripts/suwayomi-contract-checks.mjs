@@ -428,6 +428,17 @@ export const defaultRun = (
   };
 };
 
+// A closed terminal or pipe makes every write to stdout or stderr fail, and
+// Node reports each failure as an 'error' event. Without a listener, that
+// event ends the process before the cleanup has removed what the run started.
+export const ignoreOutputErrors = (
+  streams = [process.stdout, process.stderr]
+) => {
+  for (const stream of streams) {
+    stream.on('error', () => {});
+  }
+};
+
 const defaultDependencies = () => ({
   run: defaultRun,
   log: (message) => process.stdout.write(`${message}\n`),
@@ -695,6 +706,7 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
+  ignoreOutputErrors();
   try {
     parseArguments(process.argv.slice(2));
     await runContractChecks();

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import test from 'node:test';
@@ -170,6 +171,68 @@ const removals = [
 
 const removalCalls = (fake) =>
   fake.calls.filter(isRemoval).map((call) => call.args);
+
+// Runs the harness with a fake docker in a child process whose stdout has no
+// reader, as after a closed terminal, so every write to it fails. A hangup
+// arrives while the run waits for Suwayomi. The child records each command
+// and removal on stderr.
+const CLOSED_OUTPUT_SCRIPT = [
+  "import { writeSync } from 'node:fs';",
+  `import { ignoreOutputErrors, runContractChecks } from ${JSON.stringify(
+    new URL('./suwayomi-contract-checks.mjs', import.meta.url).href
+  )};`,
+  "const record = (entry) => writeSync(2, 'record ' + JSON.stringify(entry) + '\\n');",
+  "if (process.argv[1] === 'guarded') ignoreOutputErrors();",
+  'await runContractChecks({',
+  '  env: {},',
+  "  log: (message) => process.stdout.write(message + '\\n'),",
+  "  createPassword: () => 'fixture-password',",
+  "  createRunId: () => 'fixture',",
+  "  makeConfigDirectory: () => 'config-fixture',",
+  '  removeConfigDirectory: (directory) => record({ directory }),',
+  '  probe: async () => false,',
+  '  now: () => 0,',
+  "  wait: () => new Promise(() => setImmediate(() => process.emit('SIGHUP', 'SIGHUP'))),",
+  '  onInterrupt: (listener) => {',
+  "    process.on('SIGHUP', listener);",
+  "    return () => process.off('SIGHUP', listener);",
+  '  },',
+  '  exit: (code) => process.exit(code),',
+  '  run: (command, args) => {',
+  '    record({ command, args });',
+  "    const stdout = { inspect: 'true\\n', port: '127.0.0.1:54001\\n' }[args[0]] ?? '';",
+  "    return { status: 0, stdout, stderr: '' };",
+  '  },',
+  '});',
+].join('\n');
+
+const runWithClosedOutput = (mode) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ['--input-type=module', '-e', CLOSED_OUTPUT_SCRIPT, mode],
+      { stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000, windowsHide: true }
+    );
+    child.stdout.destroy();
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', reject);
+    child.on('close', (status) => {
+      const records = stderr
+        .split('\n')
+        .filter((line) => line.startsWith('record '))
+        .map((line) => JSON.parse(line.slice('record '.length)));
+      resolve({
+        status,
+        removed: records.filter(
+          (entry) => entry.directory !== undefined || isRemoval(entry)
+        ),
+      });
+    });
+  });
 
 const readPng = (png) => {
   assert.deepEqual(png.subarray(0, 8), PNG_SIGNATURE);
@@ -639,4 +702,18 @@ test('an interrupt cleans up once, skips the remaining steps and exits with the 
     'exit 130',
   ]);
   assert.equal(fake.listening, false);
+});
+
+test('an interrupt still cleans up everything when the output is closed', async () => {
+  // Without the guard, the first failed write ends the run before any removal.
+  const unguarded = await runWithClosedOutput('unguarded');
+  assert.equal(unguarded.status, 1);
+  assert.deepStrictEqual(unguarded.removed, []);
+
+  const guarded = await runWithClosedOutput('guarded');
+  assert.equal(guarded.status, 129);
+  assert.deepStrictEqual(guarded.removed, [
+    ...removals.map((args) => ({ command: 'docker', args })),
+    { directory: 'config-fixture' },
+  ]);
 });
