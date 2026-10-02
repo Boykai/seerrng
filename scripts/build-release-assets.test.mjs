@@ -75,6 +75,13 @@ const createFixture = async () => {
   return { executableDirectory, root, script };
 };
 
+const writeNodeArchitectureShim = (fixture) =>
+  fs.writeFile(
+    path.join(fixture.executableDirectory, 'node'),
+    '#!/bin/sh\nif [ "$1" = "-p" ] && [ "$2" = "process.arch" ]; then\n  printf \'%s\\n\' "$TEST_NODE_ARCH"\n  exit 0\nfi\nexec "$TEST_NODE_BINARY" "$@"\n',
+    { mode: 0o755 }
+  );
+
 const run = (fixture, arguments_, environment = {}) =>
   new Promise((resolve) => {
     const child = spawn(fixture.script, arguments_, {
@@ -129,6 +136,14 @@ describe('release asset construction', () => {
     const result = await run(fixture, ['v1.2.3', distribution]);
 
     assert.equal(result.code, 0, result.output);
+    assert.match(
+      result.output,
+      /Completed release archive phase: Install build dependencies in \d+s/u
+    );
+    assert.match(
+      result.output,
+      /Completed release archive phase: Create seerrng-v1\.2\.3-linux-x64\.tar\.gz in \d+s \(\d+ bytes\)/u
+    );
     assert.equal(await fs.readFile(sentinel, 'utf8'), 'unchanged');
     assert.equal((await fs.stat(archive)).mode & 0o777, 0o644);
     const extracted = path.join(fixture.root, 'extracted');
@@ -238,7 +253,7 @@ describe('release asset construction', () => {
     );
     await fs.writeFile(
       path.join(fixture.executableDirectory, '7z'),
-      '#!/bin/sh\nprintf \'%s\\n\' "$*" >"$ARCHIVER_LOG"\nzip -qr "$5" "$6"\n',
+      '#!/bin/sh\nprintf \'%s\\n\' "$*" >"$ARCHIVER_LOG"\nprevious_argument=\'\'\nfor argument in "$@"; do\n  archive_path="$previous_argument"\n  stage_path="$argument"\n  previous_argument="$argument"\ndone\nzip -qr "$archive_path" "$stage_path"\n',
       { mode: 0o755 }
     );
 
@@ -247,7 +262,19 @@ describe('release asset construction', () => {
     });
 
     assert.equal(result.code, 0, result.output);
-    assert.match(await fs.readFile(archiverLog, 'utf8'), /-tzip/);
+    assert.match(
+      result.output,
+      /Skipping recursive POSIX permission normalization for the Windows archive/u
+    );
+    assert.match(
+      result.output,
+      /Completed release archive phase: Create seerrng-v1\.2\.3-windows-x64\.zip in \d+s \(\d+ bytes\)/u
+    );
+    const archiverArguments = await fs.readFile(archiverLog, 'utf8');
+    assert.match(archiverArguments, /-tzip/);
+    assert.match(archiverArguments, /-bsp1/);
+    assert.match(archiverArguments, /-bso0/);
+    assert.match(archiverArguments, /-bse2/);
     assert.equal((await fs.stat(archive)).mode & 0o777, 0o644);
     const listing = await new Promise((resolve, reject) => {
       const child = spawn('unzip', ['-l', archive]);
@@ -268,16 +295,18 @@ describe('release asset construction', () => {
   it('rejects Linux ARMv7 without a supported Node.js 24 runtime', async () => {
     const fixture = await createFixture();
     const distribution = path.join(fixture.root, 'dist-release');
-    await fs.writeFile(
-      path.join(fixture.executableDirectory, 'uname'),
-      '#!/bin/sh\nif [ "$1" = "-s" ]; then echo Linux; else echo armv7l; fi\n',
-      { mode: 0o755 }
-    );
+    await writeNodeArchitectureShim(fixture);
 
-    const result = await run(fixture, ['v1.2.3', distribution]);
+    const result = await run(fixture, ['v1.2.3', distribution], {
+      TEST_NODE_ARCH: 'armv7l',
+      TEST_NODE_BINARY: process.execPath,
+    });
 
     assert.notEqual(result.code, 0);
-    assert.match(result.output, /Unsupported release architecture: armv7l/);
+    assert.match(
+      result.output,
+      /Unsupported release architecture reported by Node\.js: armv7l/u
+    );
     await assert.rejects(
       fs.stat(path.join(distribution, 'seerrng-v1.2.3-linux-arm.tar.gz')),
       { code: 'ENOENT' }
@@ -287,16 +316,18 @@ describe('release asset construction', () => {
   it('rejects an architecture outside the published archive matrix', async () => {
     const fixture = await createFixture();
     const distribution = path.join(fixture.root, 'dist-release');
-    await fs.writeFile(
-      path.join(fixture.executableDirectory, 'uname'),
-      '#!/bin/sh\nif [ "$1" = "-s" ]; then echo Linux; else echo riscv64; fi\n',
-      { mode: 0o755 }
-    );
+    await writeNodeArchitectureShim(fixture);
 
-    const result = await run(fixture, ['v1.2.3', distribution]);
+    const result = await run(fixture, ['v1.2.3', distribution], {
+      TEST_NODE_ARCH: 'riscv64',
+      TEST_NODE_BINARY: process.execPath,
+    });
 
     assert.notEqual(result.code, 0);
-    assert.match(result.output, /Unsupported release architecture: riscv64/);
+    assert.match(
+      result.output,
+      /Unsupported release architecture reported by Node\.js: riscv64/u
+    );
     await assert.rejects(
       fs.stat(path.join(distribution, 'seerrng-v1.2.3-linux-x64.tar.gz')),
       { code: 'ENOENT' }
