@@ -5,6 +5,7 @@ import type { SuwayomiAPIOptions } from '@server/api/suwayomi/types';
 import logger from '@server/logger';
 import {
   FAKE_VERSION,
+  capabilitiesData,
   graphqlData,
   graphqlErrors,
   startFakeSuwayomi,
@@ -56,10 +57,6 @@ const captureLogs = () => {
     text: () => inspect(calls, { depth: 10, breakLength: Infinity }),
   };
 };
-
-const fields = (names: readonly string[]) => ({
-  fields: names.map((name) => ({ name })),
-});
 
 afterEach(async () => {
   mock.restoreAll();
@@ -254,28 +251,55 @@ describe('SuwayomiAPI capabilities and health', () => {
     const server = await start();
     server.onOperation(
       'Capabilities',
-      graphqlData({
-        aboutServer: {
-          name: 'Suwayomi-Server',
-          version: FAKE_VERSION,
-          buildType: 'Stable',
-        },
-        __schema: {
-          queryType: fields(ROOT_FIELDS.query),
-          mutationType: fields(ROOT_FIELDS.mutation),
-        },
-        mangaType: fields(['id']),
-        chapterType: fields(['id', 'user']),
+      capabilitiesData({
+        queryTypeName: 'RootQuery',
+        mutationTypeName: 'RootMutation',
+        chapterFields: ['id', 'user'],
       })
     );
     const capabilities = await connect(server).getCapabilities();
     assert.equal(capabilities.supported, true);
+    assert.deepEqual(capabilities.missingFields, []);
     assert.equal(capabilities.partialFetchResults, true);
     assert.equal(capabilities.perUserDownloadState, true);
     assert.match(
       server.operations('Capabilities')[0].headers.authorization ?? '',
       /^Bearer /
     );
+  });
+
+  it('reports root fields that the schema lacks', async () => {
+    const server = await start();
+    const [dropped, ...mutations] = ROOT_FIELDS.mutation;
+    server.onOperation(
+      'Capabilities',
+      capabilitiesData({ mutationFields: mutations, chapterFields: null })
+    );
+    const capabilities = await connect(server).getCapabilities();
+    assert.equal(capabilities.supported, false);
+    assert.deepEqual(capabilities.missingFields, [`Mutation.${dropped}`]);
+    assert.equal(capabilities.perUserDownloadState, false);
+    assert.deepEqual(capabilities.warnings, []);
+  });
+
+  it('is refused by the fake, as by the server, for bad-faith introspection', async () => {
+    const server = await start({ mode: 'NONE' });
+    const response = await fetch(`${server.url}api/graphql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operationName: 'Capabilities',
+        query:
+          '{ a: __type(name: "A") { name } b: __type(name: "B") { name } }',
+      }),
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+      data: unknown;
+      errors: { message: string }[];
+    };
+    assert.equal(body.data, null);
+    assert.match(body.errors[0].message, /Query\.__type/);
   });
 
   it('falls back to the version when introspection is refused', async () => {

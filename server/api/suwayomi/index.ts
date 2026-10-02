@@ -394,13 +394,24 @@ class SuwayomiAPI extends ExternalAPI {
     try {
       return await this.run('Capabilities', undefined, options, (data) => {
         const schema = record(data.__schema, 'Capabilities');
+        const types = new Map(
+          list(schema.types, 'Capabilities').flatMap((type) =>
+            isRecord(type) && typeof type.name === 'string'
+              ? [[type.name, type] as const]
+              : []
+          )
+        );
+        const named = (type: unknown) =>
+          isRecord(type) && typeof type.name === 'string'
+            ? types.get(type.name)
+            : undefined;
         return evaluateCapabilities({
           about: data.aboutServer,
           introspection: {
-            queryType: schema.queryType,
-            mutationType: schema.mutationType,
-            mangaType: data.mangaType,
-            chapterType: data.chapterType,
+            queryType: named(schema.queryType),
+            mutationType: named(schema.mutationType),
+            mangaType: types.get('MangaType'),
+            chapterType: types.get('ChapterType'),
           },
         });
       });

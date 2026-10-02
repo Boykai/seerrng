@@ -5,6 +5,7 @@ import {
   ROOT_FIELDS,
   SUWAYOMI_OPERATIONS,
 } from '@server/api/suwayomi/operations';
+import { goodFaithViolations } from '@server/test/fakeSuwayomi';
 import {
   Kind,
   parse,
@@ -31,6 +32,16 @@ const FORBIDDEN_ROOT_FIELD =
 const FORBIDDEN_FIELDS = new Set(['thumbnailUrl', 'realUrl', 'pkgName']);
 const SECRET_FIELD = /password|username|secret|apikey|cookie|proxy|socks|url$/i;
 const VARIABLE_META_KEYS = new Set(['SetRequestIndex', 'DeleteRequestIndex']);
+// The capability probe the pinned server refused with HTTP 200 and `errors`.
+const REFUSED_CAPABILITIES = `query Capabilities {
+  aboutServer { name version buildType }
+  __schema {
+    queryType { fields(includeDeprecated: true) { name } }
+    mutationType { fields(includeDeprecated: true) { name } }
+  }
+  mangaType: __type(name: "MangaType") { fields(includeDeprecated: true) { name } }
+  chapterType: __type(name: "ChapterType") { fields(includeDeprecated: true) { name } }
+}`;
 
 const entries = Object.entries(SUWAYOMI_OPERATIONS);
 
@@ -94,6 +105,31 @@ describe('Suwayomi operation documents', () => {
       [...used.mutation].sort(),
       [...ROOT_FIELDS.mutation].sort()
     );
+  });
+
+  it('stay within the introspection limits Suwayomi enforces', () => {
+    for (const [name, operation] of entries) {
+      assert.deepEqual(goodFaithViolations(operation.document), [], name);
+    }
+  });
+
+  it('would catch the capability probe the pinned server refused', () => {
+    assert.deepEqual(goodFaithViolations(REFUSED_CAPABILITIES), [
+      'Query.__type',
+      '__Type.fields',
+    ]);
+  });
+
+  it('size-limit only introspection, as the server does', () => {
+    const wide = Array.from({ length: 500 }, (_, i) => `f${i}: name`).join(' ');
+    const deep = `{ __schema { types { fields { type { ${'ofType { '.repeat(16)}name${' }'.repeat(20)} }`;
+    assert.deepEqual(goodFaithViolations(`{ aboutServer { ${wide} } }`), []);
+    assert.deepEqual(
+      goodFaithViolations(`{ __schema { types { ${wide} } } }`),
+      ['more than 500 fields']
+    );
+    assert.deepEqual(goodFaithViolations(deep), ['deeper than 20 levels']);
+    assert.deepEqual(goodFaithViolations('{'), []);
   });
 
   it('never reach extension, tracker, backup or file-deletion fields, or change settings', () => {
