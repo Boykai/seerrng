@@ -61,6 +61,7 @@ const SUPPORTED_MODES = new Set<SuwayomiDetectedAuthMode>([
 const warnedModes = new Set<string>();
 
 interface PostOptions extends SuwayomiCallOptions {
+  /** Only for operations whose root fields all require a user. */
   allowPartial?: boolean;
   /** How to read a 401; detection probes interpret it as unconfigured. */
   interpretAs?: SuwayomiAuthMode;
@@ -318,12 +319,13 @@ class SuwayomiAPI extends ExternalAPI {
   }
 
   private async authorization(
-    level: SuwayomiAuthLevel
+    level: SuwayomiAuthLevel,
+    signal?: AbortSignal
   ): Promise<string | undefined> {
     if (level === 'none') return undefined;
     if (this.#basicAuthorization) return this.#basicAuthorization;
     if (level === 'public' || !this.#tokens) return undefined;
-    return `${BEARER}${await this.#tokens.getAccessToken()}`;
+    return `${BEARER}${await this.#tokens.getAccessToken(signal)}`;
   }
 
   private async login(signal?: AbortSignal): Promise<SuwayomiTokens> {
@@ -364,6 +366,10 @@ class SuwayomiAPI extends ExternalAPI {
     options: PostOptions = {}
   ): Promise<GraphQLResult> {
     const operation = SUWAYOMI_OPERATIONS[name];
+    const timeout = this.#timeouts[operation.callClass];
+    // axios's own timeout stops counting once the headers arrive; this
+    // deadline also bounds a body that stalls or trickles in.
+    const deadline = AbortSignal.timeout(timeout);
     let response: AxiosResponse<unknown>;
     try {
       response = await this.request<unknown>(
@@ -376,12 +382,17 @@ class SuwayomiAPI extends ExternalAPI {
         },
         {
           headers: authorization ? { Authorization: authorization } : {},
-          signal: options.signal,
-          timeout: this.#timeouts[operation.callClass],
+          signal: options.signal
+            ? AbortSignal.any([options.signal, deadline])
+            : deadline,
+          timeout,
           validateStatus: () => true,
         }
       );
     } catch (error) {
+      if (deadline.aborted && !options.signal?.aborted) {
+        throw new SuwayomiError('TIMEOUT', name);
+      }
       throw toSuwayomiError(error, name);
     }
     return interpretGraphQLResponse(
@@ -400,7 +411,7 @@ class SuwayomiAPI extends ExternalAPI {
   ): Promise<GraphQLResult> {
     const { auth } = SUWAYOMI_OPERATIONS[name];
     try {
-      const authorization = await this.authorization(auth);
+      const authorization = await this.authorization(auth, options.signal);
       try {
         return await this.postGraphQL(name, variables, authorization, options);
       } catch (error) {
@@ -412,7 +423,8 @@ class SuwayomiAPI extends ExternalAPI {
           throw error;
         }
         const token = await this.#tokens.renew(
-          authorization?.slice(BEARER.length)
+          authorization?.slice(BEARER.length),
+          options.signal
         );
         return await this.postGraphQL(
           name,

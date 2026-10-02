@@ -374,6 +374,48 @@ describe('SuwayomiAPI error handling', () => {
     assert.equal(server.operations('Sources').length, 1);
   });
 
+  it('times out a body that stalls after the headers', async () => {
+    const server = await start({ mode: 'NONE' });
+    server.onOperation('Sources', {
+      chunks: ['{"data":', '{"sources":{"nodes":[]}}}'],
+      stallAfterChunks: 1,
+    });
+    const api = connect(server, {
+      auth: { mode: 'NONE' },
+      timeouts: { query: 200 },
+    });
+    await assert.rejects(api.getSources(), { code: 'TIMEOUT' });
+    assert.equal(server.operations('Sources').length, 1);
+  });
+
+  it('times out a body that trickles in past the deadline', async () => {
+    const server = await start({ mode: 'NONE' });
+    server.onOperation('Sources', {
+      chunks: [...Array(40).fill(' '), '{"data":{"sources":{"nodes":[]}}}'],
+      chunkDelayMs: 50,
+    });
+    const api = connect(server, {
+      auth: { mode: 'NONE' },
+      timeouts: { query: 300 },
+    });
+    const started = Date.now();
+    await assert.rejects(api.getSources(), { code: 'TIMEOUT' });
+    assert.ok(Date.now() - started < 1_500);
+  });
+
+  it('reports a connection dropped mid-body as UNREACHABLE', async () => {
+    const server = await start({ mode: 'NONE' });
+    server.onOperation('Sources', {
+      chunks: ['{"data":', '{"sources":{"nodes":[]}}}'],
+      chunkDelayMs: 50,
+      dropAfterChunks: 1,
+    });
+    await assert.rejects(
+      connect(server, { auth: { mode: 'NONE' } }).getSources(),
+      { code: 'UNREACHABLE' }
+    );
+  });
+
   it('reports a cancelled call as ABORTED', async () => {
     const server = await start({ mode: 'NONE' });
     server.onOperation('Sources', { hang: true });
@@ -502,6 +544,21 @@ describe('SuwayomiAPI UI login tokens', () => {
       code: 'AUTH_REQUIRED',
     });
     assert.equal(server.operations('Sources').length, 2);
+  });
+
+  it('lets a caller stop waiting for a login without cancelling it for others', async () => {
+    const server = await start();
+    server.onOperation('Login', { hang: true });
+    const api = connect(server, { timeouts: { mutation: 500 } });
+    const controller = new AbortController();
+    const cancelled = api.getSources({ signal: controller.signal });
+    const waiting = api.getSources();
+    setTimeout(() => controller.abort(), 50);
+    await assert.rejects(cancelled, { code: 'ABORTED' });
+    // The shared login carried on until its own timeout.
+    await assert.rejects(waiting, { code: 'TIMEOUT' });
+    assert.equal(server.operations('Login').length, 1);
+    assert.equal(server.operations('Sources').length, 0);
   });
 
   it('never logs the password or a token when calls fail', async () => {

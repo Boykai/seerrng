@@ -182,6 +182,10 @@ export const toSuwayomiError = (
     if (current.message.startsWith('maxContentLength size of')) {
       return new SuwayomiError('RESPONSE_TOO_LARGE', operation);
     }
+    // axios: the connection closed before the response body ended.
+    if (current.message === 'stream has been aborted') {
+      return new SuwayomiError('UNREACHABLE', operation);
+    }
     current = current.cause;
   }
 
@@ -268,8 +272,17 @@ export const interpretGraphQLResponse = (
   const data = isRecord(body.data) ? body.data : undefined;
   if (errors.length > 0) {
     const code = classifyGraphQLErrors(errors);
-    if (allowPartial && data && code === 'UPSTREAM_ERROR') {
-      return { data, errorCode: code, errorCount: errors.length };
+    // Auth is decided once per request, and only operations whose root fields
+    // all require a user accept partial results. Once one of them resolved,
+    // text that reads like an auth or lookup failure came from nested source
+    // work (third-party text), so the result is partial.
+    if (
+      allowPartial &&
+      data &&
+      (code === 'UPSTREAM_ERROR' ||
+        Object.values(data).some((value) => value !== null))
+    ) {
+      return { data, errorCode: 'UPSTREAM_ERROR', errorCount: errors.length };
     }
     throw new SuwayomiError(code, operation, {
       httpStatus: status,

@@ -255,12 +255,16 @@ describe('Suwayomi error classification', () => {
     );
   });
 
-  it('accepts a partial result only when asked and only for upstream errors', () => {
+  it('accepts a partial result only when asked, and once a root field resolved', () => {
     const response = {
       status: 200,
       headers: {},
       data: { data: { value: 1 }, errors: [{ message: syntheticFailure() }] },
     };
+    const withErrors = (data: unknown, message: string) => ({
+      ...response,
+      data: { data, errors: [{ message }] },
+    });
     assert.deepEqual(interpretGraphQLResponse(OP, response, 'NONE', true), {
       data: { value: 1 },
       errorCode: 'UPSTREAM_ERROR',
@@ -269,18 +273,42 @@ describe('Suwayomi error classification', () => {
     assert.throws(() => interpretGraphQLResponse(OP, response, 'NONE'), {
       code: 'UPSTREAM_ERROR',
     });
+    // Source text that reads like an auth failure, beside resolved data.
+    assert.deepEqual(
+      interpretGraphQLResponse(
+        OP,
+        withErrors({ value: 1, other: null }, 'HTTP 401 Unauthorized'),
+        'UI_LOGIN',
+        true
+      ),
+      {
+        data: { value: 1, other: null },
+        errorCode: 'UPSTREAM_ERROR',
+        errorCount: 1,
+      }
+    );
     assert.throws(
       () =>
         interpretGraphQLResponse(
           OP,
-          {
-            ...response,
-            data: { data: { value: 1 }, errors: [{ message: 'Unauthorized' }] },
-          },
-          'NONE',
+          withErrors({ value: null }, 'Unauthorized'),
+          'UI_LOGIN',
           true
         ),
       { code: 'AUTH_REQUIRED' }
+    );
+    assert.throws(
+      () =>
+        interpretGraphQLResponse(
+          OP,
+          withErrors(
+            { value: null, other: null },
+            syntheticFailure('NoSuchElementException')
+          ),
+          'UI_LOGIN',
+          true
+        ),
+      { code: 'NOT_FOUND' }
     );
   });
 
@@ -345,6 +373,10 @@ describe('Suwayomi error classification', () => {
         'RESPONSE_TOO_LARGE',
       ],
       [new AxiosError('socket hang up'), 'UNREACHABLE'],
+      [
+        new AxiosError('stream has been aborted', AxiosError.ERR_BAD_RESPONSE),
+        'UNREACHABLE',
+      ],
       ['text', 'BAD_RESPONSE'],
     ];
     for (const [input, code] of cases) {

@@ -179,4 +179,30 @@ describe('SuwayomiTokenManager', () => {
     await manager.getAccessToken();
     assert.deepEqual(calls, { login: 2, refresh: 0 });
   });
+
+  it('stops only the aborted caller from waiting for a shared renewal', async () => {
+    const { manager, calls, handlers } = setup();
+    let finishLogin: (() => void) | undefined;
+    const login = handlers.login;
+    handlers.login = () =>
+      new Promise((resolve) => {
+        finishLogin = () => resolve(login());
+      });
+    const controller = new AbortController();
+    const cancelled = manager.getAccessToken(controller.signal);
+    const waiting = manager.getAccessToken();
+    controller.abort();
+    await assert.rejects(cancelled, { name: 'AbortError' });
+    finishLogin?.();
+    assert.ok(await waiting);
+    assert.equal(calls.login, 1);
+  });
+
+  it('does not start a renewal for a caller that has already aborted', async () => {
+    const { manager, calls } = setup();
+    await assert.rejects(manager.getAccessToken(AbortSignal.abort()), {
+      name: 'AbortError',
+    });
+    assert.equal(calls.login, 0);
+  });
 });

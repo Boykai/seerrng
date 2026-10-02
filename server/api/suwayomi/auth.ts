@@ -45,10 +45,29 @@ export const decodeJwtExpiry = (token: string): number | undefined => {
 export const basicAuthorization = (username: string, password: string) =>
   `Basic ${Buffer.from(`${username}:${password}`, 'utf8').toString('base64')}`;
 
+const abortError = () =>
+  new DOMException('This operation was aborted', 'AbortError');
+
+/** Stops waiting when `signal` aborts, without cancelling `promise`. */
+const untilAborted = <T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined
+): Promise<T> => {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener('abort', onAbort));
+  });
+};
+
 /**
  * Holds UI_LOGIN tokens in memory only. Renewal is single-flight: concurrent
  * callers share one refresh or login, and a caller holding a token that has
- * already been replaced gets the new token without another renewal.
+ * already been replaced gets the new token without another renewal. A
+ * caller's signal ends only that caller's wait, never the shared renewal.
  */
 export class SuwayomiTokenManager {
   #accessToken?: string;
@@ -75,15 +94,18 @@ export class SuwayomiTokenManager {
     this.#refreshExpiry = undefined;
   }
 
-  async getAccessToken(): Promise<string> {
+  async getAccessToken(signal?: AbortSignal): Promise<string> {
     if (this.#accessToken && this.isFresh()) {
       return this.#accessToken;
     }
-    return this.renew(this.#accessToken);
+    return this.renew(this.#accessToken, signal);
   }
 
   /** Replaces `staleToken` unless another caller already has. */
-  renew(staleToken: string | undefined): Promise<string> {
+  renew(staleToken: string | undefined, signal?: AbortSignal): Promise<string> {
+    if (signal?.aborted) {
+      return Promise.reject(abortError());
+    }
     if (
       this.#accessToken &&
       this.#accessToken !== staleToken &&
@@ -94,7 +116,7 @@ export class SuwayomiTokenManager {
     this.#pending ??= this.obtain().finally(() => {
       this.#pending = undefined;
     });
-    return this.#pending;
+    return untilAborted(this.#pending, signal);
   }
 
   private isFresh(): boolean {

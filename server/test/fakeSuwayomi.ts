@@ -29,6 +29,8 @@ export interface FakeReply {
   chunkDelayMs?: number;
   /** Sends this many chunks, then stalls without ending the response. */
   stallAfterChunks?: number;
+  /** Sends this many chunks, then drops the connection. */
+  dropAfterChunks?: number;
 }
 
 export interface FakeRequest {
@@ -159,6 +161,12 @@ const send = async (response: ServerResponse, reply: FakeReply) => {
     for (const [index, chunk] of reply.chunks.entries()) {
       if (reply.stallAfterChunks !== undefined) {
         if (index >= reply.stallAfterChunks) return;
+      }
+      if (reply.dropAfterChunks !== undefined) {
+        if (index >= reply.dropAfterChunks) {
+          response.destroy();
+          return;
+        }
       }
       if (response.destroyed) return;
       response.write(chunk);

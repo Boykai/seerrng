@@ -96,7 +96,7 @@ describe('Suwayomi operation documents', () => {
     );
   });
 
-  it('never reach extension, settings, tracker, backup or file-deletion fields', () => {
+  it('never reach extension, tracker, backup or file-deletion fields, or change settings', () => {
     for (const field of ROOT_FIELDS.mutation) {
       assert.doesNotMatch(field, FORBIDDEN_ROOT_FIELD);
     }
