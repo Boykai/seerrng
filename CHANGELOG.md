@@ -156,6 +156,28 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.46.0](https://github.com/snapetech/seerrng/compare/v3.45.3..v3.46.0) - 2026-10-02
+
+### User-facing changes
+
+#### Added
+
+- **Metadata:** Movie and series details now combine missing metadata from TMDB, TheTVDB, TVmaze, and Wikidata. Source records expire within six months, refresh independently, and show unobtrusive attribution, including TVmaze's adapted CC BY-SA 4.0 data; TMDB's logo and non-endorsement notice appear in About.
+
+#### Fixed
+
+- **Packaging:** SeerrNG's Chocolatey package is now submitted after its GitHub release is public, so users do not receive packages that point to unavailable release files.
+- **Metadata:** Movie and series cards now keep saved titles, descriptions, availability, and posters visible during metadata-provider failures, and only show “Not Found” for a confirmed missing record.
+
+### 🚀 Features
+- *(metadata)* Merge movie and series metadata sources - ([575e7f7](https://github.com/snapetech/seerrng/commit/575e7f72c8fba5c73de4029d04185fdae421f028))
+
+### 🐛 Bug Fixes
+- *(release)* Publish Chocolatey only with live assets - ([ce4d802](https://github.com/snapetech/seerrng/commit/ce4d802b8e7af62e349dda221be7f81be7d34c39))
+- Preserve cached video metadata on provider failures - ([adfb47e](https://github.com/snapetech/seerrng/commit/adfb47e5401e0750c028eac26b8b69f73db4bcec))
+
 ## [3.45.3](https://github.com/snapetech/seerrng/compare/v3.45.2..v3.45.3) - 2026-10-02
 
 ### User-facing changes
