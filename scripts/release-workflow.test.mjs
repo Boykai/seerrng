@@ -38,11 +38,17 @@ test('release assets build while image verification runs, then package channels 
   assert.match(dispatchScript, /--ref main/u);
   assert.match(dispatchScript, /release-chocolatey\.yml/u);
   assert.match(dispatchScript, /release-linux-packages\.yml/u);
+  assert.match(dispatchScript, /required_workflows=\([\s\S]*release-copr\.yml/u);
+  assert.match(dispatchScript, /optional_workflows=\([\s\S]*release-snap\.yml/u);
   assert.match(dispatchScript, /watch-github-run\.mjs/u);
-  assert.match(dispatchScript, /release-snap\.yml[\s\S]*optional=false/u);
   assert.match(
     dispatchScript,
-    /Optional package workflow .*failed; continuing without that package channel/u
+    /node scripts\/watch-github-run\.mjs[\s\S]*\) &/u,
+    'required package channels must be monitored concurrently'
+  );
+  assert.match(
+    dispatchScript,
+    /Optional package workflow .*could not be dispatched; continuing/u
   );
   assert.match(
     dispatchScript,
@@ -474,6 +480,11 @@ test('release recovery validates reusable artifacts and repairs the failed relea
   assert.match(
     recoveryValidation.run,
     /Build release assets \/ Upload release assets/u
+  );
+  assert.match(
+    recoveryValidation.run,
+    /\["Dispatch package channels"\]/u,
+    'a package-channel-only failure must be recoverable from verified assets'
   );
   assert.match(recoveryValidation.run, /event == "workflow_dispatch"/u);
   assert.match(recoveryValidation.run, /\.expired == false/u);
