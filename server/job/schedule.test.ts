@@ -113,6 +113,22 @@ describe('scheduled job lifecycle', () => {
     assert.equal(typeof backissueJob.cancelFn, 'function');
   });
 
+  it('registers the manga library scan as a scheduled process task', () => {
+    startJobs();
+
+    const mangaJob = scheduledJobs.find(
+      (job) => job.id === 'manga-library-scan'
+    );
+
+    assert.ok(mangaJob);
+    assert.equal(mangaJob.name, 'Manga Library Scan');
+    assert.equal(mangaJob.type, 'process');
+    assert.equal(mangaJob.interval, 'hours');
+    assert.equal(mangaJob.cronSchedule, '0 45 5 * * *');
+    assert.equal(typeof mangaJob.cancelFn, 'function');
+    assert.equal(mangaJob.running?.(), false);
+  });
+
   it('cancels future invocations and waits for active work', async () => {
     let cancelCalled = false;
     let release: (() => void) | undefined;

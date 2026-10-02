@@ -100,3 +100,60 @@ SSL, or username.
   choose.
 - Do not expose Suwayomi publicly; keep it on a private network that SeerrNG
   can reach.
+
+## Library scan
+
+The **Manga Library Scan** job reads the library of the connected Suwayomi
+server. It records which AniList title each manga in that library is and how
+much of it Suwayomi has downloaded. The job runs every day at 05:45; change its
+schedule or run it now under **Settings → Jobs & Cache**. It does nothing
+while the Manga category is off.
+
+The scan only reads from Suwayomi and never changes anything there. It calls
+no service other than Suwayomi. It covers every manga in the Suwayomi library,
+whichever sources you selected for searching.
+
+### Matching
+
+The scan matches a manga through the AniList link that Suwayomi stores when
+the manga is tracked with AniList in Suwayomi.
+
+- Only AniList links are used for now. A manga without one, or with links to
+  two different AniList titles, stays unmatched.
+- A match stays in place on later scans, even if the manga's tracker link
+  changes afterwards.
+- SeerrNG keeps unmatched manga for review; matching them by hand arrives in a
+  later release. An unmatched manga never makes a title available.
+
+### Availability
+
+For each matched title, SeerrNG sets the status from what Suwayomi has
+downloaded:
+
+- **Available** when Suwayomi lists at least one chapter and has downloaded all
+  of them.
+- **Partially Available** when it has downloaded some of them.
+- With no chapter downloaded, the scan gives the title no status; SeerrNG only
+  notes that the manga is in the Suwayomi library.
+
+When Suwayomi lists the same chapter number more than once, for example from
+several scanlators, the chapter counts as downloaded once any of its versions
+is.
+
+The status follows Suwayomi's own records:
+
+- Suwayomi's download records decide what is downloaded. A chapter whose files
+  were deleted outside Suwayomi still counts as downloaded.
+- Suwayomi's stored chapter list decides what exists. New chapters count only
+  after Suwayomi's own library update has added them.
+
+When fewer chapters are downloaded than before, when a matched manga leaves the
+Suwayomi library, or when you remove the Suwayomi server, SeerrNG lowers the
+title's status to match. It does not lower the status of a title with a
+pending, approved, or failed request, and it never changes a blocklisted
+title. If the library changes while a scan reads it, that run marks no manga
+as gone; the next run does.
+
+Each run logs how many matches and statuses it changed, and a code for each
+warning, under the **Manga Library Scan** label. These log entries contain
+counts, IDs, and codes only, never titles or addresses.

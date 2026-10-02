@@ -19,6 +19,7 @@ import {
 } from '@server/lib/scanners/jellyfin';
 import { lidarrScanner } from '@server/lib/scanners/lidarr';
 import { lazyLibrarianScanner } from '@server/lib/scanners/magazines/lazylibrarian';
+import { mangaLibraryScanner } from '@server/lib/scanners/manga/suwayomi';
 import { plexFullScanner, plexRecentScanner } from '@server/lib/scanners/plex';
 import { radarrScanner } from '@server/lib/scanners/radarr';
 import { readarrScanner } from '@server/lib/scanners/readarr';
@@ -460,6 +461,24 @@ export const startJobs = (): void => {
     }),
     running: () => lazyLibrarianScanner.status().running,
     cancelFn: () => lazyLibrarianScanner.cancel(),
+  });
+
+  scheduledJobs.push({
+    id: 'manga-library-scan',
+    name: 'Manga Library Scan',
+    type: 'process',
+    interval: 'hours',
+    cronSchedule: jobs['manga-library-scan'].schedule,
+    job: schedule.scheduleJob(jobs['manga-library-scan'].schedule, () => {
+      logger.info('Starting scheduled job: Manga Library Scan', {
+        label: 'Jobs',
+      });
+      return runTrackedJob('Manga Library Scan', () =>
+        mangaLibraryScanner.run()
+      );
+    }),
+    running: () => mangaLibraryScanner.status().running,
+    cancelFn: () => mangaLibraryScanner.cancel(),
   });
 
   // Checks if media is still available in plex/sonarr/radarr libs

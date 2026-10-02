@@ -7,6 +7,11 @@ import {
   MediaType,
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import MangaMatchCandidate from '@server/entity/MangaMatchCandidate';
+import MangaSourceBinding, {
+  MangaBindingConfidence,
+  MangaBindingState,
+} from '@server/entity/MangaSourceBinding';
 import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import OverrideRule from '@server/entity/OverrideRule';
@@ -88,6 +93,40 @@ describe('Servarr service ID allocation', () => {
       await getHistoricalServarrServiceIdMaximum('suwayomi'),
       3
     );
+
+    // A removed instance's library-scan rows keep its ID out of reuse.
+    await getRepository(MangaMatchCandidate).save(
+      new MangaMatchCandidate({
+        instanceId: 6,
+        sourceId: '0',
+        url: '/fake/candidate',
+        urlHash: 'c'.repeat(64),
+        suwayomiMangaId: 1,
+        title: '',
+      })
+    );
+    assert.strictEqual(
+      await getHistoricalServarrServiceIdMaximum('suwayomi'),
+      6
+    );
+    await getRepository(MangaSourceBinding).save(
+      new MangaSourceBinding({
+        instanceId: 11,
+        sourceId: '0',
+        url: '/fake/binding',
+        urlHash: 'b'.repeat(64),
+        anilistId: 30013,
+        confidence: MangaBindingConfidence.TRACKER_LINK,
+        matchedBy: 'anilist-tracker',
+        origin: 'library-scan',
+        state: MangaBindingState.ORPHANED,
+      })
+    );
+    assert.strictEqual(
+      await getHistoricalServarrServiceIdMaximum('suwayomi'),
+      11
+    );
+    assert.strictEqual(await getHistoricalServarrServiceIdMaximum('mylar'), 9);
   });
 
   it('keeps a Suwayomi instance while a manga request uses it', async () => {

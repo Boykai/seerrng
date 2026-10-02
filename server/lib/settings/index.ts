@@ -538,6 +538,7 @@ export type JobId =
   | 'kapowarr-scan'
   | 'backissue-scan'
   | 'magazine-scan'
+  | 'manga-library-scan'
   | 'download-sync'
   | 'software-request-reconciliation'
   | 'download-recovery'
@@ -880,6 +881,9 @@ class Settings {
         },
         'magazine-scan': {
           schedule: '0 30 5 * * *',
+        },
+        'manga-library-scan': {
+          schedule: '0 45 5 * * *',
         },
         'availability-sync': {
           schedule: '0 0 5 * * *',
@@ -1765,6 +1769,9 @@ class Settings {
         },
         'magazine-scan': {
           schedule: '0 30 5 * * *',
+        },
+        'manga-library-scan': {
+          schedule: '0 45 5 * * *',
         },
         'availability-sync': {
           schedule: '0 0 5 * * *',
