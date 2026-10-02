@@ -13,7 +13,9 @@
 // config directory are removed when the run ends, fails or is interrupted by
 // SIGHUP, SIGINT or SIGTERM. Steps run synchronously, so a signal sent to
 // this process alone takes effect when the current step ends; Ctrl+C also
-// stops the step itself.
+// stops the step itself. The cleanup runs synchronously too, and a signal sent
+// to this process alone cannot cut it short, so removing the container has a
+// one-minute limit.
 
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -45,6 +47,9 @@ const rootDirectory = path.resolve(
 );
 const require = createRequire(import.meta.url);
 const STEP_TIMEOUT_MS = 15 * 60 * 1000;
+// Removing the container takes seconds. The limit stops a stuck Docker daemon
+// from holding an interrupted run for the full step timeout.
+export const CLEANUP_TIMEOUT_MS = 60 * 1000;
 const READY_ATTEMPTS = 60;
 
 export class UsageError extends Error {}
@@ -223,13 +228,17 @@ const tsNodeArguments = (script, scriptArguments = []) => [
   ...scriptArguments,
 ];
 
-const defaultRun = (command, args, { env, capture = false } = {}) => {
+export const defaultRun = (
+  command,
+  args,
+  { env, capture = false, timeout = STEP_TIMEOUT_MS } = {}
+) => {
   const result = spawnSync(command, args, {
     cwd: rootDirectory,
     env,
     encoding: 'utf8',
     stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
-    timeout: STEP_TIMEOUT_MS,
+    timeout,
     windowsHide: true,
   });
 
@@ -367,7 +376,7 @@ const runPostgresChecks = async (context, options, configDirectory) => {
     const removal = context.run(
       'docker',
       postgresRemoveArguments(containerName),
-      { env: context.env, capture: true }
+      { env: context.env, capture: true, timeout: CLEANUP_TIMEOUT_MS }
     );
     if (removal.status !== 0) {
       context.log(
@@ -449,12 +458,6 @@ export const runMigrationChecks = async (
     interruption: interruption.signal,
   };
   const stopListening = dependencies.onInterrupt(async (signal) => {
-    // Another signal while the cleanup runs exits without waiting for it.
-    if (interruption.signal.aborted) {
-      dependencies.exit(signalExitCode(signal));
-      return;
-    }
-
     interruption.abort(new Error(`Interrupted by ${signal}.`));
     dependencies.log(`${signal} received; cleaning up before exiting.`);
     await cleanups.run();

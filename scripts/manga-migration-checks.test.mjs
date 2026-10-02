@@ -3,6 +3,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  CLEANUP_TIMEOUT_MS,
   INTERRUPT_SIGNALS,
   POSTGRES_ENTITY_DATABASE,
   POSTGRES_IMAGE,
@@ -11,6 +12,7 @@ import {
   actionsMaskCommand,
   createCleanups,
   databaseEnvironment,
+  defaultRun,
   parseArguments,
   parsePublishedPort,
   postgresCreateDatabaseArguments,
@@ -25,18 +27,16 @@ import {
 const PASSWORD = 'fixture-password/+=';
 const CONTAINER = 'seerrng-manga-migrations-fixture';
 
-// interruptOnBuild sends a signal while the database is built from empty,
-// interruptOnWait sends one while PostgreSQL is not ready yet, and
-// interruptOnRemove sends one while the container is being removed. The fake
-// exit only records the status, so the code after it keeps running; `events`
-// shows the order of the cleanup steps and exits.
+// interruptOnBuild sends a signal while the database is built from empty, and
+// interruptOnWait sends one while PostgreSQL is not ready yet. The fake exit
+// only records the status, so the code after it keeps running; `events` shows
+// the order of the cleanup steps and exits.
 const fakeDependencies = ({
   env = {},
   failWhen = () => false,
   notReadyAttempts = 0,
   interruptOnBuild,
   interruptOnWait,
-  interruptOnRemove,
 } = {}) => {
   const calls = [];
   const logs = [];
@@ -90,7 +90,12 @@ const fakeDependencies = ({
         events.push(`exit ${code}`);
       },
       run: (command, args, options = {}) => {
-        calls.push({ command, args, env: options.env });
+        calls.push({
+          command,
+          args,
+          env: options.env,
+          timeout: options.timeout,
+        });
         if (
           interruptOnBuild &&
           args.includes('server/scripts/prepareTestDb.ts')
@@ -99,9 +104,6 @@ const fakeDependencies = ({
         }
         if (command === 'docker' && args[0] === 'rm') {
           events.push('docker rm');
-          if (interruptOnRemove) {
-            interrupt(interruptOnRemove);
-          }
         }
         if (failWhen(command, args)) {
           return { status: 3, stdout: '', stderr: 'fixture failure' };
@@ -314,6 +316,11 @@ test('the PostgreSQL check waits for readiness, runs the tests and removes the c
     fake.calls.at(-1).args,
     postgresRemoveArguments(CONTAINER)
   );
+  // Only the container removal has the shorter cleanup limit.
+  assert.equal(fake.calls.at(-1).timeout, CLEANUP_TIMEOUT_MS);
+  assert.ok(
+    fake.calls.slice(0, -1).every((call) => call.timeout === undefined)
+  );
   assert.deepStrictEqual(fake.removed, ['config-fixture']);
 });
 
@@ -446,27 +453,13 @@ test('an interrupt during a step stops the run before the next step', async () =
   assert.equal(fake.listening, false);
 });
 
-test('a second signal during the cleanup exits without waiting for it', async () => {
-  const fake = fakeDependencies({
-    notReadyAttempts: 1,
-    interruptOnWait: 'SIGINT',
-    interruptOnRemove: 'SIGTERM',
-  });
-
-  await assert.rejects(
-    runMigrationChecks(
-      { driver: 'postgres', writeAllowlist: false },
-      fake.dependencies
-    ),
-    /Interrupted by SIGINT\./
+test('a command that runs past its time limit fails with the reason', () => {
+  const result = defaultRun(
+    process.execPath,
+    ['-e', 'setTimeout(() => {}, 60000)'],
+    { capture: true, timeout: 200 }
   );
-  await fake.handlersDone();
 
-  // A real exit would end the process at 'exit 143'.
-  assert.deepStrictEqual(fake.events, [
-    'docker rm',
-    'exit 143',
-    'remove config-fixture',
-    'exit 130',
-  ]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /ETIMEDOUT/);
 });
