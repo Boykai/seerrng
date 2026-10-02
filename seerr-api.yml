@@ -1294,6 +1294,14 @@ components:
         includeAdult:
           type: boolean
           example: false
+        mangaIncludeAdult:
+          type: boolean
+          example: false
+          description: Include adult titles in the AniList manga catalog. Off by default.
+        mangaIncludeNovels:
+          type: boolean
+          example: false
+          description: Include light novels in the AniList manga catalog. Off by default.
         openIdProviders:
           type: array
           items:
@@ -2952,6 +2960,138 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/MagazineIssueReference'
+    MangaTitles:
+      type: object
+      properties:
+        romaji:
+          type: string
+        english:
+          type: string
+        native:
+          type: string
+    MangaCredit:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+          description: AniList staff ID.
+        name:
+          type: string
+    MangaResult:
+      type: object
+      required:
+        - id
+        - mediaType
+        - provider
+        - title
+        - titles
+        - synonyms
+        - isAdult
+        - genres
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          example: 30013
+          description: AniList media ID.
+        mediaType:
+          type: string
+          enum: [manga]
+        provider:
+          type: string
+          enum: [anilist]
+        title:
+          type: string
+          description: English title when AniList has one, otherwise the romanized or native title.
+        titles:
+          $ref: '#/components/schemas/MangaTitles'
+        synonyms:
+          type: array
+          items:
+            type: string
+        format:
+          type: string
+          enum: [MANGA, ONE_SHOT, NOVEL]
+        status:
+          type: string
+          enum: [FINISHED, RELEASING, NOT_YET_RELEASED, CANCELLED, HIATUS]
+        chapters:
+          type: integer
+        volumes:
+          type: integer
+        isAdult:
+          type: boolean
+        idMal:
+          type: integer
+          description: MyAnimeList ID, when AniList links one.
+        posterPath:
+          type: string
+          description: AniList cover image URL.
+        backdropPath:
+          type: string
+          description: AniList banner image URL.
+        genres:
+          type: array
+          items:
+            type: string
+        startYear:
+          type: integer
+        countryOfOrigin:
+          type: string
+          example: JP
+        averageScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+        mediaInfo:
+          $ref: '#/components/schemas/MediaInfo'
+    MangaDetails:
+      allOf:
+        - $ref: '#/components/schemas/MangaResult'
+        - type: object
+          required:
+            - tags
+            - story
+            - art
+          properties:
+            description:
+              type: string
+              description: Synopsis as sanitized HTML limited to paragraphs, line breaks and emphasis. Spoilers are removed.
+            tags:
+              type: array
+              description: Non-spoiler tags. Adult tags appear only when adult manga is enabled.
+              items:
+                type: object
+                required:
+                  - name
+                properties:
+                  name:
+                    type: string
+                  rank:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+            story:
+              type: array
+              items:
+                $ref: '#/components/schemas/MangaCredit'
+            art:
+              type: array
+              items:
+                $ref: '#/components/schemas/MangaCredit'
+            siteUrl:
+              type: string
+              description: AniList page for this title.
+            startDate:
+              type: string
+              description: Publication start as YYYY, YYYY-MM or YYYY-MM-DD.
+              example: '1997-07-22'
+            endDate:
+              type: string
+              description: Publication end as YYYY, YYYY-MM or YYYY-MM-DD.
     AuthorResult:
       type: object
       properties:
@@ -3865,7 +4005,7 @@ components:
           nullable: true
         mediaType:
           type: string
-          enum: [movie, tv, music, book, comic, magazine]
+          enum: [movie, tv, music, book, comic, magazine, manga]
         serviceId:
           type: number
           nullable: true
@@ -10276,8 +10416,8 @@ paths:
                     type: number
   /search:
     get:
-      summary: Search for movies, TV shows, people, music, books, authors, comics, and magazines
-      description: Returns movies, TV shows, people, music albums, artists, books, authors, and comics from TMDB, MusicBrainz, ListenBrainz, Open Library, configured Bookshelf services, and ComicVine, plus magazine titles from configured LazyLibrarian catalogs.
+      summary: Search for movies, TV shows, people, music, books, authors, comics, magazines, and manga
+      description: Returns movies, TV shows, people, music albums, artists, books, authors, and comics from TMDB, MusicBrainz, ListenBrainz, Open Library, configured Bookshelf services, and ComicVine, plus magazine titles from configured LazyLibrarian catalogs and, when the manga category is enabled, manga from AniList. A manga-only search returns 429 with Retry-After when AniList is rate limited and 503 when it is unavailable.
       tags:
         - search
       parameters:
@@ -10313,6 +10453,7 @@ paths:
               - music
               - comic
               - magazine
+              - manga
             description: Filter results by media type. When omitted, all types are returned.
         - in: query
           name: format
@@ -10377,6 +10518,17 @@ paths:
                         - $ref: '#/components/schemas/AuthorResult'
                         - $ref: '#/components/schemas/ComicResult'
                         - $ref: '#/components/schemas/MagazineResult'
+                        - $ref: '#/components/schemas/MangaResult'
+        '429':
+          description: AniList rate limit reached for a manga-only search. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+        '503':
+          description: A search provider required by the selected type is unavailable
   /search/keyword:
     get:
       summary: Search for keywords
@@ -11622,6 +11774,100 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/MagazineResult'
+  /discover/manga:
+    get:
+      summary: Discover manga
+      description: Returns manga from AniList. Requires the manga category; returns 404 while it is disabled. Adult titles and light novels are excluded unless an administrator enables them. Without sortBy, a query sorts by best match and no query sorts by trending.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 1
+        - in: query
+          name: query
+          schema:
+            type: string
+            maxLength: 256
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum:
+              - trending
+              - popular
+              - top_rated
+        - in: query
+          name: genre
+          schema:
+            type: string
+            maxLength: 64
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum:
+              - MANGA
+              - ONE_SHOT
+              - NOVEL
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum:
+              - FINISHED
+              - RELEASING
+              - NOT_YET_RELEASED
+              - CANCELLED
+              - HIATUS
+        - in: query
+          name: countryOfOrigin
+          schema:
+            type: string
+            enum:
+              - JP
+              - KR
+              - CN
+              - TW
+      responses:
+        '200':
+          description: Manga discovery results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: integer
+                    example: 1
+                  totalPages:
+                    type: integer
+                    example: 20
+                  totalResults:
+                    type: integer
+                    example: 400
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MangaResult'
+        '400':
+          description: A query parameter is invalid
+        '404':
+          description: The manga category is disabled
+        '429':
+          description: AniList rate limit reached. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+        '503':
+          description: AniList is unavailable
   /discover/keyword/{keywordId}/movies:
     get:
       summary: Get movies from keyword
@@ -12116,6 +12362,42 @@ paths:
           description: Magazine not found
         '503':
           description: LazyLibrarian is unavailable
+  /manga/{mangaId}:
+    get:
+      summary: Get manga details
+      description: Returns AniList manga details, merged with local media state when the title is tracked. Returns 404 while the manga category is disabled, and for unknown titles and titles excluded by the adult or light novel settings.
+      tags:
+        - search
+      parameters:
+        - in: path
+          name: mangaId
+          description: AniList media ID.
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            example: 30013
+      responses:
+        '200':
+          description: Manga details returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaDetails'
+        '400':
+          description: The manga ID is invalid
+        '404':
+          description: Manga not found, excluded, or the manga category is disabled
+        '429':
+          description: AniList rate limit reached. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+        '503':
+          description: AniList is unavailable
   /book/{bookId}:
     get:
       summary: Get book details

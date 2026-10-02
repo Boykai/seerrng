@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
+import AnilistAPI from '@server/api/anilist';
+import { AnilistRateLimitedError } from '@server/api/anilist/failures';
+import type {
+  AnilistMangaPage,
+  AnilistMangaSummary,
+} from '@server/api/anilist/manga';
 import ComicVineAPI from '@server/api/comicvine';
 import ExternalAPI from '@server/api/externalapi';
 import LazyLibrarianAPI, {
@@ -1579,5 +1585,245 @@ describe('search filters behind the OpenAPI validator', () => {
     assert.deepStrictEqual(authors.body.results, []);
     assert.deepStrictEqual(ebook.body.results, []);
     assert.deepStrictEqual(comic.body.results, []);
+  });
+});
+
+describe('GET /search manga results', () => {
+  const mangaSummary = (
+    overrides: Partial<AnilistMangaSummary> = {}
+  ): AnilistMangaSummary => ({
+    id: 30013,
+    titles: { romaji: 'Sample Romaji', english: 'Sample Manga' },
+    synonyms: [],
+    format: 'MANGA',
+    isAdult: false,
+    genres: [],
+    ...overrides,
+  });
+  const mangaPage = (
+    media: AnilistMangaSummary[],
+    total = media.length
+  ): AnilistMangaPage => ({ pageInfo: { total, hasNextPage: false }, media });
+  const emptyTmdbSearch = () =>
+    mockPrivate(ExternalAPI.prototype, 'get', async (endpoint) => {
+      if (endpoint === '/search/multi') {
+        return { page: 1, total_pages: 1, total_results: 0, results: [] };
+      }
+
+      throw new Error(`Unexpected endpoint: ${String(endpoint)}`);
+    });
+
+  let originalMain: {
+    categories: ReturnType<
+      typeof getSettings
+    >['main']['enabledMediaCategories'];
+    mangaIncludeAdult: boolean;
+    mangaIncludeNovels: boolean;
+  };
+
+  beforeEach(() => {
+    const { main } = getSettings();
+    originalMain = {
+      categories: { ...main.enabledMediaCategories },
+      mangaIncludeAdult: main.mangaIncludeAdult,
+      mangaIncludeNovels: main.mangaIncludeNovels,
+    };
+    main.enabledMediaCategories = {
+      ...main.enabledMediaCategories,
+      manga: true,
+    };
+  });
+
+  afterEach(() => {
+    const { main } = getSettings();
+    main.enabledMediaCategories = originalMain.categories;
+    main.mangaIncludeAdult = originalMain.mangaIncludeAdult;
+    main.mangaIncludeNovels = originalMain.mangaIncludeNovels;
+  });
+
+  it('leaves AniList alone while manga is disabled', async () => {
+    getSettings().main.enabledMediaCategories = {
+      ...originalMain.categories,
+      manga: false,
+    };
+    getSettings().lidarr = [];
+    getSettings().readarr = [];
+    const getPage = mock.method(AnilistAPI.prototype, 'getMangaPage');
+    emptyTmdbSearch();
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const typed = await agent
+      .get('/search')
+      .query({ query: 'sample', type: 'manga' });
+    const untyped = await agent.get('/search').query({ query: 'sample' });
+
+    assert.strictEqual(typed.status, 200);
+    assert.deepStrictEqual(typed.body, {
+      page: 1,
+      totalPages: 1,
+      totalResults: 0,
+      results: [],
+    });
+    assert.strictEqual(untyped.status, 200);
+    assert.deepStrictEqual(untyped.body.results, []);
+    assert.strictEqual(getPage.mock.callCount(), 0);
+  });
+
+  it('returns AniList manga merged with local media state', async () => {
+    const clients: AnilistAPI[] = [];
+    const getPage = mock.method(
+      AnilistAPI.prototype,
+      'getMangaPage',
+      async function (this: AnilistAPI) {
+        clients.push(this);
+        return mangaPage(
+          [
+            mangaSummary(),
+            mangaSummary({ id: 2, titles: { romaji: 'Second' } }),
+          ],
+          41
+        );
+      }
+    );
+    const media = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.AVAILABLE,
+      })
+    );
+    await getRepository(MediaIdentifier).save(
+      new MediaIdentifier({
+        media,
+        provider: MediaIdentifierProvider.ANILIST,
+        value: '30013',
+        canonical: true,
+      })
+    );
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const res = await agent
+      .get('/search')
+      .query({ query: 'sample', type: 'manga', page: 2 });
+
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.deepStrictEqual(getPage.mock.calls[0]?.arguments, [
+      {
+        page: 2,
+        sort: ['SEARCH_MATCH'],
+        search: 'sample',
+        includeAdult: false,
+        includeNovels: false,
+      },
+    ]);
+    // Search gives up on a busy AniList budget sooner than detail pages do.
+    assert.strictEqual(
+      (clients[0] as unknown as { maxRateLimitWaitMs: number })
+        .maxRateLimitWaitMs,
+      3000
+    );
+    assert.strictEqual(res.body.page, 2);
+    assert.strictEqual(res.body.totalResults, 41);
+    assert.strictEqual(
+      res.body.totalPages,
+      Math.ceil(41 / MAX_SEARCH_RESULTS_PER_PROVIDER)
+    );
+    assert.deepStrictEqual(
+      res.body.results.map(
+        (result: { id: number; mediaType: string; title: string }) => ({
+          id: result.id,
+          mediaType: result.mediaType,
+          title: result.title,
+        })
+      ),
+      [
+        { id: 30013, mediaType: 'manga', title: 'Sample Manga' },
+        { id: 2, mediaType: 'manga', title: 'Second' },
+      ]
+    );
+    assert.strictEqual(res.body.results[0].mediaInfo?.id, media.id);
+    assert.strictEqual(
+      res.body.results[0].mediaInfo?.status,
+      MediaStatus.AVAILABLE
+    );
+  });
+
+  it('applies the administrator manga content settings', async () => {
+    const getPage = mock.method(
+      AnilistAPI.prototype,
+      'getMangaPage',
+      async () => mangaPage([])
+    );
+    getSettings().main.mangaIncludeAdult = true;
+    getSettings().main.mangaIncludeNovels = true;
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    const res = await agent
+      .get('/search')
+      .query({ query: 'sample', type: 'manga' });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(getPage.mock.calls[0]?.arguments[0]?.includeAdult, true);
+    assert.strictEqual(
+      getPage.mock.calls[0]?.arguments[0]?.includeNovels,
+      true
+    );
+  });
+
+  it('reports manga search failures as rate limits or outages', async () => {
+    let failure: Error = new AnilistRateLimitedError(30);
+    mock.method(AnilistAPI.prototype, 'getMangaPage', async () => {
+      throw failure;
+    });
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    let res = await agent
+      .get('/search')
+      .query({ query: 'sample', type: 'manga' });
+    assert.strictEqual(res.status, 429);
+    assert.strictEqual(res.headers['retry-after'], '30');
+    assert.deepStrictEqual(res.body, {
+      status: 429,
+      message: 'AniList rate limit reached. Try again later.',
+    });
+
+    failure = new Error('socket hang up');
+    res = await agent.get('/search').query({ query: 'sample', type: 'manga' });
+    assert.strictEqual(res.status, 503);
+    assert.deepStrictEqual(res.body, {
+      status: 503,
+      message:
+        'AniList, the service used for manga searches, timed out or is unavailable. Please try again.',
+    });
+  });
+
+  it('keeps global search working when AniList fails', async () => {
+    getSettings().lidarr = [];
+    getSettings().readarr = [];
+    let failure: Error | undefined = new AnilistRateLimitedError(30);
+    mock.method(AnilistAPI.prototype, 'getMangaPage', async () => {
+      if (failure) {
+        throw failure;
+      }
+      return mangaPage([mangaSummary()]);
+    });
+    emptyTmdbSearch();
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+
+    let res = await agent.get('/search').query({ query: 'sample' });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.deepStrictEqual(res.body.results, []);
+
+    failure = undefined;
+    res = await agent.get('/search').query({ query: 'sample' });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(res.body.totalResults, 1);
+    assert.deepStrictEqual(
+      res.body.results.map((result: { id: number; mediaType: string }) => [
+        result.mediaType,
+        result.id,
+      ]),
+      [['manga', 30013]]
+    );
   });
 });

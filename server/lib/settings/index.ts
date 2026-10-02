@@ -250,6 +250,9 @@ export interface MainSettings {
   applicationUrl: string;
   cacheImages: boolean;
   includeAdult: boolean;
+  // Manga catalog exclusions; both stay off unless an admin opts in.
+  mangaIncludeAdult: boolean;
+  mangaIncludeNovels: boolean;
   defaultPermissions: number;
   defaultQuotas: {
     movie: Quota;
@@ -600,6 +603,8 @@ class Settings {
         applicationUrl: '',
         cacheImages: true,
         includeAdult: false,
+        mangaIncludeAdult: false,
+        mangaIncludeNovels: false,
         defaultPermissions: Permission.REQUEST,
         defaultQuotas: {
           movie: {},
@@ -1479,6 +1484,8 @@ class Settings {
         applicationUrl: '',
         cacheImages: false,
         includeAdult: false,
+        mangaIncludeAdult: false,
+        mangaIncludeNovels: false,
         defaultPermissions: Permission.REQUEST,
         defaultQuotas: {
           movie: {},

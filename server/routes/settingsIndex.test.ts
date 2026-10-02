@@ -449,6 +449,49 @@ describe('Settings route input validation', () => {
     }
   });
 
+  it('persists and validates the manga content settings', async () => {
+    const settings = getSettings();
+    const original = {
+      mangaIncludeAdult: settings.main.mangaIncludeAdult,
+      mangaIncludeNovels: settings.main.mangaIncludeNovels,
+    };
+
+    try {
+      assert.strictEqual(settings.main.mangaIncludeAdult, false);
+      assert.strictEqual(settings.main.mangaIncludeNovels, false);
+
+      const response = await request(app)
+        .post('/settings/main')
+        .send({ mangaIncludeAdult: true, mangaIncludeNovels: true });
+
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(response.body.mangaIncludeAdult, true);
+      assert.strictEqual(response.body.mangaIncludeNovels, true);
+      assert.strictEqual(settings.main.mangaIncludeAdult, true);
+      assert.strictEqual(settings.main.mangaIncludeNovels, true);
+
+      for (const [field, value] of [
+        ['mangaIncludeAdult', 'true'],
+        ['mangaIncludeNovels', 1],
+      ] as const) {
+        const invalidResponse = await request(app)
+          .post('/settings/main')
+          .send({ [field]: value });
+
+        assert.strictEqual(invalidResponse.status, 400, field);
+        assert.strictEqual(
+          invalidResponse.body.message,
+          `${field} must be a boolean.`
+        );
+      }
+      assert.strictEqual(settings.main.mangaIncludeAdult, true);
+      assert.strictEqual(settings.main.mangaIncludeNovels, true);
+    } finally {
+      settings.main.mangaIncludeAdult = original.mangaIncludeAdult;
+      settings.main.mangaIncludeNovels = original.mangaIncludeNovels;
+    }
+  });
+
   it('saves category availability flags independently and validates their shape', async () => {
     const settings = getSettings();
     const original = { ...settings.main.enabledMediaCategories };

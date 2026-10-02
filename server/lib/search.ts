@@ -27,6 +27,7 @@ import {
 } from '@server/models/Book';
 import type { ComicResult } from '@server/models/Comic';
 import type { MagazineResult } from '@server/models/Magazine';
+import type { MangaResult } from '@server/models/Manga';
 import {
   mapMovieDetailsToResult,
   mapPersonDetailsToResult,
@@ -53,6 +54,7 @@ export type CombinedSearchResponse = {
     | AuthorResult
     | ComicResult
     | MagazineResult
+    | MangaResult
   )[];
 };
 interface SearchProvider {

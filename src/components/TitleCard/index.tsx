@@ -69,7 +69,8 @@ interface TitleCardProps {
   voteCount?: number;
   bookRatingAverage?: number;
   bookRatingCount?: number;
-  mediaType: Exclude<MediaType, 'author'>;
+  // Manga results have no title card yet; callers filter them out first.
+  mediaType: Exclude<MediaType, 'author' | 'manga'>;
   status?: MediaStatus;
   status4k?: MediaStatus;
   canExpand?: boolean;

@@ -20,9 +20,13 @@ export class AnilistAuthError extends Error {
 }
 
 export class AnilistGraphQLError extends Error {
-  constructor(message: string) {
+  // The GraphQL error status (for example 404 for an unknown id), if any.
+  public readonly status?: number;
+
+  constructor(message: string, status?: number) {
     super(message);
     this.name = 'AnilistGraphQLError';
+    this.status = status;
   }
 }
 

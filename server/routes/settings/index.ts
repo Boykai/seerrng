@@ -1094,6 +1094,8 @@ const parseMainSettingsBody = (
     ['enableSpecialEpisodes', 'enableSpecialEpisodes'],
     ['cacheImages', 'cacheImages'],
     ['includeAdult', 'includeAdult'],
+    ['mangaIncludeAdult', 'mangaIncludeAdult'],
+    ['mangaIncludeNovels', 'mangaIncludeNovels'],
   ] as const) {
     const parsed = parseOptionalBooleanSetting(body[key], fieldName);
     if ('error' in parsed) {

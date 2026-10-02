@@ -1,3 +1,5 @@
+import AnilistAPI from '@server/api/anilist';
+import type { AnilistMangaPage } from '@server/api/anilist/manga';
 import ComicVineAPI from '@server/api/comicvine';
 import CoverArtArchive from '@server/api/coverartarchive';
 import LazyLibrarianAPI, {
@@ -24,6 +26,11 @@ import {
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import { normalizeMagazineTitle } from '@server/lib/magazineIdentity';
 import { findMagazineMediaByTitles } from '@server/lib/magazineMediaMatcher';
+import {
+  findMangaMediaByAnilistIds,
+  getMangaContentPolicy,
+  sendAnilistFailure,
+} from '@server/lib/mangaCatalog';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import {
   getAvailableMusicQualities,
@@ -43,6 +50,7 @@ import {
 } from '@server/models/Book';
 import { mapComicVineVolumeResult } from '@server/models/Comic';
 import { mapLazyLibrarianMagazine } from '@server/models/Magazine';
+import { mapMangaResult } from '@server/models/Manga';
 import { mapArtistResult, mapSearchResults } from '@server/models/Search';
 import { trackBackgroundTask } from '@server/utils/backgroundTasks';
 import {
@@ -85,6 +93,8 @@ export const SEARCH_RATE_LIMIT = {
 export const MAX_SEARCH_RESULTS_PER_PROVIDER = 20;
 export const MAX_COMBINED_SEARCH_RESULTS = 100;
 export const SEARCH_PROVIDER_TIMEOUT_MS = 5_000;
+// Search fails fast instead of waiting for a long AniList pacing slot.
+export const SEARCH_ANILIST_MAX_RATE_LIMIT_WAIT_MS = 3_000;
 export const SEARCH_CREDIT_LOOKUP_CONCURRENCY = parsePositiveInt(
   process.env.SEARCH_CREDIT_CONCURRENCY,
   10,
@@ -127,10 +137,16 @@ const searchTypes = [
   'music',
   'comic',
   'magazine',
+  'manga',
 ] as const;
 type SearchType = (typeof searchTypes)[number];
 const bookFormats = ['ebook', 'audiobook'] as const;
 type BookFormat = (typeof bookFormats)[number];
+
+const createEmptyMangaPage = (): AnilistMangaPage => ({
+  pageInfo: { hasNextPage: false },
+  media: [],
+});
 
 const parseSearchQuery = (value: unknown) =>
   parseBoundedString(value, {
@@ -427,6 +443,7 @@ searchRoutes.get('/', async (req, res, next) => {
     settings.lazylibrarian.length > 0 && isMediaCategoryEnabled('magazine');
   const moviesEnabled = isMediaCategoryEnabled('movie');
   const seriesEnabled = isMediaCategoryEnabled('tv');
+  const mangaEnabled = isMediaCategoryEnabled('manga');
 
   if (
     (typeFilter === 'movie' && !moviesEnabled) ||
@@ -463,6 +480,15 @@ searchRoutes.get('/', async (req, res, next) => {
   }
 
   if (typeFilter === 'magazine' && !magazinesEnabled) {
+    return res.status(200).json({
+      page,
+      totalPages: 1,
+      totalResults: 0,
+      results: [],
+    });
+  }
+
+  if (typeFilter === 'manga' && !mangaEnabled) {
     return res.status(200).json({
       page,
       totalPages: 1,
@@ -510,6 +536,7 @@ searchRoutes.get('/', async (req, res, next) => {
       const shouldSearchAuthors = !typeFilter || typeFilter === 'author';
       const shouldSearchComics = !typeFilter || typeFilter === 'comic';
       const shouldSearchMagazines = !typeFilter || typeFilter === 'magazine';
+      const shouldSearchManga = !typeFilter || typeFilter === 'manga';
       const providerNames = [
         'TMDB',
         'MusicBrainz albums',
@@ -520,6 +547,7 @@ searchRoutes.get('/', async (req, res, next) => {
         'Bookshelf authors',
         'ComicVine',
         'LazyLibrarian magazines',
+        'AniList manga',
       ];
       const providerPromises: Promise<unknown>[] = [
         shouldSearchVideo
@@ -612,6 +640,16 @@ searchRoutes.get('/', async (req, res, next) => {
               page
             )
           : Promise.resolve({ totalResults: 0, results: [] }),
+        shouldSearchManga && mangaEnabled
+          ? new AnilistAPI({
+              maxRateLimitWaitMs: SEARCH_ANILIST_MAX_RATE_LIMIT_WAIT_MS,
+            }).getMangaPage({
+              page,
+              sort: ['SEARCH_MATCH'],
+              search: queryString,
+              ...getMangaContentPolicy(),
+            })
+          : Promise.resolve(createEmptyMangaPage()),
       ];
       type SearchProviderResult = {
         index: number;
@@ -640,6 +678,7 @@ searchRoutes.get('/', async (req, res, next) => {
         ReturnType<ComicVineAPI['searchVolumes']>
       >;
       type MagazineSearchResults = MagazineCatalogSearchResults;
+      type MangaSearchResults = Awaited<ReturnType<AnilistAPI['getMangaPage']>>;
 
       const providerResponses =
         await settlePromisesWithin<SearchProviderResult>(
@@ -792,6 +831,21 @@ searchRoutes.get('/', async (req, res, next) => {
             'LazyLibrarian, the service used for magazine searches, is unavailable. Please try again.',
         });
       }
+      const mangaProviderResponse = providerResults.get(9);
+      if (
+        typeFilter === 'manga' &&
+        shouldSearchManga &&
+        mangaEnabled &&
+        (!mangaProviderResponse || mangaProviderResponse.status === 'rejected')
+      ) {
+        return sendAnilistFailure(
+          res,
+          mangaProviderResponse?.status === 'rejected'
+            ? mangaProviderResponse.reason
+            : undefined,
+          'AniList, the service used for manga searches, timed out or is unavailable. Please try again.'
+        );
+      }
 
       if (providerResponses.timedOut) {
         logger.debug('Global search provider deadline exceeded', {
@@ -871,10 +925,18 @@ searchRoutes.get('/', async (req, res, next) => {
         totalResults: 0,
         results: [],
       });
+      const rawMangaResults = getProviderValue<MangaSearchResults>(
+        9,
+        createEmptyMangaPage()
+      );
+      const mangaTotalResults =
+        rawMangaResults.pageInfo.total ?? rawMangaResults.media.length;
       if (typeFilter === 'comic') {
         typeSpecificTotalResults = rawComicResults.number_of_total_results;
       } else if (typeFilter === 'magazine') {
         typeSpecificTotalResults = rawMagazineResults.totalResults;
+      } else if (typeFilter === 'manga') {
+        typeSpecificTotalResults = mangaTotalResults;
       }
       if (typeSpecificTotalResults !== undefined) {
         typeSpecificTotalPages = Math.max(
@@ -1106,7 +1168,8 @@ searchRoutes.get('/', async (req, res, next) => {
         rawAuthorResults.numFound +
         rawBookshelfAuthorResults.length +
         rawComicResults.number_of_total_results +
-        rawMagazineResults.totalResults;
+        rawMagazineResults.totalResults +
+        mangaTotalResults;
       const totalPages = Math.max(
         tmdbResults.total_pages,
         Math.ceil(totalItems / 20)
@@ -1142,6 +1205,16 @@ searchRoutes.get('/', async (req, res, next) => {
           magazine.serviceId
         )
       );
+      const mangaEntries = capSearchProviderResults<
+        MangaSearchResults['media'][number]
+      >(rawMangaResults.media);
+      const mangaMediaMap = await findMangaMediaByAnilistIds(
+        mangaEntries.map((manga) => manga.id),
+        req.user
+      );
+      const mappedMangaResults = mangaEntries.map((manga) =>
+        mapMangaResult(manga, mangaMediaMap.get(manga.id))
+      );
 
       const combinedResults = [
         ...tmdbResults.results,
@@ -1151,6 +1224,7 @@ searchRoutes.get('/', async (req, res, next) => {
         ...authorResults,
         ...mappedComicResults,
         ...mappedMagazineResults,
+        ...mappedMangaResults,
       ];
 
       results = {
@@ -1274,7 +1348,8 @@ searchRoutes.get('/', async (req, res, next) => {
           (result.mediaType !== 'tv' || seriesEnabled) &&
           (result.mediaType !== 'book' || booksEnabled) &&
           (result.mediaType !== 'comic' || comicsEnabled) &&
-          (result.mediaType !== 'magazine' || magazinesEnabled))
+          (result.mediaType !== 'magazine' || magazinesEnabled) &&
+          (result.mediaType !== 'manga' || mangaEnabled))
     );
 
     const filteredResults = typeFilter
