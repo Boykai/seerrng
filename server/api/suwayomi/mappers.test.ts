@@ -292,7 +292,10 @@ describe('Suwayomi capabilities', () => {
     assert.deepEqual(
       evaluateCapabilities({
         about: { version: `v2.4.${PINNED_REVISION}`, buildType: 'Stable' },
-        introspection: introspection(),
+        introspection: introspection(undefined, undefined, [
+          'id',
+          'trackRecords',
+        ]),
       }),
       {
         version: `v2.4.${PINNED_REVISION}`,
@@ -302,8 +305,27 @@ describe('Suwayomi capabilities', () => {
         missingFields: [],
         partialFetchResults: true,
         perUserDownloadState: false,
+        trackRecords: true,
         warnings: [],
       }
+    );
+  });
+
+  it('treats track records as optional: the schema decides, else support does', () => {
+    const without = evaluateCapabilities({
+      about: { version: `v2.4.${PINNED_REVISION}` },
+      introspection: introspection(),
+    });
+    assert.equal(without.trackRecords, false);
+    assert.equal(without.supported, true);
+    assert.deepEqual(without.warnings, []);
+    assert.equal(
+      evaluateCapabilities({ about: { version: 'v2.1.2230' } }).trackRecords,
+      true
+    );
+    assert.equal(
+      evaluateCapabilities({ about: { version: 'nightly' } }).trackRecords,
+      false
     );
   });
 

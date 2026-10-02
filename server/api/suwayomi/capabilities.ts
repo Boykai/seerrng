@@ -57,6 +57,7 @@ export const evaluateCapabilities = ({
   const warnings: SuwayomiCapabilityWarning[] = [];
   const missingFields: string[] = [];
   let perUserDownloadState = false;
+  let trackRecords: boolean | undefined;
 
   if (introspection) {
     const queryFields = fieldNames(introspection.queryType) ?? new Set();
@@ -73,6 +74,8 @@ export const evaluateCapabilities = ({
       introspection.mangaType,
       introspection.chapterType,
     ].some((type) => fieldNames(type)?.has('user') ?? false);
+    trackRecords =
+      fieldNames(introspection.mangaType)?.has('trackRecords') ?? false;
   } else {
     warnings.push('INTROSPECTION_UNAVAILABLE');
   }
@@ -85,18 +88,21 @@ export const evaluateCapabilities = ({
   if (perUserDownloadState) {
     warnings.push('PER_USER_SCHEMA');
   }
+  const supported = introspection
+    ? missingFields.length === 0
+    : revision !== undefined && revision >= MINIMUM_REVISION;
 
   return {
     version,
     revision,
     buildType,
-    supported: introspection
-      ? missingFields.length === 0
-      : revision !== undefined && revision >= MINIMUM_REVISION,
+    supported,
     missingFields,
     partialFetchResults:
       revision !== undefined && revision >= PARTIAL_FETCH_REVISION,
     perUserDownloadState,
+    // Every supported release has track records; only a schema can say no.
+    trackRecords: trackRecords ?? supported,
     warnings,
   };
 };

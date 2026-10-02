@@ -5,7 +5,7 @@
 // extensions: the only source is Suwayomi's built-in local source, with a
 // fixture manga that the harness generates at run time.
 
-import SuwayomiAPI from '@server/api/suwayomi';
+import SuwayomiAPI, { SUWAYOMI_TRACKER_IDS } from '@server/api/suwayomi';
 import { PINNED_REVISION } from '@server/api/suwayomi/capabilities';
 import {
   SuwayomiError,
@@ -27,6 +27,7 @@ import {
   NoDeprecatedCustomRule,
   buildClientSchema,
   getIntrospectionQuery,
+  isObjectType,
   parse,
   validate,
   type IntrospectionQuery,
@@ -300,6 +301,80 @@ describe('Suwayomi contract', { skip: !MAIN.url }, () => {
       }
       assert.deepEqual(failures, []);
     });
+
+    it('types the library-scan fields the way the client reads them', async () => {
+      const response = await post(NONE, getIntrospectionQuery());
+      const schema = buildClientSchema(
+        (response.data as { data: IntrospectionQuery }).data
+      );
+      const typeOf = (typeName: string, field: string) => {
+        const type = schema.getType(typeName);
+        assert.ok(isObjectType(type), typeName);
+        return String(type.getFields()[field]?.type);
+      };
+      assert.deepEqual(
+        Object.fromEntries(
+          [
+            ['MangaNodeList', 'totalCount'],
+            ['MangaNodeList', 'pageInfo'],
+            ['PageInfo', 'hasNextPage'],
+            ['PageInfo', 'endCursor'],
+            ['MangaType', 'id'],
+            ['MangaType', 'sourceId'],
+            ['MangaType', 'url'],
+            ['MangaType', 'downloadCount'],
+            ['MangaType', 'hasDuplicateChapters'],
+            ['MangaType', 'chapters'],
+            ['MangaType', 'trackRecords'],
+            ['ChapterNodeList', 'totalCount'],
+            ['ChapterType', 'chapterNumber'],
+            ['ChapterType', 'isDownloaded'],
+            ['TrackRecordType', 'trackerId'],
+            ['TrackRecordType', 'remoteId'],
+          ].map(([type, field]) => [`${type}.${field}`, typeOf(type, field)])
+        ),
+        {
+          'MangaNodeList.totalCount': 'Int!',
+          'MangaNodeList.pageInfo': 'PageInfo!',
+          'PageInfo.hasNextPage': 'Boolean!',
+          'PageInfo.endCursor': 'Cursor',
+          'MangaType.id': 'Int!',
+          'MangaType.sourceId': 'LongString!',
+          'MangaType.url': 'String!',
+          'MangaType.downloadCount': 'Int!',
+          'MangaType.hasDuplicateChapters': 'Boolean!',
+          'MangaType.chapters': 'ChapterNodeList!',
+          'MangaType.trackRecords': 'TrackRecordNodeList!',
+          'ChapterNodeList.totalCount': 'Int!',
+          'ChapterType.chapterNumber': 'Float!',
+          'ChapterType.isDownloaded': 'Boolean!',
+          'TrackRecordType.trackerId': 'Int!',
+          'TrackRecordType.remoteId': 'LongString!',
+        }
+      );
+    });
+
+    it('numbers MyAnimeList 1 and AniList 2, the tracker IDs the scan matches', async () => {
+      const response = await post(
+        NONE,
+        'query { trackers { nodes { id name } } }'
+      );
+      const trackers = (
+        response.data as {
+          data: { trackers: { nodes: { id: number; name: string }[] } };
+        }
+      ).data.trackers.nodes;
+      const { myAnimeList, aniList } = SUWAYOMI_TRACKER_IDS;
+      assert.deepEqual(
+        trackers
+          .filter(({ id }) => id === myAnimeList || id === aniList)
+          .sort((left, right) => left.id - right.id),
+        [
+          { id: myAnimeList, name: 'MyAnimeList' },
+          { id: aniList, name: 'AniList' },
+        ]
+      );
+    });
   });
 
   describe('server', () => {
@@ -314,6 +389,7 @@ describe('Suwayomi contract', { skip: !MAIN.url }, () => {
         missingFields: [],
         partialFetchResults: true,
         perUserDownloadState: false,
+        trackRecords: true,
         warnings: [],
       });
     });
@@ -521,6 +597,106 @@ describe('Suwayomi contract', { skip: !MAIN.url }, () => {
       assert.equal(mangas[0].inLibrary, true);
       assert.equal(mangas[0].chapterCount, 2);
       assert.equal((await client.getMangaDetails(id)).inLibrary, true);
+    });
+
+    it('lists the library in ID order, continuing after the last ID (LibraryPage)', async () => {
+      const fixture = readFixture();
+      const { id, url } = await loadFixtureManga();
+      const client = main();
+      await client.setInLibrary(id, true);
+
+      const listing = await client.listLibrary();
+      assert.equal(listing.consistent, true);
+      assert.equal(listing.skippedUrls, 0);
+      assert.equal(listing.duplicateNaturalKeys, 0);
+      assert.deepEqual(
+        listing.items.find((item) => item.id === id),
+        {
+          id,
+          sourceId: LOCAL_SOURCE_ID,
+          url,
+          title: fixture.title,
+          downloadCount: 0,
+          chapterCount: 2,
+          hasDuplicateChapters: false,
+        }
+      );
+
+      // Keyset paging: the end cursor is the page's last ID, so a manga that
+      // stays in the library cannot be skipped while others come and go.
+      const login = await post(MAIN, SUWAYOMI_OPERATIONS.Login.document, {
+        username: MAIN.username,
+        password: MAIN.password,
+      });
+      const accessToken = (
+        login.data as { data?: { login?: { accessToken?: unknown } } }
+      ).data?.login?.accessToken;
+      assert.equal(typeof accessToken, 'string');
+      const page = async (after: string | null) => {
+        const response = await post(
+          MAIN,
+          `query ($after: Cursor) {
+            mangas(condition: { inLibrary: true }, order: [{ by: ID }], first: 1, after: $after) {
+              totalCount pageInfo { hasNextPage endCursor } nodes { id }
+            }
+          }`,
+          { after },
+          `Bearer ${String(accessToken)}`
+        );
+        return (
+          response.data as {
+            data: {
+              mangas: {
+                totalCount: number;
+                pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                nodes: { id: number }[];
+              };
+            };
+          }
+        ).data.mangas;
+      };
+      const ids: number[] = [];
+      let after: string | null = null;
+      for (let index = 0; index <= listing.items.length; index += 1) {
+        const current = await page(after);
+        assert.equal(current.totalCount, listing.items.length);
+        assert.equal(current.nodes.length, 1);
+        assert.equal(current.pageInfo.endCursor, String(current.nodes[0].id));
+        ids.push(current.nodes[0].id);
+        if (!current.pageInfo.hasNextPage) break;
+        after = current.pageInfo.endCursor;
+      }
+      assert.deepEqual(
+        ids.map(String),
+        listing.items.map((item) => item.id)
+      );
+    });
+
+    it('reads tracker links and chapter states of library manga (LibraryTrackRecords, LibraryChapterStates)', async () => {
+      const { id, chapters } = await loadFixtureManga();
+      const client = main();
+      // No tracker is logged in on the test server, so nothing is linked.
+      assert.deepEqual(await client.getTrackRecords([id, MISSING_ID]), [
+        { mangaId: id, records: [] },
+      ]);
+      const states = await client.getLibraryChapterStates([id, MISSING_ID]);
+      assert.equal(states.length, 1);
+      assert.equal(states[0].mangaId, id);
+      assert.equal(states[0].totalCount, chapters.length);
+      const byNumber = (
+        left: { chapterNumber: number },
+        right: { chapterNumber: number }
+      ) => left.chapterNumber - right.chapterNumber;
+      assert.deepEqual(
+        [...states[0].chapters].sort(byNumber),
+        chapters
+          .map(({ chapterNumber }) => ({ chapterNumber, isDownloaded: false }))
+          .sort(byNumber)
+      );
+      assert.deepEqual(
+        states[0].chapters.map(({ chapterNumber }) => chapterNumber).sort(),
+        [1, 2]
+      );
     });
 
     it('keeps the instance marker, request stamp and request index in meta', async () => {

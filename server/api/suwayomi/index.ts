@@ -26,8 +26,11 @@ import {
   mapChapter,
   mapChapterState,
   mapHealth,
+  mapLibraryItem,
+  mapMangaChapterStates,
   mapMangaDetails,
   mapMangaSummary,
+  mapMangaTrackRecords,
   mapQueue,
   mapSource,
   nodes,
@@ -56,7 +59,11 @@ import type {
   SuwayomiDetectedAuthMode,
   SuwayomiFetchResult,
   SuwayomiHealth,
+  SuwayomiLibraryItem,
+  SuwayomiLibraryListing,
+  SuwayomiMangaChapterStates,
   SuwayomiMangaDetails,
+  SuwayomiMangaTrackRecords,
   SuwayomiMutationResult,
   SuwayomiQueue,
   SuwayomiRequestIndexEntry,
@@ -81,6 +88,8 @@ export const DEFAULT_SUWAYOMI_TIMEOUTS: Readonly<SuwayomiTimeouts> = {
   source: 150_000,
   bytes: 45_000,
 };
+/** Tracker IDs as Suwayomi's TrackerManager numbers them; tier 2 pins both. */
+export const SUWAYOMI_TRACKER_IDS = { myAnimeList: 1, aniList: 2 } as const;
 export const DEFAULT_CHAPTER_ARCHIVE_LIMIT_BYTES = 1024 ** 3;
 export const DEFAULT_THUMBNAIL_LIMIT_BYTES = 10 * 1024 ** 2;
 // Raster types only: an SVG cover could carry script once it is served on.
@@ -94,6 +103,8 @@ const THUMBNAIL_TYPES = new Set([
 ]);
 const MAX_IDS_PER_CALL = 100;
 const MAX_INDEX_PAGES = 100;
+// 20,000 manga at 100 per page.
+const MAX_LIBRARY_PAGES = 200;
 const MAX_CURSOR_LENGTH = 256;
 const MAX_INT = 2_147_483_647;
 const MAX_LONG = 9_223_372_036_854_775_807n;
@@ -793,6 +804,108 @@ class SuwayomiAPI extends ExternalAPI {
       mangas: nodes(data.mangas, op).map((node) => mapAvailability(node, op)),
       queue: mapQueue(data.downloadStatus, op),
     }));
+  }
+
+  /**
+   * Reads the whole library in ID order. A page list that cannot be followed
+   * to its end fails with BAD_RESPONSE instead of returning part of it.
+   */
+  async listLibrary(
+    options: SuwayomiCallOptions = {}
+  ): Promise<SuwayomiLibraryListing> {
+    const op = 'LibraryPage';
+    const byNaturalKey = new Map<string, SuwayomiLibraryItem>();
+    const listedIds = new Set<string>();
+    const followed = new Set<string>();
+    const totals: number[] = [];
+    let repeatedId = false;
+    let skippedUrls = 0;
+    let duplicateNaturalKeys = 0;
+    let after: string | null = null;
+    for (let page = 0; page < MAX_LIBRARY_PAGES; page += 1) {
+      const next: string | undefined = await this.run(
+        op,
+        { after },
+        options,
+        (data) => {
+          const mangas = record(data.mangas, op);
+          const total = mangas.totalCount;
+          totals.push(
+            typeof total === 'number' &&
+              Number.isSafeInteger(total) &&
+              total >= 0
+              ? total
+              : badResponse(op)
+          );
+          for (const node of nodes(mangas, op)) {
+            const { url, ...item } = mapLibraryItem(node, op);
+            if (listedIds.has(item.id)) {
+              repeatedId = true;
+              continue;
+            }
+            listedIds.add(item.id);
+            if (url === undefined) {
+              skippedUrls += 1;
+              continue;
+            }
+            const key = `${item.sourceId}\n${url}`;
+            const kept = byNaturalKey.get(key);
+            if (kept) duplicateNaturalKeys += 1;
+            if (!kept || Number(item.id) < Number(kept.id)) {
+              byNaturalKey.set(key, { ...item, url });
+            }
+          }
+          const pageInfo = record(mangas.pageInfo, op);
+          if (typeof pageInfo.hasNextPage !== 'boolean') badResponse(op);
+          if (!pageInfo.hasNextPage) return undefined;
+          const cursor = pageInfo.endCursor;
+          return typeof cursor === 'string' &&
+            cursor !== '' &&
+            cursor.length <= MAX_CURSOR_LENGTH &&
+            !followed.has(cursor)
+            ? cursor
+            : badResponse(op);
+        }
+      );
+      if (next === undefined) {
+        return {
+          items: [...byNaturalKey.values()].sort(
+            (a, b) => Number(a.id) - Number(b.id)
+          ),
+          consistent:
+            !repeatedId &&
+            totals[0] === totals[totals.length - 1] &&
+            listedIds.size === totals[0],
+          skippedUrls,
+          duplicateNaturalKeys,
+        };
+      }
+      followed.add(next);
+      after = next;
+    }
+    throw reportSuwayomiError(new SuwayomiError('BAD_RESPONSE', op));
+  }
+
+  /** Tracker IDs and remote IDs only; never remote URLs. */
+  async getTrackRecords(
+    mangaIds: readonly string[],
+    options: SuwayomiCallOptions = {}
+  ): Promise<SuwayomiMangaTrackRecords[]> {
+    const op = 'LibraryTrackRecords';
+    return this.run(op, { ids: intIds(mangaIds, op) }, options, (data) =>
+      nodes(data.mangas, op).map((node) => mapMangaTrackRecords(node, op))
+    );
+  }
+
+  /** Stored number and download state of every chapter of each manga. */
+  async getLibraryChapterStates(
+    mangaIds: readonly string[],
+    options: SuwayomiCallOptions = {}
+  ): Promise<SuwayomiMangaChapterStates[]> {
+    const op = 'LibraryChapterStates';
+    return this.run(op, { ids: intIds(mangaIds, op) }, options, (data) =>
+      nodes(data.mangas, op).map((node) => mapMangaChapterStates(node, op))
+    );
   }
 
   async enqueueChapters(

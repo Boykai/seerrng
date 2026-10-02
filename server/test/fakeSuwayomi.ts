@@ -576,3 +576,134 @@ export const startFakeSuwayomi = async (
       }),
   };
 };
+
+export interface FakeLibraryChapter {
+  chapterNumber: number;
+  isDownloaded: boolean;
+}
+
+/** One library manga, with invented values only. */
+export interface FakeLibraryManga {
+  id: number;
+  sourceId: string;
+  url: string;
+  title: string;
+  /** Defaults to chapter 1 to `chapterCount`, the first `downloadCount` downloaded. */
+  chapters?: FakeLibraryChapter[];
+  /** Default to what `chapters` says; set them apart to fake a stale count. */
+  chapterCount?: number;
+  downloadCount?: number;
+  hasDuplicateChapters?: boolean;
+  trackRecords?: { trackerId: number; remoteId: string }[];
+}
+
+export interface FakeLibrary {
+  mangas: FakeLibraryManga[];
+  /** Page size of LibraryPage; the client asks for 100. */
+  pageSize?: number;
+}
+
+/** Builds a library manga with invented values; `id` decides the rest. */
+export const fakeLibraryManga = (
+  id: number,
+  overrides: Partial<FakeLibraryManga> = {}
+): FakeLibraryManga => ({
+  id,
+  sourceId: '0',
+  url: `/fake-library/${id}`,
+  title: `Fake Library Title ${id}`,
+  ...overrides,
+});
+
+export const fakeLibraryChapters = (manga: FakeLibraryManga) =>
+  manga.chapters ??
+  Array.from({ length: manga.chapterCount ?? 0 }, (_, index) => ({
+    chapterNumber: index + 1,
+    isDownloaded: index < (manga.downloadCount ?? 0),
+  }));
+
+const libraryNode = (manga: FakeLibraryManga) => {
+  const chapters = fakeLibraryChapters(manga);
+  return {
+    id: manga.id,
+    sourceId: manga.sourceId,
+    url: manga.url,
+    title: manga.title,
+    downloadCount:
+      manga.downloadCount ??
+      chapters.filter((chapter) => chapter.isDownloaded).length,
+    hasDuplicateChapters: manga.hasDuplicateChapters ?? false,
+    chapters: { totalCount: manga.chapterCount ?? chapters.length },
+  };
+};
+
+const requestedIds = (request: FakeRequest) =>
+  new Set(
+    (Array.isArray(request.variables.ids) ? request.variables.ids : []).map(
+      Number
+    )
+  );
+
+/**
+ * Serves Capabilities and the library-scan reads from `library`, which tests
+ * may change between scans. Pages use keyset cursors (the last ID), as the
+ * pinned server does for `order: [{ by: ID }]`.
+ */
+export const serveFakeLibrary = (
+  server: FakeSuwayomi,
+  library: FakeLibrary
+): void => {
+  server.onOperation(
+    'Capabilities',
+    capabilitiesData({ mangaFields: ['id', 'title', 'trackRecords'] })
+  );
+  server.onOperation('LibraryPage', (request) => {
+    const sorted = [...library.mangas].sort((a, b) => a.id - b.id);
+    const after =
+      typeof request.variables.after === 'string'
+        ? Number(request.variables.after)
+        : -1;
+    const remaining = sorted.filter((manga) => manga.id > after);
+    const page = remaining.slice(0, library.pageSize ?? 100);
+    const last = page[page.length - 1];
+    return graphqlData({
+      mangas: {
+        totalCount: sorted.length,
+        pageInfo: {
+          hasNextPage: remaining.length > page.length,
+          endCursor: last ? String(last.id) : null,
+        },
+        nodes: page.map(libraryNode),
+      },
+    });
+  });
+  server.onOperation('LibraryTrackRecords', (request) => {
+    const ids = requestedIds(request);
+    return graphqlData({
+      mangas: {
+        nodes: library.mangas
+          .filter((manga) => ids.has(manga.id))
+          .map((manga) => ({
+            id: manga.id,
+            trackRecords: { nodes: manga.trackRecords ?? [] },
+          })),
+      },
+    });
+  });
+  server.onOperation('LibraryChapterStates', (request) => {
+    const ids = requestedIds(request);
+    return graphqlData({
+      mangas: {
+        nodes: library.mangas
+          .filter((manga) => ids.has(manga.id))
+          .map((manga) => {
+            const chapters = fakeLibraryChapters(manga);
+            return {
+              id: manga.id,
+              chapters: { totalCount: chapters.length, nodes: chapters },
+            };
+          }),
+      },
+    });
+  });
+};

@@ -5,8 +5,11 @@ import type {
   SuwayomiChapter,
   SuwayomiChapterState,
   SuwayomiHealth,
+  SuwayomiLibraryItem,
+  SuwayomiMangaChapterStates,
   SuwayomiMangaDetails,
   SuwayomiMangaSummary,
+  SuwayomiMangaTrackRecords,
   SuwayomiQueue,
   SuwayomiSource,
 } from '@server/api/suwayomi/types';
@@ -31,6 +34,7 @@ const MANGA_STATUSES = [
 const DOWNLOADER_STATES = ['STARTED', 'STOPPED'] as const;
 const QUEUE_STATES = ['QUEUED', 'DOWNLOADING', 'FINISHED', 'ERROR'] as const;
 const META_PREFIX = 'seerrng.';
+const MAX_INT = 2_147_483_647;
 
 export const META_KEY_LIMIT = 256;
 export const META_VALUE_LIMIT = 4_096;
@@ -110,6 +114,22 @@ const oneOf = <T extends string, F extends string>(
 
 const totalCount = (value: unknown): number =>
   (isRecord(value) ? int(value.totalCount) : undefined) ?? 0;
+
+/** Library scan counts decide availability, so they are never defaulted. */
+const count = (value: unknown, operation: string): number => {
+  const parsed = int(value);
+  return parsed !== undefined && parsed >= 0 ? parsed : badResponse(operation);
+};
+
+const flag = (value: unknown, operation: string): boolean =>
+  typeof value === 'boolean' ? value : badResponse(operation);
+
+/** Like `text`, but counts code points, so a surrogate pair is never split. */
+const codePointText = (value: unknown, max: number): string =>
+  Array.from(text(value, max * 2) ?? '')
+    .slice(0, max)
+    .join('')
+    .trim();
 
 export const sanitizeVersion = (value: unknown): string | undefined =>
   typeof value === 'string' && /^[\w.+-]{1,64}$/.test(value)
@@ -200,6 +220,69 @@ export const mapChapterState = (
     id: id(raw.id, operation),
     mangaId: id(raw.mangaId, operation),
     isDownloaded: raw.isDownloaded === true,
+  };
+};
+
+/**
+ * A library listing entry. `url` is left out when it cannot be stored (over
+ * 2,048 characters or with control characters); an empty URL or an invalid
+ * ID fails the listing.
+ */
+export const mapLibraryItem = (
+  value: unknown,
+  operation: string
+): Omit<SuwayomiLibraryItem, 'url'> & { url?: string } => {
+  const raw = record(value, operation);
+  const mangaId = id(raw.id, operation);
+  const url =
+    typeof raw.url === 'string' && raw.url !== ''
+      ? raw.url
+      : badResponse(operation);
+  return {
+    id: Number(mangaId) <= MAX_INT ? mangaId : badResponse(operation),
+    sourceId: id(raw.sourceId, operation),
+    url:
+      url.length <= 2_048 && !HAS_CONTROL_CHARACTER.test(url) ? url : undefined,
+    title: codePointText(raw.title, 512),
+    downloadCount: count(raw.downloadCount, operation),
+    chapterCount: count(record(raw.chapters, operation).totalCount, operation),
+    hasDuplicateChapters: flag(raw.hasDuplicateChapters, operation),
+  };
+};
+
+export const mapMangaTrackRecords = (
+  value: unknown,
+  operation: string
+): SuwayomiMangaTrackRecords => {
+  const raw = record(value, operation);
+  return {
+    mangaId: id(raw.id, operation),
+    records: nodes(raw.trackRecords, operation).map((node) => {
+      const entry = record(node, operation);
+      return {
+        trackerId: count(entry.trackerId, operation),
+        remoteId: id(entry.remoteId, operation),
+      };
+    }),
+  };
+};
+
+export const mapMangaChapterStates = (
+  value: unknown,
+  operation: string
+): SuwayomiMangaChapterStates => {
+  const raw = record(value, operation);
+  const chapters = record(raw.chapters, operation);
+  return {
+    mangaId: id(raw.id, operation),
+    totalCount: count(chapters.totalCount, operation),
+    chapters: nodes(chapters, operation).map((node) => {
+      const chapter = record(node, operation);
+      return {
+        chapterNumber: finite(chapter.chapterNumber) ?? badResponse(operation),
+        isDownloaded: flag(chapter.isDownloaded, operation),
+      };
+    }),
   };
 };
 
