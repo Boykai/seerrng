@@ -236,7 +236,7 @@ jobs:
           cp appimage-packaging/public/android-chrome-512x512.png SeerrNG.AppDir/seerrng.png
           cp appimage-packaging/public/android-chrome-512x512.png SeerrNG.AppDir/usr/share/icons/hicolor/256x256/apps/seerrng.png
           app_dir='SeerrNG.AppDir/usr/lib/seerrng'
-          swc_wasm_version="$(node -e "console.log(require(process.argv[1]).version)" "$app_dir/node_modules/next/package.json")"
+          swc_wasm_version="$(node -e "console.log(require(require('node:path').resolve(process.argv[1])).version)" "$app_dir/node_modules/next/package.json")"
           case "$swc_wasm_version" in
             16.3.6)
               swc_wasm_integrity='sha512-Qbh5QIWcyzZfp+neSFDxSaS0PjyCv7NUVipXcOaEp0+bCAynyGAoGnZirESQyPwpn/VXBncpZCVa0cnD+EWDmQ=='

@@ -135,6 +135,11 @@ test('AppImage uses the current launcher and excludes binaries above its glibc b
   assert.match(build.run, /@next\/swc-wasm-nodejs/u);
   assert.match(
     build.run,
+    /require\(require\('node:path'\)\.resolve\(process\.argv\[1\]\)\)/u,
+    'AppImage must resolve the extracted Next.js package.json as a filesystem path'
+  );
+  assert.match(
+    build.run,
     /next_directory="\$app_dir\/node_modules\/next"[\s\S]*swc_wasm_directory="\$next_directory\/wasm\/@next\/swc-wasm-nodejs"/u
   );
   assert.match(
