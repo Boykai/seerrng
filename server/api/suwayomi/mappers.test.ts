@@ -171,6 +171,22 @@ describe('Suwayomi capabilities', () => {
     assert.deepEqual(capabilities.missingFields, ['Query.metas']);
   });
 
+  it('lets a complete schema decide support whatever the version says', () => {
+    const old = evaluateCapabilities({
+      about: { version: `v2.0.${MINIMUM_REVISION - 1}` },
+      introspection: introspection(),
+    });
+    assert.equal(old.supported, true);
+    assert.equal(old.partialFetchResults, false);
+    assert.deepEqual(old.warnings, ['BELOW_PINNED_REVISION']);
+    const unknown = evaluateCapabilities({
+      about: { version: 'nightly' },
+      introspection: introspection(),
+    });
+    assert.equal(unknown.supported, true);
+    assert.deepEqual(unknown.warnings, ['UNKNOWN_VERSION']);
+  });
+
   it('reports per-user download state from the schema', () => {
     const capabilities = evaluateCapabilities({
       about: { version: 'v2.5.2500' },

@@ -42,7 +42,8 @@ export interface CapabilityInput {
 
 /**
  * Decides support from what the schema exposes rather than from the version
- * string; the version only adds warnings and the partial-result capability.
+ * string. The version adds warnings and the partial-result capability, and
+ * decides support only when introspection is unavailable.
  */
 export const evaluateCapabilities = ({
   about,
@@ -85,13 +86,13 @@ export const evaluateCapabilities = ({
     warnings.push('PER_USER_SCHEMA');
   }
 
-  const revisionSupported =
-    revision === undefined ? !!introspection : revision >= MINIMUM_REVISION;
   return {
     version,
     revision,
     buildType,
-    supported: revisionSupported && missingFields.length === 0,
+    supported: introspection
+      ? missingFields.length === 0
+      : revision !== undefined && revision >= MINIMUM_REVISION,
     missingFields,
     partialFetchResults:
       revision !== undefined && revision >= PARTIAL_FETCH_REVISION,
