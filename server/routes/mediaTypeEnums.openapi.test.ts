@@ -2,9 +2,10 @@
 // carry a reviewed exclusion that names its reason and its owner: the stack
 // layer (L2-L14) or planned follow-up (P1 chapter browser, P2 release
 // calendar, P3 discover filters, P4 watchlist) that decides it, post-MVP for
-// work outside the plan, or not applicable. The production OpenAPI validator
-// rejects any value missing from an enum, so an unreviewed enum would refuse
-// manga silently.
+// work outside the plan, or not applicable. The server validates requests
+// against this spec, so a request enum without manga rejects manga with a
+// 400. Responses are not validated, so a response enum without manga only
+// documents the API wrongly.
 import { MediaType } from '@server/constants/media';
 import { load as loadYaml } from 'js-yaml';
 import assert from 'node:assert/strict';
