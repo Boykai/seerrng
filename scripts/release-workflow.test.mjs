@@ -29,7 +29,7 @@ test('release package channels wait for the reusable release asset build', () =>
     'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
   );
   assert.equal(assetBuild.uses, './.github/workflows/release-assets.yml');
-  assert.equal(assetBuild.needs, 'verify');
+  assert.deepEqual(assetBuild.needs, ['validate-main-tag', 'verify']);
   assert.equal(assetBuild.with.tag, '${{ inputs.tag || github.ref_name }}');
   assert.equal(assetBuild.permissions.actions, 'read');
   assert.deepEqual(packageDispatch.needs, ['verify', 'build-release-assets']);
@@ -423,6 +423,7 @@ test('release assets support trusted reuse and main-only manual dispatch', () =>
   assert.equal(assets.jobs.build['timeout-minutes'], 45);
   assert.match(resolve.if, /github\.event_name != 'workflow_dispatch'/u);
   assert.match(resolve.if, /github\.ref == 'refs\/heads\/main'/u);
+  assert.equal(workflowCall.inputs.reuse_windows_x64_artifact.type, 'boolean');
   assert.match(
     resolve.steps.find((step) => step.name === 'Resolve version').env
       .RELEASE_TAG,
@@ -430,7 +431,7 @@ test('release assets support trusted reuse and main-only manual dispatch', () =>
   );
 });
 
-test('release recovery validates prior artifacts and rebuilds only the failed target', () => {
+test('release recovery validates reusable artifacts and repairs the failed release stage', () => {
   const release = readWorkflow('release.yml');
   const assets = readWorkflow('release-assets.yml');
   const inputs = release.on.workflow_dispatch.inputs;
@@ -455,16 +456,30 @@ test('release recovery validates prior artifacts and rebuilds only the failed ta
   assert.equal(inputs.reuse_published_image.default, false);
   assert.equal(recoveryValidation.if, "inputs.reuse_from_run_id != ''");
   assert.equal(release.jobs['validate-main-tag'].permissions.actions, 'read');
+  assert.match(
+    release.jobs['validate-main-tag'].outputs.reuse_windows_x64_artifact,
+    /steps\.recovery\.outputs/u
+  );
   assert.match(recoveryValidation.run, /\.head_sha == \$sha/u);
   assert.match(
     recoveryValidation.run,
     /Build release assets \/ Build windows x64/u
   );
+  assert.match(
+    recoveryValidation.run,
+    /Build release assets \/ Upload release assets/u
+  );
+  assert.match(recoveryValidation.run, /event == "workflow_dispatch"/u);
   assert.match(recoveryValidation.run, /\.expired == false/u);
   assert.match(imageBuild.if, /inputs\.reuse_published_image != true/u);
   assert.match(imageReuse.if, /inputs\.reuse_published_image == true/u);
   assert.match(imageReuse.run, /org\.opencontainers\.image\.revision/u);
   assert.match(imageReuse.run, /EXPECTED_SHA/u);
+  assert.deepEqual(assetBuild.needs, ['validate-main-tag', 'verify']);
+  assert.match(
+    assetBuild.with.reuse_windows_x64_artifact,
+    /needs\.validate-main-tag\.outputs\.reuse_windows_x64_artifact/u
+  );
   assert.equal(
     assetBuild.with.reuse_from_run_id,
     "${{ inputs.reuse_from_run_id || '' }}"
@@ -475,11 +490,16 @@ test('release recovery validates prior artifacts and rebuilds only the failed ta
   );
   assert.match(
     reusedArtifactDownload.if,
-    /matrix\.os != 'windows' \|\| matrix\.arch != 'x64'/u
+    /inputs\.reuse_windows_x64_artifact == true/u
   );
   assert.match(
     assets.jobs.build.steps.find((step) => step.name === 'Build archive').if,
-    /matrix\.arch == 'x64'/u
+    /matrix\.arch == 'arm64'/u
+  );
+  assert.match(
+    assets.jobs.build.steps.find((step) => step.name === 'Build archive').env
+      .SEERRNG_RELEASE_ARCH,
+    /matrix\.arch/u
   );
 });
 
@@ -498,6 +518,13 @@ test('release assets build supported native archive platforms', () => {
   ).run;
   const archiveBuild = build.steps.find(
     (step) => step.name === 'Build archive'
+  );
+  const releaseTooling = build.steps.find(
+    (step) => step.name === 'Checkout release tooling'
+  );
+  const buildScript = fs.readFileSync(
+    path.join(rootDirectory, 'scripts', 'build-release-assets.sh'),
+    'utf8'
   );
 
   assert.deepEqual(build.strategy.matrix.include, [
@@ -560,8 +587,16 @@ test('release assets build supported native archive platforms', () => {
   ]);
   assert.equal(downloadAssets.with.path, 'dist-release/downloaded');
   assert.equal(downloadAssets.with['merge-multiple'], undefined);
-  assert.match(flattenAssets.run, /Duplicate release asset filename/u);
+  assert.match(flattenAssets.run, /Unexpected file in release artifact/u);
+  assert.match(flattenAssets.run, /Duplicate release asset filename.*collides with/u);
+  assert.match(flattenAssets.run, /windows-arm64.*expected_archive/u);
   assert.match(flattenAssets.run, /find "\$downloads" -type f/u);
+  assert.match(releaseTooling.with.ref, /github\.sha/u);
+  assert.equal(releaseTooling.with.path, '.release-tooling');
+  assert.equal(releaseTooling.with['sparse-checkout'], 'scripts');
+  assert.match(archiveBuild.run, /\.release-tooling\/scripts\/build-release-assets\.sh/u);
+  assert.match(buildScript, /node -p 'process\.arch'/u);
+  assert.doesNotMatch(buildScript, /uname -m/u);
   assert.match(verifyInventory, /sha256sum -c/u);
   for (const archive of [
     'seerrng-${TAG}-macos-x64.tar.gz',

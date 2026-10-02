@@ -17,6 +17,11 @@ on:
         required: false
         type: string
         default: ''
+      reuse_windows_x64_artifact:
+        description: Reuse the successful Windows x64 artifact from the prior run
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -97,7 +102,7 @@ jobs:
             msvs_version: '2026'
     steps:
       - name: Download validated artifacts from previous run
-        if: inputs.reuse_from_run_id != '' && (matrix.os != 'windows' || matrix.arch != 'x64')
+        if: inputs.reuse_from_run_id != '' && (matrix.os != 'windows' || (matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact == true))
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: seerrng-${{ matrix.os }}-${{ matrix.arch }}
@@ -107,20 +112,29 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64')
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
         with:
           ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64')
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
         with:
           node-version-file: 'package.json'
           package-manager-cache: false
 
+      - name: Checkout release tooling
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tooling
+          sparse-checkout: scripts
+          persist-credentials: false
+
       - name: Prepare isolated pnpm package metadata
-        if: (inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64')) && matrix.os == 'windows'
+        if: (inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)) && matrix.os == 'windows'
         shell: bash
         run: |
           cat > .github/release-pnpm-tooling.json <<'JSON'
@@ -131,14 +145,14 @@ jobs:
           JSON
 
       - name: Pnpm Setup
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64')
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: ${{ matrix.pnpm_version }}
           package_json_file: ${{ matrix.os == 'windows' && '.github/release-pnpm-tooling.json' || 'package.json' }}
 
       - name: Verify pinned pnpm runtime
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64')
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
         shell: bash
         env:
           EXPECTED_PNPM_VERSION: ${{ matrix.pnpm_version }}
@@ -156,7 +170,7 @@ jobs:
           }
 
       - name: Verify runner platform
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64')
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
         shell: bash
         env:
           EXPECTED_OS: ${{ matrix.os }}
@@ -181,7 +195,7 @@ jobs:
           }
 
       - name: Install node-gyp for Visual Studio 2026
-        if: (inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64')) && matrix.os == 'windows' && matrix.arch == 'arm64'
+        if: matrix.os == 'windows' && matrix.arch == 'arm64'
         shell: bash
         run: |
           set -euo pipefail
@@ -196,11 +210,12 @@ jobs:
           printf 'npm_config_msvs_version=2026\n' >> "$GITHUB_ENV"
 
       - name: Build archive
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64')
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
         shell: bash
         env:
           EXPECTED_PNPM_VERSION: ${{ matrix.pnpm_version }}
           TAG: ${{ needs.resolve.outputs.tag }}
+          SEERRNG_RELEASE_ARCH: ${{ matrix.arch }}
           GYP_MSVS_VERSION: ${{ matrix.msvs_version || 'auto' }}
         run: |
           set -euo pipefail
@@ -214,7 +229,7 @@ jobs:
             echo "Expected pnpm $EXPECTED_PNPM_VERSION, got $actual_version." >&2
             exit 1
           }
-          ./scripts/build-release-assets.sh "${TAG}" dist-release
+          bash .release-tooling/scripts/build-release-assets.sh "${TAG}" dist-release
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -331,15 +346,37 @@ jobs:
 
       - name: Flatten downloaded release assets
         shell: bash
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           set -euo pipefail
           release_dir='dist-release'
           downloads="$release_dir/downloaded"
           while IFS= read -r -d '' file; do
             filename="${file##*/}"
+            artifact="${file#"$downloads"/}"
+            artifact="${artifact%%/*}"
+            case "$artifact" in
+              seerrng-linux-x64) expected_archive="seerrng-${TAG}-linux-x64.tar.gz" ;;
+              seerrng-linux-arm64) expected_archive="seerrng-${TAG}-linux-arm64.tar.gz" ;;
+              seerrng-macos-x64) expected_archive="seerrng-${TAG}-macos-x64.tar.gz" ;;
+              seerrng-macos-arm64) expected_archive="seerrng-${TAG}-macos-arm64.tar.gz" ;;
+              seerrng-windows-x64) expected_archive="seerrng-${TAG}-windows-x64.zip" ;;
+              seerrng-windows-arm64) expected_archive="seerrng-${TAG}-windows-arm64.zip" ;;
+              seerrng-jellyfin-plugin) expected_archive="seerrng-jellyfin-bridge-${TAG}.zip" ;;
+              *) echo "Unexpected release artifact directory: $artifact" >&2; exit 1 ;;
+            esac
+            expected_checksum="${expected_archive%.tar.gz}"
+            expected_checksum="${expected_checksum%.zip}.sha256"
+            expected_manifest=""
+            [[ "$artifact" != 'seerrng-jellyfin-plugin' ]] || expected_manifest='seerrng-jellyfin-plugin-manifest.json'
+            if [[ "$filename" != "$expected_archive" && "$filename" != "$expected_checksum" && "$filename" != "$expected_manifest" ]]; then
+              echo "Unexpected file in release artifact $artifact: $filename (expected $expected_archive)" >&2
+              exit 1
+            fi
             target="$release_dir/$filename"
             if [[ -e "$target" ]]; then
-              echo "Duplicate release asset filename: $filename" >&2
+              echo "Duplicate release asset filename $filename: $file collides with $target" >&2
               exit 1
             fi
             cp -- "$file" "$target"

@@ -22,14 +22,27 @@ case "$(uname -s)" in
   *) echo "Unsupported OS: $(uname -s)" >&2; exit 1 ;;
 esac
 
-case "$(uname -m)" in
-  x86_64|amd64) arch=x64 ;;
-  arm64|aarch64) arch=arm64 ;;
+runtime_arch="$(node -p 'process.arch')"
+case "$runtime_arch" in
+  x64|arm64) arch="$runtime_arch" ;;
   *)
-    echo "Unsupported release architecture: $(uname -m)" >&2
+    echo "Unsupported release architecture reported by Node.js: $runtime_arch" >&2
     exit 1
     ;;
 esac
+requested_arch="${SEERRNG_RELEASE_ARCH:-$arch}"
+case "$requested_arch" in
+  x64|arm64) ;;
+  *)
+    echo "Unsupported requested release architecture: $requested_arch" >&2
+    exit 1
+    ;;
+esac
+[[ "$requested_arch" == "$arch" ]] || {
+  echo "Release architecture mismatch: requested $requested_arch, runner Node.js reports $arch" >&2
+  exit 1
+}
+arch="$requested_arch"
 
 asset="seerrng-${tag}-${os}-${arch}"
 work_dir="$(mktemp -d)"

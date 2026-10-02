@@ -18,7 +18,7 @@ on:
         default: false
         type: boolean
       reuse_from_run_id:
-        description: Reuse verified artifacts from a failed release run for this exact tag
+        description: Reuse successful platform artifacts from a failed release run for this exact tag
         required: false
         type: string
         default: ''
@@ -49,6 +49,8 @@ jobs:
     permissions:
       actions: read
       contents: read
+    outputs:
+      reuse_windows_x64_artifact: ${{ steps.recovery.outputs.reuse_windows_x64_artifact || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -77,6 +79,7 @@ jobs:
           fi
 
       - name: Validate previous run artifacts for recovery
+        id: recovery
         if: inputs.reuse_from_run_id != ''
         shell: bash
         env:
@@ -97,15 +100,26 @@ jobs:
             --arg sha "$release_sha" \
             '.status == "completed" and
              .conclusion == "failure" and
-             .event == "push" and
-             .head_branch == $tag and
-             .head_sha == $sha' <<<"$run" >/dev/null || {
-              echo 'The previous run must be a failed tag push for this exact release commit.' >&2
+             ((.event == "push" and .head_branch == $tag and .head_sha == $sha) or
+              (.event == "workflow_dispatch" and .head_branch == "main"))' <<<"$run" >/dev/null || {
+              echo 'The previous run must be a failed release run for this tag on main.' >&2
               exit 1
             }
+          source_event="$(jq -r '.event' <<<"$run")"
+          source_sha="$(jq -r '.head_sha' <<<"$run")"
+          if [[ "$source_event" == 'workflow_dispatch' ]]; then
+            git merge-base --is-ancestor "$release_sha" "$source_sha" || {
+              echo 'The previous manual release run started before this tag commit.' >&2
+              exit 1
+            }
+            git merge-base --is-ancestor "$source_sha" origin/main || {
+              echo 'The previous manual release run is not based on current main history.' >&2
+              exit 1
+            }
+          fi
 
           jobs="$(gh api "repos/$REPO/actions/runs/$REUSE_FROM_RUN_ID/jobs?per_page=100")"
-          jq -e '
+          if jq -e '
             ([.jobs[] | select(.conclusion == "failure") | .name] ==
               ["Build release assets / Build windows x64"]) and
             (([
@@ -118,21 +132,53 @@ jobs:
               "Build release assets / Build windows arm64",
               "Build release assets / Build optional Jellyfin plugin"
             ] - [.jobs[] | select(.conclusion == "success") | .name]) | length == 0)
-          ' <<<"$jobs" >/dev/null || {
-            echo 'The previous run does not have the expected successful builders with only Windows x64 failed.' >&2
+          ' <<<"$jobs" >/dev/null; then
+            reuse_windows_x64_artifact=false
+          elif jq -e '
+            ([.jobs[] | select(.conclusion == "failure") | .name] ==
+              ["Build release assets / Upload release assets"]) and
+            (([
+              "Validate main release tag",
+              "Build release assets / Validate release tag",
+              "Build release assets / Build linux x64",
+              "Build release assets / Build linux arm64",
+              "Build release assets / Build macos arm64",
+              "Build release assets / Build macos x64",
+              "Build release assets / Build windows x64",
+              "Build release assets / Build windows arm64",
+              "Build release assets / Build optional Jellyfin plugin",
+              "Create draft release"
+            ] - [.jobs[] | select(.conclusion == "success") | .name]) | length == 0)
+          ' <<<"$jobs" >/dev/null; then
+            reuse_windows_x64_artifact=true
+          else
+            echo 'The previous run did not fail at a supported recoverable release stage.' >&2
             exit 1
-          }
+          fi
+          echo "reuse_windows_x64_artifact=$reuse_windows_x64_artifact" >> "$GITHUB_OUTPUT"
 
           artifacts="$(gh api "repos/$REPO/actions/runs/$REUSE_FROM_RUN_ID/artifacts?per_page=100")"
-          jq -e '
-            [
+          if [[ "$reuse_windows_x64_artifact" == true ]]; then
+            expected_artifacts='[
+              "seerrng-linux-x64",
+              "seerrng-linux-arm64",
+              "seerrng-macos-arm64",
+              "seerrng-macos-x64",
+              "seerrng-windows-x64",
+              "seerrng-windows-arm64",
+              "seerrng-jellyfin-plugin"
+            ]'
+          else
+            expected_artifacts='[
               "seerrng-linux-x64",
               "seerrng-linux-arm64",
               "seerrng-macos-arm64",
               "seerrng-macos-x64",
               "seerrng-windows-arm64",
               "seerrng-jellyfin-plugin"
-            ] as $expected |
+            ]'
+          fi
+          jq -e --argjson expected "$expected_artifacts" '
             ($expected - [.artifacts[] | select(.expired == false) | .name] | length == 0)
           ' <<<"$artifacts" >/dev/null || {
             echo 'One or more successful builder artifacts are missing or expired.' >&2
@@ -673,11 +719,12 @@ jobs:
 
   build-release-assets:
     name: Build release assets
-    needs: verify
+    needs: [validate-main-tag, verify]
     uses: ./.github/workflows/release-assets.yml
     with:
       tag: ${{ inputs.tag || github.ref_name }}
       reuse_from_run_id: ${{ inputs.reuse_from_run_id || '' }}
+      reuse_windows_x64_artifact: ${{ needs.validate-main-tag.outputs.reuse_windows_x64_artifact == 'true' }}
     permissions:
       actions: read
       contents: write
