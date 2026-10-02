@@ -106,6 +106,23 @@ const GRAPHQL_ERROR_PATTERNS: readonly (readonly [
   [TOKEN_MISUSE_PATTERN, 'AUTH_REQUIRED'],
   [/\bnot found\b|NoSuchElementException/i, 'NOT_FOUND'],
 ];
+const NOT_FOUND_PRIORITY = GRAPHQL_ERROR_PATTERNS.findIndex(
+  ([, code]) => code === 'NOT_FOUND'
+);
+const LOOKUP_ROOTS = new Set(['manga', 'meta']);
+const NULL_VALUE_PATTERN = /wrongly returned a null value/i;
+
+/**
+ * graphql-java answers `manga(id:)` or `meta(key:)` for a missing id or key
+ * with a non-null violation on that root field. Anywhere else the same
+ * violation is a server fault and stays UPSTREAM_ERROR.
+ */
+const isMissingLookup = (error: unknown, message: string): boolean =>
+  isRecord(error) &&
+  Array.isArray(error.path) &&
+  error.path.length === 1 &&
+  LOOKUP_ROOTS.has(error.path[0]) &&
+  NULL_VALUE_PATTERN.test(message);
 
 /** Maps a GraphQL `errors` array to one code without keeping its text. */
 export const classifyGraphQLErrors = (
@@ -117,9 +134,13 @@ export const classifyGraphQLErrors = (
       isRecord(error) && typeof error.message === 'string'
         ? error.message.slice(0, MAX_CLASSIFIED_TEXT)
         : '';
-    const index = GRAPHQL_ERROR_PATTERNS.findIndex(([pattern]) =>
+    const matched = GRAPHQL_ERROR_PATTERNS.findIndex(([pattern]) =>
       pattern.test(message)
     );
+    const index =
+      matched === -1 && isMissingLookup(error, message)
+        ? NOT_FOUND_PRIORITY
+        : matched;
     if (index !== -1 && index < best) {
       best = index;
     }

@@ -110,6 +110,18 @@ export const graphqlErrors = (
 export const syntheticFailure = (detail = 'synthetic failure') =>
   `com.example.FakeFailureException: ${detail}\r\n\tat com.example.Fake.run(Fake.kt:1)\r\n`;
 
+/** graphql-java's error when a non-null field resolved to null. */
+export const nullValueError = (path: string[]) => ({
+  message: `The field at path '/${path.join('/')}' was declared as a non null type, but the code involved in retrieving data has wrongly returned a null value.`,
+  locations: [],
+  path,
+});
+
+/** How a root lookup such as `manga(id:)` or `meta(key:)` reports a miss. */
+export const missingLookup = (field: string): FakeReply => ({
+  body: { data: null, errors: [nullValueError([field])] },
+});
+
 const base64url = (value: string) =>
   Buffer.from(value, 'utf8').toString('base64url');
 

@@ -3,6 +3,7 @@ import type { SuwayomiAPIOptions } from '@server/api/suwayomi/types';
 import {
   graphqlData,
   graphqlErrors,
+  missingLookup,
   startFakeSuwayomi,
   syntheticFailure,
   type FakeSuwayomi,
@@ -159,11 +160,13 @@ describe('SuwayomiAPI catalog and library', () => {
     server.onOperation(
       'MangaDetails',
       graphqlData({ manga: manga(7) }),
-      graphqlErrors([syntheticFailure('Manga not found')])
+      graphqlErrors([syntheticFailure('Manga not found')]),
+      missingLookup('manga')
     );
     const api = connect(server);
     assert.equal((await api.getMangaDetails('7')).chapterCount, 2);
     await assert.rejects(api.getMangaDetails('8'), { code: 'NOT_FOUND' });
+    await assert.rejects(api.getMangaDetails('9'), { code: 'NOT_FOUND' });
   });
 
   it('returns fresh fetch results', async () => {
@@ -393,6 +396,7 @@ describe('SuwayomiAPI request meta', () => {
       graphqlData({ meta: { key: 'seerrng.instance', value: 'instance-1' } }),
       graphqlData({ meta: null }),
       graphqlErrors([syntheticFailure('not found')]),
+      missingLookup('meta'),
       graphqlErrors([syntheticFailure()])
     );
     server.onOperation(
@@ -401,6 +405,7 @@ describe('SuwayomiAPI request meta', () => {
     );
     const api = connect(server);
     assert.equal(await api.getInstanceMarker(), 'instance-1');
+    assert.equal(await api.getInstanceMarker(), undefined);
     assert.equal(await api.getInstanceMarker(), undefined);
     assert.equal(await api.getInstanceMarker(), undefined);
     await assert.rejects(api.getInstanceMarker(), { code: 'UPSTREAM_ERROR' });

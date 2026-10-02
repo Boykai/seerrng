@@ -24,7 +24,7 @@ import {
 } from '@server/api/suwayomi/mappers';
 import { ROOT_FIELDS } from '@server/api/suwayomi/operations';
 import logger from '@server/logger';
-import { syntheticFailure } from '@server/test/fakeSuwayomi';
+import { nullValueError, syntheticFailure } from '@server/test/fakeSuwayomi';
 import { AxiosError, CanceledError } from 'axios';
 import assert from 'node:assert/strict';
 import { afterEach, describe, it, mock } from 'node:test';
@@ -400,6 +400,41 @@ describe('Suwayomi error classification', () => {
       'UPSTREAM_ERROR'
     );
     assert.equal(classifyGraphQLErrors(['Unauthorized', 5]), 'UPSTREAM_ERROR');
+  });
+
+  it('reads a lookup that found nothing as NOT_FOUND', () => {
+    assert.equal(
+      classifyGraphQLErrors([nullValueError(['meta'])]),
+      'NOT_FOUND'
+    );
+    assert.throws(
+      () =>
+        interpretGraphQLResponse(
+          OP,
+          {
+            status: 200,
+            headers: {},
+            data: { data: null, errors: [nullValueError(['manga'])] },
+          },
+          'UI_LOGIN'
+        ),
+      { code: 'NOT_FOUND', errorCount: 1 }
+    );
+    // Below a lookup, on any other root, or without a path: a server fault.
+    for (const error of [
+      nullValueError(['manga', 'chapters', 'totalCount']),
+      nullValueError(['enqueueChapterDownloads']),
+      { message: nullValueError(['meta']).message },
+    ]) {
+      assert.equal(classifyGraphQLErrors([error]), 'UPSTREAM_ERROR');
+    }
+    assert.equal(
+      classifyGraphQLErrors([
+        nullValueError(['meta']),
+        { message: 'Unauthorized' },
+      ]),
+      'AUTH_REQUIRED'
+    );
   });
 
   it('reads auth failures from errors on HTTP 200', () => {
