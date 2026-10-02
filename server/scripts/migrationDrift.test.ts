@@ -230,6 +230,57 @@ test('recordsFromTables keeps index key order and orders foreign key pairs', () 
   );
 });
 
+test('foreign key names are compared only when asked, as for PostgreSQL', () => {
+  // The migration named the constraint; synchronize() takes the naming
+  // strategy's hashed name.
+  const requestTable = (foreignKeyName: string) =>
+    new Table({
+      name: 'request',
+      columns: [{ name: 'mediaId', type: 'integer' }],
+      foreignKeys: [
+        {
+          name: foreignKeyName,
+          columnNames: ['mediaId'],
+          referencedTableName: 'media',
+          referencedColumnNames: ['id'],
+        },
+      ],
+    });
+  const foreignKey = (name: string): SchemaRecord => ({
+    kind: 'foreignKey',
+    table: 'request',
+    name,
+    columns: ['mediaId'],
+    referencedTable: 'media',
+    referencedColumns: ['id'],
+    onDelete: 'NO ACTION',
+    onUpdate: 'NO ACTION',
+  });
+  const migrations = [requestTable('FK_request_media')];
+  const entities = [requestTable('FK_0123456789abcdef0123456789a')];
+
+  assert.deepStrictEqual(
+    diffSchemaRecords(
+      recordsFromTables(migrations),
+      recordsFromTables(entities)
+    ),
+    []
+  );
+  assert.deepStrictEqual(
+    diffSchemaRecords(
+      recordsFromTables(migrations, { foreignKeyNames: true }),
+      recordsFromTables(entities, { foreignKeyNames: true })
+    ),
+    [
+      {
+        side: 'entities',
+        record: foreignKey('FK_0123456789abcdef0123456789a'),
+      },
+      { side: 'migrations', record: foreignKey('FK_request_media') },
+    ]
+  );
+});
+
 test('normalizeSqlExpression drops formatting but keeps string literals', () => {
   assert.equal(
     normalizeSqlExpression('  ( "provider"  =  \'a  b\' )  '),

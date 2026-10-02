@@ -33,6 +33,8 @@ export type SchemaRecord =
   | {
       kind: 'foreignKey';
       table: string;
+      // PostgreSQL only; see RecordOptions.foreignKeyNames.
+      name?: string;
       columns: string[];
       referencedTable: string;
       referencedColumns: string[];
@@ -63,9 +65,14 @@ export interface DriftCheck {
 }
 
 export interface RecordOptions {
-  // PostgreSQL only: check constraints, and the key order of each index by
-  // name (TypeORM's getTables() does not report key order there).
+  // PostgreSQL only: check constraints, foreign key names, and the key order
+  // of each index by name (TypeORM's getTables() does not report key order
+  // there). TypeORM matches foreign keys by name when it synchronizes, so a
+  // foreign key whose name differs is drift. SQLite reports a foreign key
+  // name only when the table SQL spells one out, so names are not compared
+  // there.
   checks?: boolean;
+  foreignKeyNames?: boolean;
   keyOrder?: ReadonlyMap<string, string[]>;
 }
 
@@ -167,7 +174,7 @@ const columnGenerated = (column: TableColumn) =>
 
 export const recordsFromTables = (
   tables: readonly Table[],
-  { checks = false, keyOrder }: RecordOptions = {}
+  { checks = false, foreignKeyNames = false, keyOrder }: RecordOptions = {}
 ): SchemaRecord[] =>
   tables.flatMap((table): SchemaRecord[] => {
     const keys = (name: string | undefined, columns: string[]) =>
@@ -212,6 +219,7 @@ export const recordsFromTables = (
         return {
           kind: 'foreignKey',
           table: table.name,
+          ...(foreignKeyNames ? { name: foreignKey.name ?? '' } : {}),
           columns: pairs.map(([column]) => column),
           referencedTable: foreignKey.referencedTableName,
           referencedColumns: pairs.map(([, column]) => column),

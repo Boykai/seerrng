@@ -256,6 +256,34 @@
       }
     },
     {
+      "reason": "Name only: both sides have the foreign key from watchAheadParentRequestId to media_request.id with ON DELETE CASCADE. The migration named it FK_media_request_watch_ahead_parent, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "foreignKey",
+        "table": "media_request",
+        "name": "FK_78e87f17da380c4c849f1b996ac",
+        "columns": ["watchAheadParentRequestId"],
+        "referencedTable": "media_request",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from watchAheadParentRequestId to media_request.id with ON DELETE CASCADE. The migration named it FK_media_request_watch_ahead_parent, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "foreignKey",
+        "table": "media_request",
+        "name": "FK_media_request_watch_ahead_parent",
+        "columns": ["watchAheadParentRequestId"],
+        "referencedTable": "media_request",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
       "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
       "side": "entities",
       "record": {
@@ -337,6 +365,34 @@
         "columns": ["searchText"],
         "unique": false,
         "where": null
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from mediaId to media.id with ON DELETE CASCADE. The migration named it FK_media_search_metadata_media, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "foreignKey",
+        "table": "media_search_metadata",
+        "name": "FK_0dc93caff05b3c78bf6d48ac94a",
+        "columns": ["mediaId"],
+        "referencedTable": "media",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from mediaId to media.id with ON DELETE CASCADE. The migration named it FK_media_search_metadata_media, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "foreignKey",
+        "table": "media_search_metadata",
+        "name": "FK_media_search_metadata_media",
+        "columns": ["mediaId"],
+        "referencedTable": "media",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
       }
     },
     {
@@ -579,6 +635,62 @@
         "table": "software_request",
         "name": "UQ_software_request_provider_external_id",
         "columns": ["provider", "externalRequestId"]
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from approvedById to user.id with ON DELETE SET NULL. The migration named it FK_software_request_approved_by, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "foreignKey",
+        "table": "software_request",
+        "name": "FK_0aaf942f149f2c42ae1e27b733b",
+        "columns": ["approvedById"],
+        "referencedTable": "user",
+        "referencedColumns": ["id"],
+        "onDelete": "SET NULL",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from requestedById to user.id with ON DELETE CASCADE. The migration named it FK_software_request_requested_by, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "foreignKey",
+        "table": "software_request",
+        "name": "FK_6b70ccbc61d1b8077c3a3a73732",
+        "columns": ["requestedById"],
+        "referencedTable": "user",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from approvedById to user.id with ON DELETE SET NULL. The migration named it FK_software_request_approved_by, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "foreignKey",
+        "table": "software_request",
+        "name": "FK_software_request_approved_by",
+        "columns": ["approvedById"],
+        "referencedTable": "user",
+        "referencedColumns": ["id"],
+        "onDelete": "SET NULL",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from requestedById to user.id with ON DELETE CASCADE. The migration named it FK_software_request_requested_by, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "foreignKey",
+        "table": "software_request",
+        "name": "FK_software_request_requested_by",
+        "columns": ["requestedById"],
+        "referencedTable": "user",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
       }
     },
     {

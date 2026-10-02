@@ -213,6 +213,7 @@ const introspect = async (source: DataSource): Promise<SchemaRecord[]> => {
     return [
       ...recordsFromTables(tables, {
         checks: true,
+        foreignKeyNames: true,
         keyOrder: new Map(keys.map((row) => [row.name, row.key_columns])),
       }),
       ...enums.map((row): SchemaRecord => ({
