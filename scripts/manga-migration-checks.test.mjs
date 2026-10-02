@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import test from 'node:test';
 
 import {
+  POSTGRES_ENTITY_DATABASE,
   POSTGRES_IMAGE,
   POSTGRES_MIGRATION_TESTS,
   UsageError,
@@ -9,6 +11,7 @@ import {
   databaseEnvironment,
   parseArguments,
   parsePublishedPort,
+  postgresCreateDatabaseArguments,
   postgresRunArguments,
   postgresTestUrl,
   runMigrationChecks,
@@ -112,6 +115,7 @@ test('databaseEnvironment isolates the run from the caller database settings', (
     PRESERVE_DB: 'true',
     DB_TYPE: 'postgres',
     DB_HOST: 'database.invalid',
+    DRIFT_ENTITY_DATABASE: 'inherited.sqlite3',
   };
 
   assert.deepStrictEqual(
@@ -170,6 +174,11 @@ test('the SQLite check builds from empty, then runs the round trip and drift che
   assert.ok(!fake.calls[1].args.includes('--write-allowlist'));
   assert.equal(fake.calls[0].env.CONFIG_DIRECTORY, 'config-fixture');
   assert.equal(fake.calls[0].env.WITH_MIGRATIONS, 'true');
+  assert.equal(fake.calls[0].env.DRIFT_ENTITY_DATABASE, undefined);
+  assert.equal(
+    fake.calls[1].env.DRIFT_ENTITY_DATABASE,
+    path.join('config-fixture', 'entities.sqlite3')
+  );
   assert.deepStrictEqual(fake.removed, ['config-fixture']);
 });
 
@@ -211,6 +220,19 @@ test('the PostgreSQL check waits for readiness, runs the tests and removes the c
     'the password must never appear on a command line'
   );
 
+  const createdb = fake.calls.findIndex((call) =>
+    call.args.includes('createdb')
+  );
+  assert.deepStrictEqual(
+    fake.calls[createdb].args,
+    postgresCreateDatabaseArguments('seerrng-manga-migrations-fixture')
+  );
+  assert.equal(fake.calls[createdb - 1].args[0], 'port');
+  assert.equal(
+    scriptOf(fake.calls[createdb + 1]),
+    'server/scripts/prepareTestDb.ts'
+  );
+
   const nodeCalls = fake.calls.filter((call) => call.command !== 'docker');
   assert.deepStrictEqual(nodeCalls.map(scriptOf), [
     'server/scripts/prepareTestDb.ts',
@@ -219,12 +241,19 @@ test('the PostgreSQL check waits for readiness, runs the tests and removes the c
   ]);
   assert.equal(nodeCalls[0].env.DB_TYPE, 'postgres');
   assert.equal(nodeCalls[0].env.DB_PORT, '55432');
+  assert.equal(nodeCalls[0].env.DRIFT_ENTITY_DATABASE, undefined);
+  assert.equal(nodeCalls[1].env.DB_NAME, 'seerr');
+  assert.equal(
+    nodeCalls[1].env.DRIFT_ENTITY_DATABASE,
+    POSTGRES_ENTITY_DATABASE
+  );
   assert.deepStrictEqual(nodeCalls[2].args.slice(1), POSTGRES_MIGRATION_TESTS);
   assert.equal(
     nodeCalls[2].env.SEERR_TEST_POSTGRES_URL,
     postgresTestUrl({ port: 55432, password: PASSWORD })
   );
   assert.equal(nodeCalls[2].env.DB_TYPE, undefined);
+  assert.equal(nodeCalls[2].env.DRIFT_ENTITY_DATABASE, undefined);
 
   assert.deepStrictEqual(fake.calls.at(-1).args, [
     'rm',

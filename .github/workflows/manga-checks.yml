@@ -1,9 +1,11 @@
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: Manga Checks
-# Fork-only checks for the manga media type. The migrations job builds both
-# databases from empty with migrations, runs the manga migration round trip and
-# fails on entity/migration drift outside the reviewed allowlist.
+# Fork-only checks for the manga media type. The migrations job builds each
+# database from empty with migrations and a second, empty one with
+# synchronize() from the entities. It runs the manga migration round trip and
+# fails on schema records that differ between the two outside the reviewed
+# allowlist. The repository guard keeps the job off upstream pull requests.
 
 on:
   pull_request:
@@ -20,6 +22,7 @@ concurrency:
 jobs:
   migrations:
     name: Migrations (SQLite and PostgreSQL)
+    if: github.repository == 'Boykai/seerrng'
     timeout-minutes: 30
     runs-on: ubuntu-latest
     permissions:

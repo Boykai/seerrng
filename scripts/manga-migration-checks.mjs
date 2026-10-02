@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Builds the database from empty with migrations, then runs the migration
-// round trip and the entity/migration drift check
-// (server/scripts/checkMigrationDrift.ts). Used locally and by
-// .github/workflows/manga-checks.yml.
+// Builds the database from empty with migrations and creates a second, empty
+// database for the entity schema, then runs the migration round trip and the
+// entity/migration drift check (server/scripts/checkMigrationDrift.ts). Used
+// locally and by .github/workflows/manga-checks.yml.
 //
 //   node scripts/manga-migration-checks.mjs sqlite [--write-allowlist]
 //   node scripts/manga-migration-checks.mjs postgres [--write-allowlist]
@@ -24,6 +24,10 @@ export const POSTGRES_IMAGE =
   'postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873';
 export const POSTGRES_USER = 'postgres';
 export const POSTGRES_DATABASE = 'seerr';
+// The entity schema is built by synchronize() in a second, empty database:
+// a file next to the SQLite database, or a database in the same container.
+export const POSTGRES_ENTITY_DATABASE = 'seerr_entities';
+export const SQLITE_ENTITY_DATABASE = 'entities.sqlite3';
 export const POSTGRES_MIGRATION_TESTS = [
   'server/migration/postgres/mangaMigrations.test.ts',
 ];
@@ -92,6 +96,15 @@ export const postgresReadyArguments = (containerName) => [
   POSTGRES_DATABASE,
 ];
 
+export const postgresCreateDatabaseArguments = (containerName) => [
+  'exec',
+  containerName,
+  'createdb',
+  '--username',
+  POSTGRES_USER,
+  POSTGRES_ENTITY_DATABASE,
+];
+
 export const postgresRemoveArguments = (containerName) => [
   'rm',
   '--force',
@@ -126,6 +139,7 @@ export const databaseEnvironment = ({ baseEnv, configDirectory, postgres }) => {
   // compiled dist/ entities; both would skip the database under test.
   delete env.NODE_ENV;
   delete env.PRESERVE_DB;
+  delete env.DRIFT_ENTITY_DATABASE;
   for (const key of Object.keys(env)) {
     if (key.startsWith('DB_')) {
       delete env[key];
@@ -212,7 +226,12 @@ const runStep = (dependencies, label, command, args, options) => {
   return result;
 };
 
-const runDatabaseChecks = (dependencies, { driver, writeAllowlist }, env) => {
+const runDatabaseChecks = (
+  dependencies,
+  { driver, writeAllowlist },
+  env,
+  entityDatabase
+) => {
   runStep(
     dependencies,
     `${driver}: build the database from empty with migrations`,
@@ -230,7 +249,7 @@ const runDatabaseChecks = (dependencies, { driver, writeAllowlist }, env) => {
       'server/scripts/checkMigrationDrift.ts',
       writeAllowlist ? ['--write-allowlist'] : []
     ),
-    { env }
+    { env: { ...env, DRIFT_ENTITY_DATABASE: entityDatabase } }
   );
 
   if (writeAllowlist) {
@@ -302,6 +321,13 @@ const runPostgresChecks = async (dependencies, options, configDirectory) => {
       ).stdout
     );
     const postgres = { port, password };
+    runStep(
+      dependencies,
+      'postgres: create the empty entity database',
+      'docker',
+      postgresCreateDatabaseArguments(containerName),
+      { env: dependencies.env, capture: true }
+    );
 
     runDatabaseChecks(
       dependencies,
@@ -310,7 +336,8 @@ const runPostgresChecks = async (dependencies, options, configDirectory) => {
         baseEnv: dependencies.env,
         configDirectory,
         postgres,
-      })
+      }),
+      POSTGRES_ENTITY_DATABASE
     );
 
     if (!options.writeAllowlist) {
@@ -357,7 +384,8 @@ export const runMigrationChecks = async (
       runDatabaseChecks(
         dependencies,
         options,
-        databaseEnvironment({ baseEnv: dependencies.env, configDirectory })
+        databaseEnvironment({ baseEnv: dependencies.env, configDirectory }),
+        path.join(configDirectory, SQLITE_ENTITY_DATABASE)
       );
     }
   } finally {

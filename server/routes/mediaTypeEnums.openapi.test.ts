@@ -1,9 +1,12 @@
 // Audits every media-type enum in seerr-api.yml. Each one must list manga or
-// carry a reviewed exclusion that names its reason and the layer that owns
-// the decision. The production OpenAPI validator rejects any value missing
-// from an enum, so an unreviewed enum would refuse manga silently.
+// carry a reviewed exclusion that names its reason and its owner: the stack
+// layer (L2-L14) or planned follow-up (P1 chapter browser, P2 release
+// calendar, P3 discover filters, P4 watchlist) that decides it, post-MVP for
+// work outside the plan, or not applicable. The production OpenAPI validator
+// rejects any value missing from an enum, so an unreviewed enum would refuse
+// manga silently.
 import { MediaType } from '@server/constants/media';
-import yaml from 'js-yaml';
+import { load as loadYaml } from 'js-yaml';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -34,7 +37,7 @@ const COMPOSITION_KEYWORDS = new Set(['allOf', 'anyOf', 'oneOf']);
 const MEDIA_TYPE_VALUES: ReadonlySet<unknown> = new Set(
   Object.values(MediaType)
 );
-const OWNER_PATTERN = /^(?:L(?:[2-9]|1[0-4])|post-MVP|not applicable)$/u;
+const OWNER_PATTERN = /^(?:L(?:[2-9]|1[0-4])|P[1-4]|post-MVP|not applicable)$/u;
 
 const TMDB_DISCOVERY = 'Movie and TV discovery integrations keyed by TMDB.';
 const PROWLARR_CATEGORIES =
@@ -48,7 +51,9 @@ const COLLECTION_CATALOG =
 const BLOCKLIST =
   'L1 refuses manga blocklisting; the catalog UI adds the blocklist action.';
 const WATCHLIST =
-  'L1 refuses manga watchlist items; the follow layer decides watchlist support.';
+  'L1 refuses manga watchlist items; manga watchlist support is planned follow-up work.';
+const RELEASE_CALENDAR =
+  'Release calendar; manga chapter releases are planned follow-up work.';
 
 // Keyed by the location printed in a failure. Remove an entry when its enum
 // gains manga; the audit fails on entries that no longer match.
@@ -119,9 +124,9 @@ const MANGA_ENUM_EXCLUSIONS: Record<string, Exclusion> = {
     owner: 'L12',
     reason: 'Issue reporting parity for manga lands with progress tracking.',
   },
-  'schema Watchlist mediaType': { owner: 'L14', reason: WATCHLIST },
+  'schema Watchlist mediaType': { owner: 'P4', reason: WATCHLIST },
   'DELETE /watchlist/{mediaId} query mediaType': {
-    owner: 'L14',
+    owner: 'P4',
     reason: WATCHLIST,
   },
   'schema DiscoveryFeedItem mediaType': {
@@ -221,12 +226,12 @@ const MANGA_ENUM_EXCLUSIONS: Record<string, Exclusion> = {
     reason: COLLECTION_CATALOG,
   },
   'GET /calendar query mediaType': {
-    owner: 'post-MVP',
-    reason: 'Release calendar; manga chapter releases are outside the MVP.',
+    owner: 'P2',
+    reason: RELEASE_CALENDAR,
   },
   'GET /calendar response 200 results[].mediaType': {
-    owner: 'post-MVP',
-    reason: 'Release calendar; manga chapter releases are outside the MVP.',
+    owner: 'P2',
+    reason: RELEASE_CALENDAR,
   },
 };
 
@@ -607,7 +612,7 @@ describe('OpenAPI media-type enum audit helpers', () => {
 });
 
 describe('seerr-api.yml media-type enums', () => {
-  const document = yaml.load(
+  const document = loadYaml(
     readFileSync(path.join(process.cwd(), 'seerr-api.yml'), 'utf8')
   ) as Record<string, unknown>;
   const sites = collectEnumSites(document);
