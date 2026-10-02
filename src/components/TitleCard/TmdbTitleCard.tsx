@@ -84,11 +84,14 @@ const TmdbTitleCard = ({
     }
   );
 
-  const hasFallback = !!(
+  const hasDescriptiveFallback = !!(
     fallbackTitle ||
     fallbackPosterPath ||
     fallbackSummary ||
-    fallbackYear ||
+    fallbackYear
+  );
+  const hasFallback = !!(
+    hasDescriptiveFallback ||
     fallbackStatus !== undefined ||
     fallbackStatus4k !== undefined
   );
@@ -136,6 +139,10 @@ const TmdbTitleCard = ({
 
   if (!title) {
     if (axios.isAxiosError(error) && error.response?.status === 404) {
+      if (hasDescriptiveFallback) {
+        return renderFallback();
+      }
+
       return hasPermission(Permission.ADMIN) ? (
         <TitleCard.ErrorCard
           id={id}
