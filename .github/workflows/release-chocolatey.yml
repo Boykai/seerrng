@@ -46,6 +46,20 @@ jobs:
             throw 'The CHOCOLATEY_API_KEY repository secret is required to submit the SeerrNG package.'
           }
 
+      - name: Require a published GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseJson = gh release view $env:TAG --repo $env:GITHUB_REPOSITORY --json isDraft,publishedAt
+          if ($LASTEXITCODE -ne 0) { throw "Could not verify GitHub release $env:TAG." }
+          $release = $releaseJson | ConvertFrom-Json
+          if ($release.isDraft -or -not $release.publishedAt) {
+            throw "Refusing to submit a Chocolatey package while GitHub release $env:TAG is still a draft."
+          }
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.version.outputs.tag }}

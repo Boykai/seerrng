@@ -752,6 +752,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  dispatch-chocolatey:
+    name: Dispatch Chocolatey after publication
+    needs: [publish-release]
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch Chocolatey package workflow
+        env:
+          GH_TOKEN: ${{ secrets.GH_WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$TAG" == *-* ]]; then
+            echo "Skipping Chocolatey for pre-release tag $TAG."
+            exit 0
+          fi
+          gh workflow run release-chocolatey.yml --repo "$REPO" --ref main -f "tag=$TAG"
+
   build-release-assets:
     name: Build release assets
     needs: [validate-main-tag, create-draft-release]
@@ -797,8 +819,8 @@ jobs:
             release-ppa.yml \
             release-copr.yml
           )
+          # release-chocolatey.yml is dispatched after the public-release gate.
           optional_workflows=(
-            release-chocolatey.yml
             release-snap.yml
           )
           declare -A dispatch_started=()
@@ -859,7 +881,7 @@ jobs:
               echo "Dispatched optional $workflow for $TAG."
             done
           else
-            echo 'Skipping optional Chocolatey and Snap workflows during release recovery.'
+            echo 'Skipping optional Chocolatey and Snap workflows during release recovery; Chocolatey dispatch follows publication.'
           fi
 
           for workflow in "${pending_names[@]}"; do
