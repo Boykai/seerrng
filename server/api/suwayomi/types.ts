@@ -1,3 +1,5 @@
+import type { Readable } from 'node:stream';
+
 /**
  * Credentials stay in memory. `UI_LOGIN` exchanges them for short-lived
  * tokens; `BASIC_AUTH` sends them on every request.
@@ -17,6 +19,9 @@ export interface SuwayomiAPIOptions {
   url: string;
   auth: SuwayomiAuthConfig;
   timeouts?: Partial<SuwayomiTimeouts>;
+  limits?: { chapterArchiveBytes?: number; thumbnailBytes?: number };
+  /** Read state back after a queue mutation times out before failing it. */
+  readback?: { attempts?: number; delayMs?: number };
 }
 
 export interface SuwayomiCallOptions {
@@ -93,4 +98,133 @@ export interface SuwayomiSource {
   isObsolete: boolean;
 }
 
+export type SuwayomiMangaStatus =
+  | 'UNKNOWN'
+  | 'ONGOING'
+  | 'COMPLETED'
+  | 'LICENSED'
+  | 'PUBLISHING_FINISHED'
+  | 'CANCELLED'
+  | 'ON_HIATUS';
+
+export interface SuwayomiMangaSummary {
+  id: string;
+  sourceId: string;
+  url: string;
+  title: string;
+  author?: string;
+  status: SuwayomiMangaStatus;
+  inLibrary: boolean;
+  initialized: boolean;
+}
+
+export interface SuwayomiMangaDetails extends SuwayomiMangaSummary {
+  artist?: string;
+  description?: string;
+  genre: string[];
+  inLibraryAt?: string;
+  lastFetchedAt?: string;
+  chaptersLastFetchedAt?: string;
+  downloadCount: number;
+  unreadCount: number;
+  hasDuplicateChapters: boolean;
+  chapterCount: number;
+  /** Only `seerrng.*` keys; other clients' meta is dropped. */
+  meta: Record<string, string>;
+}
+
+export interface SuwayomiAvailability {
+  id: string;
+  inLibrary: boolean;
+  status: SuwayomiMangaStatus;
+  downloadCount: number;
+  hasDuplicateChapters: boolean;
+  chaptersLastFetchedAt?: string;
+  chapterCount: number;
+}
+
+export interface SuwayomiAvailabilitySnapshot {
+  mangas: SuwayomiAvailability[];
+  queue: SuwayomiQueue;
+}
+
+export interface SuwayomiChapter {
+  id: string;
+  mangaId: string;
+  url: string;
+  name: string;
+  chapterNumber: number;
+  scanlator?: string;
+  uploadDate?: string;
+  sourceOrder: number;
+  pageCount?: number;
+  isDownloaded: boolean;
+}
+
+export interface SuwayomiChapterState {
+  id: string;
+  mangaId: string;
+  isDownloaded: boolean;
+}
+
 export type SuwayomiDownloaderState = 'STARTED' | 'STOPPED' | 'UNKNOWN';
+
+export interface SuwayomiQueueItem {
+  chapterId: string;
+  mangaId: string;
+  state: 'QUEUED' | 'DOWNLOADING' | 'FINISHED' | 'ERROR' | 'UNKNOWN';
+  progress?: number;
+  tries?: number;
+}
+
+export interface SuwayomiQueue {
+  state: SuwayomiDownloaderState;
+  items: SuwayomiQueueItem[];
+}
+
+export interface SuwayomiCategory {
+  id: string;
+  name: string;
+  includeInUpdate?: string;
+  includeInDownload?: string;
+}
+
+export interface SuwayomiSearchPage {
+  hasNextPage: boolean;
+  mangas: SuwayomiMangaSummary[];
+}
+
+export interface SuwayomiFetchResult {
+  /** False when Suwayomi reported a failure or the call timed out. */
+  fresh: boolean;
+  issue?: 'UPSTREAM_ERROR' | 'TIMEOUT';
+  /**
+   * After a timeout this is a readback of the stored manga; compare its
+   * `chaptersLastFetchedAt` with an earlier value to see whether the fetch
+   * completed on the server.
+   */
+  manga?: SuwayomiMangaDetails;
+  /** Absent after a timeout, or when Suwayomi returned no chapter list. */
+  chapters?: SuwayomiChapter[];
+}
+
+export interface SuwayomiMutationResult {
+  /** `readback` means the call timed out but a re-read confirmed it. */
+  confirmedBy: 'response' | 'readback';
+}
+
+export interface SuwayomiRequestIndexEntry {
+  requestId: string;
+  value: string;
+}
+
+export interface SuwayomiArchiveInfo {
+  /** Absent when Suwayomi sends no length (for example a chunked body). */
+  contentLength?: number;
+  contentType?: string;
+}
+
+export interface SuwayomiByteStream extends SuwayomiArchiveInfo {
+  /** Fails with `RESPONSE_TOO_LARGE` once more bytes than the limit arrive. */
+  stream: Readable;
+}

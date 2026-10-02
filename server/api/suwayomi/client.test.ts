@@ -81,6 +81,8 @@ describe('SuwayomiAPI configuration', () => {
       [{ url: 'not a url' }, 'INVALID_ARGUMENT'],
       [{ timeouts: { query: 0 } }, 'INVALID_ARGUMENT'],
       [{ timeouts: { source: 1.5 } }, 'INVALID_ARGUMENT'],
+      [{ limits: { chapterArchiveBytes: -1 } }, 'INVALID_ARGUMENT'],
+      [{ readback: { attempts: -1 } }, 'INVALID_ARGUMENT'],
     ];
     for (const [options, code] of cases) {
       assert.throws(
