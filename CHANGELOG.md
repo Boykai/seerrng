@@ -154,6 +154,56 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.45.3](https://github.com/snapetech/seerrng/compare/v3.45.2..v3.45.3) - 2026-10-02
+
+### User-facing changes
+
+#### Added
+
+- **Integrations:** The new companion-services guide compares optional providers by media type and explains which Snapetech NG forks supply SeerrNG-specific book and software workflows.
+
+#### Changed
+
+- **Watch Ahead:** The TV episode queue guide now covers Plex, Jellyfin, and Emby playback. Each request remains Off by default, and turning it on only queues missing episodes in that request's Sonarr destination.
+
+#### Fixed
+
+- **Release Pipeline:** The Windows ARM64 release now uses the correct architecture name for its download and archive contents, so Windows on ARM devices can select the native build.
+- **Bookshelf:** Bookshelf-only book requests now show their catalog details in Requests, and their request notifications can be delivered without an Open Library identifier.
+- **Packaging:** Linux AppImage releases now build SQLite against the supported GLIBC baseline, keeping the download usable on older compatible Linux systems.
+- **Release Notes:** The About page can now load published release notes instead of having its GitHub request blocked by the browser security policy.
+- **Profile:** The Advanced Theme tab now opens from every self-profile settings route instead of leading to a missing page.
+- **Search:** Opening Search with no query now lands directly on the ready-to-use search page instead of flashing a loading state.
+
+### 🛡️ Security
+- Resolve Playwright audit findings - ([c59226a](https://github.com/snapetech/seerrng/commit/c59226a14e645f67a0eb1672c33fa33f46eec68e))
+
+### 🐛 Bug Fixes
+- *(books)* Support Bookshelf-only request details - ([2e38ff5](https://github.com/snapetech/seerrng/commit/2e38ff5967e9f5f084134fd48ba74374e0fed3f0))
+- *(release)* Verify published Launchpad binaries - ([0b2db7d](https://github.com/snapetech/seerrng/commit/0b2db7d301ab3ef7eccdd6237b2b56e13179c455))
+- *(release)* Reuse successful package workflows during recovery - ([35b19f4](https://github.com/snapetech/seerrng/commit/35b19f496bc54c6dc3ae7a25c4a43630da3de302))
+- *(release)* Build AppImage SQLite for the supported glibc baseline - ([28d357b](https://github.com/snapetech/seerrng/commit/28d357b474dc04b646481532f0d980950c3ad0ea))
+- *(release)* Reuse verified Windows ARM64 assets on recovery - ([f29ebc3](https://github.com/snapetech/seerrng/commit/f29ebc3f09d5595eaccd9abc60c1b7a967433eb9))
+- *(release)* Recover verified assets and fan out package channels - ([45b8343](https://github.com/snapetech/seerrng/commit/45b8343493809a0e68e32df1ea6a09c9c96bb6f8))
+- *(release)* Resolve AppImage package metadata from filesystem - ([3770591](https://github.com/snapetech/seerrng/commit/37705916422ae43d5f210bd1fe7181d7e699f150))
+- *(release)* Correctly target Windows ARM64 artifacts - ([66b7973](https://github.com/snapetech/seerrng/commit/66b7973d0e7fcc53e0589a7db24e9ba83dec697b))
+- *(release)* Isolate artifacts before checksum checks - ([3a558b8](https://github.com/snapetech/seerrng/commit/3a558b85c429532e0d1d571889daea7dc7664ebd))
+- *(release)* Recover failed Windows asset builds - ([ac57b31](https://github.com/snapetech/seerrng/commit/ac57b31c7331e1f4afb8854944dce40f39f2a2ca))
+
+### 📖 Documentation
+- Clarify opt-in TV episode queue - ([bf319b2](https://github.com/snapetech/seerrng/commit/bf319b29b56e169d857b644523eae60b416fb5d8))
+- Document optional SeerrNG companion forks - ([e9119fd](https://github.com/snapetech/seerrng/commit/e9119fdd937a7bf810c473f506dc6c9d2061d62a))
+
+### ⚡ Performance
+- *(release)* Speed up Windows ARM archive staging - ([086cf63](https://github.com/snapetech/seerrng/commit/086cf63d46edf206908b6a83041fe30ee430f82e))
+- *(release)* Remove redundant Windows chmod and expose archive progress - ([48dcadd](https://github.com/snapetech/seerrng/commit/48dcadd68f35d72b3865a74252c375b0b9d0a62d))
+- *(release)* Build assets alongside image verification - ([9b9200a](https://github.com/snapetech/seerrng/commit/9b9200a8eaa3a1d8e3689f67d87e9beeea500781))
+
+### 🧪 Testing
+- Correct Advanced Theme regression selector - ([da85baa](https://github.com/snapetech/seerrng/commit/da85baa8461c183d785d4ca5df264ad0ba79f24c))
+
 ## [3.45.2](https://github.com/snapetech/seerrng/compare/v3.45.1..v3.45.2) - 2026-10-01
 
 ### User-facing changes
