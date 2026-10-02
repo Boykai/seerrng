@@ -23,7 +23,7 @@ describe('User Profile', () => {
       .click();
 
     cy.location('pathname').should('eq', '/profile/advanced-theme');
-    cy.contains('h2', 'Advanced Theme Overrides').should('be.visible');
+    cy.contains('h1', 'Advanced Theme Overrides').should('be.visible');
   });
 
   it('loads plex watchlist', () => {
