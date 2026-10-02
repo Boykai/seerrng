@@ -593,6 +593,19 @@ it('orders, filters and marks sources, and saves them in priority order', async 
   });
 });
 
+it('ignores a hidden filter once the source list is cleared', async () => {
+  await render({ ...view, sourceAllowlist: ['1003'] });
+  state.post.mockResolvedValueOnce(passed());
+  await runTest();
+  await type('sourceFilter', 'source a');
+  expect(cards()).toEqual(['Source A (EN)Safe']);
+
+  await type('port', '4568');
+  expect(host.querySelector('#sourceFilter')).toBeNull();
+  expect(cards()).toEqual(['1003Priority 1']);
+  expect(text()).not.toContain('No results');
+});
+
 it('stops offering sources at the allowlist limit', async () => {
   const full = Array.from({ length: 200 }, (_, i) => String(i + 1));
   await render({ ...view, sourceAllowlist: full });

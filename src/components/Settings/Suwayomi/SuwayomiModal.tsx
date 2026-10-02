@@ -213,9 +213,13 @@ const SourcePicker = ({
 }) => {
   const intl = useIntl();
   const [query, setQuery] = useState('');
+  // The filter box exists only while sources are loaded; a hidden query must
+  // not hide the stored sources.
+  const activeQuery = sources ? query : '';
   const entries = useMemo(
-    () => filterSourceEntries(orderSourceEntries(sources, selected), query),
-    [sources, selected, query]
+    () =>
+      filterSourceEntries(orderSourceEntries(sources, selected), activeQuery),
+    [sources, selected, activeQuery]
   );
   const atLimit = selected.length >= SUWAYOMI_MAX_SOURCES;
 
@@ -273,7 +277,7 @@ const SourcePicker = ({
           ))}
         </ul>
       ) : (
-        query && (
+        activeQuery && (
           <span className="settings-form-row-description">
             {intl.formatMessage(globalMessages.noresults)}
           </span>
