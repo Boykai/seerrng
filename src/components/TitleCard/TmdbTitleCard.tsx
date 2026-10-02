@@ -129,6 +129,10 @@ const TmdbTitleCard = ({
     </div>
   );
 
+  if (!title && !error && hasFallback) {
+    return renderFallback();
+  }
+
   if (!title && !error) {
     return (
       <div ref={ref}>
