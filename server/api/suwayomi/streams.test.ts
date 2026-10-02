@@ -327,4 +327,45 @@ describe('SuwayomiAPI manga thumbnail', () => {
       code: 'RESPONSE_TOO_LARGE',
     });
   });
+
+  it('accepts only raster image types', async () => {
+    const accepted = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'IMAGE/AVIF; charset=binary',
+    ];
+    const rejected = [
+      'image/svg+xml',
+      'Image/SVG+XML; charset=utf-8',
+      'image/bmp',
+      'application/octet-stream',
+      undefined,
+    ];
+    const reply = (type: string | undefined): FakeReply => ({
+      headers: type ? { 'Content-Type': type } : {},
+      body: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    });
+    const server = await start();
+    server.onRoute('GET', THUMBNAIL, ...[...accepted, ...rejected].map(reply));
+    const api = connect(server);
+    for (const type of accepted) {
+      const thumbnail = await api.streamMangaThumbnail('7');
+      assert.equal(thumbnail.contentType, type.split(';')[0].toLowerCase());
+      await readAll(thumbnail.stream);
+    }
+    for (const type of rejected) {
+      await assert.rejects(
+        api.streamMangaThumbnail('7'),
+        { code: 'BAD_RESPONSE' },
+        String(type)
+      );
+    }
+    assert.equal(
+      routeRequests(server, THUMBNAIL).length,
+      accepted.length + rejected.length
+    );
+  });
 });

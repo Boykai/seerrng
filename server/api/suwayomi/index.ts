@@ -83,6 +83,15 @@ export const DEFAULT_SUWAYOMI_TIMEOUTS: Readonly<SuwayomiTimeouts> = {
 };
 export const DEFAULT_CHAPTER_ARCHIVE_LIMIT_BYTES = 1024 ** 3;
 export const DEFAULT_THUMBNAIL_LIMIT_BYTES = 10 * 1024 ** 2;
+// Raster types only: an SVG cover could carry script once it is served on.
+const THUMBNAIL_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+]);
 const MAX_IDS_PER_CALL = 100;
 const MAX_INDEX_PAGES = 100;
 const MAX_INT = 2_147_483_647;
@@ -855,6 +864,7 @@ class SuwayomiAPI extends ExternalAPI {
     );
   }
 
+  /** Streams a cover image; any type but a raster image is BAD_RESPONSE. */
   async streamMangaThumbnail(
     mangaId: string,
     options: SuwayomiCallOptions = {}
@@ -1173,7 +1183,9 @@ class SuwayomiAPI extends ExternalAPI {
       fail('RESPONSE_TOO_LARGE');
     }
     const contentType = mediaType(readHeader(headers, 'content-type'));
-    if (!archive && !contentType?.startsWith('image/')) fail('BAD_RESPONSE');
+    if (!archive && !(contentType && THUMBNAIL_TYPES.has(contentType))) {
+      fail('BAD_RESPONSE');
+    }
     return { contentLength, contentType };
   }
 
