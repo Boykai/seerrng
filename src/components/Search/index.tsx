@@ -318,6 +318,7 @@ const Search = () => {
   const { currentSettings } = useSettings();
   const query =
     typeof router.query.query === 'string' ? router.query.query.trim() : '';
+  const hasRoutedSearchParams = Object.keys(router.query).length > 0;
   const requestedCategory = getSearchCategory(
     router.query.type,
     router.query.format
@@ -860,7 +861,7 @@ const Search = () => {
             emptyClassName="mt-6"
             isEmpty={isShowingEmptyState || (isSearchReady && isEmpty)}
             isLoading={
-              !router.isReady ||
+              (!router.isReady && hasRoutedSearchParams) ||
               (isSearchReady &&
                 (isLoadingInitialData ||
                   (isLoadingMore && (titles?.length ?? 0) > 0)))

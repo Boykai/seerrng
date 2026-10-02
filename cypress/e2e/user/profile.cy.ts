@@ -14,6 +14,18 @@ describe('User Profile', () => {
     });
   });
 
+  it('opens Advanced Theme from self user settings', () => {
+    cy.visit('/users/1/settings/main');
+
+    cy.get('[data-testid=settings-nav-desktop]')
+      .contains('Advanced Theme')
+      .should('have.attr', 'href', '/profile/advanced-theme')
+      .click();
+
+    cy.location('pathname').should('eq', '/profile/advanced-theme');
+    cy.contains('h2', 'Advanced Theme Overrides').should('be.visible');
+  });
+
   it('loads plex watchlist', () => {
     cy.intercept('/api/v1/user/[0-9]*/watchlist', {
       fixture: 'watchlist.json',
