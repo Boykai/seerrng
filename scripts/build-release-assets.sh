@@ -99,39 +99,64 @@ rm -rf "${stage:?}/.next/cache" "${stage:?}/.next/dev" "${stage:?}/bin" "${stage
 mkdir -p "$stage/config"
 touch "$stage/config/.gitkeep"
 
-symlink_phase_started_at="$(date +%s)"
-echo 'Starting release archive phase: Validate and normalize runtime symlinks'
-while IFS= read -r -d '' link; do
-  target="$(readlink "$link")"
-  link_dir="$(dirname -- "$link")"
-  if [[ "$target" == /* ]]; then
-    resolved="$(realpath "$target")" || {
-      echo "Refusing broken archive symlink: $link -> $target" >&2
-      exit 1
-    }
-  else
-    resolved="$(realpath "$link_dir/$target")" || {
-      echo "Refusing broken archive symlink: $link -> $target" >&2
-      exit 1
-    }
-  fi
-  [[ "$resolved" == "$stage"/* ]] || {
-    if [[ "$target" == /* ]]; then
-      echo "Refusing absolute archive symlink: $link -> $target" >&2
-    else
-      echo "Refusing escaping archive symlink: $link -> $target" >&2
-    fi
-    exit 1
-  }
+# Keep symlink validation in one Node process instead of spawning several Git
+# Bash utilities for every link in the large Windows ARM64 tree.
+time_phase 'Validate and normalize runtime symlinks' node --input-type=module - "$stage" <<'NODE'
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
-  if [[ "$target" == /* ]]; then
-    relative_target="$(node -e 'const path = require("node:path"); process.stdout.write(path.posix.relative(process.argv[1], process.argv[2]));' "$link_dir" "$resolved")"
-    rm -- "$link"
-    ln -s -- "$relative_target" "$link"
-  fi
-done < <(find "$stage" -type l -print0)
-printf 'Completed release archive phase: Validate and normalize runtime symlinks in %ss\n' \
-  "$(( $(date +%s) - symlink_phase_started_at ))"
+const stage = await fs.realpath(process.argv[2]);
+const pendingDirectories = [stage];
+
+function isInsideStage(target) {
+  const relative = path.relative(stage, target);
+  return (
+    relative !== '..' &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+}
+
+while (pendingDirectories.length > 0) {
+  const directory = pendingDirectories.pop();
+  const entries = await fs.readdir(directory, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      pendingDirectories.push(entryPath);
+      continue;
+    }
+    if (!entry.isSymbolicLink()) continue;
+
+    const target = await fs.readlink(entryPath);
+    let resolved;
+    try {
+      resolved = await fs.realpath(entryPath);
+    } catch {
+      throw new Error(`Refusing broken archive symlink: ${entryPath} -> ${target}`);
+    }
+    if (!isInsideStage(resolved)) {
+      const kind = path.isAbsolute(target) ? 'absolute' : 'escaping';
+      throw new Error(`Refusing ${kind} archive symlink: ${entryPath} -> ${target}`);
+    }
+
+    if (path.isAbsolute(target)) {
+      const relativeTarget = path.relative(path.dirname(entryPath), resolved);
+      const targetType =
+        process.platform === 'win32' && (await fs.stat(resolved)).isDirectory()
+          ? 'dir'
+          : 'file';
+      await fs.unlink(entryPath);
+      await fs.symlink(
+        relativeTarget,
+        entryPath,
+        process.platform === 'win32' ? targetType : undefined
+      );
+    }
+  }
+}
+NODE
 
 cat > "$stage/start.sh" <<'EOF'
 #!/usr/bin/env sh
@@ -177,9 +202,9 @@ if [[ "$os" == "windows" ]]; then
   rm -f -- "$archive_temporary"
   if command -v 7z >/dev/null 2>&1; then
     # PowerShell Compress-Archive is prohibitively slow for the staged
-    # Next.js runtime on GitHub's Windows runners. Prefer the runner's
-    # 7-Zip installation, which handles the same tree in seconds.
-    (cd "$work_dir" && 7z a -tzip -mx=5 -bsp1 -bso0 -bse2 "$archive_temporary" "$asset")
+    # Next.js runtime on GitHub's Windows runners. Use 7-Zip's fast Deflate
+    # level and parallel workers to keep native ARM packaging practical.
+    (cd "$work_dir" && 7z a -tzip -mx=1 -mmt=on -bsp1 -bso0 -bse2 "$archive_temporary" "$asset")
   elif command -v zip >/dev/null 2>&1; then
     (cd "$work_dir" && zip -qr "$archive_temporary" "$asset")
   elif command -v tar >/dev/null 2>&1; then

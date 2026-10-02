@@ -272,6 +272,8 @@ describe('release asset construction', () => {
     );
     const archiverArguments = await fs.readFile(archiverLog, 'utf8');
     assert.match(archiverArguments, /-tzip/);
+    assert.match(archiverArguments, /-mx=1/);
+    assert.match(archiverArguments, /-mmt=on/);
     assert.match(archiverArguments, /-bsp1/);
     assert.match(archiverArguments, /-bso0/);
     assert.match(archiverArguments, /-bse2/);
