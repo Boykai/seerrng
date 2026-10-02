@@ -12,6 +12,8 @@ export interface OptionalServiceAvailability {
   magazinesEnabled?: boolean;
   softwareEnabled?: boolean;
   romarrEnabled?: boolean;
+  /** Whether a Suwayomi instance is configured; manga catalog paths ignore it. */
+  suwayomiEnabled?: boolean;
   enabledMediaCategories?: Partial<
     Record<MediaAvailabilityCategoryKey, boolean>
   >;

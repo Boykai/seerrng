@@ -92,6 +92,7 @@ Reflect.set(
       kapowarr: settings.kapowarr,
       backissue: settings.backissue,
       lazylibrarian: settings.lazylibrarian,
+      suwayomi: settings.suwayomi,
       notifications: settings.notifications,
       network: settings.network,
     };

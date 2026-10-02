@@ -28,6 +28,7 @@ const mediaTypeByService: Record<ServarrServiceType, MediaType> = {
   kapowarr: MediaType.COMIC,
   backissue: MediaType.COMIC,
   lazylibrarian: MediaType.MAGAZINE,
+  suwayomi: MediaType.MANGA,
 };
 
 export const getHistoricalComicServiceIdMaximum = async (): Promise<number> =>

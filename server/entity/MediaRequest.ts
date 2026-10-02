@@ -51,6 +51,7 @@ import {
   isDestinationAvailableInTargets,
   isDestinationCoveredByActiveRequest,
   type RequestDestination,
+  type RequestServiceType,
 } from '@server/lib/requestDestination';
 import {
   runWithServarrServiceAdmission,
@@ -107,7 +108,7 @@ export const MANGA_REQUESTS_UNAVAILABLE_MESSAGE =
   'Manga requests are not available yet.';
 
 export type MediaRequestServiceTarget = {
-  serviceType: ServarrServiceType;
+  serviceType: RequestServiceType;
   format:
     'standard' | '4k' | 'music' | 'ebook' | 'audiobook' | 'comic' | 'magazine';
   serverId: number;

@@ -54,6 +54,7 @@ import {
 import { runMediaEntityMutation } from '@server/lib/mediaMutation';
 import { getLidarrAlbumMediaStatus } from '@server/lib/musicAvailability';
 import notificationManager, { Notification } from '@server/lib/notifications';
+import type { RequestServiceType } from '@server/lib/requestDestination';
 import requestDispatchManager, {
   MAX_REQUEST_DISPATCH_RETRY_DELAY_MS,
   type RequestDispatchOutcome,
@@ -69,7 +70,6 @@ import {
   ServarrServiceAuthorityChangedError,
   runWithServarrServiceAdmission,
   runWithServarrServiceCollectionAdmission,
-  type ServarrServiceType,
 } from '@server/lib/serviceAdmission';
 import { type ReadarrSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -137,7 +137,7 @@ const saveRequestServiceTarget = async (
 };
 
 interface RequestDispatchServiceSelection {
-  serviceType: ServarrServiceType;
+  serviceType: RequestServiceType;
   serviceIds: number[];
 }
 

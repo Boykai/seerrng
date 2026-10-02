@@ -207,6 +207,26 @@ export type BackIssueSettings = CollectorServiceSettings;
 
 export type LazyLibrarianSettings = CollectorServiceSettings;
 
+export type SuwayomiSettingsAuthMode = 'UI_LOGIN' | 'BASIC_AUTH' | 'NONE';
+
+export interface SuwayomiSettings {
+  id: number;
+  name: string;
+  hostname: string;
+  port: number;
+  useSsl: boolean;
+  baseUrl?: string;
+  isDefault: boolean;
+  authMode: SuwayomiSettingsAuthMode;
+  username: string;
+  password: string;
+  // Suwayomi source IDs are 64-bit, so they are kept as decimal strings.
+  sourceAllowlist: string[];
+  preferredLanguages: string[];
+  scanlatorPreference: string[];
+  requireCbz: boolean;
+}
+
 interface Quota {
   quotaLimit?: number;
   quotaDays?: number;
@@ -341,6 +361,7 @@ interface FullPublicSettings extends PublicSettings {
   magazinesEnabled: boolean;
   softwareEnabled: boolean;
   romarrEnabled: boolean;
+  suwayomiEnabled: boolean;
   enabledMediaCategories: EnabledMediaCategories;
   discoverRegion: string;
   streamingRegion: string;
@@ -562,6 +583,7 @@ export interface AllSettings {
   kapowarr: KapowarrSettings[];
   backissue: BackIssueSettings[];
   lazylibrarian: LazyLibrarianSettings[];
+  suwayomi: SuwayomiSettings[];
   softwareAcquisition: SoftwareAcquisitionSettings;
   prowlarr: ProwlarrSettings;
   discoveryIntegrations: DiscoveryIntegrationsSettings;
@@ -680,6 +702,7 @@ class Settings {
       kapowarr: [],
       backissue: [],
       lazylibrarian: [],
+      suwayomi: [],
       discoveryIntegrations: defaultDiscoveryIntegrations(),
       softwareAcquisition: {
         romarr: {
@@ -1192,6 +1215,14 @@ class Settings {
     this.data.lazylibrarian = data;
   }
 
+  get suwayomi(): SuwayomiSettings[] {
+    return this.data.suwayomi;
+  }
+
+  set suwayomi(data: SuwayomiSettings[]) {
+    this.data.suwayomi = data;
+  }
+
   get discoveryIntegrations(): DiscoveryIntegrationsSettings {
     return this.data.discoveryIntegrations ?? defaultDiscoveryIntegrations();
   }
@@ -1262,6 +1293,7 @@ class Settings {
         this.data.softwareAcquisition.romarr.hostname &&
         this.data.softwareAcquisition.romarr.apiKey
       ),
+      suwayomiEnabled: this.data.suwayomi.length > 0,
       enabledMediaCategories: {
         ...DEFAULT_ENABLED_MEDIA_CATEGORIES,
         ...this.data.main.enabledMediaCategories,
@@ -1556,6 +1588,7 @@ class Settings {
       kapowarr: [],
       backissue: [],
       lazylibrarian: [],
+      suwayomi: [],
       discoveryIntegrations: defaultDiscoveryIntegrations(),
       softwareAcquisition: {
         romarr: {

@@ -29,6 +29,7 @@ const defaultSettings: PublicSettingsResponse = {
   magazinesEnabled: false,
   softwareEnabled: false,
   romarrEnabled: false,
+  suwayomiEnabled: false,
   enabledMediaCategories: DEFAULT_ENABLED_MEDIA_CATEGORIES,
   discoverRegion: '',
   streamingRegion: '',

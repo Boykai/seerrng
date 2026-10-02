@@ -41,6 +41,7 @@ const externalConfig = {
   sonarr: settings.sonarr,
   lidarr: settings.lidarr ?? [],
   readarr: settings.readarr ?? [],
+  suwayomi: settings.suwayomi ?? [],
   notifications: settings.notifications,
   network: settings.network,
 };

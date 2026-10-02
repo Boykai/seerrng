@@ -1958,6 +1958,270 @@ components:
         - useSsl
         - isDefault
         - syncEnabled
+    SuwayomiSettings:
+      type: object
+      description: >-
+        A Suwayomi server. The server assigns `id` and `isDefault`, so requests
+        must omit them.
+      properties:
+        id:
+          type: number
+          example: 0
+          readOnly: true
+        name:
+          type: string
+          example: 'Suwayomi'
+        hostname:
+          type: string
+          example: '127.0.0.1'
+        port:
+          type: number
+          example: 4567
+        useSsl:
+          type: boolean
+          example: false
+        baseUrl:
+          type: string
+        isDefault:
+          type: boolean
+          readOnly: true
+        authMode:
+          type: string
+          enum: [UI_LOGIN, BASIC_AUTH, NONE]
+          description: >-
+            How SeerrNG signs in to Suwayomi. Save the mode that the
+            connection test detected.
+        username:
+          type: string
+        password:
+          type: string
+          description: >-
+            Write-only. Responses return `[REDACTED]` when a password is stored
+            and an empty string when not. Sending `[REDACTED]` keeps the stored
+            password, but only while `useSsl`, `hostname`, `port`, `baseUrl` and
+            `username` are unchanged; otherwise the request fails with
+            `SUWAYOMI_PASSWORD_REQUIRED`.
+        sourceAllowlist:
+          type: array
+          description: >-
+            Suwayomi source IDs as decimal strings, in order of preference. The
+            local source (`0`) is not allowed.
+          items:
+            type: string
+            example: '4000000000000000001'
+        preferredLanguages:
+          type: array
+          description: Language codes, in order of preference.
+          items:
+            type: string
+            example: 'en'
+        scanlatorPreference:
+          type: array
+          description: Scanlation group names, in order of preference.
+          items:
+            type: string
+            example: 'Group A'
+        requireCbz:
+          type: boolean
+          description: Require Suwayomi to save downloads as CBZ files.
+          example: true
+      required:
+        - name
+        - hostname
+        - port
+        - authMode
+    SuwayomiConnectionTestRequest:
+      type: object
+      description: >-
+        A Suwayomi server to test. The test detects the authentication mode
+        itself. With `id`, a `[REDACTED]` password stands for that instance's
+        stored password under the same rule as an update.
+      properties:
+        id:
+          type: number
+        hostname:
+          type: string
+          example: '127.0.0.1'
+        port:
+          type: number
+          example: 4567
+        useSsl:
+          type: boolean
+        baseUrl:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+          description: Write-only. `[REDACTED]` stands for the stored password.
+        requireCbz:
+          type: boolean
+        sourceAllowlist:
+          type: array
+          items:
+            type: string
+      required:
+        - hostname
+        - port
+    SuwayomiConnectionTestWarning:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - AUTH_DISABLED
+            - BASIC_AUTH_IN_USE
+            - EMPTY_CREDENTIALS
+            - CBZ_DISABLED
+            - QUEUE_ERRORS
+            - BELOW_PINNED_REVISION
+            - UNKNOWN_VERSION
+            - INTROSPECTION_UNAVAILABLE
+            - PER_USER_SCHEMA
+            - SOURCE_UPDATE_AVAILABLE
+            - SOURCE_OBSOLETE
+            - SOURCE_MISSING
+        count:
+          type: number
+          description: Queue items in the error state, for `QUEUE_ERRORS`.
+        sourceIds:
+          type: array
+          description: Allowlisted sources the warning applies to.
+          items:
+            type: string
+      required:
+        - code
+    SuwayomiConnectionTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        authMode:
+          type: string
+          enum: [UI_LOGIN, BASIC_AUTH, NONE]
+        version:
+          type: string
+          example: 'v2.4.2366'
+        capabilities:
+          type: object
+          properties:
+            revision:
+              type: number
+            buildType:
+              type: string
+            supported:
+              type: boolean
+            missingFields:
+              type: array
+              items:
+                type: string
+        health:
+          type: object
+          properties:
+            downloaderState:
+              type: string
+            queueLength:
+              type: number
+            queueErrors:
+              type: number
+            sourceCount:
+              type: number
+              description: Installed sources, excluding the local source.
+            downloadAsCbz:
+              type: boolean
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuwayomiConnectionTestWarning'
+        sources:
+          type: array
+          description: Installed sources, excluding the local source.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              displayName:
+                type: string
+              lang:
+                type: string
+              contentWarning:
+                type: string
+                enum: [SAFE, MIXED, NSFW, UNKNOWN]
+              hasUpdate:
+                type: boolean
+              isObsolete:
+                type: boolean
+      required:
+        - success
+        - authMode
+        - capabilities
+        - health
+        - warnings
+        - sources
+    SuwayomiConnectionTestFailure:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        code:
+          type: string
+          enum:
+            - SUWAYOMI_UNREACHABLE
+            - SUWAYOMI_TIMEOUT
+            - SUWAYOMI_NOT_SUWAYOMI
+            - SUWAYOMI_AUTH_FAILED
+            - SUWAYOMI_CREDENTIALS_REQUIRED
+            - SUWAYOMI_SIMPLE_LOGIN_UNSUPPORTED
+            - SUWAYOMI_UNSUPPORTED_SERVER
+            - SUWAYOMI_NO_SOURCES
+            - SUWAYOMI_CBZ_REQUIRED
+            - SUWAYOMI_UPSTREAM_ERROR
+        message:
+          type: string
+        authMode:
+          type: string
+          description: The detected mode, once detection finished.
+          enum: [UI_LOGIN, BASIC_AUTH, NONE, SIMPLE_LOGIN, LOGIN_REQUIRED]
+        version:
+          type: string
+        missingFields:
+          type: array
+          description: >-
+            Present for `SUWAYOMI_UNSUPPORTED_SERVER`: the GraphQL fields
+            SeerrNG needs that the server lacks. Empty when the schema could
+            not be read and the version is older than v2.3.2223.
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuwayomiConnectionTestWarning'
+      required:
+        - success
+        - code
+        - message
+        - warnings
+    SuwayomiError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - SUWAYOMI_INVALID_SETTINGS
+            - SUWAYOMI_CREDENTIALS_REQUIRED
+            - SUWAYOMI_PASSWORD_REQUIRED
+            - SUWAYOMI_INSTANCE_LIMIT
+            - SUWAYOMI_IN_USE
+        message:
+          type: string
+      required:
+        - code
+        - message
     SonarrSettings:
       type: object
       properties:
@@ -2558,6 +2822,10 @@ components:
           type: boolean
           description: Whether a ROMarrNG instance is configured.
           example: true
+        suwayomiEnabled:
+          type: boolean
+          description: Whether a Suwayomi instance is configured.
+          example: false
         enabledMediaCategories:
           type: object
           description: Administrator-controlled visibility and request availability for each media category.
@@ -13471,6 +13739,146 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LazyLibrarianSettings'
+  /settings/suwayomi:
+    get:
+      summary: Get Suwayomi settings
+      description: >-
+        Returns all Suwayomi settings in a JSON array. Passwords are returned
+        as `[REDACTED]` when stored and as an empty string when not.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Values were returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SuwayomiSettings'
+    post:
+      summary: Create Suwayomi instance
+      description: >-
+        Creates a Suwayomi instance from the request body. Only one instance
+        can exist.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuwayomiSettings'
+      responses:
+        '201':
+          description: New Suwayomi instance created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiSettings'
+        '400':
+          description: Invalid settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiError'
+        '409':
+          description: A Suwayomi instance already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiError'
+  /settings/suwayomi/test:
+    post:
+      summary: Test Suwayomi configuration
+      description: >-
+        Detects the Suwayomi authentication mode, checks the credentials, the
+        server version and capabilities, and lists the installed sources.
+        Sends only read-only queries plus login and token refresh.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuwayomiConnectionTestRequest'
+      responses:
+        '200':
+          description: The test passed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiConnectionTestResult'
+        '400':
+          description: Invalid request, or a required password is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiError'
+        '502':
+          description: The test failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiConnectionTestFailure'
+  /settings/suwayomi/{suwayomiId}:
+    put:
+      summary: Update Suwayomi instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: suwayomiId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuwayomiSettings'
+      responses:
+        '200':
+          description: Suwayomi instance updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiSettings'
+        '400':
+          description: Invalid settings, or a required password is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiError'
+        '404':
+          description: Suwayomi instance not found
+    delete:
+      summary: Delete Suwayomi instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: suwayomiId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Suwayomi instance deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiSettings'
+        '404':
+          description: Suwayomi instance not found
+        '409':
+          description: Active requests still use this instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiError'
   /request:
     get:
       summary: Get all requests

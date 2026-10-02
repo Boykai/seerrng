@@ -123,6 +123,7 @@ import radarrRoutes from './radarr';
 import readarrRoutes from './readarr';
 import softwareAcquisitionRoutes from './softwareAcquisition';
 import sonarrRoutes from './sonarr';
+import suwayomiRoutes from './suwayomi';
 
 const settingsRoutes = Router();
 settingsRoutes.use(authorizedRouteAccess(Permission.ADMIN));
@@ -1428,6 +1429,7 @@ settingsRoutes.use('/mylar', mylarRoutes);
 settingsRoutes.use('/kapowarr', kapowarrRoutes);
 settingsRoutes.use('/backissue', backissueRoutes);
 settingsRoutes.use('/lazylibrarian', lazyLibrarianRoutes);
+settingsRoutes.use('/suwayomi', suwayomiRoutes);
 settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 settingsRoutes.use('/software-acquisition', softwareAcquisitionRoutes);

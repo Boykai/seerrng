@@ -16,6 +16,7 @@ const portableTests = [
   'scripts/backissue-service.test.mjs',
   'scripts/check-helm-security.test.mjs',
   'scripts/check-workflow-boundaries.test.mjs',
+  'scripts/export-external-config.test.mjs',
   'scripts/manga-migration-checks.test.mjs',
   'scripts/sync-yunohost-package.test.mjs',
   'scripts/release-notes.test.mjs',
