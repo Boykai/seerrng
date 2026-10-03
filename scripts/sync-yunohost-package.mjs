@@ -35,7 +35,10 @@ const gitOutput = (repo, args, options) =>
   git(repo, args, options).stdout.toString().trim();
 
 const normalizeOrigin = (origin) =>
-  origin.replace(/\/+$/u, '').replace(/\.git$/u, '').toLowerCase();
+  origin
+    .replace(/\/+$/u, '')
+    .replace(/\.git$/u, '')
+    .toLowerCase();
 
 const clonePackageRepository = (destination) => {
   const result = spawnSync(
