@@ -606,6 +606,7 @@ export class MediaRequest {
           ? MangaRequestBindingState.BOUND
           : MangaRequestBindingState.AWAITING_BINDING,
         boundAt: bound ? new Date() : null,
+        followEnabled: requestBody.mangaFollow === true,
       });
       return savedRequest;
     });
@@ -686,6 +687,16 @@ export class MediaRequest {
           'The requested episode queue can only be enabled by the linked owner of a TV request.'
         );
       }
+    }
+    // Following, like watch-ahead, is consent for future acquisition: nobody
+    // may give it on the owner's behalf.
+    if (
+      requestBody.mangaFollow === true &&
+      (requestBody.mediaType !== MediaType.MANGA || requestUser.id !== user.id)
+    ) {
+      throw new RequestPermissionError(
+        'Following new chapters can only be turned on by the owner of a manga request.'
+      );
     }
 
     const isManagedRequestForAnotherUser =

@@ -181,6 +181,20 @@ describe('scheduled job lifecycle', () => {
     assert.equal(progressJob.running?.(), false);
   });
 
+  it('registers the manga follow loop as a half-hourly process task', () => {
+    startJobs();
+
+    const followJob = scheduledJobs.find((job) => job.id === 'manga-follow');
+
+    assert.ok(followJob);
+    assert.equal(followJob.name, 'Manga Follow');
+    assert.equal(followJob.type, 'process');
+    assert.equal(followJob.interval, 'minutes');
+    assert.equal(followJob.cronSchedule, '0 7,37 * * * *');
+    assert.equal(typeof followJob.cancelFn, 'function');
+    assert.equal(followJob.running?.(), false);
+  });
+
   it('cancels future invocations and waits for active work', async () => {
     let cancelCalled = false;
     let release: (() => void) | undefined;

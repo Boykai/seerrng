@@ -103,6 +103,7 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages(
     'manga-source-resolve': 'Manga Source Resolve',
     'manga-dispatch-sweep': 'Manga Dispatch Sweep',
     'manga-progress': 'Manga Progress',
+    'manga-follow': 'Manga Follow',
     'download-sync': 'Download Sync',
     'software-request-reconciliation': 'Software Request Reconciliation',
     'download-recovery': 'Download Recovery',

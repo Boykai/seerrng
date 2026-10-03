@@ -678,15 +678,21 @@ describe('updateMangaRequestManifest', () => {
 });
 
 describe('loadMangaRequestScopeSummaries', () => {
-  it('summarizes the scope and the parked state by request ID', async () => {
+  it('summarizes the scope, the parked state and following by request ID', async () => {
     const parked = await seedManifest(900001, {
       scope: RANGE,
       rangeStart: 1,
       rangeEnd: 9.5,
     });
+    const lastCheckAt = new Date('2026-10-01T06:07:00.000Z');
+    const nextCheckAt = new Date('2026-10-02T06:07:00.000Z');
     const bound = await seedManifest(900002, {
       bindingState: MangaRequestBindingState.BOUND,
       boundAt: new Date(),
+      followEnabled: true,
+      followStopReason: 'BINDING_INACTIVE',
+      followLastAt: lastCheckAt,
+      followNextAt: nextCheckAt,
     });
 
     const summaries = await loadMangaRequestScopeSummaries(dataSource.manager, [
@@ -703,6 +709,12 @@ describe('loadMangaRequestScopeSummaries', () => {
         rangeStart: 1,
         rangeEnd: 9.5,
         awaitingBinding: true,
+        follow: {
+          enabled: false,
+          stopReason: null,
+          lastCheckAt: null,
+          nextCheckAt: null,
+        },
       },
       [bound.requestId]: {
         scope: ALL_AT_DISPATCH,
@@ -710,6 +722,12 @@ describe('loadMangaRequestScopeSummaries', () => {
         rangeStart: null,
         rangeEnd: null,
         awaitingBinding: false,
+        follow: {
+          enabled: true,
+          stopReason: 'BINDING_INACTIVE',
+          lastCheckAt,
+          nextCheckAt,
+        },
       },
     });
   });

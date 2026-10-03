@@ -3019,6 +3019,7 @@
   "components.Settings.SettingsJobsCache.lidarr-scan": "Lidarr Scan",
   "components.Settings.SettingsJobsCache.magazine-scan": "LazyLibrarian Magazine Scan",
   "components.Settings.SettingsJobsCache.manga-dispatch-sweep": "Manga Dispatch Sweep",
+  "components.Settings.SettingsJobsCache.manga-follow": "Manga Follow",
   "components.Settings.SettingsJobsCache.manga-library-scan": "Manga Library Scan",
   "components.Settings.SettingsJobsCache.manga-progress": "Manga Progress",
   "components.Settings.SettingsJobsCache.manga-source-resolve": "Manga Source Resolve",

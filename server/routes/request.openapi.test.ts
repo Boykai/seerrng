@@ -24,6 +24,10 @@ describe('request status routes behind the OpenAPI validator', () => {
     app.put('/api/v1/request/:requestId/watch-ahead', (_req, res) =>
       res.status(200).json({})
     );
+    app.put('/api/v1/request/:requestId/follow', (_req, res) =>
+      res.status(200).json({})
+    );
+    app.post('/api/v1/request', (_req, res) => res.status(201).json({}));
     app.get('/api/v1/request/status', (_req, res) =>
       res.status(200).json({
         pageInfo: {
@@ -84,6 +88,32 @@ describe('request status routes behind the OpenAPI validator', () => {
 
     assert.strictEqual(response.status, 400);
   });
+
+  it('admits following new chapters on a manga request and its follow route', async () => {
+    const created = await request(createValidatedApp())
+      .post('/api/v1/request')
+      .send({ mediaType: 'manga', mediaId: 30013, mangaFollow: true });
+    const enabled = await request(createValidatedApp())
+      .put('/api/v1/request/31/follow')
+      .send({ enabled: true });
+    const disabled = await request(createValidatedApp())
+      .put('/api/v1/request/31/follow')
+      .send({ enabled: false });
+
+    assert.strictEqual(created.status, 201, JSON.stringify(created.body));
+    assert.strictEqual(enabled.status, 200, JSON.stringify(enabled.body));
+    assert.strictEqual(disabled.status, 200, JSON.stringify(disabled.body));
+  });
+
+  for (const body of [{}, { enabled: 'yes' }, { enabled: true, extra: 1 }]) {
+    it(`rejects the follow body ${JSON.stringify(body)}`, async () => {
+      const response = await request(createValidatedApp())
+        .put('/api/v1/request/31/follow')
+        .send(body);
+
+      assert.strictEqual(response.status, 400);
+    });
+  }
 
   for (const filter of ['pending', 'processing', 'deleted']) {
     it(`allows the ${filter} request status filter to return no matches`, async () => {

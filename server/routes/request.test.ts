@@ -3377,6 +3377,12 @@ describe('POST /request', () => {
         rangeStart: null,
         rangeEnd: null,
         awaitingBinding: true,
+        follow: {
+          enabled: false,
+          stopReason: null,
+          lastCheckAt: null,
+          nextCheckAt: null,
+        },
       });
       assert.strictEqual(await getRepository(MediaRequest).count(), 1);
       assert.strictEqual(

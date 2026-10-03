@@ -51,6 +51,8 @@ export type MediaRequestBody = {
   ignoreQuota?: boolean;
   /** Manga only: which chapters to fetch; every chapter when omitted. */
   mangaScope?: MangaRequestScopeInput;
+  /** Manga only: the owner's consent to fetch new chapters as they appear. */
+  mangaFollow?: boolean;
 };
 
 export type MangaRequestScopeInput = {
