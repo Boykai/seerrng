@@ -360,6 +360,36 @@ export const selectMangaRequestInstance = (
     ? instances.find(({ id }) => id === serverId)
     : (instances.find(({ isDefault }) => isDefault) ?? instances[0]);
 
+const importMangaRequestPolicy = () =>
+  Promise.all([
+    import('@server/api/anilist'),
+    import('@server/api/anilist/manga'),
+    import('@server/lib/mangaCatalog'),
+  ]);
+
+let mangaRequestPolicyModules:
+  ReturnType<typeof importMangaRequestPolicy> | undefined;
+
+/**
+ * Loads the AniList client, its manga helpers and the catalog policy once
+ * and keeps them. They load on first use so that importers of the request
+ * entity skip the client's HTML sanitizer and the catalog's import cycle.
+ * The server calls this at boot, before Next starts: under `pnpm dev`, Next
+ * removes ts-node's `.ts` loader once it has loaded next.config.ts, and a
+ * `.ts` module that has not loaded by then no longer resolves.
+ */
+export const loadMangaRequestPolicy = (): ReturnType<
+  typeof importMangaRequestPolicy
+> => {
+  mangaRequestPolicyModules ??= importMangaRequestPolicy().catch(
+    (error: unknown) => {
+      mangaRequestPolicyModules = undefined;
+      throw error;
+    }
+  );
+  return mangaRequestPolicyModules;
+};
+
 /**
  * Refuses an AniList ID that is unknown or excluded by the content policy
  * (adult titles, novels) with one indistinguishable error. Runs before any
@@ -368,17 +398,11 @@ export const selectMangaRequestInstance = (
 export const assertMangaRequestable = async (
   anilistId: number
 ): Promise<void> => {
-  // Loaded on first use: the AniList client brings an HTML sanitizer that
-  // every importer of the request entity would otherwise load too.
   const [
     { default: AnilistClient },
     { isAnilistMangaExcluded },
     { getMangaContentPolicy },
-  ] = await Promise.all([
-    import('@server/api/anilist'),
-    import('@server/api/anilist/manga'),
-    import('@server/lib/mangaCatalog'),
-  ]);
+  ] = await loadMangaRequestPolicy();
   let details: Awaited<ReturnType<AnilistAPI['getMangaDetails']>>;
   try {
     details = await new AnilistClient().getMangaDetails(anilistId);
