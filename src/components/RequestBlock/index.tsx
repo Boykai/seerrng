@@ -4,18 +4,28 @@ import BookFormatBadge, {
 } from '@app/components/Common/BookFormatBadge';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
+import {
+  formatMangaScope,
+  mangaScopeMessages,
+  MangaWaitingStatus,
+} from '@app/components/Common/MangaRequestScope';
 import MediaTypeBadge, {
   getMediaTypeBadgeType,
 } from '@app/components/Common/MediaTypeBadge';
 import Tooltip from '@app/components/Common/Tooltip';
 import useRequestOverride from '@app/hooks/useRequestOverride';
-import { useUser } from '@app/hooks/useUser';
+import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import {
   normalizeMusicBrainzId,
   normalizeOpenLibraryWorkId,
 } from '@app/utils/apiPath';
 import defineMessages from '@app/utils/defineMessages';
+import {
+  getMangaAniListId,
+  isAwaitingMangaSource,
+  type MangaScopedRequest,
+} from '@app/utils/mangaRequestScope';
 import {
   CalendarIcon,
   CheckIcon,
@@ -32,7 +42,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useIntl } from 'react-intl';
-import { mutate } from 'swr';
+import useSWR, { mutate } from 'swr';
 
 const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
   ssr: false,
@@ -67,12 +77,20 @@ const RequestBlock = ({
   onUpdate,
   hideDeleteAction = false,
 }: RequestBlockProps) => {
-  const { user } = useUser();
+  const { user, hasPermission } = useUser();
   const intl = useIntl();
   const [isUpdating, setIsUpdating] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const { profile, metadataProfile, rootFolder, server, languageProfile } =
     useRequestOverride(request);
+  // Media request lists omit the manga scope; the request endpoint has it.
+  const { data: mangaRequest } = useSWR<MangaScopedRequest>(
+    request.type === 'manga' ? `/api/v1/request/${request.id}` : null
+  );
+  const mangaScope = mangaRequest?.mangaScope;
+  const isAwaitingSource = isAwaitingMangaSource(
+    mangaRequest && { ...mangaRequest, status: request.status }
+  );
   const rawBookId = request.media?.identifiers?.find(
     (identifier) => identifier.provider === 'openlibrary'
   )?.value;
@@ -83,6 +101,8 @@ const RequestBlock = ({
   const comicId = request.media?.identifiers?.find(
     (identifier) => identifier.provider === 'comicvine'
   )?.value;
+  const mangaId =
+    request.type === 'manga' ? getMangaAniListId(request.media) : undefined;
   const updateRequest = async (type: 'approve' | 'decline'): Promise<void> => {
     setIsUpdating(true);
     await axios.post(`/api/v1/request/${request.id}/${type}`);
@@ -114,13 +134,15 @@ const RequestBlock = ({
           tmdbId={
             request.type === 'music' ||
             request.type === 'book' ||
-            request.type === 'comic'
+            request.type === 'comic' ||
+            request.type === 'manga'
               ? undefined
               : request.media.tmdbId
           }
           mbId={request.type === 'music' ? musicId : undefined}
           bookId={request.type === 'book' ? bookId : undefined}
           comicId={request.type === 'comic' ? comicId : undefined}
+          mangaId={mangaId}
           type={
             request.type === 'music'
               ? 'music'
@@ -128,9 +150,11 @@ const RequestBlock = ({
                 ? 'book'
                 : request.type === 'comic'
                   ? 'comic'
-                  : request.type === 'tv'
-                    ? 'tv'
-                    : 'movie'
+                  : request.type === 'manga'
+                    ? 'manga'
+                    : request.type === 'tv'
+                      ? 'tv'
+                      : 'movie'
           }
           is4k={request.is4k}
           editRequest={request}
@@ -279,11 +303,16 @@ const RequestBlock = ({
                   </Tooltip>
                 </span>
               )}
-              {request.status === MediaRequestStatus.APPROVED && (
-                <Badge badgeType="success">
-                  {intl.formatMessage(globalMessages.approved)}
-                </Badge>
-              )}
+              {request.status === MediaRequestStatus.APPROVED &&
+                (isAwaitingSource ? (
+                  <MangaWaitingStatus
+                    showHint={hasPermission(Permission.MANAGE_REQUESTS)}
+                  />
+                ) : (
+                  <Badge badgeType="success">
+                    {intl.formatMessage(globalMessages.approved)}
+                  </Badge>
+                ))}
               {request.status === MediaRequestStatus.DECLINED && (
                 <Badge badgeType="danger">
                   {intl.formatMessage(globalMessages.declined)}
@@ -351,6 +380,14 @@ const RequestBlock = ({
                 </span>
               ))}
             </div>
+          </div>
+        )}
+        {mangaScope !== undefined && (
+          <div className="mt-2 flex flex-col text-sm">
+            <div className="mb-1 font-medium">
+              {intl.formatMessage(mangaScopeMessages.chapters)}
+            </div>
+            <div>{formatMangaScope(intl, mangaScope)}</div>
           </div>
         )}
         {(server ||

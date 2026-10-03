@@ -501,8 +501,21 @@ const TitleCard = ({
     canShowWatchedStatus && watchStatusInView
   );
   const canUseVideoActions = videoMediaType && Number.isFinite(numericId);
+  // Manga requests need a configured Suwayomi server; browsing does not.
+  const mangaRequestId =
+    isManga &&
+    settings.currentSettings.suwayomiEnabled &&
+    Number.isSafeInteger(numericId) &&
+    numericId > 0
+      ? numericId
+      : undefined;
   const canUseRequestActions =
-    canUseVideoActions || isAlbum || isBook || isComic || isMagazine;
+    canUseVideoActions ||
+    isAlbum ||
+    isBook ||
+    isComic ||
+    isMagazine ||
+    mangaRequestId !== undefined;
   const canUseWatchlistActions =
     canUseVideoActions || isAlbum || isBook || isComic || isMagazine;
   const detailHref =
@@ -598,6 +611,7 @@ const TitleCard = ({
     (!currentStatus ||
       currentStatus === MediaStatus.UNKNOWN ||
       currentStatus === MediaStatus.DELETED ||
+      (isManga && currentStatus === MediaStatus.PARTIALLY_AVAILABLE) ||
       canRequestAdditionalFormat ||
       canRequest4k);
   const requestingAdditional4k =
@@ -733,6 +747,16 @@ const TitleCard = ({
               magazineTitle={canonicalId}
               show={showRequestModal}
               type="magazine"
+              onComplete={requestComplete}
+              onUpdating={requestUpdating}
+              onCancel={closeModal}
+            />
+          )}
+          {mangaRequestId !== undefined && (
+            <RequestModal
+              mangaId={mangaRequestId}
+              show={showRequestModal}
+              type="manga"
               onComplete={requestComplete}
               onUpdating={requestUpdating}
               onCancel={closeModal}

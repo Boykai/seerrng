@@ -38,6 +38,16 @@ available and the other is still requested or missing. See
 [Books, Authors, and Series](./books-and-series.md) for book discovery and
 series requests.
 
+## Manga requests
+
+Manga requests show a **Manga** badge, and the **Manga** media filter lists
+them on their own. Each card's **Chapters** row shows the requested chapters,
+for example "All", "Latest 25", "10–20", or "10 onward". An
+approved manga request whose title has no current match on the Suwayomi server
+shows **Waiting for a source** instead of **Approved**; see
+[Manga Backend](./manga-backend.md#waiting-for-a-source). SeerrNG does not send
+manga requests to Suwayomi yet.
+
 ## Download an available copy
 
 When an imported file is available to SeerrNG, its request card shows a

@@ -1,12 +1,14 @@
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import { MangaWaitingStatus } from '@app/components/Common/MangaRequestScope';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
 import ExternalBlocklistModal from '@app/components/ExternalBlocklistModal';
 import { getMangaAvailability } from '@app/components/MangaDetails/mangaAvailability';
 import AvailabilityValue from '@app/components/MediaDetails/AvailabilityValue';
 import MediaDetailArtwork from '@app/components/MediaDetails/MediaDetailArtwork';
+import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -15,17 +17,32 @@ import { encodeApiPathSegment } from '@app/utils/apiPath';
 import defineMessages from '@app/utils/defineMessages';
 import { getMangaImageUrl } from '@app/utils/mangaImages';
 import {
+  isAwaitingMangaSource,
+  type MangaScopedRequest,
+} from '@app/utils/mangaRequestScope';
+import {
+  ArrowDownTrayIcon,
   ArrowTopRightOnSquareIcon,
   EyeSlashIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/solid';
-import { MediaStatus, MediaType } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import type { MangaDetails as MangaDetailsType } from '@server/models/Manga';
 import axios from 'axios';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { Fragment, useState } from 'react';
 import type { IntlShape } from 'react-intl';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
+
+const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
+  ssr: false,
+});
 
 const messages = defineMessages('components.MangaDetails', {
   format: 'Format',
@@ -49,6 +66,7 @@ const messages = defineMessages('components.MangaDetails', {
   notAvailable: 'Not available',
   viewOnAniList: 'View on AniList',
   viewOnMyAnimeList: 'View on MyAnimeList',
+  viewRequest: 'View Request',
   formatManga: 'Manga',
   formatOneShot: 'One Shot',
   formatNovel: 'Novel',
@@ -114,10 +132,13 @@ const formatPartialDate = (
 const MangaDetails = () => {
   const router = useRouter();
   const intl = useIntl();
+  const settings = useSettings();
   const { addToast } = useToasts();
-  const { hasPermission } = useUser();
+  const { user, hasPermission } = useUser();
   const [showBlocklistModal, setShowBlocklistModal] = useState(false);
   const [isBlocklisting, setIsBlocklisting] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [editRequest, setEditRequest] = useState<MangaScopedRequest>();
   const mangaId =
     typeof router.query.mangaId === 'string' ? router.query.mangaId : '';
 
@@ -127,6 +148,27 @@ const MangaDetails = () => {
     mutate: revalidate,
   } = useSWR<MangaDetailsType>(
     mangaId ? `/api/v1/manga/${encodeApiPathSegment(mangaId)}` : null
+  );
+  const activeRequests =
+    data?.mediaInfo?.requests?.filter(
+      (request) =>
+        request.status === MediaRequestStatus.PENDING ||
+        request.status === MediaRequestStatus.APPROVED
+    ) ?? [];
+  // Other users' requests can arrive without a requester, so a match needs
+  // the loaded user.
+  const activeRequest =
+    activeRequests.find(
+      (request) => user !== undefined && request.requestedBy?.id === user.id
+    ) ??
+    (hasPermission(Permission.MANAGE_REQUESTS) && activeRequests.length === 1
+      ? activeRequests[0]
+      : undefined);
+  // Only the request endpoint says whether an approved request is parked.
+  const { data: activeRequestData } = useSWR<MangaScopedRequest>(
+    activeRequest?.status === MediaRequestStatus.APPROVED
+      ? `/api/v1/request/${activeRequest.id}`
+      : null
   );
 
   if (!data && !error) {
@@ -145,6 +187,18 @@ const MangaDetails = () => {
   const canUseBlocklist = hasPermission(Permission.MANAGE_BLOCKLIST);
   const isBlocklistAvailable =
     data.mediaInfo?.status !== MediaStatus.BLOCKLISTED;
+  const mediaStatus = data.mediaInfo?.status;
+  const canShowRequestButton =
+    !!settings.currentSettings.suwayomiEnabled &&
+    aniListId !== undefined &&
+    hasPermission([Permission.REQUEST, Permission.REQUEST_MANGA], {
+      type: 'or',
+    }) &&
+    (mediaStatus === undefined ||
+      mediaStatus === MediaStatus.UNKNOWN ||
+      mediaStatus === MediaStatus.DELETED ||
+      mediaStatus === MediaStatus.PARTIALLY_AVAILABLE) &&
+    activeRequests.length === 0;
   const availability = getMangaAvailability(
     data.mediaInfo?.status,
     data.inSuwayomiLibrary
@@ -236,6 +290,23 @@ const MangaDetails = () => {
           isUpdating={isBlocklisting}
         />
       )}
+      {showRequestModal && aniListId !== undefined && (
+        <RequestModal
+          type="manga"
+          mangaId={aniListId}
+          editRequest={editRequest}
+          show={showRequestModal}
+          onComplete={() => {
+            setEditRequest(undefined);
+            setShowRequestModal(false);
+            void revalidate();
+          }}
+          onCancel={() => {
+            setEditRequest(undefined);
+            setShowRequestModal(false);
+          }}
+        />
+      )}
       <div className="media-page">
         <article className="media-detail-card app-card-main refreshed-card-surface refreshed-detail-text relative overflow-hidden rounded-xl border border-gray-700 p-3 shadow-lg shadow-gray-950/20">
           {artworkSrc && <MediaDetailArtwork src={artworkSrc} type="tmdb" />}
@@ -275,6 +346,30 @@ const MangaDetails = () => {
                         <AvailabilityValue tone={availability.tone}>
                           {intl.formatMessage(availability.message)}
                         </AvailabilityValue>
+                      </dd>
+                    </>
+                  )}
+                  {activeRequests.length > 0 && (
+                    <>
+                      <dt className="font-medium text-gray-100">
+                        {intl.formatMessage(globalMessages.request)}:
+                      </dt>
+                      <dd className="m-0 flex min-w-0 flex-wrap items-center gap-1">
+                        {!activeRequest ? (
+                          // Another user's request: its parked state is not
+                          // visible here, so never claim it is approved.
+                          intl.formatMessage(globalMessages.requested)
+                        ) : isAwaitingMangaSource(activeRequestData) ? (
+                          <MangaWaitingStatus
+                            showHint={hasPermission(Permission.MANAGE_REQUESTS)}
+                          />
+                        ) : (
+                          intl.formatMessage(
+                            activeRequest.status === MediaRequestStatus.APPROVED
+                              ? globalMessages.approved
+                              : globalMessages.pending
+                          )
+                        )}
                       </dd>
                     </>
                   )}
@@ -329,6 +424,32 @@ const MangaDetails = () => {
                 >
                   <ArrowTopRightOnSquareIcon aria-hidden="true" />
                   <span>{intl.formatMessage(messages.viewOnMyAnimeList)}</span>
+                </Button>
+              )}
+              {activeRequest && aniListId !== undefined && (
+                <Button
+                  buttonType="ghost"
+                  buttonSize="sm"
+                  onClick={() => {
+                    setEditRequest(activeRequest);
+                    setShowRequestModal(true);
+                  }}
+                >
+                  <InformationCircleIcon />
+                  <span>{intl.formatMessage(messages.viewRequest)}</span>
+                </Button>
+              )}
+              {canShowRequestButton && (
+                <Button
+                  buttonType="primary"
+                  buttonSize="sm"
+                  onClick={() => {
+                    setEditRequest(undefined);
+                    setShowRequestModal(true);
+                  }}
+                >
+                  <ArrowDownTrayIcon />
+                  <span>{intl.formatMessage(globalMessages.request)}</span>
                 </Button>
               )}
             </div>

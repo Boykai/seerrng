@@ -1,14 +1,16 @@
 ---
 title: Manga Backend
-description: Enable manga discovery and choose which AniList titles SeerrNG shows.
+description: Enable manga discovery, choose which AniList titles SeerrNG shows, and request manga.
 sidebar_position: 26
 ---
 
 # Manga Backend
 
 SeerrNG can show manga beside your other media. Manga discovery, search, and
-details use metadata from [AniList](https://anilist.co/). Manga requests and
-downloads are not available yet; downloading through Suwayomi arrives in a
+details use metadata from [AniList](https://anilist.co/). Once a Suwayomi
+server is [connected](#connect-suwayomi), users can also
+[request manga](#request-manga). SeerrNG records approved manga requests but
+does not send them to Suwayomi yet; downloading through Suwayomi arrives in a
 later release.
 
 ## Enable manga
@@ -61,8 +63,8 @@ where you can remove them again.
 
 SeerrNG will download manga through a
 [Suwayomi](https://github.com/Suwayomi/Suwayomi-Server) server. Connecting the
-server now prepares that later download support; it does not enable manga
-requests yet.
+server lets users [request manga](#request-manga); SeerrNG does not send those
+requests to Suwayomi yet.
 
 1. Open **Settings → Services** and select **Add Suwayomi Server** in the
    **Suwayomi Settings** section. You can add one server.
@@ -100,6 +102,66 @@ SSL, or username.
   choose.
 - Do not expose Suwayomi publicly; keep it on a private network that SeerrNG
   can reach.
+
+## Request manga
+
+Users can request manga while the Manga category is on and a Suwayomi server
+is connected. Without a connected server, manga cards and details pages show
+no **Request** button, and the API refuses manga requests with HTTP `400` and
+the message "No Suwayomi server is configured for manga requests." Each title
+can have one pending or approved request at a time. Available and blocklisted
+titles show no **Request** button. A title that already has a pending or
+approved request shows its request status on the details page instead, and the
+request form shows it as **Requested**. Manga has no 4K requests.
+
+Select **Request** on a manga card or details page and choose which chapters
+to request:
+
+- **All chapters**, the default: every chapter that is available when SeerrNG
+  sends the request to Suwayomi.
+- **Latest chapters**: the newest chapters, from 1 to 10,000 of them.
+- **Chapter range**: the chapters from a starting number, with an optional
+  last chapter. Leave the last chapter empty to request every chapter from the
+  starting number onward. Chapter numbers go from 0 to 1,000,000 and may have
+  decimals, such as 10.5.
+
+SeerrNG chooses the chapters when it sends the request to Suwayomi, not when
+the request is made. Request cards, request lists, and the **Requests** page
+show the choice in a **Chapters** row, for example "All", "Latest 25", "10–20",
+or "10 onward".
+
+### Permissions and quotas
+
+Administrators can grant **Request Manga** and **Auto-Approve Manga** in user
+permissions; **Request** and **Auto-Approve** also cover manga. Requests from
+users without an auto-approve permission wait for a request manager's
+approval. **Global Manga Request Limit** in **Settings > Users** sets a manga
+request limit for everyone. To give one user a different limit, enable
+**Override Global Limit** under **Manga Request Limit** in that user's
+**General** profile settings. Users see their current usage in the request
+form and on their profile.
+
+### Change a pending request
+
+While a manga request is pending, select **View Request** on the title's
+details page, or edit the request from its request card, to change the chapter
+choice. Requesters with the **Advanced Requests** permission can change their
+own requests, and users with **Manage Requests** can change any request. The
+requester and users with **Manage Requests** can also cancel a pending request
+there.
+
+### Waiting for a source
+
+An approved request shows **Waiting for a source** instead of **Approved**
+while its title has no current match on the Suwayomi server, so SeerrNG does
+not know yet which manga in Suwayomi it belongs to; see [Matching](#matching).
+The request stays approved, and the requester does not need to do anything. It
+shows **Approved** again once the title is matched: by a library scan, on the
+[Manga Library page](#manga-library-page), or by the **Manga Source Resolve**
+job; see [Source resolution](#source-resolution). The job matches a title by
+itself only when it finds an exact link; otherwise an administrator chooses a
+source, as in [Resolve sources by hand](#resolve-sources-by-hand). Request
+managers also see that an administrator may need to choose a source.
 
 ## Library scan
 
@@ -212,6 +274,9 @@ Manga category is off, they return the normal not-found response.
   anything in Suwayomi.
 - Each decision updates the title's status right away, the same way a scan
   would.
+- Each decision also updates the title's manga requests: they stop
+  [waiting for a source](#waiting-for-a-source) once the title has a current
+  match, and wait again when it no longer has one.
 - When the Suwayomi read fails, the decision returns HTTP `502` and changes
   nothing. When it conflicts with a change made meanwhile, for example by a
   scan, it returns HTTP `409`; reload the manga and decide again.

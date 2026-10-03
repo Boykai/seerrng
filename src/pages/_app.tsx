@@ -8,8 +8,8 @@ import { NativeRuntimeProvider } from '@app/context/NativeRuntimeContext';
 import { SettingsProvider } from '@app/context/SettingsContext';
 import { ThemeProvider } from '@app/context/ThemeContext';
 import { UserContext } from '@app/context/UserContext';
+import useLocaleMessages from '@app/hooks/useLocaleMessages';
 import useSettings from '@app/hooks/useSettings';
-import enMessages from '@app/i18n/locale/en.json';
 import '@app/styles/globals.css';
 import { polyfillIntl } from '@app/utils/polyfillIntl';
 import '@fontsource-variable/inter';
@@ -18,7 +18,7 @@ import axios from 'axios';
 import type { AppProps } from 'next/app';
 import dynamic from 'next/dynamic';
 import Head from 'next/head';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { IntlProvider } from 'react-intl';
 import { SWRConfig } from 'swr';
@@ -110,11 +110,10 @@ const loadLocaleData = (locale: AvailableLocale): Promise<any> => {
     case 'zh-TW':
       return import('../i18n/locale/zh_Hant.json');
     default:
-      return import('../i18n/locale/en.json');
+      // English needs no catalogue: messages render their defaults.
+      return Promise.resolve({});
   }
 };
-
-type MessagesType = Record<string, string>;
 
 // Reads settings from context (populated client-side by SettingsProvider)
 // to set the document title and PWA meta tags.
@@ -131,38 +130,12 @@ const AppHead = () => {
 
 const CoreApp = ({ Component, pageProps, router }: AppProps) => {
   let component: React.ReactNode;
-  const [loadedMessages, setMessages] = useState<MessagesType>(
-    enMessages as MessagesType
-  );
   const [currentLocale, setLocale] = useState<AvailableLocale>('en');
-  const loadedLocale = useRef<AvailableLocale>('en');
+  const intlLocale = useLocaleMessages(currentLocale, loadLocaleData);
 
   useEffect(() => {
     polyfillIntl();
   }, []);
-
-  useEffect(() => {
-    if (currentLocale === loadedLocale.current) {
-      return;
-    }
-
-    let active = true;
-    void loadLocaleData(currentLocale)
-      .then((localeMessages) => {
-        if (!active) {
-          return;
-        }
-        loadedLocale.current = currentLocale;
-        setMessages(localeMessages);
-      })
-      .catch(() => {
-        // Keep the last complete locale when a chunk fails to load.
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [currentLocale]);
 
   if (
     isPathPrefix(router.pathname, '/login') ||
@@ -190,9 +163,9 @@ const CoreApp = ({ Component, pageProps, router }: AppProps) => {
     >
       <LanguageContext.Provider value={{ locale: currentLocale, setLocale }}>
         <IntlProvider
-          locale={currentLocale}
+          locale={intlLocale.locale}
           defaultLocale="en"
-          messages={currentLocale === 'en' ? enMessages : loadedMessages}
+          messages={intlLocale.messages}
         >
           <LoadingBar />
           <ThemeProvider>
