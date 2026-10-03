@@ -47,10 +47,26 @@ export interface MangaRequestScopeValue {
   rangeEnd: number | null;
 }
 
+/** Following new chapters, as the request's manifest records it. */
+export interface MangaRequestFollowSummary {
+  enabled: boolean;
+  /** Why following stopped (when off) or paused (when on); else null. */
+  stopReason: string | null;
+  lastCheckAt: Date | null;
+  /** Null while following is on means the next run checks it. */
+  nextCheckAt: Date | null;
+}
+
 /** The read-only scope summary request responses carry. */
 export interface MangaRequestScopeSummary extends MangaRequestScopeValue {
   /** Parked until a library scan or an admin binds the title. */
   awaitingBinding: boolean;
+  /**
+   * Changed only through `PUT /request/{requestId}/follow`. Request
+   * responses always carry it; it is optional so summaries built without
+   * follow state, such as client test fixtures, stay valid.
+   */
+  follow?: MangaRequestFollowSummary;
 }
 
 export const DEFAULT_MANGA_REQUEST_SCOPE: MangaRequestScopeValue = {
@@ -433,7 +449,15 @@ export const updateMangaRequestManifest = async (
 export const toMangaRequestScopeSummary = (
   manifest: Pick<
     MangaRequestManifest,
-    'scope' | 'latestCount' | 'rangeStart' | 'rangeEnd' | 'bindingState'
+    | 'scope'
+    | 'latestCount'
+    | 'rangeStart'
+    | 'rangeEnd'
+    | 'bindingState'
+    | 'followEnabled'
+    | 'followStopReason'
+    | 'followLastAt'
+    | 'followNextAt'
   >
 ): MangaRequestScopeSummary => ({
   scope: manifest.scope,
@@ -441,6 +465,12 @@ export const toMangaRequestScopeSummary = (
   rangeStart: manifest.rangeStart ?? null,
   rangeEnd: manifest.rangeEnd ?? null,
   awaitingBinding: manifest.bindingState !== MangaRequestBindingState.BOUND,
+  follow: {
+    enabled: manifest.followEnabled === true,
+    stopReason: manifest.followStopReason ?? null,
+    lastCheckAt: manifest.followLastAt ?? null,
+    nextCheckAt: manifest.followNextAt ?? null,
+  },
 });
 
 /** Scope summaries by request ID, loaded in one query per 500 requests. */
@@ -459,6 +489,10 @@ export const loadMangaRequestScopeSummaries = async (
         rangeStart: true,
         rangeEnd: true,
         bindingState: true,
+        followEnabled: true,
+        followStopReason: true,
+        followLastAt: true,
+        followNextAt: true,
       },
       where: { requestId: In(slice) },
     });

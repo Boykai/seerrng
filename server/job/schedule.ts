@@ -7,6 +7,7 @@ import downloadRecovery from '@server/lib/downloadRecovery';
 import downloadTracker from '@server/lib/downloadtracker';
 import episodeWatchAhead from '@server/lib/episodeWatchAhead';
 import ImageProxy from '@server/lib/imageproxy';
+import { mangaFollowPoller } from '@server/lib/mangaFollow';
 import { mangaProgressPoller } from '@server/lib/mangaProgress';
 import { mangaSourceResolver } from '@server/lib/mangaResolver';
 import refreshToken from '@server/lib/refreshToken';
@@ -541,6 +542,22 @@ export const startJobs = (): void => {
     }),
     running: () => mangaProgressPoller.status().running,
     cancelFn: () => mangaProgressPoller.cancel(),
+  });
+
+  scheduledJobs.push({
+    id: 'manga-follow',
+    name: 'Manga Follow',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['manga-follow'].schedule,
+    job: schedule.scheduleJob(jobs['manga-follow'].schedule, () => {
+      logger.debug('Starting scheduled job: Manga Follow', {
+        label: 'Jobs',
+      });
+      return runTrackedJob('Manga Follow', () => mangaFollowPoller.run());
+    }),
+    running: () => mangaFollowPoller.status().running,
+    cancelFn: () => mangaFollowPoller.cancel(),
   });
 
   // Checks if media is still available in plex/sonarr/radarr libs

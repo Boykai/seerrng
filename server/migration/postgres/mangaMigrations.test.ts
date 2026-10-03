@@ -7,6 +7,7 @@ import { AddMangaRequestManifests1790986406000 as PortableMangaRequestMigration 
 import { AddMangaSourceResolution1790986408000 as PortableMangaSourceResolutionMigration } from '@server/migration/sqlite/1790986408000-AddMangaSourceResolution';
 import { AddMangaDispatch1790986411000 as PortableMangaDispatchMigration } from '@server/migration/sqlite/1790986411000-AddMangaDispatch';
 import { AddMangaProgress1790986412000 as PortableMangaProgressMigration } from '@server/migration/sqlite/1790986412000-AddMangaProgress';
+import { AddMangaFollow1790986414000 as PortableMangaFollowMigration } from '@server/migration/sqlite/1790986414000-AddMangaFollow';
 import { DataSource, type QueryRunner } from 'typeorm';
 import { AddMangaIdentityUniqueness1790986402000 } from './1790986402000-AddMangaIdentityUniqueness';
 import { AddMangaQuota1790986403000 } from './1790986403000-AddMangaQuota';
@@ -16,6 +17,7 @@ import { AddMangaRequestManifests1790986406000 } from './1790986406000-AddMangaR
 import { AddMangaSourceResolution1790986408000 } from './1790986408000-AddMangaSourceResolution';
 import { AddMangaDispatch1790986411000 } from './1790986411000-AddMangaDispatch';
 import { AddMangaProgress1790986412000 } from './1790986412000-AddMangaProgress';
+import { AddMangaFollow1790986414000 } from './1790986414000-AddMangaFollow';
 
 const postgresUrl = process.env.SEERR_TEST_POSTGRES_URL;
 const postgresTest = postgresUrl ? test : test.skip;
@@ -1042,6 +1044,162 @@ postgresTest(
         ),
         [{ requestId: 1, anilistId: 900001 }]
       );
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "urlHash" FROM "manga_request_chapter"`
+        ),
+        [{ urlHash: 'hash-a' }]
+      );
+    });
+  }
+);
+
+test('PostgreSQL manga follow migration adds and drops the SQLite columns and index', async () => {
+  const migration = new AddMangaFollow1790986414000();
+  const objectsOf = (statements: string[]) =>
+    statements.map((statement) => {
+      const column =
+        /^ALTER TABLE "([^"]+)" (ADD|DROP)(?: COLUMN)?(?: IF(?: NOT)? EXISTS)? "([^"]+)"/.exec(
+          statement
+        );
+      if (column) return `${column[2]} ${column[1]}.${column[3]}`;
+      const index = /^(CREATE|DROP) INDEX IF (?:NOT )?EXISTS "([^"]+)"/.exec(
+        statement
+      );
+      return index ? `${index[1]} ${index[2]}` : statement;
+    });
+  const postgres = await recordStatements(async (queryRunner) => {
+    await migration.up(queryRunner);
+    await migration.down(queryRunner);
+  });
+  const portable: string[] = [];
+  let present = false;
+  const sqlite = {
+    query: async (statement: string) => {
+      portable.push(statement);
+    },
+    hasColumn: async () => present,
+  } as unknown as QueryRunner;
+  await new PortableMangaFollowMigration().up(sqlite);
+  present = true;
+  await new PortableMangaFollowMigration().down(sqlite);
+
+  assert.equal(migration.name, 'AddMangaFollow1790986414000');
+  assert.equal(postgres.length, 12);
+  assert.deepStrictEqual(objectsOf(postgres), objectsOf(portable));
+  assert.equal(
+    postgres.find((statement) => statement.startsWith('CREATE INDEX')),
+    portable.find((statement) => statement.startsWith('CREATE INDEX'))
+  );
+});
+
+postgresTest(
+  'PostgreSQL manga follow migration fills existing rows and reverses',
+  async () => {
+    await withPostgresQueryRunner(async (queryRunner) => {
+      await queryRunner.query(`CREATE SCHEMA "manga_follow_check"`);
+      await queryRunner.query(`SET LOCAL search_path TO "manga_follow_check"`);
+      await queryRunner.query(
+        `CREATE TABLE "media_request" ("id" integer PRIMARY KEY)`
+      );
+      const columns = async (table: string) =>
+        (
+          (await queryRunner.query(
+            `SELECT "column_name" AS "name", "data_type" AS "type",
+                    "character_maximum_length" AS "length",
+                    "is_nullable" AS "nullable", "column_default" AS "default"
+             FROM information_schema.columns
+             WHERE "table_schema" = 'manga_follow_check'
+               AND "table_name" = $1
+               AND "column_name" IN (
+                 'followEnabled', 'followNextAt', 'followLastAt',
+                 'followStopReason', 'followAddedAt'
+               )
+             ORDER BY "ordinal_position"`,
+            [table]
+          )) as {
+            name: string;
+            type: string;
+            length: number | null;
+            nullable: string;
+            default: string | null;
+          }[]
+        ).map(({ name, type, length, nullable, default: value }) =>
+          [
+            name,
+            length === null ? type : `${type}(${length})`,
+            nullable === 'YES' ? 'null' : 'not null',
+            ...(value === null ? [] : [value]),
+          ].join(' ')
+        );
+      const indexColumns = async () =>
+        (
+          (await queryRunner.query(
+            `SELECT a."attname" AS "name"
+             FROM pg_index i
+             JOIN pg_class c ON c."oid" = i."indexrelid"
+             JOIN pg_namespace n ON n."oid" = c."relnamespace"
+             JOIN pg_attribute a
+               ON a."attrelid" = i."indrelid" AND a."attnum" = ANY(i."indkey")
+             WHERE n."nspname" = 'manga_follow_check'
+               AND c."relname" = 'IDX_manga_request_manifest_follow_due'
+             ORDER BY array_position(i."indkey"::int2[], a."attnum")`
+          )) as { name: string }[]
+        ).map(({ name }) => name);
+
+      await new AddMangaRequestManifests1790986406000().up(queryRunner);
+      await queryRunner.query(`INSERT INTO "media_request" ("id") VALUES (1)`);
+      await queryRunner.query(
+        `INSERT INTO "manga_request_manifest" ("requestId", "anilistId", "instanceId") VALUES (1, 900001, 1)`
+      );
+      await queryRunner.query(
+        `INSERT INTO "manga_request_chapter" ("manifestId", "url", "urlHash", "chapterNumber")
+         SELECT "id", '/fake/chapter/a', 'hash-a', 1.5 FROM "manga_request_manifest"`
+      );
+      const migration = new AddMangaFollow1790986414000();
+      await migration.up(queryRunner);
+      await migration.up(queryRunner);
+
+      assert.deepStrictEqual(await columns('manga_request_manifest'), [
+        'followEnabled boolean not null false',
+        'followNextAt timestamp with time zone null',
+        'followLastAt timestamp with time zone null',
+        'followStopReason character varying(64) null',
+      ]);
+      assert.deepStrictEqual(await columns('manga_request_chapter'), [
+        'followAddedAt timestamp with time zone null',
+      ]);
+      assert.deepStrictEqual(await indexColumns(), [
+        'followEnabled',
+        'followNextAt',
+      ]);
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "followEnabled", "followNextAt", "followLastAt", "followStopReason"
+           FROM "manga_request_manifest"`
+        ),
+        [
+          {
+            followEnabled: false,
+            followNextAt: null,
+            followLastAt: null,
+            followStopReason: null,
+          },
+        ]
+      );
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "followAddedAt" FROM "manga_request_chapter"`
+        ),
+        [{ followAddedAt: null }]
+      );
+
+      await migration.down(queryRunner);
+      await migration.down(queryRunner);
+
+      assert.deepStrictEqual(await columns('manga_request_manifest'), []);
+      assert.deepStrictEqual(await columns('manga_request_chapter'), []);
+      assert.deepStrictEqual(await indexColumns(), []);
       assert.deepStrictEqual(
         await queryRunner.query(
           `SELECT "urlHash" FROM "manga_request_chapter"`

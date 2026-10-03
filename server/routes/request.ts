@@ -3,6 +3,7 @@ import RadarrAPI from '@server/api/servarr/radarr';
 import ReadarrAPI from '@server/api/servarr/readarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import { SuwayomiError } from '@server/api/suwayomi/errors';
+import { MANGA_FOLLOW_ENABLE_STATUSES } from '@server/constants/mangaFollow';
 import { MangaRequestCheckpoint } from '@server/constants/mangaRequest';
 import {
   MediaRequestStatus,
@@ -1378,6 +1379,26 @@ const sanitizeMediaRequestBody = (
       return { error: { status: 400, message: mangaScope.error } };
     }
     bodyObject.mangaScope = mangaScope.value;
+  }
+  if (bodyObject.mangaFollow !== undefined) {
+    if (typeof bodyObject.mangaFollow !== 'boolean') {
+      return {
+        error: { status: 400, message: 'mangaFollow must be a boolean.' },
+      };
+    }
+    // Only consent is manga-only: declining to follow is harmless on any type.
+    if (
+      bodyObject.mangaFollow &&
+      mediaType !== undefined &&
+      mediaType !== MediaType.MANGA
+    ) {
+      return {
+        error: {
+          status: 400,
+          message: 'mangaFollow is only valid for manga requests.',
+        },
+      };
+    }
   }
 
   if (mediaType === MediaType.MAGAZINE) {
@@ -3939,6 +3960,155 @@ requestRoutes.put<{ requestId: string }>(
   }
 );
 
+const followError = (status: number, message: string) =>
+  Object.assign(new Error(message), { status });
+
+/**
+ * Turns following new chapters on or off. Like watch-ahead, following is
+ * consent for future acquisition: only the owner turns it on, while the owner
+ * or a request manager may turn it off. Turning it on clears the last stop
+ * reason and makes the request due for a check; turning it off only stops
+ * future additions, so chapters already added finish like any other.
+ */
+requestRoutes.put<{ requestId: string }>(
+  '/:requestId/follow',
+  async (req, res, next) => {
+    try {
+      const requestId = parseRequestParamId(req.params.requestId);
+      if (!requestId) {
+        return next({ status: 404, message: 'Request not found.' });
+      }
+      const enabled = (req.body as { enabled?: unknown } | undefined)?.enabled;
+      if (typeof enabled !== 'boolean') {
+        return next({ status: 400, message: 'enabled must be a boolean.' });
+      }
+
+      const initialRequest = await getRepository(MediaRequest).findOne({
+        where: { id: requestId },
+        relations: { requestedBy: true },
+      });
+      if (!initialRequest) {
+        return next({ status: 404, message: 'Request not found.' });
+      }
+
+      return await runUserSecurityMutationWithActor(
+        req.user!.id,
+        initialRequest.requestedBy.id,
+        [Permission.MANAGE_REQUESTS],
+        async (actor) => {
+          if (enabled && actor.id !== initialRequest.requestedBy.id) {
+            return next({
+              status: 403,
+              message:
+                'Only the request owner can turn on following new chapters.',
+            });
+          }
+
+          return await runWithRequestAdmission(
+            [getRequestMutationAdmissionKey(requestId)],
+            async () => {
+              const updated = await dataSource.transaction(async (manager) => {
+                const current = await manager
+                  .getRepository(MediaRequest)
+                  .findOne({
+                    where: { id: requestId },
+                    relations: { media: true, requestedBy: true },
+                  });
+                if (!current) {
+                  return undefined;
+                }
+                if (current.type !== MediaType.MANGA) {
+                  throw followError(
+                    400,
+                    'Following new chapters is only available for manga requests.'
+                  );
+                }
+                const isOwner = current.requestedBy.id === actor.id;
+                if (
+                  enabled
+                    ? !isOwner
+                    : !isOwner &&
+                      !actor.hasPermission(Permission.MANAGE_REQUESTS)
+                ) {
+                  throw followError(403, 'Access denied.');
+                }
+                const manifests = manager.getRepository(MangaRequestManifest);
+                const manifest = await manifests.findOne({
+                  where: { requestId },
+                  select: { id: true, followEnabled: true },
+                });
+                if (enabled) {
+                  if (!MANGA_FOLLOW_ENABLE_STATUSES.includes(current.status)) {
+                    throw followError(
+                      409,
+                      'Following new chapters can only be turned on for pending, approved, or completed requests.'
+                    );
+                  }
+                  if (!manifest) {
+                    throw followError(
+                      409,
+                      'This request cannot follow new chapters.'
+                    );
+                  }
+                  if (!hasMediaRequestPermission(actor, MediaType.MANGA)) {
+                    throw followError(
+                      403,
+                      'You do not have permission to request manga.'
+                    );
+                  }
+                  await manifests.update(manifest.id, {
+                    followEnabled: true,
+                    followStopReason: null,
+                    followNextAt: null,
+                  });
+                } else if (manifest?.followEnabled) {
+                  await manifests.update(manifest.id, {
+                    followEnabled: false,
+                    followStopReason: null,
+                    followNextAt: null,
+                  });
+                }
+                return current;
+              });
+
+              if (!updated) {
+                return next({ status: 404, message: 'Request not found.' });
+              }
+              await attachMangaScopes([updated]);
+              return res.status(200).json(filterEntityResponse(updated, actor));
+            }
+          );
+        },
+        { expectedCredentialVersion: getExpectedCredentialVersion(req) }
+      );
+    } catch (error) {
+      if (error instanceof UserMutationActorUnauthorizedError) {
+        return next({ status: 403, message: 'Access denied.' });
+      }
+      if (
+        error &&
+        typeof error === 'object' &&
+        'status' in error &&
+        typeof error.status === 'number'
+      ) {
+        return next({
+          status: error.status,
+          message: error instanceof Error ? error.message : 'Invalid request.',
+        });
+      }
+      logger.error('Failed to update manga follow setting', {
+        label: 'Request',
+        requestId: req.params.requestId,
+        ...getErrorLogFields(error),
+      });
+      return next({
+        status: 500,
+        message: 'Unable to update following new chapters.',
+      });
+    }
+  }
+);
+
 requestRoutes.put<{ requestId: string }>(
   '/:requestId',
   async (req, res, next) => {
@@ -3961,6 +4131,14 @@ requestRoutes.put<{ requestId: string }>(
         return next(sanitizedBody.error);
       }
       const body = sanitizedBody.value;
+      // An edit by an administrator must never opt the owner in.
+      if (body.mangaFollow !== undefined) {
+        return next({
+          status: 400,
+          message:
+            'mangaFollow cannot be edited here; use PUT /request/{requestId}/follow.',
+        });
+      }
       const initialRequest = await requestRepository.findOne({
         where: { id: requestId },
         select: { id: true, status: true },

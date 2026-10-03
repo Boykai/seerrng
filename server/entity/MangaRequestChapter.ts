@@ -65,6 +65,10 @@ export class MangaRequestChapter {
   @DbAwareColumn({ type: 'datetime', nullable: true })
   public headCheckedAt: Date | null;
 
+  /** When following added the chapter, after the scope was frozen. */
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public followAddedAt: Date | null;
+
   constructor(init?: Partial<MangaRequestChapter>) {
     Object.assign(this, init);
   }

@@ -4795,12 +4795,49 @@ components:
         awaitingBinding:
           type: boolean
           description: True while the title has no source on the request's Suwayomi server. A library scan or an administrator's match review provides one.
+        follow:
+          $ref: '#/components/schemas/MangaRequestFollowSummary'
       required:
         - scope
         - latestCount
         - rangeStart
         - rangeEnd
         - awaitingBinding
+        - follow
+    MangaRequestFollowSummary:
+      type: object
+      description: Whether the request follows new chapters, adding them as its source lists them. Change it with `PUT /request/{requestId}/follow`.
+      properties:
+        enabled:
+          type: boolean
+        stopReason:
+          type: string
+          nullable: true
+          enum:
+            - OWNER_NOT_PERMITTED
+            - REQUEST_DECLINED
+            - REQUEST_FAILED
+            - RANGE_COMPLETE
+            - MANIFEST_LIMIT
+            - BINDING_INACTIVE
+            - INSTANCE_MISSING
+            - BINDING_CHANGED
+            - MANGA_NOT_FOUND
+          description: Why following stopped (enabled is false) or paused (enabled is true). BINDING_INACTIVE, INSTANCE_MISSING, BINDING_CHANGED and MANGA_NOT_FOUND are pauses, which clear on their own once the cause is resolved.
+        lastCheckAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextCheckAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: While following is on, null means the next run of the Manga Follow job checks the request.
+      required:
+        - enabled
+        - stopReason
+        - lastCheckAt
+        - nextCheckAt
     MediaInfo:
       type: object
       properties:
@@ -15327,6 +15364,9 @@ paths:
                   description: If true, this request will not count against the user's quota. Requires MANAGE_REQUESTS permission.
                 mangaScope:
                   $ref: '#/components/schemas/MangaRequestScopeInput'
+                mangaFollow:
+                  type: boolean
+                  description: Manga only. When true, the request follows new chapters, adding them as its source lists them; omitted or false leaves following off. Only the user the request is for can turn this on, so true is refused on a request made for someone else and on other media types. Change it later with `PUT /request/{requestId}/follow`.
               required:
                 - mediaType
                 - mediaId
@@ -16374,6 +16414,47 @@ paths:
           description: Request not found
         '409':
           description: Jellyfin or Sonarr is not configured, the series has no TVDB identity, or the request cannot be enrolled
+  /request/{requestId}/follow:
+    put:
+      summary: Turn following new chapters on or off
+      description: |
+        Turns following new chapters on or off for a manga request. Only the request owner can turn it on, while the request is pending, approved or completed and the owner may still request manga. The owner or a user with `MANAGE_REQUESTS` can turn it off at any time; turning it off again does nothing. Turning it on clears the last stop reason and makes the request due for a check. Turning it off only stops future additions: chapters already added still download.
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: requestId
+          description: Manga request ID
+          required: true
+          schema:
+            type: string
+            example: '1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated manga request; `mangaScope.follow` holds the new state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaRequest'
+        '400':
+          description: The body is invalid, or the request is not a manga request
+        '403':
+          description: Only the request owner can turn following on, and only while they may request manga; turning it off for another user requires MANAGE_REQUESTS
+        '404':
+          description: Request not found
+        '409':
+          description: The request is declined or failed, or cannot follow new chapters
   /request/{requestId}/fail-download:
     post:
       summary: Fail an active request download and search again

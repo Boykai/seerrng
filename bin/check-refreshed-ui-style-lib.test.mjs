@@ -24,6 +24,7 @@ const validSharedStyles = `
   .refreshed-inset-surface {}
   .refreshed-artwork-scrim {}
   .request-card-artwork-gradient { background: rgb(var(--theme-artwork-gradient-black)); }
+  .request-status-note {}
 `;
 
 test('accepts shared blue surfaces and semantic card text', () => {
@@ -34,6 +35,7 @@ test('accepts shared blue surfaces and semantic card text', () => {
           <section className="refreshed-inset-surface">
             <p className="refreshed-detail-text-muted">Details</p>
           </section>
+          <p className="request-status-note refreshed-detail-text">Note</p>
         </article>
       );
     `,

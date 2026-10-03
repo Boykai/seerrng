@@ -19,6 +19,7 @@ import {
   MediaType,
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import MangaChapterOwnership from '@server/entity/MangaChapterOwnership';
 import MangaRequestChapter from '@server/entity/MangaRequestChapter';
 import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import Media from '@server/entity/Media';
@@ -211,6 +212,13 @@ const countMangaRows = async () => ({
 
 const NO_ROWS = { requests: 0, media: 0, manifests: 0 };
 
+const FOLLOW_OFF = {
+  enabled: false,
+  stopReason: null,
+  lastCheckAt: null,
+  nextCheckAt: null,
+};
+
 describe('manga request routes', () => {
   it('records a manga request with its chapter scope and leaves a pending one undispatched', async () => {
     const friend = await loginAs('friend@seerr.dev');
@@ -229,6 +237,7 @@ describe('manga request routes', () => {
       rangeStart: null,
       rangeEnd: null,
       awaitingBinding: true,
+      follow: FOLLOW_OFF,
     });
     const manifest = await getRepository(MangaRequestManifest).findOneOrFail({
       where: { requestId: response.body.id },
@@ -378,6 +387,7 @@ describe('manga request routes', () => {
       rangeStart: 1,
       rangeEnd: 12.5,
       awaitingBinding: true,
+      follow: FOLLOW_OFF,
     };
     const admin = await loginAs('admin@seerr.dev');
 
@@ -438,6 +448,7 @@ describe('manga request routes', () => {
       rangeStart: null,
       rangeEnd: null,
       awaitingBinding: true,
+      follow: FOLLOW_OFF,
     });
     const manifest = await getRepository(MangaRequestManifest).findOneOrFail({
       where: { requestId: created.body.id },
@@ -645,7 +656,7 @@ describe('manga chapter retry route', () => {
       })
     ).attentionCode;
 
-  it('lets only an administrator queue the failed chapters again, once', async () => {
+  it('refuses the requester and lets an administrator queue the failed chapters again, once', async () => {
     const { fake, requestId, manifestId } = await seedFailedChapter();
     const admission = mock.method(
       instanceAdmission,
@@ -730,6 +741,334 @@ describe('manga chapter retry route', () => {
     assert.strictEqual(
       await attentionOf(manifestId),
       MangaAttentionCode.CHAPTER_ERROR
+    );
+  });
+});
+
+describe('manga follow consent', () => {
+  let fake: FakeProgressSuwayomi | undefined;
+
+  afterEach(async () => {
+    if (!fake) return;
+    invalidateSuwayomiClients();
+    await fake.close();
+    fake = undefined;
+  });
+
+  const followOf = async (requestId: number) => {
+    const manifest = await getRepository(MangaRequestManifest).findOneOrFail({
+      where: { requestId },
+    });
+    return {
+      enabled: manifest.followEnabled,
+      stopReason: manifest.followStopReason,
+      nextAt: manifest.followNextAt,
+    };
+  };
+
+  const setStatus = (requestId: number, status: MediaRequestStatus) =>
+    getRepository(MediaRequest).update(requestId, { status });
+
+  it('lets the owner turn following on when requesting, and nobody on their behalf', async () => {
+    const friend = await loginAs('friend@seerr.dev');
+    const admin = await loginAs('admin@seerr.dev');
+
+    const owned = await requestManga(friend, { mangaFollow: true });
+
+    assert.strictEqual(owned.status, 201);
+    assert.deepStrictEqual(owned.body.mangaScope.follow, {
+      ...FOLLOW_OFF,
+      enabled: true,
+    });
+    assert.deepStrictEqual(await followOf(owned.body.id), {
+      enabled: true,
+      stopReason: null,
+      nextAt: null,
+    });
+
+    const onBehalf = await requestManga(admin, {
+      mediaId: TITLE + 1,
+      userId: 2,
+      mangaFollow: true,
+    });
+
+    assert.strictEqual(onBehalf.status, 403);
+    assert.strictEqual(
+      onBehalf.body.message,
+      'Following new chapters can only be turned on by the owner of a manga request.'
+    );
+
+    const invalid = await requestManga(friend, {
+      mediaId: TITLE + 2,
+      mangaFollow: 'yes',
+    });
+
+    assert.strictEqual(invalid.status, 400);
+    assert.strictEqual(invalid.body.message, 'mangaFollow must be a boolean.');
+
+    const movie = await friend
+      .post('/request')
+      .send({ mediaType: MediaType.MOVIE, mediaId: 12345, mangaFollow: true });
+
+    assert.strictEqual(movie.status, 400);
+    assert.strictEqual(
+      movie.body.message,
+      'mangaFollow is only valid for manga requests.'
+    );
+    assert.deepStrictEqual(await countMangaRows(), {
+      requests: 1,
+      media: 1,
+      manifests: 1,
+    });
+
+    // An administrator's own request may follow; asking for less is fine too.
+    const own = await requestManga(admin, {
+      mediaId: TITLE + 3,
+      mangaFollow: true,
+    });
+    const declined = await requestManga(admin, {
+      mediaId: TITLE + 4,
+      userId: 2,
+      mangaFollow: false,
+    });
+
+    assert.strictEqual(own.status, 201);
+    assert.strictEqual(own.body.mangaScope.follow.enabled, true);
+    assert.strictEqual(declined.status, 201);
+    assert.strictEqual(declined.body.mangaScope.follow.enabled, false);
+  });
+
+  it('refuses mangaFollow when editing, so an edit can never opt the owner in', async () => {
+    const friend = await loginAs('friend@seerr.dev');
+    const created = await requestManga(friend);
+    const admin = await loginAs('admin@seerr.dev');
+
+    const edited = await admin.put(`/request/${created.body.id}`).send({
+      mediaType: MediaType.MANGA,
+      mangaFollow: true,
+    });
+
+    assert.strictEqual(edited.status, 400);
+    assert.strictEqual(
+      edited.body.message,
+      'mangaFollow cannot be edited here; use PUT /request/{requestId}/follow.'
+    );
+    assert.strictEqual((await followOf(created.body.id)).enabled, false);
+  });
+
+  it('lets only the owner turn following on, and the owner or a request manager turn it off', async () => {
+    const friend = await loginAs('friend@seerr.dev');
+    const created = await requestManga(friend);
+    const requestId = created.body.id;
+    const admin = await loginAs('admin@seerr.dev');
+    const demo = await loginAs('demo@seerr.dev');
+
+    const adminOn = await admin
+      .put(`/request/${requestId}/follow`)
+      .send({ enabled: true });
+
+    assert.strictEqual(adminOn.status, 403);
+    assert.strictEqual(
+      adminOn.body.message,
+      'Only the request owner can turn on following new chapters.'
+    );
+    assert.strictEqual((await followOf(requestId)).enabled, false);
+
+    const ownerOn = await friend
+      .put(`/request/${requestId}/follow`)
+      .send({ enabled: true });
+
+    assert.strictEqual(ownerOn.status, 200);
+    assert.strictEqual(ownerOn.body.id, requestId);
+    assert.deepStrictEqual(ownerOn.body.mangaScope.follow, {
+      ...FOLLOW_OFF,
+      enabled: true,
+    });
+
+    const strangerOff = await demo
+      .put(`/request/${requestId}/follow`)
+      .send({ enabled: false });
+
+    assert.strictEqual(strangerOff.status, 403);
+    assert.strictEqual((await followOf(requestId)).enabled, true);
+
+    const adminOff = await admin
+      .put(`/request/${requestId}/follow`)
+      .send({ enabled: false });
+    const adminOffAgain = await admin
+      .put(`/request/${requestId}/follow`)
+      .send({ enabled: false });
+
+    assert.strictEqual(adminOff.status, 200);
+    assert.deepStrictEqual(adminOff.body.mangaScope.follow, FOLLOW_OFF);
+    assert.strictEqual(adminOffAgain.status, 200);
+    assert.deepStrictEqual(adminOffAgain.body.mangaScope.follow, FOLLOW_OFF);
+
+    const invalid = await friend
+      .put(`/request/${requestId}/follow`)
+      .send({ enabled: 'yes' });
+    const missing = await friend
+      .put('/request/999999/follow')
+      .send({ enabled: true });
+    const malformed = await friend
+      .put('/request/abc/follow')
+      .send({ enabled: true });
+
+    assert.strictEqual(invalid.status, 400);
+    assert.strictEqual(invalid.body.message, 'enabled must be a boolean.');
+    assert.strictEqual(missing.status, 404);
+    assert.strictEqual(malformed.status, 404);
+  });
+
+  it('turns following on only for pending, approved or completed manga requests the owner may still make', async () => {
+    const friend = await loginAs('friend@seerr.dev');
+    const created = await requestManga(friend);
+    const requestId = created.body.id;
+    const enable = () =>
+      friend.put(`/request/${requestId}/follow`).send({ enabled: true });
+
+    for (const status of [
+      MediaRequestStatus.DECLINED,
+      MediaRequestStatus.FAILED,
+    ]) {
+      await setStatus(requestId, status);
+      const refused = await enable();
+
+      assert.strictEqual(refused.status, 409);
+      assert.strictEqual(
+        refused.body.message,
+        'Following new chapters can only be turned on for pending, approved, or completed requests.'
+      );
+    }
+    // Turning it off is always allowed.
+    const off = await friend
+      .put(`/request/${requestId}/follow`)
+      .send({ enabled: false });
+    assert.strictEqual(off.status, 200);
+
+    for (const status of [
+      MediaRequestStatus.APPROVED,
+      MediaRequestStatus.COMPLETED,
+    ]) {
+      await setStatus(requestId, status);
+      const allowed = await enable();
+
+      assert.strictEqual(allowed.status, 200);
+      assert.strictEqual(allowed.body.mangaScope.follow.enabled, true);
+    }
+
+    const owner = await getRepository(User).findOneOrFail({
+      where: { email: 'friend@seerr.dev' },
+    });
+    await getRepository(User).update(owner.id, { permissions: 0 });
+    const unpermitted = await enable();
+
+    assert.strictEqual(unpermitted.status, 403);
+    assert.strictEqual(
+      unpermitted.body.message,
+      'You do not have permission to request manga.'
+    );
+
+    const movieMedia = await getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.MOVIE,
+        tmdbId: 12345,
+        status: MediaStatus.PENDING,
+      })
+    );
+    const movie = await getRepository(MediaRequest).save(
+      new MediaRequest({
+        type: MediaType.MOVIE,
+        status: MediaRequestStatus.PENDING,
+        media: movieMedia,
+        requestedBy: owner,
+        is4k: false,
+      })
+    );
+    const notManga = await friend
+      .put(`/request/${movie.id}/follow`)
+      .send({ enabled: true });
+
+    assert.strictEqual(notManga.status, 400);
+    assert.strictEqual(
+      notManga.body.message,
+      'Following new chapters is only available for manga requests.'
+    );
+  });
+
+  it('turns following off without touching queued chapters, and on again due at once', async () => {
+    const manga = fakeDispatchManga(11, {
+      inLibrary: true,
+      chapters: fakeDispatchChapters(11, [1, 2]),
+    });
+    fake = await startFakeProgressSuwayomi([manga]);
+    invalidateSuwayomiClients();
+    getSettings().suwayomi = [dispatchInstanceFor(fake.server)];
+    await seedDispatchBinding(manga);
+    fake.state.queue.push(1101, 1102);
+    const lastCheckAt = new Date('2026-10-01T06:07:00.000Z');
+    const seeded = await seedProgressRequest(manga, {
+      status: MediaRequestStatus.COMPLETED,
+      owned: true,
+      manifest: {
+        followEnabled: true,
+        followLastAt: lastCheckAt,
+        followNextAt: new Date(Date.now() + 3_600_000),
+      },
+    });
+    const requestId = seeded.request.id;
+    const friend = await loginAs('friend@seerr.dev');
+
+    const off = await friend
+      .put(`/request/${requestId}/follow`)
+      .send({ enabled: false });
+
+    assert.strictEqual(off.status, 200);
+    assert.deepStrictEqual(await followOf(requestId), {
+      enabled: false,
+      stopReason: null,
+      nextAt: null,
+    });
+    assert.deepStrictEqual(fake.operationNames(), []);
+    assert.deepStrictEqual(fake.state.queue, [1101, 1102]);
+    assert.strictEqual(
+      await getRepository(MangaRequestChapter).count({
+        where: { manifestId: seeded.manifest.id },
+      }),
+      2
+    );
+    assert.strictEqual(await getRepository(MangaChapterOwnership).count(), 2);
+
+    // The follow job stopped it at the end of a closed range.
+    await getRepository(MangaRequestManifest).update(seeded.manifest.id, {
+      followStopReason: 'RANGE_COMPLETE',
+      followNextAt: new Date(Date.now() + 3_600_000),
+    });
+
+    const on = await friend
+      .put(`/request/${requestId}/follow`)
+      .send({ enabled: true });
+
+    assert.strictEqual(on.status, 200);
+    assert.deepStrictEqual(on.body.mangaScope.follow, {
+      enabled: true,
+      stopReason: null,
+      lastCheckAt: lastCheckAt.toISOString(),
+      nextCheckAt: null,
+    });
+    assert.deepStrictEqual(await followOf(requestId), {
+      enabled: true,
+      stopReason: null,
+      nextAt: null,
+    });
+    assert.deepStrictEqual(fake.operationNames(), []);
+    assert.strictEqual(
+      (
+        await getRepository(MediaRequest).findOneOrFail({
+          where: { id: requestId },
+        })
+      ).status,
+      MediaRequestStatus.COMPLETED
     );
   });
 });

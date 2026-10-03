@@ -10,10 +10,15 @@ import { getFilterToggleButtonClass } from '@app/components/Discover/FilterPanel
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
 import RequestFooterStatus from '@app/components/RequestModal/RequestFooterStatus';
 import RequestMediaCard from '@app/components/RequestModal/RequestMediaCard';
+import {
+  MangaFollowField,
+  MangaFollowRequestSettings,
+} from '@app/components/Requests/MangaFollow';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import { buildMangaFollowCreateField } from '@app/utils/mangaFollow';
 import { getMangaImageUrl } from '@app/utils/mangaImages';
 import {
   MANGA_MAX_CHAPTER_NUMBER,
@@ -256,6 +261,7 @@ const MangaRequestModal = ({
   const { user, hasPermission } = useUser();
   const [isUpdating, setIsUpdating] = useState(false);
   const [draft, setDraft] = useState<MangaScopeDraft>();
+  const [followNewChapters, setFollowNewChapters] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [submitError, setSubmitError] = useState<string>();
   const mangaKey = `/api/v1/manga/${mangaId}`;
@@ -343,10 +349,10 @@ const MangaRequestModal = ({
     setIsUpdating(true);
     setSubmitError(undefined);
     try {
-      const response = await axios.post<MangaScopedRequest>(
-        '/api/v1/request',
-        mangaRequestBody(mangaId, body)
-      );
+      const response = await axios.post<MangaScopedRequest>('/api/v1/request', {
+        ...mangaRequestBody(mangaId, body),
+        ...buildMangaFollowCreateField(followNewChapters),
+      });
       revalidate();
       toast(messages.requestSuccess);
       onComplete?.(
@@ -408,6 +414,14 @@ const MangaRequestModal = ({
     setDraft(next);
     setSubmitError(undefined);
   };
+
+  // The follow choice also shows on the request's card, so every request
+  // view reloads after it changes.
+  const refreshRequestViews = () =>
+    mutate(
+      (key) =>
+        typeof key === 'string' && /^\/api\/v1\/request(?:[/?]|$)/.test(key)
+    );
 
   const summary = (rows: [MessageDescriptor, ReactNode][]) => (
     <div className="app-card-inset refreshed-inset-surface detail-summary-card grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[80px_minmax(0,1fr)]">
@@ -537,6 +551,10 @@ const MangaRequestModal = ({
               onChange={changeDraft}
             />
           )}
+          <MangaFollowRequestSettings
+            request={request}
+            onUpdated={refreshRequestViews}
+          />
         </RequestMediaCard>
       </Modal>
     );
@@ -607,6 +625,13 @@ const MangaRequestModal = ({
             showErrors={showErrors}
             disabled={isUpdating}
             onChange={changeDraft}
+          />
+        )}
+        {data && (
+          <MangaFollowField
+            enabled={followNewChapters}
+            disabled={isUpdating}
+            onChange={setFollowNewChapters}
           />
         )}
         <div className="flex flex-wrap items-center justify-end gap-2 pt-2">

@@ -240,6 +240,24 @@ const MANGA_SCHEMA_OBJECTS: readonly SchemaObject[] = [
     table: 'manga_request_chapter',
     name,
   })),
+  // Manga follow: the owner's consent, the job's schedule and its additions.
+  ...['followEnabled', 'followNextAt', 'followLastAt', 'followStopReason'].map(
+    (name): SchemaObject => ({
+      kind: 'column',
+      table: 'manga_request_manifest',
+      name,
+    })
+  ),
+  {
+    kind: 'index',
+    table: 'manga_request_manifest',
+    name: 'IDX_manga_request_manifest_follow_due',
+  },
+  {
+    kind: 'column',
+    table: 'manga_request_chapter',
+    name: 'followAddedAt',
+  },
 ];
 
 const driver = isPgsql ? 'postgres' : 'sqlite';
