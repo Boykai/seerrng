@@ -1,6 +1,5 @@
-import MangaRequestManifest, {
-  MangaRequestBindingState,
-} from '@server/entity/MangaRequestManifest';
+import { MangaRequestBindingState } from '@server/constants/mangaRequest';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import MangaSourceBinding, {
   MangaBindingState,
 } from '@server/entity/MangaSourceBinding';

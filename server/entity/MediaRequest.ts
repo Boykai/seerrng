@@ -7,6 +7,7 @@ import SonarrAPI from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
 import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
 import type { TmdbKeyword } from '@server/api/themoviedb/interfaces';
+import { MangaRequestBindingState } from '@server/constants/mangaRequest';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -14,9 +15,7 @@ import {
 } from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
 import { Blocklist } from '@server/entity/Blocklist';
-import MangaRequestManifest, {
-  MangaRequestBindingState,
-} from '@server/entity/MangaRequestManifest';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import MediaIdentifier, {
   MediaIdentifierProvider,
 } from '@server/entity/MediaIdentifier';

@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { MangaRequestBindingState } from '@server/constants/mangaRequest';
 import {
   MediaRequestStatus,
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
-import MangaRequestManifest, {
-  MangaRequestBindingState,
-} from '@server/entity/MangaRequestManifest';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import MangaSourceBinding, {
   MangaBindingConfidence,
   MangaBindingState,

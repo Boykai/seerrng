@@ -6,6 +6,7 @@ import AnilistAPI, {
 import type { AnilistMangaSummary } from '@server/api/anilist/manga';
 import MangaDexAPI, { MangaDexRateLimitedError } from '@server/api/mangadex';
 import { SUWAYOMI_TRACKER_IDS } from '@server/api/suwayomi';
+import { MangaRequestBindingState } from '@server/constants/mangaRequest';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -13,9 +14,7 @@ import {
 } from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
 import MangaMatchCandidate from '@server/entity/MangaMatchCandidate';
-import MangaRequestManifest, {
-  MangaRequestBindingState,
-} from '@server/entity/MangaRequestManifest';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import MangaSourceBinding, {
   MangaBindingConfidence,
   MangaBindingState,

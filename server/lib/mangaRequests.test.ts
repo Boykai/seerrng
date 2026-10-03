@@ -5,16 +5,17 @@ import AnilistAPI from '@server/api/anilist';
 import { AnilistOutageError } from '@server/api/anilist/failures';
 import type { AnilistMangaDetails } from '@server/api/anilist/manga';
 import {
+  MangaRequestBindingState,
+  MangaRequestCheckpoint,
+  MangaRequestScope,
+} from '@server/constants/mangaRequest';
+import {
   MediaRequestStatus,
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
-import MangaRequestManifest, {
-  MangaRequestBindingState,
-  MangaRequestCheckpoint,
-  MangaRequestScope,
-} from '@server/entity/MangaRequestManifest';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import MangaSourceBinding, {
   MangaBindingConfidence,
   MangaBindingState,

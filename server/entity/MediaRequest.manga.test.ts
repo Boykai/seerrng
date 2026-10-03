@@ -6,15 +6,16 @@ import { AnilistRateLimitedError } from '@server/api/anilist/failures';
 import type { AnilistMangaDetails } from '@server/api/anilist/manga';
 import ExternalAPI from '@server/api/externalapi';
 import {
+  MangaRequestBindingState,
+  MangaRequestScope,
+} from '@server/constants/mangaRequest';
+import {
   MediaRequestStatus,
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
-import MangaRequestManifest, {
-  MangaRequestBindingState,
-  MangaRequestScope,
-} from '@server/entity/MangaRequestManifest';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import MangaSourceBinding, {
   MangaBindingConfidence,
   MangaBindingState,

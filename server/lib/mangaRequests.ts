@@ -1,10 +1,11 @@
 import type AnilistAPI from '@server/api/anilist';
-import type MangaRequestChapter from '@server/entity/MangaRequestChapter';
-import MangaRequestManifest, {
+import {
   MangaRequestBindingState,
   MangaRequestCheckpoint,
   MangaRequestScope,
-} from '@server/entity/MangaRequestManifest';
+} from '@server/constants/mangaRequest';
+import type MangaRequestChapter from '@server/entity/MangaRequestChapter';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import { hashMangaSourceUrl } from '@server/entity/MangaSourceBinding';
 import { syncMangaRequestBindings } from '@server/lib/mangaRequestBindings';
 import type { SuwayomiSettings } from '@server/lib/settings';
