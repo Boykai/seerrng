@@ -56,13 +56,37 @@ vi.mock('next/dynamic', () => ({
       type,
       mangaId,
       editRequest,
+      mediaType,
+      mediaId,
+      title,
+      backdrop,
+      onCancel,
     }: {
       show?: boolean;
       type?: string;
       mangaId?: number;
       editRequest?: { id: number };
+      mediaType?: string;
+      mediaId?: number;
+      title?: string;
+      backdrop?: string;
+      onCancel?: () => void;
     }) =>
-      show ? (
+      // The page loads two modals; only the issue report takes a media type.
+      mediaType !== undefined ? (
+        <div
+          data-testid="issue-modal"
+          data-show={String(show)}
+          data-media-type={mediaType}
+          data-media-id={String(mediaId)}
+          data-title={title}
+          data-backdrop={backdrop}
+        >
+          <button type="button" data-testid="issue-cancel" onClick={onCancel}>
+            cancel
+          </button>
+        </div>
+      ) : show ? (
         <div
           data-testid="request-modal"
           data-type={type}
@@ -385,6 +409,111 @@ it('shows the not-found page when the manga is unknown or excluded', async () =>
   expect(host.querySelector('[data-testid="error-page"]')?.textContent).toBe(
     '404'
   );
+});
+
+const reportIssueButton = () =>
+  host.querySelector('button[aria-label="Report an Issue"]');
+
+it('opens a manga issue report for an available library title', async () => {
+  state.granted = [Permission.CREATE_ISSUES];
+  state.swr = {
+    data: details({
+      mediaInfo: {
+        id: 9001,
+        status: MediaStatus.PARTIALLY_AVAILABLE,
+      } as MangaDetailsType['mediaInfo'],
+    }),
+  };
+  await render();
+
+  expect(reportIssueButton()?.hasAttribute('disabled')).toBe(false);
+  expect(host.querySelector('span[title="Report an Issue"]')).toBeTruthy();
+  expect(host.querySelector('[data-testid="issue-modal"]')).toBeNull();
+
+  await act(async () => {
+    reportIssueButton()!.dispatchEvent(
+      new dom.window.MouseEvent('click', { bubbles: true })
+    );
+  });
+
+  const modal = host.querySelector('[data-testid="issue-modal"]');
+  expect(modal?.getAttribute('data-show')).toBe('true');
+  expect(modal?.getAttribute('data-media-type')).toBe('manga');
+  expect(modal?.getAttribute('data-media-id')).toBe('9001');
+  expect(modal?.getAttribute('data-title')).toBe('Sample Manga');
+  expect(modal?.getAttribute('data-backdrop')).toBe(
+    '/imageproxy/anilist/file/cover.jpg'
+  );
+
+  await act(async () => {
+    host
+      .querySelector('[data-testid="issue-cancel"]')!
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  });
+  expect(host.querySelector('[data-testid="issue-modal"]')).toBeNull();
+});
+
+it.each([
+  ['no library media', undefined],
+  [
+    'a processing title',
+    {
+      id: 9001,
+      status: MediaStatus.PROCESSING,
+    } as MangaDetailsType['mediaInfo'],
+  ],
+  [
+    'an unknown library title',
+    { id: 9001, status: MediaStatus.UNKNOWN } as MangaDetailsType['mediaInfo'],
+  ],
+])(
+  'disables the issue report for %s and explains why',
+  async (_case, mediaInfo) => {
+    state.granted = [Permission.MANAGE_ISSUES];
+    state.swr = { data: details({ mediaInfo }) };
+    await render();
+
+    expect(reportIssueButton()?.hasAttribute('disabled')).toBe(true);
+    expect(
+      host.querySelector(
+        'span[title="An issue can be reported after this title is available in the library."]'
+      )
+    ).toBeTruthy();
+  }
+);
+
+it('hides the issue report from users who cannot report issues', async () => {
+  state.granted = [Permission.REQUEST, Permission.VIEW_ISSUES];
+  state.swr = {
+    data: details({
+      mediaInfo: {
+        id: 9001,
+        status: MediaStatus.AVAILABLE,
+      } as MangaDetailsType['mediaInfo'],
+    }),
+  };
+  await render();
+
+  expect(reportIssueButton()).toBeNull();
+});
+
+it('orders the issue report after the blocklist action', async () => {
+  state.granted = [Permission.MANAGE_BLOCKLIST, Permission.CREATE_ISSUES];
+  state.swr = {
+    data: details({
+      mediaInfo: {
+        id: 9001,
+        status: MediaStatus.AVAILABLE,
+      } as MangaDetailsType['mediaInfo'],
+    }),
+  };
+  await render();
+
+  expect(
+    [...host.querySelectorAll('button')].map((button) =>
+      button.getAttribute('aria-label')
+    )
+  ).toEqual(['Add to Blocklist', 'Report an Issue']);
 });
 
 const availabilityCell = () =>

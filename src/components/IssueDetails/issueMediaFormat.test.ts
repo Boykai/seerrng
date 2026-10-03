@@ -23,6 +23,8 @@ test('issue media labels include the saved movie and series quality', () => {
     'Music · Album'
   );
   assert.equal(getIssueMediaAndFormatLabel(MediaType.BOOK, false), 'Book');
+  assert.equal(getIssueMediaAndFormatLabel(MediaType.MANGA, false), 'Manga');
+  assert.equal(getIssueMediaAndFormatLabel(MediaType.MANGA, true), 'Manga');
 });
 
 test('issue quality choices include only qualities currently available', () => {

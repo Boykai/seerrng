@@ -1385,11 +1385,16 @@ export const RequestStatusCard = ({
   const genres = getGenres(details, item);
   const canShowDelete =
     isAdminView && hasPermission(Permission.MANAGE_REQUESTS);
+  // An approved manga request fails only once its chapters are queued, and
+  // the route lets request managers alone queue those chapters again.
+  const retryNeedsManager =
+    item.request.type === 'manga' &&
+    item.request.status === MediaRequestStatus.APPROVED;
   const canRetry =
     (observedCurrent.stage === 'failed' ||
       observedCurrent.stage === 'unavailable') &&
     ((isAdminView && hasPermission(Permission.MANAGE_REQUESTS)) ||
-      item.request.requestedBy.id === user?.id);
+      (!retryNeedsManager && item.request.requestedBy.id === user?.id));
   const canShowRemove =
     isAdminView && hasPermission(Permission.MANAGE_REQUESTS);
   const canRemove = canShowRemove && item.canRemove === true;

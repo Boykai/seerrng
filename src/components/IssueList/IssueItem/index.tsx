@@ -18,6 +18,7 @@ import {
 } from '@app/utils/apiPath';
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
+import { getMangaImageUrl } from '@app/utils/mangaImages';
 import { getSafeHref } from '@app/utils/safeUrl';
 import { EyeIcon, ServerIcon } from '@heroicons/react/24/outline';
 import { IssueStatus } from '@server/constants/issue';
@@ -26,6 +27,7 @@ import type Issue from '@server/entity/Issue';
 import type { BookDetails } from '@server/models/Book';
 import type { ComicDetails } from '@server/models/Comic';
 import type { MagazineDetails } from '@server/models/Magazine';
+import type { MangaDetails } from '@server/models/Manga';
 import type { MovieDetails } from '@server/models/Movie';
 import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
@@ -47,6 +49,7 @@ const messages = defineMessages('components.IssueList.IssueItem', {
   runtime: 'Runtime',
   pages: 'Pages',
   issues: 'Issues',
+  chapters: 'Chapters',
   description: 'Description',
   createdBy: 'Created By',
   createdDate: 'Created Date',
@@ -77,7 +80,8 @@ type IssueTitle =
   | MusicDetails
   | BookDetails
   | ComicDetails
-  | MagazineDetails;
+  | MagazineDetails
+  | MangaDetails;
 
 const isMovie = (movie: IssueTitle): movie is MovieDetails => {
   return (
@@ -85,6 +89,7 @@ const isMovie = (movie: IssueTitle): movie is MovieDetails => {
     !isBook(movie) &&
     !isComic(movie) &&
     !isMagazine(movie) &&
+    !isManga(movie) &&
     (movie as MovieDetails).title !== undefined
   );
 };
@@ -105,12 +110,17 @@ const isMagazine = (title: IssueTitle): title is MagazineDetails => {
   return (title as MagazineDetails).mediaType === 'magazine';
 };
 
+const isManga = (title: IssueTitle): title is MangaDetails => {
+  return (title as MangaDetails).mediaType === 'manga';
+};
+
 const getTitle = (title: IssueTitle): string =>
   isMovie(title) ||
   isMusic(title) ||
   isBook(title) ||
   isComic(title) ||
-  isMagazine(title)
+  isMagazine(title) ||
+  isManga(title)
     ? title.title
     : title.name;
 
@@ -125,7 +135,9 @@ const getReleaseDate = (title: IssueTitle): string | undefined =>
           ? title.startYear
           : isMagazine(title)
             ? title.latestIssue
-            : title.firstAirDate;
+            : isManga(title)
+              ? (title.startDate ?? title.startYear?.toString())
+              : title.firstAirDate;
 
 const getRuntime = (title: IssueTitle, unavailable: string): string => {
   if (isBook(title)) {
@@ -136,6 +148,9 @@ const getRuntime = (title: IssueTitle, unavailable: string): string => {
   }
   if (isMagazine(title)) {
     return title.issueCount?.toLocaleString() ?? unavailable;
+  }
+  if (isManga(title)) {
+    return title.chapters?.toLocaleString() ?? unavailable;
   }
   const minutes = isMovie(title)
     ? title.runtime
@@ -158,6 +173,12 @@ const getBackdrop = (
     return title.posterPath
       ? { src: title.posterPath, type: 'book' }
       : undefined;
+  }
+  if (isManga(title)) {
+    const src =
+      getMangaImageUrl(title.backdropPath) ??
+      getMangaImageUrl(title.posterPath);
+    return src ? { src, type: 'tmdb' } : undefined;
   }
   if (title.backdropPath) {
     return {
@@ -207,6 +228,9 @@ const IssueItem = ({
   const magazineId = issue.media.identifiers?.find(
     (identifier) => identifier.provider === 'lazylibrarian'
   )?.value;
+  const mangaId = issue.media.identifiers?.find(
+    (identifier) => identifier.provider === 'anilist'
+  )?.value;
   const normalizedMusicId = issue.media.mbId
     ? normalizeMusicBrainzId(issue.media.mbId)
     : undefined;
@@ -230,7 +254,9 @@ const IssueItem = ({
               : issue.media.mediaType === MediaType.MAGAZINE &&
                   normalizedMagazineId
                 ? `/api/v1/magazine/${encodeApiPathSegment(normalizedMagazineId)}`
-                : null;
+                : issue.media.mediaType === MediaType.MANGA && mangaId
+                  ? `/api/v1/manga/${encodeApiPathSegment(mangaId)}`
+                  : null;
   const mediaHref =
     issue.media.mediaType === MediaType.MOVIE
       ? `/movie/${issue.media.tmdbId}`
@@ -238,13 +264,15 @@ const IssueItem = ({
         ? `/tv/${issue.media.tmdbId}`
         : issue.media.mediaType === MediaType.MUSIC && normalizedMusicId
           ? `/music/${encodeApiPathSegment(normalizedMusicId)}`
-          : normalizedBookId
-            ? `/book/${encodeApiPathSegment(normalizedBookId)}`
-            : comicId
-              ? `/comic/${encodeApiPathSegment(comicId)}`
-              : normalizedMagazineId
-                ? `/magazine/${encodeApiPathSegment(normalizedMagazineId)}`
-                : '/';
+          : issue.media.mediaType === MediaType.MANGA && mangaId
+            ? `/manga/${encodeApiPathSegment(mangaId)}`
+            : normalizedBookId
+              ? `/book/${encodeApiPathSegment(normalizedBookId)}`
+              : comicId
+                ? `/comic/${encodeApiPathSegment(comicId)}`
+                : normalizedMagazineId
+                  ? `/magazine/${encodeApiPathSegment(normalizedMagazineId)}`
+                  : '/';
   const { data: title, error } = useSWR<IssueTitle>(inView ? url : null);
   const refreshDiscussion = async () => {
     await refreshIssue();
@@ -311,11 +339,14 @@ const IssueItem = ({
   const releaseDate = getReleaseDate(title);
   const releaseYear = releaseDate?.match(/\d{4}/)?.[0];
   const displayTitle = `${getTitle(title)}${releaseYear ? ` (${releaseYear})` : ''}`;
-  const posterSrc = title.posterPath
-    ? isMusic(title) || isBook(title) || isComic(title) || isMagazine(title)
-      ? title.posterPath
-      : getTmdbPosterImageUrl(title.posterPath)
-    : '/images/seerr_poster_not_found.png';
+  const posterSrc = isManga(title)
+    ? (getMangaImageUrl(title.posterPath) ??
+      '/images/seerr_poster_not_found.png')
+    : title.posterPath
+      ? isMusic(title) || isBook(title) || isComic(title) || isMagazine(title)
+        ? title.posterPath
+        : getTmdbPosterImageUrl(title.posterPath)
+      : '/images/seerr_poster_not_found.png';
   const posterType =
     isBook(title) || isComic(title) || isMagazine(title)
       ? 'book'
@@ -424,7 +455,7 @@ const IssueItem = ({
                   {intl.formatMessage(
                     isBook(title)
                       ? messages.firstPublished
-                      : isComic(title)
+                      : isComic(title) || isManga(title)
                         ? messages.firstPublished
                         : isMagazine(title)
                           ? messages.latestIssue
@@ -441,7 +472,9 @@ const IssueItem = ({
                       ? messages.pages
                       : isComic(title)
                         ? messages.issues
-                        : messages.runtime
+                        : isManga(title)
+                          ? messages.chapters
+                          : messages.runtime
                   )}
                   :
                 </dt>

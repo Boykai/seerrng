@@ -232,7 +232,7 @@ export const isInsideMangaProgressLock = (): boolean =>
  * Throws unless the instance still has the address and login the snapshot
  * was taken with. Each write transaction calls it as its last read.
  */
-const assertSameInstance = (snapshot: SuwayomiSettings): void => {
+export const assertSameInstance = (snapshot: SuwayomiSettings): void => {
   const current = getExternalRuntimeConfig().suwayomi.find(
     (instance) => instance.id === snapshot.id
   );
@@ -265,7 +265,8 @@ const toStoredMangaId = (mangaId: string): number => {
   return value;
 };
 
-const isSameManga = (
+/** Whether Suwayomi's manga is the source manga the key names. */
+export const isSameManga = (
   details: Pick<SuwayomiMangaDetails, 'sourceId' | 'url'>,
   key: MangaKey
 ): boolean =>
@@ -377,7 +378,7 @@ const changedValues = <Row extends object>(
  * a downloaded chapter waiting for its HEAD counts as downloading, and one
  * whose file is missing, unmapped or not queued counts as missing.
  */
-const countRows = (states: readonly RowState[]): Progress => {
+export const countRows = (states: readonly RowState[]): Progress => {
   const progress: Progress = {
     total: states.length,
     verified: 0,

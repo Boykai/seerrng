@@ -58,6 +58,7 @@ const issueMediaTypeFilters = [
   MediaType.BOOK,
   MediaType.COMIC,
   MediaType.MAGAZINE,
+  MediaType.MANGA,
 ] as const;
 const issueTypeFilters = [
   'all',
@@ -427,11 +428,14 @@ issueRoutes.get<
       });
     }
 
+    // Comics, magazines and manga keep no search metadata, so these filters
+    // would hide every one of their issues.
     if (
       parsedMediaType.value &&
       parsedMediaType.value !== 'all' &&
       parsedMediaType.value !== MediaType.COMIC &&
-      parsedMediaType.value !== MediaType.MAGAZINE
+      parsedMediaType.value !== MediaType.MAGAZINE &&
+      parsedMediaType.value !== MediaType.MANGA
     ) {
       if (parsedReleaseYear.value === 'before-1970') {
         query = query.andWhere(

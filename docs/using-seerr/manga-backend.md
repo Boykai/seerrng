@@ -848,7 +848,7 @@ the run stops on that server and the next run tries again.
 The job only reads from Suwayomi. It never asks a source for chapters, and it
 never queues, takes off the queue, downloads again, or deletes anything. Once
 a request's chapters are queued, nothing in SeerrNG queues them again on its
-own.
+own; only an administrator's [retry](#retry-chapters) does.
 
 ### Delivered chapters
 
@@ -887,22 +887,72 @@ scanlator's version of a chapter is downloaded, or when Suwayomi lists a
 chapter as downloaded but its file is gone. Completing a request never changes
 the title's status.
 
+### Request stages
+
+A manga request's status shows one of these stages:
+
+| Stage | When |
+| --- | --- |
+| Requested | The request waits for approval. |
+| Approved | The request waits to be sent, or waits for a match; see [Waiting for a match](#waiting-for-a-match). |
+| Searching | SeerrNG found the manga and works through steps 2 to 7 of [Dispatch](#dispatch). |
+| Downloading | The chapters are queued. The progress is the share of the request's chapters that are delivered. Chapters in Suwayomi's download queue show as downloads such as **Chapter 12**, with their progress. |
+| Available | Every chapter of the request is delivered, and no [code](#requests-that-need-attention) holds the request back. |
+| Failed | Some chapters failed to download or are not queued, or SeerrNG stopped sending the request after 50 failed tries; see [Dispatch sweep and retries](#dispatch-sweep-and-retries). |
+| Declined | The request was declined. |
+
+When a request needs an administrator, its status explains what happened,
+whether SeerrNG tries again by itself, and what to do. Status messages never
+name a source, an extension, or an address. Reading a request's status never
+contacts Suwayomi.
+
 ### Requests that need attention
 
 The Manga Progress job records at most one of these codes per request; when
 several apply, it records the first in the table. A code clears by itself once
 its cause is gone, and it never fails, completes, or sends a request again.
 While a request has a code, it does not complete. SeerrNG logs each code when
-it is raised and when it clears, under the **Manga Progress** label. These log
-entries contain IDs, counts, and codes only, never titles or addresses.
+it is raised and when it clears, under the **Manga Progress** label, or under
+**Manga Retry** when a retry clears it. These log entries contain IDs, counts,
+and codes only, never titles or addresses.
 
 | Code | What happened | What to do |
 | --- | --- | --- |
 | `MANGA_INSTANCE_REMOVED` | The request's Suwayomi server was removed from SeerrNG. SeerrNG stops checking the request. | Delete the request so the title can be requested again. |
 | `MANGA_BINDING_ORPHANED` | Suwayomi no longer has the manga the request was sent to, or the title's match on that manga was rejected or is no longer current. When the only change is that the manga left the library, the request shows `MANGA_NOT_IN_LIBRARY` instead, even after the library scan marks the match as no longer current. | Review the match under **Settings → Manga Library**. |
 | `MANGA_NOT_IN_LIBRARY` | The manga left the Suwayomi library. | Add the manga to the library again in Suwayomi. |
-| `MANGA_CHAPTER_ERROR` | Suwayomi could not download some of the chapters. They stay in its download queue with an error. | Check Suwayomi's download queue and logs, fix the cause, then retry the download in Suwayomi. |
-| `MANGA_CHAPTER_FILE_MISSING` | Suwayomi lists some chapters as downloaded, but their files were empty or missing in two checks. | Delete those chapters' downloads in Suwayomi, then queue them again there. |
+| `MANGA_CHAPTER_ERROR` | Suwayomi could not download some of the chapters. They stay in its download queue with an error. | Check Suwayomi's download queue and logs, fix the cause, then [retry](#retry-chapters) the request. |
+| `MANGA_CHAPTER_FILE_MISSING` | Suwayomi lists some chapters as downloaded, but their files were empty or missing in two checks. | Delete those chapters' downloads in Suwayomi. Once the request reports `MANGA_CHAPTER_NOT_QUEUED`, retry it. |
 | `MANGA_CHAPTER_LENGTH_UNKNOWN` | Suwayomi sent no file size for some downloaded chapters, so SeerrNG cannot confirm them. | Check whether a proxy in front of Suwayomi removes the `Content-Length` header. |
 | `MANGA_CHAPTER_MISSING` | For a day, the source has not listed some of the chapters, and no other chapter replaces them; see [Delivered chapters](#delivered-chapters). | Check the manga's source in Suwayomi. If the chapters do not come back, delete the request and request the title again. |
-| `MANGA_CHAPTER_NOT_QUEUED` | Some chapters were neither downloaded nor queued in two checks in a row, for example because they were taken off the queue, or because their address changed before SeerrNG queued them. | Queue the chapters again in Suwayomi. |
+| `MANGA_CHAPTER_NOT_QUEUED` | Some chapters were neither downloaded nor queued in two checks in a row, for example because they were taken off the queue, or because their address changed before SeerrNG queued them. | [Retry](#retry-chapters) the request. |
+
+Of these codes, only `MANGA_CHAPTER_ERROR` and `MANGA_CHAPTER_NOT_QUEUED` make
+a request show **Failed**, which the **Needs Attention** filter on the
+**Requests** page counts. A request with any other code keeps its stage,
+usually **Downloading**, so that filter does not count it; its status still
+explains the code.
+
+### Retry chapters
+
+When a request shows **Failed** because of `MANGA_CHAPTER_ERROR` or
+`MANGA_CHAPTER_NOT_QUEUED`, a user with the **Manage Requests** permission can
+retry it with **Retry** on the **Requests** page, or through the
+[REST API](../../seerr-api.yml). The retry queues each of the request's
+chapters that has an error in Suwayomi's queue or is neither downloaded nor
+queued, 50 at a time, and records them as queued by SeerrNG. An errored
+chapter gets one more download attempt.
+
+The request stays approved and keeps its match and its chosen chapters. The
+retry does not ask the source for chapters again, takes nothing off the queue,
+and deletes nothing. It is refused while a code higher in the table comes
+first. When Suwayomi cannot be reached or the server changes during the retry,
+the retry fails; try again later. Without the **Manage Requests** permission,
+the requester cannot retry a request in this state.
+
+### Report an issue
+
+Users with the **Create Issues** or **Manage Issues** permission can report a
+problem with an **Available** or **Partially Available** manga with **Report an
+Issue** on its details page. Manga reports use the **Other** issue type. While
+the Manga category is on, the **Issues** page has a **Manga** filter.

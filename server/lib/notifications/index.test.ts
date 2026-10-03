@@ -13,6 +13,7 @@ import { MediaRequest } from '@server/entity/MediaRequest';
 import { NotificationOutbox } from '@server/entity/NotificationOutbox';
 import { User } from '@server/entity/User';
 import { UserSettings } from '@server/entity/UserSettings';
+import { createMangaMedia } from '@server/lib/mangaMedia';
 import notificationManager, {
   NOTIFICATION_OUTBOX_DELIVERY_CONCURRENCY,
   Notification,
@@ -22,6 +23,7 @@ import type {
   NotificationAgent,
   NotificationPayload,
 } from '@server/lib/notifications/agents/agent';
+import WebhookAgent from '@server/lib/notifications/agents/webhook';
 import {
   MAX_NOTIFICATION_OUTBOX_RETRY_DELAY_MS,
   NOTIFICATION_OUTBOX_CLAIM_LEASE_MS,
@@ -37,6 +39,7 @@ import {
   getPendingBackgroundTaskCount,
   waitForBackgroundTasks,
 } from '@server/utils/backgroundTasks';
+import axios from 'axios';
 import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
 
@@ -726,6 +729,91 @@ describe('NotificationManager delivery lifecycle', () => {
     assert.strictEqual(recoveredPayload?.issue?.modifiedBy, undefined);
     assert.strictEqual(recoveredPayload?.notifyUser?.id, createdBy.id);
     assert.strictEqual(await getRepository(NotificationOutbox).count(), 0);
+  });
+
+  it('names manga by its AniList ID in webhook request and issue payloads', async (t) => {
+    process.env.SEERR_ALLOW_PRIVATE_NOTIFICATION_URLS = 'true';
+    t.after(() => {
+      delete process.env.SEERR_ALLOW_PRIVATE_NOTIFICATION_URLS;
+    });
+    const bodies: unknown[] = [];
+    const postMock = mock.method(
+      axios,
+      'post',
+      async (_url: string, body: unknown) => {
+        bodies.push(body);
+        return { data: {} };
+      }
+    );
+    t.after(() => postMock.mock.restore());
+    const requestedBy = await getRepository(User).findOneByOrFail({ id: 2 });
+    // Created as the catalog creates it: the identifier is its own row, so
+    // neither the media nor an issue loaded later carries it.
+    const media = await createMangaMedia(
+      dataSource.manager,
+      9001,
+      MediaStatus.PARTIALLY_AVAILABLE
+    );
+    assert.strictEqual(media.identifiers, undefined);
+    const request = await getRepository(MediaRequest).save(
+      new MediaRequest({
+        type: MediaType.MANGA,
+        status: MediaRequestStatus.PENDING,
+        media,
+        requestedBy,
+        is4k: false,
+        isAutoRequest: false,
+      })
+    );
+    const issue = await getRepository(Issue).save(
+      new Issue({
+        createdBy: requestedBy,
+        issueType: IssueType.OTHER,
+        status: IssueStatus.OPEN,
+        media,
+        comments: [
+          new IssueComment({ user: requestedBy, message: 'Synthetic report' }),
+        ],
+      })
+    );
+    const manager = new NotificationManager();
+    manager.registerAgents([
+      new WebhookAgent({
+        enabled: true,
+        embedPoster: false,
+        types: Notification.MEDIA_PENDING | Notification.ISSUE_CREATED,
+        options: {
+          webhookUrl: 'http://127.0.0.1/webhook',
+          jsonPayload: Buffer.from(
+            JSON.stringify(
+              JSON.stringify({
+                type: '{{notification_type}}',
+                mediaType: '{{media_type}}',
+                externalId: '{{media_externalid}}',
+              })
+            )
+          ).toString('base64'),
+          customHeaders: [],
+          supportVariables: false,
+        },
+      }),
+    ]);
+
+    await manager.sendNotificationIntent(Notification.MEDIA_PENDING, {
+      kind: 'media-request',
+      requestId: request.id,
+    });
+    await waitForBackgroundTasks();
+    await manager.sendNotificationIntent(Notification.ISSUE_CREATED, {
+      kind: 'issue',
+      issueId: issue.id,
+    });
+    await waitForBackgroundTasks();
+
+    assert.deepStrictEqual(bodies, [
+      { type: 'MEDIA_PENDING', mediaType: 'manga', externalId: '9001' },
+      { type: 'ISSUE_CREATED', mediaType: 'manga', externalId: '9001' },
+    ]);
   });
 });
 

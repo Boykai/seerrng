@@ -2,6 +2,8 @@ import LidarrAPI from '@server/api/servarr/lidarr';
 import RadarrAPI from '@server/api/servarr/radarr';
 import ReadarrAPI from '@server/api/servarr/readarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
+import { SuwayomiError } from '@server/api/suwayomi/errors';
+import { MangaRequestCheckpoint } from '@server/constants/mangaRequest';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -63,6 +65,11 @@ import {
   updateMangaRequestManifest,
   type MangaRequestManifestEdit,
 } from '@server/lib/mangaRequests';
+import {
+  MANGA_RETRY_STATE_MESSAGE,
+  MangaRetryRefusedError,
+  retryMangaChapters,
+} from '@server/lib/mangaRetry';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { hydrateMediaRequestRelations } from '@server/lib/mediaRequestHydration';
 import { aliasDownloadId } from '@server/lib/mediaResponse';
@@ -77,6 +84,7 @@ import {
   RequestStatusStage,
   getRequestStatusHistory,
   getRequestStatusPage,
+  isMangaChapterRetryable,
   recordRequestStatus,
 } from '@server/lib/requestStatus';
 import {
@@ -87,6 +95,7 @@ import requestWorkCleanupManager, {
   RequestWorkCleanupError,
 } from '@server/lib/requestWorkCleanup';
 import { runWithCurrentServarrService } from '@server/lib/serviceAdmission';
+import { SuwayomiInstanceChangedError } from '@server/lib/suwayomi/instanceAdmission';
 import {
   UserMutationActorUnauthorizedError,
   acquireAuthorizedUserSecurityMutation,
@@ -4522,6 +4531,40 @@ requestRoutes.post<{
               });
             }
 
+            if (
+              request.type === MediaType.MANGA &&
+              request.status === MediaRequestStatus.APPROVED
+            ) {
+              const manifest = await getRepository(
+                MangaRequestManifest
+              ).findOne({ where: { requestId: request.id } });
+              if (
+                manifest?.checkpoint ===
+                MangaRequestCheckpoint.CHAPTERS_ENQUEUED
+              ) {
+                // An enqueued request keeps its dispatch: an administrator's
+                // retry queues its failed and dropped chapters once more.
+                if (!actor.hasPermission(Permission.MANAGE_REQUESTS)) {
+                  return next({
+                    status: 403,
+                    message:
+                      'You do not have permission to retry this request.',
+                  });
+                }
+                if (!isMangaChapterRetryable(manifest)) {
+                  return next({
+                    status: 409,
+                    message: MANGA_RETRY_STATE_MESSAGE,
+                  });
+                }
+                await retryMangaChapters(request.id);
+                await recordRequestStatus(request.id);
+                return res
+                  .status(200)
+                  .json(filterEntityResponse(request, req.user));
+              }
+            }
+
             const currentStatus = await recordRequestStatus(request.id);
             if (!currentStatus) {
               return next({ status: 404, message: 'Request not found.' });
@@ -4613,6 +4656,29 @@ requestRoutes.post<{
     }
     if (e instanceof RequestWorkCleanupError) {
       return next({ status: 409, message: e.message });
+    }
+    if (e instanceof MangaRetryRefusedError) {
+      return next({ status: e.status, message: e.message });
+    }
+    if (e instanceof SuwayomiInstanceChangedError) {
+      return next({
+        status: 409,
+        message:
+          'The manga service changed while the request was retried. Try again.',
+      });
+    }
+    if (e instanceof SuwayomiError) {
+      logger.warn('A manga retry failed on the manga service', {
+        label: 'Media Request',
+        suwayomiCode: e.code,
+        operation: e.operation,
+      });
+      return next({
+        status: e.retryable ? 503 : 502,
+        message: e.retryable
+          ? 'The manga service is unavailable. Try again later.'
+          : 'The manga service could not queue the chapters.',
+      });
     }
 
     logger.error('Error processing request retry', {
