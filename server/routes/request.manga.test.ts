@@ -656,7 +656,7 @@ describe('manga chapter retry route', () => {
       })
     ).attentionCode;
 
-  it('lets only an administrator queue the failed chapters again, once', async () => {
+  it('refuses the requester and lets an administrator queue the failed chapters again, once', async () => {
     const { fake, requestId, manifestId } = await seedFailedChapter();
     const admission = mock.method(
       instanceAdmission,
