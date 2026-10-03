@@ -349,11 +349,11 @@ const MangaLibrary = () => {
       });
       return false;
     } finally {
+      // Every decision can move rows between both lists. Stay busy until
+      // both have reloaded, so a decided row cannot be submitted again.
+      await Promise.allSettled([candidates.mutate(), bindings.mutate()]);
       busyRef.current = false;
       setBusyKey(null);
-      // Every decision can move rows between both lists.
-      void candidates.mutate();
-      void bindings.mutate();
     }
   };
 

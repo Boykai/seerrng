@@ -44,7 +44,7 @@ export const messages = defineMessages('components.Settings.MangaLibrary', {
     'SeerrNG cannot use this Suwayomi server. Check the Suwayomi settings.',
   errorRetry: 'The Suwayomi settings changed. Try again.',
   errorChanged:
-    'A library scan changed this title. Check the refreshed list and try again.',
+    'This title changed in the meantime. Check the refreshed list and try again.',
   errorLookup:
     'Could not reach Suwayomi; nothing was changed.{code, select, none {} other { ({code})}}',
 });

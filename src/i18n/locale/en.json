@@ -2424,7 +2424,7 @@
   "components.Settings.MangaLibrary.confidence": "Confidence",
   "components.Settings.MangaLibrary.confirmedByAdmin": "Confirmed by an Admin",
   "components.Settings.MangaLibrary.emptyQueue": "No Titles to Review",
-  "components.Settings.MangaLibrary.errorChanged": "A library scan changed this title. Check the refreshed list and try again.",
+  "components.Settings.MangaLibrary.errorChanged": "This title changed in the meantime. Check the refreshed list and try again.",
   "components.Settings.MangaLibrary.errorGone": "This title was matched or removed in the meantime. The list was refreshed.",
   "components.Settings.MangaLibrary.errorLookup": "Could not reach Suwayomi; nothing was changed.{code, select, none {} other { ({code})}}",
   "components.Settings.MangaLibrary.errorNotInLibrary": "This title is no longer in the Suwayomi library.",

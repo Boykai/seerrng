@@ -416,7 +416,9 @@ describe('MangaLibrary', () => {
 
   it('confirms a proposal once and refreshes both lists', async () => {
     const request = deferred();
+    const reload = deferred();
     state.post.mockReturnValue(request.promise);
+    state.mutate.mockReturnValue(reload.promise);
     await render();
 
     const confirm = buttonIn(rows(0)[0], 'Confirm');
@@ -450,6 +452,14 @@ describe('MangaLibrary', () => {
       autoDismiss: true,
     });
     expect(state.mutate).toHaveBeenCalledTimes(2);
+    // The decided row stays busy until both lists have reloaded.
+    expect(labels(cells(0, 0)[2])).toEqual(['Saving…']);
+    expect(buttonIn(rows(0)[1], 'Confirm')?.disabled).toBe(true);
+
+    await act(async () => reload.resolve(undefined));
+    await flush();
+
+    expect(state.post).toHaveBeenCalledTimes(1);
     expect(buttonIn(rows(0)[1], 'Confirm')?.disabled).toBe(false);
   });
 

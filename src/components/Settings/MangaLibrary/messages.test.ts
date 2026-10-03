@@ -28,9 +28,9 @@ describe('describeMangaLibraryError', () => {
         'SeerrNG cannot use this Suwayomi server. Check the Suwayomi settings.',
       MANGA_INSTANCE_CHANGED: 'The Suwayomi settings changed. Try again.',
       MANGA_ITEM_CHANGED:
-        'A library scan changed this title. Check the refreshed list and try again.',
+        'This title changed in the meantime. Check the refreshed list and try again.',
       MANGA_UNIQUE_CONFLICT:
-        'A library scan changed this title. Check the refreshed list and try again.',
+        'This title changed in the meantime. Check the refreshed list and try again.',
       MANGA_SUWAYOMI_LOOKUP_FAILED:
         'Could not reach Suwayomi; nothing was changed.',
     };
