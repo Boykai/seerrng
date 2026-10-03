@@ -720,6 +720,8 @@ is current again (`MANGA_BINDING_MISSING`). Once the chapters are queued,
 rejecting the match leaves them queued, but until the match is current again,
 an approved request shows `MANGA_BINDING_ORPHANED` and does not complete; see
 [Requests that need attention](#requests-that-need-attention).
+[Following new chapters](#when-following-stops-or-pauses) pauses until the
+match is current again.
 
 ### Which chapters a request gets
 
