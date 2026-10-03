@@ -64,6 +64,57 @@ describe('TVDB Integration', () => {
     return cy.wait('@saveMetadata');
   };
 
+  const openMediaServer = () => {
+    cy.get('button[aria-controls="series-media-server-panel"]')
+      .should('be.visible')
+      .then(($button) => {
+        if ($button.attr('aria-expanded') !== 'true') cy.wrap($button).click();
+      });
+    cy.get('#series-media-server-panel').should('be.visible');
+    cy.get('#series-media-server-panel [data-selection-tree]').should('exist');
+  };
+
+  const recordClientSeasonSummary = (tvId: number, seasonNumber: number) => {
+    cy.intercept('GET', `/api/v1/tv/${tvId}`, (request) => {
+      request.continue((response) => {
+        Cypress.log({
+          name: 'client season summary',
+          message: JSON.stringify({
+            id: response.body.id,
+            season: response.body.seasons?.find(
+              (season: { seasonNumber: number }) =>
+                season.seasonNumber === seasonNumber
+            ),
+          }),
+        });
+      });
+    }).as('seriesDetails');
+  };
+
+  const verifySsrSeasonSummary = (tvId: number, seasonNumber: number) => {
+    // Initial full-page metadata is server-side; don't require a browser GET.
+    cy.get('script#__NEXT_DATA__')
+      .invoke('text')
+      .then((text) => {
+        const details = JSON.parse(text).props.pageProps.tv;
+        const season = details.seasons.find(
+          (item: { seasonNumber: number }) => item.seasonNumber === seasonNumber
+        );
+        Cypress.log({
+          name: 'SSR season summary',
+          message: JSON.stringify({ id: details.id, season }),
+        });
+        expect(details.id, 'SSR canonical series TMDB ID').to.eq(tvId);
+        expect(season, `SSR advertises season ${seasonNumber}`).not.to.equal(
+          undefined
+        );
+        expect(
+          season.episodeCount,
+          'SSR season meets the current tree episodeCount > 0 eligibility filter'
+        ).to.be.greaterThan(0);
+      });
+  };
+
   beforeEach(() => {
     // Perform login
     cy.loginAsAdmin();
@@ -104,9 +155,13 @@ describe('TVDB Integration', () => {
   });
 
   it('should display "Tomorrow is Ours" show information with multiple seasons from TVDB', () => {
+    recordClientSeasonSummary(72879, 2);
     cy.intercept('GET', '/api/v1/tv/72879/season/2').as('tomorrowSeason2');
     // Navigate to the TV show
     cy.visit(ROUTES.tomorrowIsOursTvShow);
+    verifySsrSeasonSummary(72879, 2);
+    openMediaServer();
+    cy.get(SELECTORS.season2).should('be.visible');
 
     // Verify that multiple seasons are displayed (TMDB has only 1 season, TVDB has multiple)
     // cy.get(SELECTORS.seasonSelector).should('exist');
@@ -130,9 +185,13 @@ describe('TVDB Integration', () => {
   });
 
   it('Should display "Monster" show information correctly when not existing on TVDB', () => {
+    recordClientSeasonSummary(225634, 1);
     cy.intercept('GET', '/api/v1/tv/225634/season/1').as('monsterSeason1');
     // Navigate to the TV show
     cy.visit(ROUTES.monsterTvShow);
+    verifySsrSeasonSummary(225634, 1);
+    openMediaServer();
+    cy.get(SELECTORS.season1).should('be.visible');
 
     // Select Season 1
     cy.wait('@monsterSeason1').its('response.statusCode').should('eq', 200);
@@ -153,9 +212,13 @@ describe('TVDB Integration', () => {
   });
 
   it('should display "Dragon Ball Z Kai" show information with multiple only 2 seasons from TVDB', () => {
+    recordClientSeasonSummary(61709, 2);
     cy.intercept('GET', '/api/v1/tv/61709/season/2').as('dragonSeason2');
     // Navigate to the TV show
     cy.visit(ROUTES.dragonnBallZKaiAnime);
+    verifySsrSeasonSummary(61709, 2);
+    openMediaServer();
+    cy.get(SELECTORS.season2).should('be.visible');
 
     // Select Season 2 and verify it visible
     cy.wait('@dragonSeason2').its('response.statusCode').should('eq', 200);

@@ -287,7 +287,8 @@ describe('manual fail and search from request status', () => {
         .and('have.class', 'button-sm')
         .and(($button) => {
           const bounds = $button[0].getBoundingClientRect();
-          expect(bounds.height).to.eq(16);
+          // This legacy phone action retains its touch target, unlike compact controls.
+          expect(bounds.height).to.be.at.least(44);
           expect(window.getComputedStyle($button[0]).fontSize).to.eq('12px');
           expect(bounds.left).to.be.at.least(0);
           expect(bounds.right).to.be.at.most(Cypress.config('viewportWidth'));

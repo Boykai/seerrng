@@ -172,9 +172,14 @@ describe('Requests', () => {
       }
     });
     cy.get('[role="dialog"]')
-      .should('contain.text', 'Clear this cancelled request?')
-      .contains('button', 'Clear cancelled request')
-      .click();
+      .should('be.visible')
+      .within(() => {
+        cy.get('[data-testid="modal-title"]').should(
+          'have.text',
+          'Clear This Cancelled Request?'
+        );
+        cy.contains('button', 'Clear cancelled request').click();
+      });
     cy.then(() => {
       expect(clientErrors.join('\n')).not.to.include(
         'Transition.Child is used but it is missing a parent'

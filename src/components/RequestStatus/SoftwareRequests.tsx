@@ -342,7 +342,6 @@ const SoftwareRequests = ({
   ) {
     return null;
   }
-  if (!enabled) return null;
   if (!data && !error) return <LoadingSpinner />;
   if (error) {
     if (category === undefined) {

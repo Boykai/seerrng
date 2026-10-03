@@ -37,14 +37,39 @@ describe('User Profile', () => {
 
     cy.wait('@getWatchlist');
 
-    // Reveal the lazy item's layout wrapper before requiring its metadata
-    // request. This also works while its card is still a loading placeholder.
+    // The supplied watchlist title renders a fallback card before metadata.
+    // Its parent div, not the outer slider item, is TmdbTitleCard's IO target.
     cy.contains('.slider-header', 'Watchlist')
       .closest('[data-testid=media-slider]')
-      .find('.slider-item')
+      .find('[data-testid=title-card]')
       .first()
+      .parent()
       .scrollIntoView()
-      .should('be.visible');
+      .should('be.visible')
+      .should(($observedCard) => {
+        const target = $observedCard[0];
+        const bounds = target.getBoundingClientRect();
+        const window = target.ownerDocument.defaultView;
+        if (!window) throw new Error('Watchlist card has no browsing context');
+        expect(bounds.width, 'observed card width').to.be.greaterThan(0);
+        expect(bounds.height, 'observed card height').to.be.greaterThan(0);
+        expect(
+          bounds.right,
+          'observed card crosses viewport left edge'
+        ).to.be.greaterThan(0);
+        expect(
+          bounds.bottom,
+          'observed card crosses viewport top edge'
+        ).to.be.greaterThan(0);
+        expect(
+          bounds.left,
+          'observed card crosses viewport right edge'
+        ).to.be.lessThan(window.innerWidth);
+        expect(
+          bounds.top,
+          'observed card crosses viewport bottom edge'
+        ).to.be.lessThan(window.innerHeight);
+      });
 
     cy.wait('@getTmdbMovie').its('response.statusCode').should('eq', 200);
 

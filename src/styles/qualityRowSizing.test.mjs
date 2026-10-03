@@ -171,6 +171,25 @@ const iconSources = [
   ['MediaDetails/MediaQualitySelect.tsx', 'AdjustmentsHorizontalIcon', 1],
   ['Common/FormatRequestControl/index.tsx', 'ArrowDownTrayIcon', 2],
 ];
+const localGeometryPrefixes = [
+  'h-',
+  'w-',
+  'size-',
+  'min-h-',
+  'max-h-',
+  'min-w-',
+  'max-w-',
+];
+const hasLocalGeometryUtility = (className) =>
+  className
+    .split(/\s+/)
+    .some((token) =>
+      token
+        .split(':')
+        .some((segment) =>
+          localGeometryPrefixes.some((prefix) => segment.startsWith(prefix))
+        )
+    );
 const verifyNoLocalIconGeometry = (source, tag, expectedCount) => {
   const tree = ts.createSourceFile(
     'Control.tsx',
@@ -201,9 +220,9 @@ const verifyNoLocalIconGeometry = (source, tag, expectedCount) => {
             attribute.initializer && ts.isStringLiteral(attribute.initializer),
             `${tag} class owner stays auditable`
           );
-          assert.doesNotMatch(
-            attribute.initializer.text,
-            /(?:^|\s)(?:\S+:)*(?:h-|w-|size-|min-h-|max-h-|min-w-|max-w-)/,
+          assert.equal(
+            hasLocalGeometryUtility(attribute.initializer.text),
+            false,
             `${tag} has no local geometry utility`
           );
         }
@@ -246,4 +265,15 @@ test('local icon utility and inline sizing regressions fail closed', () => {
       ),
     /ArrowDownTrayIcon has no local geometry override/
   );
+});
+test('geometry utility scan preserves variants without ambiguous backtracking', () => {
+  assert.equal(hasLocalGeometryUtility('app-action-icon md:hover:w-4'), true);
+  assert.equal(hasLocalGeometryUtility('app-action-icon md:max-h-8'), true);
+  assert.equal(hasLocalGeometryUtility('app-action-icon'), false);
+  const repeatedVariants = '!:'.repeat(10_000);
+  assert.equal(
+    hasLocalGeometryUtility(`${repeatedVariants}app-action-icon`),
+    false
+  );
+  assert.equal(hasLocalGeometryUtility(`${repeatedVariants}h-4`), true);
 });
