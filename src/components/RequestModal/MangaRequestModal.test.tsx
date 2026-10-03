@@ -525,6 +525,7 @@ it('edits a pending request scope with a PUT', async () => {
   await submit();
 
   expect(state.put).toHaveBeenCalledWith(REQUEST_KEY, {
+    mediaType: 'manga',
     mangaScope: { scope: MangaRequestScope.LATEST_N, latestCount: 30 },
   });
   expect(state.onComplete).toHaveBeenCalledWith(MediaStatus.PENDING);
@@ -545,6 +546,7 @@ it('shows the server message when the scope can no longer change', async () => {
   await submit();
 
   expect(state.put).toHaveBeenCalledWith(REQUEST_KEY, {
+    mediaType: 'manga',
     mangaScope: { scope: MangaRequestScope.ALL_AT_DISPATCH },
   });
   expect(text()).toContain(

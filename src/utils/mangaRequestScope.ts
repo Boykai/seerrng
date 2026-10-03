@@ -116,6 +116,18 @@ export const parseMangaScopeDraft = (
   return { body: { scope: MangaRequestScope.ALL_AT_DISPATCH }, errors: {} };
 };
 
+/** The POST /api/v1/request body for a new manga request. */
+export const mangaRequestBody = (
+  mediaId: number,
+  mangaScope: MangaScopeBody
+) => ({ mediaType: MediaType.MANGA, mediaId, mangaScope });
+
+/** The PUT /api/v1/request/:id body; the API contract requires mediaType. */
+export const mangaRequestEditBody = (mangaScope: MangaScopeBody) => ({
+  mediaType: MediaType.MANGA,
+  mangaScope,
+});
+
 const draftNumber = (value?: number | null): string =>
   value === null || value === undefined ? '' : String(value);
 

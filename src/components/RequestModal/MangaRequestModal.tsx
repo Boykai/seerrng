@@ -20,6 +20,8 @@ import {
   MANGA_MAX_LATEST_COUNT,
   draftFromMangaScope,
   isAwaitingMangaSource,
+  mangaRequestBody,
+  mangaRequestEditBody,
   parseMangaScopeDraft,
   type MangaScopeDraft,
   type MangaScopeErrors,
@@ -340,11 +342,10 @@ const MangaRequestModal = ({
     setIsUpdating(true);
     setSubmitError(undefined);
     try {
-      const response = await axios.post<MangaScopedRequest>('/api/v1/request', {
-        mediaType: 'manga',
-        mediaId: mangaId,
-        mangaScope: body,
-      });
+      const response = await axios.post<MangaScopedRequest>(
+        '/api/v1/request',
+        mangaRequestBody(mangaId, body)
+      );
       revalidate();
       toast(messages.requestSuccess);
       onComplete?.(
@@ -370,9 +371,10 @@ const MangaRequestModal = ({
     setIsUpdating(true);
     setSubmitError(undefined);
     try {
-      await axios.put(`/api/v1/request/${editRequest.id}`, {
-        mangaScope: body,
-      });
+      await axios.put(
+        `/api/v1/request/${editRequest.id}`,
+        mangaRequestEditBody(body)
+      );
       revalidate();
       toast(messages.requestUpdated);
       onComplete?.(MediaStatus.PENDING);
