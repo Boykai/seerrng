@@ -396,12 +396,17 @@ const SettingsUsers = () => {
                   </div>
                 </div>
                 <div className="form-row">
-                  <label htmlFor="mangaRequestLimit" className="text-label">
+                  <label
+                    id="mangaRequestLimit"
+                    htmlFor="mangaRequestLimit-limit"
+                    className="text-label"
+                  >
                     {intl.formatMessage(messages.mangaRequestLimitLabel)}
                   </label>
                   <div className="form-input-area">
                     <QuotaSelector
                       onChange={setFieldValue}
+                      labelId="mangaRequestLimit"
                       dayFieldName="mangaQuotaDays"
                       limitFieldName="mangaQuotaLimit"
                       mediaType="manga"

@@ -540,7 +540,7 @@ it('shows the server message when the scope can no longer change', async () => {
   );
   await render(pendingRequest());
 
-  expect(button('modal-secondary-button')).toBeNull();
+  expect(button('modal-secondary-button')?.textContent).toBe('Cancel Request');
   await click(radio('All chapters'));
   await submit();
 
@@ -584,6 +584,20 @@ it('lets an owner without advanced requests only cancel', async () => {
   await submit();
 
   expect(state.delete).toHaveBeenCalledWith(REQUEST_KEY);
+  expect(state.onComplete).toHaveBeenCalledWith(MediaStatus.UNKNOWN);
+});
+
+it("lets a request manager cancel another user's pending request", async () => {
+  state.granted = [Permission.MANAGE_REQUESTS];
+  state.userId = 2;
+  state.delete.mockResolvedValue({});
+  await render(pendingRequest());
+
+  expect(button('modal-ok-button')?.textContent).toBe('Save Changes');
+  await click(button('modal-secondary-button'));
+
+  expect(state.delete).toHaveBeenCalledWith(REQUEST_KEY);
+  expect(state.put).not.toHaveBeenCalled();
   expect(state.onComplete).toHaveBeenCalledWith(MediaStatus.UNKNOWN);
 });
 

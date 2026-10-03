@@ -486,13 +486,9 @@ const MangaRequestModal = ({
         okButtonType={canEdit ? 'primary' : 'danger'}
         okButtonProps={canEdit ? undefined : { buttonIcon: 'cancel' }}
         okDisabled={isUpdating}
-        onSecondary={
-          canEdit && isOwner ? () => void cancelRequest() : undefined
-        }
+        onSecondary={canEdit ? () => void cancelRequest() : undefined}
         secondaryText={
-          canEdit && isOwner
-            ? intl.formatMessage(messages.cancelRequest)
-            : undefined
+          canEdit ? intl.formatMessage(messages.cancelRequest) : undefined
         }
         secondaryButtonType="danger"
         secondaryButtonProps={{ buttonIcon: 'cancel' }}

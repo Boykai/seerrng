@@ -939,7 +939,7 @@ const UserGeneralSettings = () => {
                     </div>
                     <div className="form-row">
                       <div className="text-label">
-                        <span>
+                        <span id="mangaQuotaLabel">
                           {intl.formatMessage(messages.mangarequestlimit)}
                         </span>
                       </div>
@@ -948,17 +948,22 @@ const UserGeneralSettings = () => {
                           <div className="mb-4 flex items-center">
                             <input
                               type="checkbox"
+                              aria-labelledby="mangaQuotaLabel mangaQuotaOverride"
                               checked={mangaQuotaEnabled}
                               onChange={() =>
                                 setMangaQuotaEnabled((enabled) => !enabled)
                               }
                             />
-                            <span className="ml-2 text-gray-300">
+                            <span
+                              id="mangaQuotaOverride"
+                              className="ml-2 text-gray-300"
+                            >
                               {intl.formatMessage(messages.enableOverride)}
                             </span>
                           </div>
                           <QuotaSelector
                             isDisabled={!mangaQuotaEnabled}
+                            labelId="mangaQuotaLabel"
                             dayFieldName="mangaQuotaDays"
                             limitFieldName="mangaQuotaLimit"
                             mediaType="manga"

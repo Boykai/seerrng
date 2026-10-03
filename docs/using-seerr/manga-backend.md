@@ -145,8 +145,9 @@ form and on their profile.
 While a manga request is pending, select **View Request** on the title's
 details page, or edit the request from its request card, to change the chapter
 choice. Requesters with the **Advanced Requests** permission can change their
-own requests, and users with **Manage Requests** can change any request.
-Requesters can also cancel their own pending requests there.
+own requests, and users with **Manage Requests** can change any request. The
+requester and users with **Manage Requests** can also cancel a pending request
+there.
 
 ### Waiting for a source
 

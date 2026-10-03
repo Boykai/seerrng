@@ -48,6 +48,8 @@ interface QuotaSelectorProps {
   dayFieldName: string;
   limitFieldName: string;
   isDisabled?: boolean;
+  /** Names both selects after the row's visible label with this id. */
+  labelId?: string;
   onChange: (fieldName: string, value: number) => void;
 }
 
@@ -60,6 +62,7 @@ const QuotaSelector = ({
   dayOverride,
   limitOverride,
   isDisabled = false,
+  labelId,
   onChange,
 }: QuotaSelectorProps) => {
   const initialDays = defaultDays ?? 7;
@@ -67,6 +70,7 @@ const QuotaSelector = ({
   const [quotaDays, setQuotaDays] = useState(initialDays);
   const [quotaLimit, setQuotaLimit] = useState(initialLimit);
   const intl = useIntl();
+  const daysText = intl.formatMessage(messages.days, { count: quotaDays });
 
   useEffect(() => {
     onChange(dayFieldName, quotaDays);
@@ -97,6 +101,8 @@ const QuotaSelector = ({
         {
           quotaLimit: (
             <select
+              id={labelId && `${labelId}-limit`}
+              aria-labelledby={labelId}
               className="short inline"
               value={limitOverride ?? quotaLimit}
               onChange={(e) => setQuotaLimit(Number(e.target.value))}
@@ -114,6 +120,7 @@ const QuotaSelector = ({
           ),
           quotaDays: (
             <select
+              aria-labelledby={labelId && `${labelId} ${labelId}-days`}
               className="short inline"
               value={dayOverride ?? quotaDays}
               onChange={(e) => setQuotaDays(Number(e.target.value))}
@@ -141,7 +148,11 @@ const QuotaSelector = ({
           software: intl.formatMessage(messages.software, {
             count: quotaLimit,
           }),
-          days: intl.formatMessage(messages.days, { count: quotaDays }),
+          days: labelId ? (
+            <span id={`${labelId}-days`}>{daysText}</span>
+          ) : (
+            daysText
+          ),
           quotaUnits: function quotaUnits(msg) {
             return (
               <span className={limitOverride || quotaLimit ? '' : 'hidden'}>

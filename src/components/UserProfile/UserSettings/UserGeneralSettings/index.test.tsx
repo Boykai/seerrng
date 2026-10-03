@@ -145,6 +145,22 @@ it('shows the global manga limit until a manager overrides it', async () => {
   expect(selects.map((select) => select.value)).toEqual(['3', '7']);
 });
 
+it('names the manga override and quota selects', async () => {
+  await render();
+  const { override, selects } = mangaRow();
+  const nameOf = (element: Element) =>
+    (element.getAttribute('aria-labelledby') ?? '')
+      .split(' ')
+      .map((id) => document.getElementById(id)?.textContent)
+      .join(' ');
+
+  expect(nameOf(override)).toBe('Manga Request Limit Override Global Limit');
+  expect(selects.map(nameOf)).toEqual([
+    'Manga Request Limit',
+    'Manga Request Limit days',
+  ]);
+});
+
 it('saves a per-user manga request limit', async () => {
   await render();
   await act(async () => {

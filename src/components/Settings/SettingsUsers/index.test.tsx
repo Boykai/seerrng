@@ -110,6 +110,21 @@ it('shows the global manga request limit from the saved defaults', async () => {
   expect(days.value).toBe('7');
 });
 
+it('names the global manga quota selects after their label', async () => {
+  await render();
+  const [limit, days] = mangaSelects();
+  const label = host.querySelector<HTMLLabelElement>('#mangaRequestLimit')!;
+  const nameOf = (element: Element) =>
+    (element.getAttribute('aria-labelledby') ?? '')
+      .split(' ')
+      .map((id) => document.getElementById(id)?.textContent)
+      .join(' ');
+
+  expect(document.getElementById(label.htmlFor)).toBe(limit);
+  expect(nameOf(limit)).toBe('Global Manga Request Limit');
+  expect(nameOf(days)).toBe('Global Manga Request Limit days');
+});
+
 it('saves the global manga request limit with the other defaults', async () => {
   await render();
   const [limit, days] = mangaSelects();
