@@ -99,6 +99,7 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages(
     'kapowarr-scan': 'Kapowarr Comics Scan',
     'backissue-scan': 'BackIssue Comics Scan',
     'magazine-scan': 'LazyLibrarian Magazine Scan',
+    'manga-library-scan': 'Manga Library Scan',
     'download-sync': 'Download Sync',
     'software-request-reconciliation': 'Software Request Reconciliation',
     'download-recovery': 'Download Recovery',

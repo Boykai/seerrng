@@ -1,5 +1,7 @@
 import { MediaRequestStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import MangaMatchCandidate from '@server/entity/MangaMatchCandidate';
+import MangaSourceBinding from '@server/entity/MangaSourceBinding';
 import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import OverrideRule from '@server/entity/OverrideRule';
@@ -69,31 +71,42 @@ export const getHistoricalServarrServiceIdMaximum = async (
 ): Promise<number> => {
   const mediaType = mediaTypeByService[serviceType];
   const overrideColumn = overrideColumnByService[serviceType];
-  const [requestMaximum, mediaMaximum, overrideMaximum] = await Promise.all([
-    getRepository(MediaRequest)
-      .createQueryBuilder('request')
-      .select('MAX(request.serverId)', 'maximum')
-      .where('request.type = :mediaType', { mediaType })
-      .getRawOne<{ maximum: unknown }>(),
-    getRepository(Media)
-      .createQueryBuilder('media')
-      .select('MAX(media.serviceId)', 'standardMaximum')
-      .addSelect('MAX(media.serviceId4k)', 'fourKMaximum')
-      .where('media.mediaType = :mediaType', { mediaType })
-      .getRawOne<{ standardMaximum: unknown; fourKMaximum: unknown }>(),
-    !overrideColumn
-      ? Promise.resolve({ maximum: null as unknown })
-      : getRepository(OverrideRule)
-          .createQueryBuilder('rule')
-          .select(`MAX(rule.${overrideColumn})`, 'maximum')
-          .getRawOne<{ maximum: unknown }>(),
-  ]);
+  const [requestMaximum, mediaMaximum, overrideMaximum, ...libraryMaximums] =
+    await Promise.all([
+      getRepository(MediaRequest)
+        .createQueryBuilder('request')
+        .select('MAX(request.serverId)', 'maximum')
+        .where('request.type = :mediaType', { mediaType })
+        .getRawOne<{ maximum: unknown }>(),
+      getRepository(Media)
+        .createQueryBuilder('media')
+        .select('MAX(media.serviceId)', 'standardMaximum')
+        .addSelect('MAX(media.serviceId4k)', 'fourKMaximum')
+        .where('media.mediaType = :mediaType', { mediaType })
+        .getRawOne<{ standardMaximum: unknown; fourKMaximum: unknown }>(),
+      !overrideColumn
+        ? Promise.resolve({ maximum: null as unknown })
+        : getRepository(OverrideRule)
+            .createQueryBuilder('rule')
+            .select(`MAX(rule.${overrideColumn})`, 'maximum')
+            .getRawOne<{ maximum: unknown }>(),
+      // Library-scan rows keep their instance's ID after it is removed.
+      ...(serviceType !== 'suwayomi'
+        ? []
+        : [MangaSourceBinding, MangaMatchCandidate].map((entity) =>
+            getRepository(entity)
+              .createQueryBuilder('row')
+              .select('MAX(row.instanceId)', 'maximum')
+              .getRawOne<{ maximum: unknown }>()
+          )),
+    ]);
 
   return Math.max(
     parseStoredServiceId(requestMaximum?.maximum),
     parseStoredServiceId(mediaMaximum?.standardMaximum),
     parseStoredServiceId(mediaMaximum?.fourKMaximum),
-    parseStoredServiceId(overrideMaximum?.maximum)
+    parseStoredServiceId(overrideMaximum?.maximum),
+    ...libraryMaximums.map((row) => parseStoredServiceId(row?.maximum))
   );
 };
 

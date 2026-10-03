@@ -56,6 +56,18 @@ describe('runMediaMutation', () => {
     assert.deepStrictEqual(getMediaAdmissionResources(comic), [
       'request-canonical:comic:comicvine:4567',
     ]);
+    const manga = new Media({ id: 5, mediaType: MediaType.MANGA, tmdbId: 0 });
+    manga.identifiers = [
+      new MediaIdentifier({
+        media: manga,
+        provider: MediaIdentifierProvider.ANILIST,
+        value: '30013',
+        canonical: true,
+      }),
+    ];
+    assert.deepStrictEqual(getMediaAdmissionResources(manga), [
+      'request-canonical:manga:anilist:30013',
+    ]);
   });
 
   it('deduplicates and orders cross-instance media resources', async () => {
