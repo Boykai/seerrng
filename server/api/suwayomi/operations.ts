@@ -8,7 +8,9 @@ import type { SuwayomiCallClass } from '@server/api/suwayomi/types';
  * Rules (enforced by operations.test.ts):
  * - one named operation per document, no fragments, no subscriptions;
  * - root fields come from the allow-lists below, so extension, extension
- *   store, settings mutation, tracker and file-deletion fields are never sent;
+ *   store, settings mutation, tracker and file-deletion root fields are never
+ *   sent; the library scan reads only `trackerId` and `remoteId` of a
+ *   manga's track records;
  * - `settings` selects only non-secret fields.
  *
  * Auth levels: `none` never carries credentials (login and refresh), `public`
@@ -167,6 +169,43 @@ export const SUWAYOMI_OPERATIONS = {
         }
       }
       ${QUEUE_FIELDS}
+    }`
+  ),
+  LibraryPage: op(
+    'query',
+    'user',
+    `query LibraryPage($after: Cursor) {
+      mangas(
+        condition: { inLibrary: true }
+        order: [{ by: ID }]
+        first: 100
+        after: $after
+      ) {
+        totalCount
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id sourceId url title downloadCount hasDuplicateChapters
+          chapters { totalCount }
+        }
+      }
+    }`
+  ),
+  LibraryTrackRecords: op(
+    'query',
+    'user',
+    `query LibraryTrackRecords($ids: [Int!]!) {
+      mangas(filter: { id: { in: $ids } }, first: 100) {
+        nodes { id trackRecords { nodes { trackerId remoteId } } }
+      }
+    }`
+  ),
+  LibraryChapterStates: op(
+    'query',
+    'user',
+    `query LibraryChapterStates($ids: [Int!]!) {
+      mangas(filter: { id: { in: $ids } }, first: 100) {
+        nodes { id chapters { totalCount nodes { chapterNumber isDownloaded } } }
+      }
     }`
   ),
   Login: op(

@@ -29,7 +29,12 @@ const SETTINGS_ALLOW_LIST = [
 ];
 const FORBIDDEN_ROOT_FIELD =
   /extension|setting|track|deleteDownloaded|backup|restore|webui|clear|subscri/i;
-const FORBIDDEN_FIELDS = new Set(['thumbnailUrl', 'realUrl', 'pkgName']);
+const FORBIDDEN_FIELDS = new Set([
+  'thumbnailUrl',
+  'realUrl',
+  'remoteUrl',
+  'pkgName',
+]);
 const SECRET_FIELD = /password|username|secret|apikey|cookie|proxy|socks|url$/i;
 const VARIABLE_META_KEYS = new Set(['SetRequestIndex', 'DeleteRequestIndex']);
 // The capability probe the pinned server refused with HTTP 200 and `errors`.
@@ -146,6 +151,29 @@ describe('Suwayomi operation documents', () => {
       visit(parse(operation.document), {
         Field(node) {
           assert.ok(!FORBIDDEN_FIELDS.has(node.name.value), name);
+        },
+      });
+    }
+  });
+
+  it('read only the tracker and remote IDs of track records, and only to match', () => {
+    for (const [name, operation] of entries) {
+      visit(parse(operation.document), {
+        Field(node) {
+          if (node.name.value !== 'trackRecords') return;
+          assert.equal(name, 'LibraryTrackRecords');
+          const [nodesField, ...rest] = node.selectionSet?.selections ?? [];
+          assert.deepEqual(rest, [], name);
+          assert.ok(
+            nodesField?.kind === Kind.FIELD &&
+              nodesField.name.value === 'nodes',
+            name
+          );
+          const selected = (nodesField.selectionSet?.selections ?? []).map(
+            (selection) =>
+              selection.kind === Kind.FIELD ? selection.name.value : ''
+          );
+          assert.deepEqual(selected.sort(), ['remoteId', 'trackerId']);
         },
       });
     }

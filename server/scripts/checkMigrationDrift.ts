@@ -51,6 +51,29 @@ const MANGA_SCHEMA_OBJECTS: readonly SchemaObject[] = [
   },
   { kind: 'column', table: 'user', name: 'mangaQuotaLimit' },
   { kind: 'column', table: 'user', name: 'mangaQuotaDays' },
+  { kind: 'column', table: 'manga_source_binding', name: 'urlHash' },
+  { kind: 'column', table: 'manga_source_binding', name: 'availability' },
+  {
+    kind: 'index',
+    table: 'manga_source_binding',
+    name: 'IDX_manga_source_binding_anilistId',
+  },
+  {
+    kind: 'index',
+    table: 'manga_source_binding',
+    name: 'UQ_manga_source_binding_pair',
+  },
+  {
+    kind: 'index',
+    table: 'manga_source_binding',
+    name: 'UQ_manga_source_binding_live',
+  },
+  { kind: 'column', table: 'manga_match_candidate', name: 'urlHash' },
+  {
+    kind: 'index',
+    table: 'manga_match_candidate',
+    name: 'UQ_manga_match_candidate_item',
+  },
 ];
 
 const driver = isPgsql ? 'postgres' : 'sqlite';

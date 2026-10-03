@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { AddMangaIdentityUniqueness1790986402000 as PortableMangaIdentityMigration } from '@server/migration/sqlite/1790986402000-AddMangaIdentityUniqueness';
+import { AddMangaLibraryBindings1790986404000 as PortableMangaLibraryMigration } from '@server/migration/sqlite/1790986404000-AddMangaLibraryBindings';
 import { DataSource, type QueryRunner } from 'typeorm';
 import { AddMangaIdentityUniqueness1790986402000 } from './1790986402000-AddMangaIdentityUniqueness';
 import { AddMangaQuota1790986403000 } from './1790986403000-AddMangaQuota';
+import { AddMangaLibraryBindings1790986404000 } from './1790986404000-AddMangaLibraryBindings';
 
 const postgresUrl = process.env.SEERR_TEST_POSTGRES_URL;
 const postgresTest = postgresUrl ? test : test.skip;
@@ -52,6 +54,33 @@ test('PostgreSQL manga quota migration adds and drops both columns', async () =>
       `ALTER TABLE "user" ADD "mangaQuotaDays" integer`,
       `ALTER TABLE "user" DROP COLUMN "mangaQuotaDays"`,
       `ALTER TABLE "user" DROP COLUMN "mangaQuotaLimit"`,
+    ]
+  );
+});
+
+test('PostgreSQL manga library migration creates the SQLite indexes and drops both tables', async () => {
+  const migration = new AddMangaLibraryBindings1790986404000();
+  const indexes = (statements: string[]) =>
+    statements.filter((statement) => / INDEX /.test(statement));
+  const postgres = await recordStatements((queryRunner) =>
+    migration.up(queryRunner)
+  );
+
+  assert.equal(migration.name, 'AddMangaLibraryBindings1790986404000');
+  assert.equal(indexes(postgres).length, 4);
+  assert.deepStrictEqual(
+    indexes(postgres),
+    indexes(
+      await recordStatements((queryRunner) =>
+        new PortableMangaLibraryMigration().up(queryRunner)
+      )
+    )
+  );
+  assert.deepStrictEqual(
+    await recordStatements((queryRunner) => migration.down(queryRunner)),
+    [
+      `DROP TABLE IF EXISTS "manga_match_candidate"`,
+      `DROP TABLE IF EXISTS "manga_source_binding"`,
     ]
   );
 });
@@ -197,6 +226,115 @@ postgresTest(
         await queryRunner.query(`SELECT "id" FROM "user"`),
         [{ id: 1 }]
       );
+    });
+  }
+);
+
+postgresTest(
+  'PostgreSQL manga library migration enforces live and pair uniqueness reversibly',
+  async () => {
+    await withPostgresQueryRunner(async (queryRunner) => {
+      // The migrated database already has these tables; a private schema
+      // keeps them out of reach, and the rollback removes it again.
+      await queryRunner.query(`CREATE SCHEMA "manga_library_check"`);
+      await queryRunner.query(`SET LOCAL search_path TO "manga_library_check"`);
+      const objects = async () =>
+        (
+          (await queryRunner.query(
+            `SELECT c."relkind" AS "kind", c."relname" AS "name"
+             FROM pg_class c
+             JOIN pg_namespace n ON n."oid" = c."relnamespace"
+             WHERE n."nspname" = 'manga_library_check'
+               AND c."relkind" IN ('r', 'i')
+             ORDER BY c."relkind", c."relname"`
+          )) as { kind: string; name: string }[]
+        ).map(({ kind, name }) => `${kind} ${name}`);
+      const insertBinding = (
+        item: string,
+        anilistId: number,
+        state: string,
+        instanceId = 1
+      ) =>
+        queryRunner.query(
+          `INSERT INTO "manga_source_binding" ("instanceId", "sourceId", "url", "urlHash", "anilistId", "confidence", "matchedBy", "origin", "state")
+           VALUES ($1, '0', $2, $3, $4, 'TRACKER_LINK', 'anilist-tracker', 'library-scan', $5)`,
+          [instanceId, `/fake/${item}`, `hash-${item}`, anilistId, state]
+        );
+      const rejectsDuplicate = async (insert: () => Promise<unknown>) => {
+        await queryRunner.query('SAVEPOINT manga_library_unique_check');
+        await assert.rejects(insert(), /unique/i);
+        await queryRunner.query(
+          'ROLLBACK TO SAVEPOINT manga_library_unique_check'
+        );
+      };
+
+      const migration = new AddMangaLibraryBindings1790986404000();
+      await migration.up(queryRunner);
+      await migration.up(queryRunner);
+
+      assert.deepStrictEqual(await objects(), [
+        'i IDX_manga_source_binding_anilistId',
+        'i PK_manga_match_candidate',
+        'i PK_manga_source_binding',
+        'i UQ_manga_match_candidate_item',
+        'i UQ_manga_source_binding_live',
+        'i UQ_manga_source_binding_pair',
+        'r manga_match_candidate',
+        'r manga_source_binding',
+      ]);
+      const [{ definition }] = (await queryRunner.query(
+        `SELECT pg_get_indexdef('"UQ_manga_source_binding_live"'::regclass) AS "definition"`
+      )) as { definition: string }[];
+      assert.match(
+        definition,
+        /^CREATE UNIQUE INDEX .*\("instanceId", "sourceId", "urlHash"\) WHERE .*'ACTIVE'.*'ORPHANED'/
+      );
+
+      await insertBinding('a', 10, 'ACTIVE');
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "inLibrary", "availability", "chapterCount", "createdAt" IS NOT NULL AS "stamped"
+           FROM "manga_source_binding"`
+        ),
+        [
+          {
+            inLibrary: false,
+            availability: 1,
+            chapterCount: null,
+            stamped: true,
+          },
+        ]
+      );
+      // One live binding per source manga, whichever live state it is in.
+      await rejectsDuplicate(() => insertBinding('a', 11, 'ORPHANED'));
+      await rejectsDuplicate(() => insertBinding('a', 11, 'ACTIVE'));
+      // Rejections are per pair and coexist with the live binding.
+      await insertBinding('a', 12, 'REJECTED');
+      await insertBinding('a', 13, 'REJECTED');
+      await rejectsDuplicate(() => insertBinding('a', 12, 'REJECTED'));
+      await rejectsDuplicate(() => insertBinding('a', 10, 'REJECTED'));
+      // The keys are per instance and per item.
+      await insertBinding('a', 10, 'ACTIVE', 2);
+      await insertBinding('b', 10, 'ACTIVE');
+      // Once the live binding is rejected, another one may take its place.
+      await queryRunner.query(
+        `UPDATE "manga_source_binding" SET "state" = 'REJECTED'
+         WHERE "instanceId" = 1 AND "urlHash" = 'hash-a' AND "anilistId" = 10`
+      );
+      await insertBinding('a', 14, 'ORPHANED');
+
+      const insertCandidate = () =>
+        queryRunner.query(
+          `INSERT INTO "manga_match_candidate" ("instanceId", "sourceId", "url", "urlHash", "suwayomiMangaId", "title")
+           VALUES (1, '0', '/fake/c', 'hash-c', 7, 'Fake Title')`
+        );
+      await insertCandidate();
+      await rejectsDuplicate(insertCandidate);
+
+      await migration.down(queryRunner);
+      await migration.down(queryRunner);
+
+      assert.deepStrictEqual(await objects(), []);
     });
   }
 );

@@ -67,6 +67,11 @@ export interface SuwayomiCapabilities {
   partialFetchResults: boolean;
   /** The schema exposes per-user state (for example `user.isDownloaded`). */
   perUserDownloadState: boolean;
+  /**
+   * MangaType exposes `trackRecords`. Optional: it never affects `supported`;
+   * the library scan skips tracker matching without it.
+   */
+  trackRecords: boolean;
   warnings: SuwayomiCapabilityWarning[];
 }
 
@@ -154,6 +159,47 @@ export interface SuwayomiAvailability {
 export interface SuwayomiAvailabilitySnapshot {
   mangas: SuwayomiAvailability[];
   queue: SuwayomiQueue;
+}
+
+export interface SuwayomiLibraryItem {
+  id: string;
+  sourceId: string;
+  url: string;
+  /** Up to 512 code points; empty when Suwayomi has none. */
+  title: string;
+  downloadCount: number;
+  chapterCount: number;
+  hasDuplicateChapters: boolean;
+}
+
+export interface SuwayomiLibraryListing {
+  /** Ordered by ID; one item per source and URL. */
+  items: SuwayomiLibraryItem[];
+  /**
+   * The first and last pages agree on `totalCount` and every manga ID was
+   * listed once, so a stored source and URL that no item has left the library.
+   */
+  consistent: boolean;
+  /** Listed manga left out because their URL cannot be stored. */
+  skippedUrls: number;
+  /** Listed manga left out because a lower ID has the same source and URL. */
+  duplicateNaturalKeys: number;
+}
+
+export interface SuwayomiTrackRecord {
+  trackerId: number;
+  remoteId: string;
+}
+
+export interface SuwayomiMangaTrackRecords {
+  mangaId: string;
+  records: SuwayomiTrackRecord[];
+}
+
+export interface SuwayomiMangaChapterStates {
+  mangaId: string;
+  totalCount: number;
+  chapters: { chapterNumber: number; isDownloaded: boolean }[];
 }
 
 export interface SuwayomiChapter {
