@@ -62,14 +62,16 @@ Readarr API path. Both routes reach the same BookshelfNG database and library;
 the facade carries the configured format context and does not create separate
 profile storage.
 
-Operators can set `BOOKSHELF_SEERRNG_API_KEY` in BookshelfNG from a container or
-Kubernetes secret and use it in both SeerrNG service entries. This credential
+On BookshelfNG builds that support a dedicated SeerrNG key, operators can set
+`BOOKSHELF_SEERRNG_API_KEY` from a container or Kubernetes secret and use it in
+both SeerrNG service entries. This credential
 is limited to BookshelfNG status/capability, library/search, tag,
 quality/metadata-profile and root-folder, queue, book-file, book-history, and
 command-status reads; author/book add or update operations; and a `BookSearch`
 command for one book at a time. It cannot manage API keys or system settings,
 run other commands, or delete authors or files. The global BookshelfNG API key
-remains supported for existing clients.
+remains supported for existing clients. Older BookshelfNG builds should
+continue to use the global API key.
 
 [ChaptarrNG](https://github.com/snapetech/chaptarrng) is Snapetech's maintained
 fork of [Chaptarr](https://github.com/Chaptarr/chaptarr), supported as a
