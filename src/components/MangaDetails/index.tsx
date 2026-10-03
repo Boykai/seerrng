@@ -194,7 +194,7 @@ const MangaDetails = () => {
       mediaStatus === MediaStatus.UNKNOWN ||
       mediaStatus === MediaStatus.DELETED ||
       mediaStatus === MediaStatus.PARTIALLY_AVAILABLE) &&
-    !activeRequest;
+    activeRequests.length === 0;
   const availability = getMangaAvailability(
     data.mediaInfo?.status,
     data.inSuwayomiLibrary
@@ -345,13 +345,17 @@ const MangaDetails = () => {
                       </dd>
                     </>
                   )}
-                  {activeRequest && (
+                  {activeRequests.length > 0 && (
                     <>
                       <dt className="font-medium text-gray-100">
                         {intl.formatMessage(globalMessages.request)}:
                       </dt>
                       <dd className="m-0 flex min-w-0 flex-wrap items-center gap-1">
-                        {isAwaitingMangaSource(activeRequestData) ? (
+                        {!activeRequest ? (
+                          // Another user's request: its parked state is not
+                          // visible here, so never claim it is approved.
+                          intl.formatMessage(globalMessages.requested)
+                        ) : isAwaitingMangaSource(activeRequestData) ? (
                           <MangaWaitingStatus
                             showHint={hasPermission(Permission.MANAGE_REQUESTS)}
                           />

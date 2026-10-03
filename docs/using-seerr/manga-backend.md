@@ -109,9 +109,10 @@ Users can request manga while the Manga category is on and a Suwayomi server
 is connected. Without a connected server, manga cards and details pages show
 no **Request** button, and the API refuses manga requests with HTTP `400` and
 the message "No Suwayomi server is configured for manga requests." Each title
-can have one pending or approved request at a time; titles that already have
-one, and titles that are available or blocklisted, show no **Request** button.
-Manga has no 4K requests.
+can have one pending or approved request at a time. Available and blocklisted
+titles show no **Request** button. A title that already has a pending or
+approved request shows its request status on the details page instead, and the
+request form shows it as **Requested**. Manga has no 4K requests.
 
 Select **Request** on a manga card or details page and choose which chapters
 to request:
