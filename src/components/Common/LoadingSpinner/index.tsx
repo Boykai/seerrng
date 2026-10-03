@@ -1,6 +1,14 @@
+import useSearchActivity from '@app/hooks/useSearchActivity';
+import defineMessages from '@app/utils/defineMessages';
 import { memo } from 'react';
+import { useIntl } from 'react-intl';
 
-const SpinnerIcon = memo(({ className }: { className: string }) => (
+const messages = defineMessages('components.Common.PageStatus', {
+  searching: 'Searching',
+  loading: 'Loading',
+});
+
+const SpinnerIcon = memo(({ className }: { className?: string }) => (
   <svg
     className={className}
     viewBox="0 0 38 38"
@@ -26,6 +34,27 @@ const SpinnerIcon = memo(({ className }: { className: string }) => (
 ));
 
 SpinnerIcon.displayName = 'SpinnerIcon';
+
+export const PageStatus = memo(
+  ({ active = false, label }: { active?: boolean; label?: string }) => {
+    const searching = useSearchActivity();
+    const intl = useIntl();
+    if (!active && !searching) return null;
+
+    // One display per title row; search activity wins while both are active.
+    const statusLabel = searching
+      ? intl.formatMessage(messages.searching)
+      : (label ?? intl.formatMessage(messages.loading));
+    return (
+      <span className="page-status" role="status" aria-live="polite">
+        <SpinnerIcon />
+        <span>{statusLabel}</span>
+      </span>
+    );
+  }
+);
+
+PageStatus.displayName = 'PageStatus';
 
 export const SmallLoadingSpinner = memo(() => {
   return (

@@ -1,12 +1,52 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import postcss from 'postcss';
 
 const css = readFileSync(new URL('./globals.css', import.meta.url), 'utf8');
+const verifySharedSpacing = (stylesheet) => {
+  const variables = new Map();
+  postcss.parse(stylesheet).walkRules((rule) => {
+    if (!rule.selectors.includes(':root')) return;
+    for (const node of rule.nodes ?? []) {
+      if (node.type === 'decl') variables.set(node.prop, node.value);
+    }
+  });
+  assert.equal(
+    variables.get('--card-layout-spacing'),
+    '8px',
+    'card layout retains the shared eight-pixel gap'
+  );
+  assert.equal(
+    variables.get('--card-spacing'),
+    'var(--card-layout-spacing)',
+    'card spacing consumes the layout owner'
+  );
+  assert.equal(
+    variables.get('--main-card-padding'),
+    '8px',
+    'main padding remains independently owned'
+  );
+  assert.equal(
+    variables.get('--inset-card-padding'),
+    '8px',
+    'inset padding remains independently owned'
+  );
+};
+
 test('primary action rows fill their width while disclosure rows remain left aligned', () => {
-  assert.match(
-    css,
-    /\.media-primary-action-row\s*\{[^}]*w-full[^}]*justify-between/
+  const values = new Map();
+  postcss.parse(css).walkRules((rule) => {
+    if (!rule.selectors.includes('.media-primary-action-row')) return;
+    for (const node of rule.nodes ?? [])
+      if (node.type === 'decl') values.set(node.prop, node.value);
+  });
+  assert.equal(values.get('display'), 'flex');
+  assert.equal(values.get('width'), '100%');
+  assert.equal(values.get('flex-wrap'), 'wrap');
+  assert.equal(
+    values.get('justify-content'),
+    'var(--action-row-justify, space-between)'
   );
   assert.doesNotMatch(
     css.match(/\.media-detail-disclosure-row\s*\{([^}]+)\}/)?.[1] ?? '',
@@ -26,9 +66,7 @@ test('primary action rows fill their width while disclosure rows remain left ali
   }
 });
 test('main and inset padding have independent eight-pixel settings', () => {
-  assert.match(css, /--card-spacing: 8px;/);
-  assert.match(css, /--main-card-padding: 8px;/);
-  assert.match(css, /--inset-card-padding: 8px;/);
+  verifySharedSpacing(css);
   assert.match(
     css,
     /\.refreshed-card-surface,[^{]+\{\s*padding: var\(--main-card-padding\) !important/
@@ -41,6 +79,25 @@ test('main and inset padding have independent eight-pixel settings', () => {
     css,
     /padding(?:-top)?: var\(--card-spacing\) !important/
   );
+});
+
+test('shared spacing rejects a changed gap and a copied spacing owner', () => {
+  for (const [before, after, diagnostic] of [
+    [
+      '--card-layout-spacing: 8px;',
+      '--card-layout-spacing: 12px;',
+      /card layout retains the shared eight-pixel gap/,
+    ],
+    [
+      '--card-spacing: var(--card-layout-spacing);',
+      '--card-spacing: 8px;',
+      /card spacing consumes the layout owner/,
+    ],
+  ]) {
+    const broken = css.replace(before, after);
+    assert.notEqual(broken, css);
+    assert.throws(() => verifySharedSpacing(broken), diagnostic);
+  }
 });
 test('compound settings cards do not double their inset padding', () => {
   for (const selector of [
@@ -73,7 +130,7 @@ test('card stacks, inset offsets and Settings grids share the gap token, not pad
   for (const file of [
     '../components/ManageSlideOver/index.tsx',
     '../components/ExternalMediaManageSlideOver/index.tsx',
-    '../components/RequestStatus/index.tsx',
+    '../components/Requests/index.tsx',
     '../components/IssueList/index.tsx',
     '../components/Blocklist/index.tsx',
   ]) {

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it, mock } from 'node:test';
 
-import ExternalAPI from '@server/api/externalapi';
 import RadarrAPI from '@server/api/servarr/radarr';
+import TheMovieDb from '@server/api/themoviedb';
+import Tvdb from '@server/api/tvdb';
+import WikidataVideoMetadataAPI from '@server/api/wikidata/videoMetadata';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
@@ -45,39 +47,72 @@ const mockPrivate = (
 
 describe('GET /movie/:id', () => {
   it('retains the TMDB poster for an available movie linked to Radarr', async () => {
-    mockPrivate(ExternalAPI.prototype, 'get', async () => ({
-      id: 100,
-      adult: false,
-      budget: 0,
-      genres: [],
-      videos: { results: [] },
-      original_language: 'en',
-      original_title: 'Test Movie',
-      popularity: 0,
-      production_companies: [],
-      production_countries: [],
-      release_date: '2026-01-01',
-      release_dates: { results: [] },
-      revenue: 0,
-      spoken_languages: [],
-      status: 'Released',
-      title: 'Test Movie',
-      video: false,
-      vote_average: 0,
-      vote_count: 0,
-      backdrop_path: '/provider-backdrop.jpg',
-      homepage: '',
-      imdb_id: 'tt0000100',
-      overview: 'A test movie.',
-      poster_path: '/provider-poster.jpg',
-      runtime: 90,
-      tagline: '',
-      credits: { cast: [], crew: [] },
-      belongs_to_collection: null,
-      external_ids: {},
-      keywords: { keywords: [] },
-      'watch/providers': { results: {} },
+    const tmdbCalls: unknown[] = [];
+    mockPrivate(TheMovieDb.prototype, 'get', async (endpoint: unknown) => {
+      tmdbCalls.push(endpoint);
+      assert.strictEqual(endpoint, '/movie/100');
+      return {
+        id: 100,
+        adult: false,
+        budget: 0,
+        genres: [],
+        videos: { results: [] },
+        original_language: 'en',
+        original_title: 'Test Movie',
+        popularity: 0,
+        production_companies: [],
+        production_countries: [],
+        release_date: '2026-01-01',
+        release_dates: { results: [] },
+        revenue: 0,
+        spoken_languages: [],
+        status: 'Released',
+        title: 'Test Movie',
+        video: false,
+        vote_average: 0,
+        vote_count: 0,
+        backdrop_path: '/provider-backdrop.jpg',
+        homepage: '',
+        imdb_id: 'tt0000100',
+        overview: 'A test movie.',
+        poster_path: '/provider-poster.jpg',
+        runtime: 90,
+        tagline: '',
+        credits: { cast: [], crew: [] },
+        belongs_to_collection: null,
+        external_ids: {},
+        keywords: { keywords: [] },
+        'watch/providers': { results: {} },
+      };
+    });
+    const tvdb = new Tvdb();
+    const getTvdb = mock.method(Tvdb, 'getInstance', async () => tvdb);
+    const getTvdbMetadata = mock.method(
+      tvdb,
+      'getVideoMetadataByTmdbId',
+      async () => ({
+        id: 200,
+        name: 'Test Movie',
+        releaseDate: '2026-01-01',
+        remoteIds: [{ sourceName: 'The Movie Database', id: '100' }],
+      })
+    );
+    const getTvdbById = mock.method(tvdb, 'getVideoMetadataById', async () => ({
+      id: 200,
+      name: 'Test Movie',
+      releaseDate: '2026-01-01',
+      remoteIds: [{ sourceName: 'The Movie Database', id: '100' }],
     }));
+    const wikidataIds = mock.method(
+      WikidataVideoMetadataAPI.prototype,
+      'searchItemsByExternalId',
+      async () => []
+    );
+    const wikidataTitle = mock.method(
+      WikidataVideoMetadataAPI.prototype,
+      'searchItems',
+      async () => []
+    );
     const media = await getRepository(Media).save(
       new Media({
         tmdbId: 100,
@@ -94,6 +129,27 @@ describe('GET /movie/:id', () => {
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.mediaInfo.id, media.id);
     assert.strictEqual(res.body.posterPath, '/provider-poster.jpg');
+    assert.deepStrictEqual(tmdbCalls, ['/movie/100']);
+    assert.strictEqual(getTvdb.mock.callCount(), 2);
+    assert.deepStrictEqual(
+      getTvdbMetadata.mock.calls.map((call) => call.arguments),
+      [[{ mediaType: 'movie', tmdbId: 100 }]]
+    );
+    assert.deepStrictEqual(
+      getTvdbById.mock.calls.map((call) => call.arguments),
+      [[{ mediaType: 'movie', id: 200 }]]
+    );
+    assert.deepStrictEqual(
+      wikidataIds.mock.calls.map((call) => call.arguments),
+      [
+        [{ propertyId: 'P4947', value: '100' }],
+        [{ propertyId: 'P4947', value: '100' }],
+      ]
+    );
+    assert.deepStrictEqual(
+      wikidataTitle.mock.calls.map((call) => call.arguments),
+      [['Test Movie']]
+    );
   });
 });
 

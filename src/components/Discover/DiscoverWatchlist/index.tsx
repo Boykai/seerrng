@@ -75,18 +75,24 @@ const DiscoverWatchlist = () => {
     visibleTitles.length,
   ]);
 
-  if (error) {
-    return <ErrorPage statusCode={500} />;
-  }
-
   const title = intl.formatMessage(
     userId ? messages.watchlist : messages.discoverwatchlist
   );
 
+  if (error) {
+    return (
+      <>
+        <PageTitle title={title} />
+        <Header>{title}</Header>
+        <ErrorPage statusCode={500} />
+      </>
+    );
+  }
+
   return (
     <>
       <PageTitle title={[title, userId ? user?.displayName : '']} />
-      <div className="mt-1 mb-5">
+      <div>
         <Header
           subtext={
             userId ? (

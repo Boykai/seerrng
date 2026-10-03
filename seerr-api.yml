@@ -1198,6 +1198,18 @@ components:
           type: boolean
           description: 'Keep Subject Tags open by default on supported detail pages'
           example: false
+        detailDisclosureOrder:
+          type: object
+          additionalProperties: false
+          description: Independent per-media disclosure order for this user.
+          properties:
+            tv:
+              type: array
+              uniqueItems: true
+              maxItems: 6
+              items:
+                type: string
+                enum: [cast, crew, subjectTags, details, mediaServer, overview]
     CardTextVisibilitySettings:
       type: object
       properties:
@@ -9814,6 +9826,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetailDisclosurePinSettings'
+  /user/{id}/settings/detail-disclosure-order/{mediaType}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+      - in: path
+        name: mediaType
+        required: true
+        schema:
+          type: string
+          enum: [tv]
+    get:
+      summary: Get the current user's Series detail disclosure order
+      description: Self-only, including administrators. Returns all six roles in normalized order. Overview defaults first when absent; explicitly saved placement is preserved.
+      tags: [users]
+      responses:
+        '200':
+          description: Normalized disclosure order
+          content:
+            application/json:
+              schema: &detailDisclosureOrder
+                type: array
+                minItems: 6
+                maxItems: 6
+                uniqueItems: true
+                items:
+                  type: string
+                  enum:
+                    [cast, crew, subjectTags, details, mediaServer, overview]
+        '400':
+          description: Invalid media category
+        '403':
+          description: Not the current authenticated user
+        '404':
+          description: Invalid or nonexistent user
+    post:
+      summary: Save the current user's Series detail disclosure order
+      description: Self-only authenticated operation, protected by the application's cookie and CSRF middleware. Overview defaults first when absent; other missing roles are appended in their default order. Explicitly saved placements and the relative order of existing roles are preserved.
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [order]
+              properties:
+                order:
+                  type: array
+                  maxItems: 6
+                  uniqueItems: true
+                  items:
+                    type: string
+                    enum:
+                      [cast, crew, subjectTags, details, mediaServer, overview]
+      responses:
+        '200':
+          description: Saved normalized disclosure order
+          content:
+            application/json:
+              schema: *detailDisclosureOrder
+        '400':
+          description: Invalid media category or order
+        '403':
+          description: Not the current authenticated user
+        '404':
+          description: Invalid or nonexistent user
+        '500':
+          description: Disclosure order could not be saved
   /user/{userId}/settings/media-filter-pins/{scope}:
     post:
       summary: Remember or unpin a media filter selection for one page
@@ -9855,6 +9940,9 @@ paths:
                       magazine,
                       author,
                       software,
+                      retro,
+                      modern,
+                      game,
                       null,
                     ]
       responses:
@@ -13247,6 +13335,12 @@ paths:
             enum: [movie, tv, music, book, comic, magazine, all]
             nullable: true
             default: all
+        - in: query
+          name: category
+          description: Restrict results to one software request category.
+          schema:
+            type: string
+            enum: [retro, modern, game]
       responses:
         '200':
           description: Requests returned
@@ -14788,6 +14882,271 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TvDetails'
+  /tv/{tvId}/media-server-saved-item:
+    parameters:
+      - in: path
+        name: tvId
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000000000
+    get:
+      summary: Get the current account's native Series saved state
+      description: Reads Plex Universal Watchlist or Jellyfin/Emby Favorites for the authenticated user's linked native account. Favorites use the trusted Series item for the selected quality, without falling back to a different quality. Plex Watchlist is format-independent. Does not mutate provider state or the Seerr watchlist. Provider credentials and catalog identities are resolved server-side and never returned.
+      tags: [tv]
+      parameters:
+        - in: query
+          name: is4k
+          schema:
+            type: boolean
+            default: false
+          description: Select the trusted 4K Series root for native Favorites. Accepts only true or false. Ignored by format-independent Plex Watchlist.
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Native account capability and saved state
+          content:
+            application/json:
+              schema: &mediaServerSavedItemStatus
+                type: object
+                required: [serverType, kind, available]
+                properties:
+                  serverType:
+                    type: integer
+                    enum: [1, 2, 3, 4]
+                  kind:
+                    type: string
+                    enum: [watchlist, favorites]
+                  available:
+                    type: boolean
+                  saved:
+                    type: boolean
+                  reason:
+                    type: string
+                    enum: [account-not-linked, series-not-found]
+        '400':
+          description: Invalid Series ID
+        '401':
+          description: Authentication required
+        '403':
+          description: Current account authority changed
+        '429':
+          description: Too many saved-state requests
+        '502':
+          description: Sanitized provider failure; no saved success is asserted
+          content:
+            application/json:
+              schema: &mediaServerSavedItemFailure
+                type: object
+                additionalProperties: false
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                  diagnostic:
+                    type: object
+                    additionalProperties: false
+                    required: [phase, category]
+                    properties:
+                      phase:
+                        type: string
+                        enum:
+                          [
+                            series-metadata,
+                            account,
+                            catalog-search,
+                            catalog-identity,
+                            watchlist-state,
+                            watchlist-write,
+                            watchlist-confirmation,
+                          ]
+                      category:
+                        type: string
+                        enum:
+                          [
+                            http,
+                            transport,
+                            invalid-response,
+                            identity-mismatch,
+                            confirmation-mismatch,
+                            unexpected,
+                          ]
+                      upstreamStatus:
+                        type: integer
+                        minimum: 400
+                        maximum: 599
+    post:
+      summary: Set the current account's native Series saved state
+      description: Adds or removes the entire Series from Plex Universal Watchlist or Jellyfin/Emby Favorites using only the authenticated user's fresh linked credentials. Strict desired-state mutation is idempotent and verified by provider readback. Selected seasons and episodes are not added separately. Does not create Seerr requests, change auto-request settings, or move/synchronize membership with any other list. Existing Plex Watchlist auto-request behavior may independently observe membership. Uses application cookie authentication and existing CSRF protection.
+      tags: [tv]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [saved]
+              properties:
+                saved:
+                  type: boolean
+                is4k:
+                  type: boolean
+                  default: false
+                  description: Select the trusted 4K Series root for Favorites, without other-quality fallback. Plex Watchlist is format-independent.
+      responses:
+        '200':
+          description: Confirmed native saved state
+          content:
+            application/json:
+              schema: *mediaServerSavedItemStatus
+        '400':
+          description: Invalid Series ID or mutation body
+        '401':
+          description: Authentication required
+        '403':
+          description: Current account authority changed or CSRF rejection
+        '409':
+          description: Linked account or matching native Series is unavailable
+        '429':
+          description: Too many saved-state requests
+        '502':
+          description: Sanitized provider failure or unconfirmed write
+          content:
+            application/json:
+              schema: *mediaServerSavedItemFailure
+  /tv/{tvId}/media-server-collections:
+    get:
+      summary: Get existing authorized media-server Collections for this Series
+      description: Lists existing eligible Collections and whole-Series membership using only the authenticated user's linked native credentials. Collections may be shared server/library assets, not private watchlists. Uses a trusted quality-selected Series root. Plex requires current-account ownership of the configured PMS; Jellyfin/Emby require native Collection-management permission. Smart Collections and unsupported media types are excluded. No Collection is created, and no membership is synchronized with Watchlist or Favorites.
+      tags: [tv]
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: tvId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000000
+        - in: query
+          name: is4k
+          schema:
+            type: boolean
+            default: false
+          description: Select the trusted 4K Series root. Accepts only true or false; no other-quality fallback.
+      responses:
+        '200':
+          description: Native Collection capability and confirmed existing membership
+          content:
+            application/json:
+              schema: &mediaServerCollectionsStatus
+                type: object
+                required: [serverType, available, collections]
+                properties:
+                  serverType:
+                    type: integer
+                    enum: [1, 2, 3, 4]
+                  available:
+                    type: boolean
+                  reason:
+                    type: string
+                    enum:
+                      [
+                        account-not-linked,
+                        not-authorized,
+                        series-not-found,
+                        unsupported-server,
+                        collection-limit,
+                      ]
+                  collections:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, member]
+                      properties:
+                        id:
+                          type: string
+                          minLength: 1
+                          maxLength: 128
+                          pattern: '^[a-zA-Z0-9-]+$'
+                        name:
+                          type: string
+                          minLength: 1
+                          maxLength: 512
+                        member:
+                          type: boolean
+        '400':
+          description: Invalid Series ID or strict quality query
+        '401':
+          description: Authentication required
+        '403':
+          description: Current account authority changed
+        '429':
+          description: Too many native Collection requests
+        '502':
+          description: Sanitized provider failure or incomplete native response
+  /tv/{tvId}/media-server-collections/{collectionId}:
+    post:
+      summary: Set whole-Series membership in one existing authorized Collection
+      description: Idempotently adds or removes the trusted quality-selected Series root in an existing eligible media-server Collection using fresh current-user native authority. Revalidates Collection and Series identities and verifies membership after any write. Does not create or delete a Collection, add selected episodes, synchronize other list membership, or directly create Seerr requests. Uses application cookie authentication and existing CSRF protection. Tokens, native Series item IDs and user IDs are never client parameters.
+      tags: [tv]
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: tvId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000000
+        - in: path
+          name: collectionId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: '^[a-zA-Z0-9-]+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [member]
+              properties:
+                member:
+                  type: boolean
+                is4k:
+                  type: boolean
+                  default: false
+                  description: Select the trusted 4K Series root, without other-quality fallback.
+      responses:
+        '200':
+          description: Refreshed native Collection membership
+          content:
+            application/json:
+              schema: *mediaServerCollectionsStatus
+        '400':
+          description: Invalid Series or Collection ID, unexpected query, or mutation body
+        '401':
+          description: Authentication required
+        '403':
+          description: Current account authority changed, native permission denied, or CSRF rejection
+        '409':
+          description: Linked account, selected-quality Series, or eligible Collection is unavailable
+        '429':
+          description: Too many native Collection requests
+        '502':
+          description: Sanitized provider failure or unconfirmed write
   /tv/{tvId}/cover:
     get:
       summary: Get linked Sonarr cover image

@@ -50,7 +50,7 @@ const CardTextVisibilityToggle = ({
           })();
         }}
       >
-        <Bars3BottomLeftIcon className="h-4 w-4" aria-hidden="true" />
+        <Bars3BottomLeftIcon aria-hidden="true" />
         {intl.formatMessage(messages.titleView)}
       </button>
     </Tooltip>

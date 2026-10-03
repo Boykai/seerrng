@@ -122,7 +122,7 @@ const AuthorDetails = () => {
       </div>
       <section>
         <div className="slider-header">
-          <div className="slider-title">
+          <div className="page-heading">
             {intl.formatMessage(messages.bibliography)}
             <span className="ml-2 text-sm text-gray-400">
               ({data.pagination.totalItems})

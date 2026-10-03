@@ -33,6 +33,7 @@ const fileNames = [
   'bin/check-refreshed-ui-style-lib.js',
   'bin/check-refreshed-ui-style-lib.test.mjs',
   'bin/run-cypress-start.mjs',
+  'bin/local-validation.mjs',
   'scripts/check-container-security.test.mjs',
   'seerr-api.yml',
   'src/styles/globals.css',

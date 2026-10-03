@@ -29,6 +29,41 @@ const validSharedStyles = `
   .request-card-artwork-gradient { background: rgb(var(--theme-artwork-gradient-black)); }
 `;
 
+test('attribute-qualified semantic class definitions remain valid shared style owners', () => {
+  for (const selector of [
+    ".app-filter-panel[data-filter-layout='expanded']",
+    '.app-filter-panel[aria-expanded="true"]',
+    '.app-filter-panel[data-filter-layout]',
+  ]) {
+    const result = validateRefreshedUiStyleBoundaries({
+      'src/styles/globals.css': `${validSharedStyles}\n${selector} {}`,
+      'src/components/Example/index.tsx':
+        '<section className="app-filter-panel" data-filter-layout="expanded" />',
+    });
+    assert.deepEqual(result.errors, []);
+  }
+});
+
+test('lookalike class names and an attribute-only selector cannot satisfy a missing semantic class', () => {
+  for (const selector of [
+    '.app-filter-panels[data-filter-layout]',
+    '.app-filter-panel-extra[data-filter-layout]',
+    '.app-filter-panel_extra[data-filter-layout]',
+    "[data-filter-layout='expanded']",
+  ]) {
+    const result = validateRefreshedUiStyleBoundaries({
+      'src/styles/globals.css': `${validSharedStyles}\n${selector} {}`,
+      'src/components/Example/index.tsx':
+        '<section className="app-filter-panel" data-filter-layout="expanded" />',
+    });
+    assert.equal(result.errors.length, 1);
+    assert.match(
+      result.errors[0],
+      /no global CSS definition \(app-filter-panel\)/
+    );
+  }
+});
+
 test('accepts shared blue surfaces and semantic card text', () => {
   const result = validateRefreshedUiStyleBoundaries({
     'src/components/Example/index.tsx': `

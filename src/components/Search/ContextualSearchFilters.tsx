@@ -110,7 +110,7 @@ const LibrarySearchFilters = ({
       'searchAll' | 'searchAuthors' | 'searchComics' | 'searchMagazines']
   ) => (
     <form
-      className="discover-filter-control w-72 max-w-full flex-none"
+      className="discover-filter-control app-filter-search-control"
       onSubmit={(event) => {
         event.preventDefault();
         onSearchSubmit();
@@ -122,7 +122,7 @@ const LibrarySearchFilters = ({
           (search.trim() ? ' discover-filter-control-label-active' : '')
         }
       >
-        <MagnifyingGlassIcon className="h-4 w-4" aria-hidden="true" />
+        <MagnifyingGlassIcon aria-hidden="true" />
         {intl.formatMessage(messages.keywordSearch)}
       </span>
       <input
@@ -131,7 +131,7 @@ const LibrarySearchFilters = ({
         onChange={(event) => setSearch(event.target.value)}
         placeholder={intl.formatMessage(placeholder)}
         aria-label={intl.formatMessage(placeholder)}
-        className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0 text-xs font-medium text-gray-200 placeholder:text-gray-500 focus:ring-0"
+        className="app-filter-search-input"
       />
     </form>
   );

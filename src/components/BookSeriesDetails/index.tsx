@@ -343,7 +343,7 @@ const BookSeriesDetails = ({ series }: { series?: BookSeriesDetailsType }) => {
             />
           </div>
           <section className="card-spacing-before">
-            <h2 className="slider-title">
+            <h2 className="page-heading">
               {intl.formatMessage(messages.collection)}
               <span className="refreshed-detail-text-muted ml-2 text-sm">
                 ({visibleBooks.length})

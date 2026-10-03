@@ -31,10 +31,12 @@ export default function MediaFilterOption<T extends MediaFilterValue>({
     label,
   });
   return (
-    <span className={`${getFilterToggleButtonClass(selected)} !gap-0 !p-0`}>
+    <span
+      className={`${getFilterToggleButtonClass(selected)} app-filter-button-segmented`}
+    >
       <button
         type="button"
-        className="app-control-shadow-exempt app-filter-segment-focus flex h-full items-center border-r border-current/30 px-2"
+        className="app-control-shadow-exempt app-filter-segment-focus app-filter-pin-segment"
         aria-label={pinLabel}
         title={pinLabel}
         aria-pressed={pinned}
@@ -43,7 +45,7 @@ export default function MediaFilterOption<T extends MediaFilterValue>({
       >
         <PushPinIcon
           filled={pinned}
-          className="h-3.5 w-3.5 rotate-45"
+          className="app-filter-pin-icon"
           aria-hidden="true"
         />
       </button>

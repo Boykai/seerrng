@@ -1,7 +1,7 @@
 import Tooltip from '@app/components/Common/Tooltip';
 import defineMessages from '@app/utils/defineMessages';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
-import type { ReactNode, SVGProps } from 'react';
+import type { ButtonHTMLAttributes, ReactNode, SVGProps } from 'react';
 import { useIntl } from 'react-intl';
 
 export const PushPinIcon = ({
@@ -26,7 +26,7 @@ const messages = defineMessages('components.MediaDetails.DetailDisclosure', {
   unpin: 'Unpin {label}',
 });
 
-interface DetailDisclosureButtonProps {
+export interface DetailDisclosureButtonProps {
   label: string;
   icon?: ReactNode;
   open: boolean;
@@ -34,6 +34,23 @@ interface DetailDisclosureButtonProps {
   pinned?: boolean;
   onPinClick?: () => void;
   controls?: string;
+  title?: string;
+  reorder?: {
+    role: string;
+    state?: 'ready' | 'dragging';
+    insertion?: 'before' | 'after';
+    descriptionId: string;
+    handlers: Pick<
+      ButtonHTMLAttributes<HTMLButtonElement>,
+      | 'onPointerDown'
+      | 'onPointerMove'
+      | 'onPointerUp'
+      | 'onPointerCancel'
+      | 'onLostPointerCapture'
+      | 'onKeyDown'
+      | 'onClickCapture'
+    >;
+  };
 }
 
 const DetailDisclosureButton = ({
@@ -44,6 +61,8 @@ const DetailDisclosureButton = ({
   pinned = false,
   onPinClick,
   controls,
+  title,
+  reorder,
 }: DetailDisclosureButtonProps) => {
   const intl = useIntl();
   const pinLabel = intl.formatMessage(pinned ? messages.unpin : messages.pin, {
@@ -51,7 +70,12 @@ const DetailDisclosureButton = ({
   });
 
   return (
-    <span className="detail-disclosure-control">
+    <span
+      className="detail-disclosure-control"
+      data-disclosure-role={reorder?.role}
+      data-reorder-state={reorder?.state}
+      data-reorder-insertion={reorder?.insertion}
+    >
       {onPinClick && (
         <Tooltip content={pinLabel}>
           <button
@@ -63,7 +87,7 @@ const DetailDisclosureButton = ({
           >
             <PushPinIcon
               filled={pinned}
-              className="h-3.5 w-3.5 rotate-45"
+              className="detail-disclosure-pin-icon"
               aria-hidden="true"
             />
           </button>
@@ -74,7 +98,10 @@ const DetailDisclosureButton = ({
         className="detail-disclosure-button"
         aria-expanded={open}
         aria-controls={controls}
+        title={title}
         onClick={onClick}
+        aria-describedby={reorder?.descriptionId}
+        {...reorder?.handlers}
       >
         {icon}
         {label}

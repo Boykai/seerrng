@@ -79,12 +79,7 @@ const IssueComment = ({
     <div className="grid grid-cols-[max-content_2rem_minmax(0,1fr)] items-start gap-x-3 border-t border-gray-700/70 py-2 first:border-t-0">
       <Transition
         as={Fragment}
-        enter="transition-opacity duration-300"
-        enterFrom="opacity-0"
-        enterTo="opacity-100"
-        leave="transition-opacity duration-300"
-        leaveFrom="opacity-100"
-        leaveTo="opacity-0"
+
         show={showDeleteModal}
       >
         <Modal
@@ -129,7 +124,7 @@ const IssueComment = ({
                 buttonSize="sm"
                 title={intl.formatMessage(messages.editHelp)}
               >
-                <PencilSquareIcon className="h-3.5 w-3.5" />
+                <PencilSquareIcon />
                 {intl.formatMessage(messages.edit)}
               </Button>
             )}
@@ -141,7 +136,7 @@ const IssueComment = ({
                 buttonSize="sm"
                 title={intl.formatMessage(messages.deleteHelp)}
               >
-                <TrashIcon className="h-3.5 w-3.5" />
+                <TrashIcon />
                 {intl.formatMessage(messages.delete)}
               </Button>
             )}
@@ -194,7 +189,7 @@ const IssueComment = ({
                     buttonSize="sm"
                     title={intl.formatMessage(messages.cancelHelp)}
                   >
-                    <XMarkIcon className="h-3.5 w-3.5" />
+                    <XMarkIcon />
                     {intl.formatMessage(globalMessages.cancel)}
                   </Button>
                   <Button
@@ -204,7 +199,7 @@ const IssueComment = ({
                     buttonSize="sm"
                     title={intl.formatMessage(messages.saveHelp)}
                   >
-                    <CheckIcon className="h-3.5 w-3.5" />
+                    <CheckIcon />
                     {intl.formatMessage(globalMessages.save)}
                   </Button>
                 </div>

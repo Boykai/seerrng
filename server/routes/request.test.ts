@@ -6585,6 +6585,19 @@ describe('POST /request/:requestId/retry', () => {
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.status, MediaRequestStatus.APPROVED);
     assert.strictEqual(res.body.modifiedBy.id, 2);
+    const retryEvents = await getRepository(MediaRequestStatusEvent).find({
+      where: { requestId: failed.id },
+      order: { id: 'ASC' },
+    });
+    const retryEvent = retryEvents.find((event) =>
+      event.fingerprint.startsWith('retry:')
+    );
+    assert.ok(retryEvent);
+    assert.strictEqual(retryEvent.stage, RequestStatusStage.APPROVED);
+    assert.strictEqual(
+      retryEvent.message,
+      'The request was retried and is waiting to be dispatched.'
+    );
   });
 
   it('requeues an unavailable approved request for another search', async () => {

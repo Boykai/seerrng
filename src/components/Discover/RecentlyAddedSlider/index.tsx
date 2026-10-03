@@ -82,12 +82,14 @@ const RecentlyAddedSlider = () => {
 
   return (
     <div ref={ref}>
-      <div className="slider-header">
-        <div className="slider-title">
-          <span>{intl.formatMessage(messages.recentlyAdded)}</span>
-        </div>
-      </div>
       <Slider
+        heading={
+          <>
+            <div className="page-heading">
+              <span>{intl.formatMessage(messages.recentlyAdded)}</span>
+            </div>
+          </>
+        }
         sliderKey="media"
         isLoading={isLoading}
         isEmpty={!!media && !recentlyAddedCards.length && !mediaError}

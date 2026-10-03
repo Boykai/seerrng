@@ -1,3 +1,4 @@
+import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
 import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
 import {
@@ -11,7 +12,7 @@ import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/solid';
 import type { Region } from '@server/lib/settings';
 import { countries } from 'country-flag-icons';
 import 'country-flag-icons/3x2/flags.css';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -43,8 +44,13 @@ const RegionSelector = ({
 }: RegionSelectorProps) => {
   const { currentSettings } = useSettings();
   const intl = useIntl();
-  const { data: regions } = useSWR<Region[]>(
+  const { data: regions, isLoading } = useSWR<Region[]>(
     watchProviders ? '/api/v1/watchproviders/regions' : '/api/v1/regions'
+  );
+  const activityId = useId();
+  useSearchActivityReporter(
+    compact && isLoading,
+    `region-selector:${activityId}`
   );
   const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
 
@@ -97,20 +103,38 @@ const RegionSelector = ({
     onChange?.(name, region?.iso_3166_1 ?? '');
   };
 
+  const optionClass = (active: boolean) =>
+    compact
+      ? `app-filter-select-option ${active ? 'app-filter-select-option-active' : ''}`
+      : `${active ? 'bg-indigo-600 text-white' : 'text-gray-300'} relative flex cursor-default items-center pr-4 pl-8 select-none py-2`;
+  const valueClass = (selected: boolean) =>
+    compact
+      ? undefined
+      : `${selected ? 'font-semibold' : 'font-normal'} block truncate`;
+
   return (
-    <div className="w-full">
+    <div
+      className={compact ? undefined : 'w-full'}
+      data-filter-region={compact ? 'container' : undefined}
+    >
       <Listbox as="div" value={selectedRegion} onChange={handleRegionSelect}>
         {({ open }) => (
-          <div className="relative">
+          <div
+            className={compact ? undefined : 'relative'}
+            data-filter-region={compact ? 'container' : undefined}
+          >
             <span
-              className={`inline-block w-full ${compact ? '' : 'rounded-md shadow-sm'}`}
+              className={
+                compact ? undefined : 'inline-block w-full rounded-md shadow-sm'
+              }
             >
               <ListboxButton
-                className={`settings-compatible-listbox-button focus:shadow-outline-blue relative flex w-full cursor-default items-center text-left text-white transition duration-150 ease-in-out focus:outline-none ${
+                className={
                   compact
-                    ? 'rounded-none border-0 bg-transparent pr-8 pl-2'
-                    : 'rounded-md border pr-8 pl-2'
-                }`}
+                    ? 'app-filter-select-trigger'
+                    : 'settings-compatible-listbox-button focus:shadow-outline-blue relative flex w-full cursor-default items-center rounded-md border pr-8 pl-2 text-left text-white transition duration-150 ease-in-out focus:outline-none'
+                }
+                data-filter-region={compact ? 'trigger' : undefined}
               >
                 {((selectedRegion &&
                   countries.includes(selectedRegion?.iso_3166_1)) ||
@@ -118,7 +142,14 @@ const RegionSelector = ({
                     !selectedRegion &&
                     regionValue &&
                     countries.includes(regionValue))) && (
-                  <span className="mr-2 h-4 overflow-hidden text-base leading-4">
+                  <span
+                    className={
+                      compact
+                        ? undefined
+                        : 'mr-2 h-4 overflow-hidden text-base leading-4'
+                    }
+                    data-filter-region={compact ? 'flag' : undefined}
+                  >
                     <span
                       className={`flag:${
                         selectedRegion ? selectedRegion.iso_3166_1 : regionValue
@@ -126,7 +157,10 @@ const RegionSelector = ({
                     />
                   </span>
                 )}
-                <span className="block truncate">
+                <span
+                  className={compact ? undefined : 'block truncate'}
+                  data-filter-region={compact ? 'value' : undefined}
+                >
                   {selectedRegion && selectedRegion.iso_3166_1 !== 'all'
                     ? regionName(selectedRegion.iso_3166_1)
                     : isUserSetting && selectedRegion?.iso_3166_1 !== 'all'
@@ -137,45 +171,64 @@ const RegionSelector = ({
                         })
                       : intl.formatMessage(messages.regionDefault)}
                 </span>
-                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500">
-                  <ChevronDownIcon className="h-5 w-5" />
-                </span>
+                {compact ? (
+                  <ChevronDownIcon className="app-filter-select-chevron" />
+                ) : (
+                  <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500">
+                    <ChevronDownIcon className="h-5 w-5" />
+                  </span>
+                )}
               </ListboxButton>
             </span>
 
             <Transition
               as="div"
               show={open}
-              leave="transition-opacity ease-in duration-100"
-              leaveFrom="opacity-100"
-              leaveTo="opacity-0"
-              className="absolute z-50 mt-1 w-full rounded-md bg-gray-800 shadow-lg"
+              leave={
+                compact ? undefined : 'transition-opacity ease-in duration-100'
+              }
+              leaveFrom={compact ? undefined : 'opacity-100'}
+              leaveTo={compact ? undefined : 'opacity-0'}
+              className={
+                compact
+                  ? 'app-filter-select-menu'
+                  : 'absolute z-50 mt-1 w-full rounded-md bg-gray-800 shadow-lg'
+              }
             >
               <ListboxOptions
                 static
-                className={`overflow-auto rounded-md py-1 text-base leading-6 shadow-xs focus:outline-none sm:text-sm sm:leading-5 ${compact ? 'max-h-60 text-xs leading-4 sm:text-xs sm:leading-4' : 'max-h-60'}`}
+                className={
+                  compact
+                    ? undefined
+                    : 'max-h-60 overflow-auto rounded-md py-1 text-base leading-6 shadow-xs focus:outline-none sm:text-sm sm:leading-5'
+                }
+                data-filter-region={compact ? 'options' : undefined}
               >
                 {isUserSetting && (
                   <ListboxOption value={null}>
                     {({ selected, active }) => (
                       <div
-                        className={`${
-                          active ? 'bg-indigo-600 text-white' : 'text-gray-300'
-                        } relative flex cursor-default items-center pr-4 pl-8 select-none ${compact ? 'py-1' : 'py-2'}`}
+                        className={optionClass(active)}
+                        data-filter-region={compact ? 'option' : undefined}
                       >
-                        <span className="mr-2 text-base">
+                        <span
+                          className={compact ? undefined : 'mr-2 text-base'}
+                          data-filter-region={compact ? 'flag' : undefined}
+                        >
                           <span
                             className={
                               countries.includes(regionValue)
                                 ? `flag:${regionValue}`
-                                : 'pr-6'
+                                : compact
+                                  ? undefined
+                                  : 'pr-6'
                             }
                           />
                         </span>
                         <span
-                          className={`${
-                            selected ? 'font-semibold' : 'font-normal'
-                          } block truncate`}
+                          className={valueClass(selected)}
+                          data-filter-region={compact ? 'value' : undefined}
+                          data-selected={selected}
                         >
                           {intl.formatMessage(messages.regionServerDefault, {
                             region: regionValue
@@ -185,11 +238,15 @@ const RegionSelector = ({
                         </span>
                         {selected && (
                           <span
-                            className={`${
-                              active ? 'text-white' : 'text-indigo-600'
-                            } absolute inset-y-0 left-0 flex items-center pl-1.5`}
+                            className={
+                              compact
+                                ? 'app-filter-select-check'
+                                : `${active ? 'text-white' : 'text-indigo-600'} absolute inset-y-0 left-0 flex items-center pl-1.5`
+                            }
                           >
-                            <CheckIcon className="h-5 w-5" />
+                            <CheckIcon
+                              className={compact ? undefined : 'h-5 w-5'}
+                            />
                           </span>
                         )}
                       </div>
@@ -200,24 +257,35 @@ const RegionSelector = ({
                   <ListboxOption value={isUserSetting ? allRegion : null}>
                     {({ selected, active }) => (
                       <div
-                        className={`${
-                          active ? 'bg-indigo-600 text-white' : 'text-gray-300'
-                        } relative cursor-default pr-4 pl-8 select-none ${compact ? 'py-1' : 'py-2'}`}
+                        className={
+                          compact
+                            ? optionClass(active)
+                            : `${active ? 'bg-indigo-600 text-white' : 'text-gray-300'} relative cursor-default py-2 pr-4 pl-8 select-none`
+                        }
+                        data-filter-region={compact ? 'option' : undefined}
                       >
                         <span
-                          className={`${
-                            selected ? 'font-semibold' : 'font-normal'
-                          } block truncate pl-8`}
+                          className={
+                            compact
+                              ? undefined
+                              : `${selected ? 'font-semibold' : 'font-normal'} block truncate pl-8`
+                          }
+                          data-filter-region={compact ? 'value' : undefined}
+                          data-selected={selected}
                         >
                           {intl.formatMessage(messages.regionDefault)}
                         </span>
                         {selected && (
                           <span
-                            className={`${
-                              active ? 'text-white' : 'text-indigo-600'
-                            } absolute inset-y-0 left-0 flex items-center pl-1.5`}
+                            className={
+                              compact
+                                ? 'app-filter-select-check'
+                                : `${active ? 'text-white' : 'text-indigo-600'} absolute inset-y-0 left-0 flex items-center pl-1.5`
+                            }
                           >
-                            <CheckIcon className="h-5 w-5" />
+                            <CheckIcon
+                              className={compact ? undefined : 'h-5 w-5'}
+                            />
                           </span>
                         )}
                       </div>
@@ -228,33 +296,41 @@ const RegionSelector = ({
                   <ListboxOption key={region.iso_3166_1} value={region}>
                     {({ selected, active }) => (
                       <div
-                        className={`${
-                          active ? 'bg-indigo-600 text-white' : 'text-gray-300'
-                        } relative flex cursor-default items-center pr-4 pl-8 select-none ${compact ? 'py-1' : 'py-2'}`}
+                        className={optionClass(active)}
+                        data-filter-region={compact ? 'option' : undefined}
                       >
-                        <span className="mr-2 text-base">
+                        <span
+                          className={compact ? undefined : 'mr-2 text-base'}
+                          data-filter-region={compact ? 'flag' : undefined}
+                        >
                           <span
                             className={
                               countries.includes(region.iso_3166_1)
                                 ? `flag:${region.iso_3166_1}`
-                                : 'pr-6'
+                                : compact
+                                  ? undefined
+                                  : 'pr-6'
                             }
                           />
                         </span>
                         <span
-                          className={`${
-                            selected ? 'font-semibold' : 'font-normal'
-                          } block truncate`}
+                          className={valueClass(selected)}
+                          data-filter-region={compact ? 'value' : undefined}
+                          data-selected={selected}
                         >
                           {regionName(region.iso_3166_1)}
                         </span>
                         {selected && (
                           <span
-                            className={`${
-                              active ? 'text-white' : 'text-indigo-600'
-                            } absolute inset-y-0 left-0 flex items-center pl-1.5`}
+                            className={
+                              compact
+                                ? 'app-filter-select-check'
+                                : `${active ? 'text-white' : 'text-indigo-600'} absolute inset-y-0 left-0 flex items-center pl-1.5`
+                            }
                           >
-                            <CheckIcon className="h-5 w-5" />
+                            <CheckIcon
+                              className={compact ? undefined : 'h-5 w-5'}
+                            />
                           </span>
                         )}
                       </div>

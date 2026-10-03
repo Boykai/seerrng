@@ -159,6 +159,7 @@ const MovieSummaryCard = ({
 
         <div
           className={`movie-summary-fields detail-card-heading-spacing grid min-w-0 flex-1 ${ratings ? 'movie-summary-fields-with-ratings' : 'detail-three-column-grid'}`}
+          data-table-layout="movie-title-details-table"
         >
           <div className="detail-paired-column-span min-w-0">
             <dl className="media-detail-rows detail-paired-columns grid min-w-0 content-start text-xs">

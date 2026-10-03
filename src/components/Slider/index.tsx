@@ -1,18 +1,20 @@
 import Button from '@app/components/Common/Button';
+import PageErrorMessage from '@app/components/Common/PageErrorMessage';
 import TitleCard from '@app/components/TitleCard';
 import globalMessages from '@app/i18n/globalMessages';
+import defineMessages from '@app/utils/defineMessages';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type JSX,
-} from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { useIntl } from 'react-intl';
 
+const messages = defineMessages('components.Slider', {
+  emptyTitle: 'No Results',
+});
+
 interface SliderProps {
+  heading: React.ReactNode;
+  notice?: React.ReactNode;
+  isActive?: boolean;
   sliderKey: string;
   items?: JSX.Element[];
   isLoading: boolean;
@@ -29,6 +31,9 @@ enum Direction {
 }
 
 const Slider = ({
+  heading,
+  notice,
+  isActive = true,
   sliderKey,
   items,
   isLoading,
@@ -108,10 +113,6 @@ const Slider = ({
     debouncedScroll();
   };
 
-  const itemStyle: CSSProperties | undefined = disableItemContentVisibility
-    ? { contain: 'none', contentVisibility: 'visible', overflow: 'visible' }
-    : undefined;
-
   const slide = (direction: Direction) => {
     const clientWidth =
       containerRef.current?.getBoundingClientRect().width ?? 0;
@@ -156,69 +157,81 @@ const Slider = ({
   };
 
   return (
-    <div className="relative" data-testid="media-slider">
-      <div className="absolute right-0 -mt-10 flex gap-1 text-gray-400">
-        <Button
-          buttonType="success"
-          buttonSize="sm"
-          className="h-8 w-8 p-0 disabled:text-gray-600"
-          onClick={() => slide(Direction.LEFT)}
-          disabled={scrollPos.isStart}
-          disabledReason={intl.formatMessage(globalMessages.noPreviousItems)}
-          type="button"
-          aria-label={intl.formatMessage(globalMessages.previous)}
-        >
-          <ChevronLeftIcon className="h-4 w-4" />
-        </Button>
-        <Button
-          buttonType="success"
-          buttonSize="sm"
-          className="h-8 w-8 p-0 disabled:text-gray-600"
-          onClick={() => slide(Direction.RIGHT)}
-          disabled={scrollPos.isEnd}
-          disabledReason={intl.formatMessage(globalMessages.noNextItems)}
-          type="button"
-          aria-label={intl.formatMessage(globalMessages.next)}
-        >
-          <ChevronRightIcon className="h-4 w-4" />
-        </Button>
-      </div>
-      <div
-        className={`slider-track hide-scrollbar relative -my-2 -mr-4 -ml-4 overflow-x-scroll overflow-y-auto overscroll-x-contain px-2 py-2 whitespace-nowrap ${
-          compact
-            ? 'slider-track-compact min-h-[5.5rem]'
-            : 'min-h-[13.5rem] md:min-h-[17rem]'
-        }`}
-        ref={containerRef}
-        onScroll={onScroll}
-      >
-        {items?.map((item, index) => (
-          <div
-            key={`${sliderKey}-${index}`}
-            className={`slider-item inline-block px-2 align-top ${compact ? 'slider-item-compact' : ''}`}
-            style={itemStyle}
-          >
-            {item}
-          </div>
-        ))}
-        {isLoading &&
-          [...Array(10)].map((_item, i) => (
-            <div
-              key={`placeholder-${i}`}
-              className={`slider-item inline-block px-2 align-top ${compact ? 'slider-item-compact' : ''}`}
-              style={itemStyle}
+    <div
+      className="slider-layout"
+      data-slider-size={compact ? 'compact' : undefined}
+      data-testid="media-slider"
+    >
+      <div className="slider-header">
+        {heading}
+        {isActive && (
+          <div className="slider-navigation">
+            <Button
+              buttonType="success"
+              buttonSize="standard"
+              onClick={() => slide(Direction.LEFT)}
+              disabled={scrollPos.isStart}
+              disabledReason={intl.formatMessage(
+                globalMessages.noPreviousItems
+              )}
+              type="button"
+              aria-label={intl.formatMessage(globalMessages.previous)}
             >
-              {placeholder}
-            </div>
-          ))}
-        {isEmpty && (
-          <div className="mt-16 mb-16 text-center font-medium text-gray-300">
-            {emptyMessage
-              ? emptyMessage
-              : intl.formatMessage(globalMessages.noresults)}
+              <ChevronLeftIcon />
+            </Button>
+            <Button
+              buttonType="success"
+              buttonSize="standard"
+              onClick={() => slide(Direction.RIGHT)}
+              disabled={scrollPos.isEnd}
+              disabledReason={intl.formatMessage(globalMessages.noNextItems)}
+              type="button"
+              aria-label={intl.formatMessage(globalMessages.next)}
+            >
+              <ChevronRightIcon />
+            </Button>
           </div>
         )}
       </div>
+      {notice}
+      {isActive && (
+        <div
+          className={`slider-track ${compact ? 'slider-track-compact' : ''}`}
+          ref={containerRef}
+          onScroll={onScroll}
+        >
+          {items?.map((item, index) => (
+            <div
+              key={`${sliderKey}-${index}`}
+              className={`slider-item ${compact ? 'slider-item-compact' : ''}`}
+              data-render-visibility={
+                disableItemContentVisibility ? 'full' : undefined
+              }
+            >
+              {item}
+            </div>
+          ))}
+          {isLoading &&
+            [...Array(10)].map((_item, i) => (
+              <div
+                key={`placeholder-${i}`}
+                className={`slider-item ${compact ? 'slider-item-compact' : ''}`}
+                data-render-visibility={
+                  disableItemContentVisibility ? 'full' : undefined
+                }
+              >
+                {placeholder}
+              </div>
+            ))}
+          {isEmpty && (
+            <PageErrorMessage
+              severity="empty"
+              title={intl.formatMessage(messages.emptyTitle)}
+              description={emptyMessage}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 };

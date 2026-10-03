@@ -18,6 +18,15 @@ const cacheableRoutePatterns = [
 ];
 
 const getCacheControl = (path: string, isAuthenticated: boolean) => {
+  if (
+    /^\/tv\/\d+\/media-server-(?:collections|saved-item)(?:\/|$)/.test(path)
+  ) {
+    // Membership and saved state are mutable outside SeerrNG and are re-read
+    // immediately before every add/remove action. A browser-cached response is
+    // not authoritative.
+    return 'private, no-store';
+  }
+
   if (path === '/settings/public') {
     // These values control authentication and media visibility. A stale 304
     // can silently revert the client to old feature flags, so never reuse it.

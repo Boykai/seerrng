@@ -26,7 +26,12 @@ import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
 import { refreshIntervalHelper } from '@app/utils/refreshIntervalHelper';
 import { withProperties } from '@app/utils/typeHelpers';
 import {
-  ArrowPathIcon,
+  CheckIcon as AvailableStatusIcon,
+  ExclamationTriangleIcon as FailedStatusIcon,
+  ClockIcon as PendingStatusIcon,
+  ArrowPathIcon as ProcessingStatusIcon,
+} from '@heroicons/react/24/outline';
+import {
   CheckIcon,
   PencilIcon,
   TrashIcon,
@@ -55,7 +60,8 @@ const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
 
 const messages = defineMessages('components.RequestCard', {
   failedretry: 'Something went wrong while retrying the request.',
-  searchAgain: 'Search Again',
+  retry: 'Retry',
+  retryRequest: 'Retry this request',
   failedmodify: 'Something went wrong while modifying the request.',
   mediaerror: '{mediaType} Not Found',
   tmdbid: 'TMDB ID',
@@ -251,17 +257,19 @@ interface RequestCardPlaceholderProps {
 }
 
 const RequestCardPlaceholder = ({ compact }: RequestCardPlaceholderProps) => {
+  if (compact) {
+    return (
+      <div
+        className="request-card-placeholder request-card-compact-layout"
+        aria-hidden="true"
+      />
+    );
+  }
+
   return (
-    <div
-      className={`relative w-72 animate-pulse rounded-xl bg-gray-700 p-4 sm:w-96 ${
-        compact ? 'h-[9.5rem]' : 'min-h-[17rem]'
-      }`}
-    >
-      <div className={compact ? 'h-full w-20 sm:w-28' : 'w-20 sm:w-28'}>
-        <div
-          className={compact ? 'h-full w-full' : 'w-full'}
-          style={compact ? undefined : { paddingBottom: '150%' }}
-        />
+    <div className="relative min-h-[17rem] w-72 animate-pulse rounded-xl bg-gray-700 p-4 sm:w-96">
+      <div className="w-20 sm:w-28">
+        <div className="w-full" style={{ paddingBottom: '150%' }} />
       </div>
     </div>
   );
@@ -513,13 +521,6 @@ const RequestCard = ({
     getRequestDownloadStatus(requestData)?.some((item) => item.downloadId) &&
     canRetry
   );
-  const { mediaUrl: plexUrl, mediaUrl4k: plexUrl4k } = useDeepLinks({
-    mediaUrl: requestData?.media?.mediaUrl,
-    mediaUrl4k: requestData?.media?.mediaUrl4k,
-    iOSPlexUrl: requestData?.media?.iOSPlexUrl,
-    iOSPlexUrl4k: requestData?.media?.iOSPlexUrl4k,
-  });
-
   const modifyRequest = async (type: 'approve' | 'decline') => {
     setUpdatingType(type);
     try {
@@ -599,20 +600,24 @@ const RequestCard = ({
     MediaStatus.BLOCKLISTED,
     MediaStatus.DELETED,
   ];
+  const requestedMediaStatus = getRequestMediaStatus(requestData);
+  const requestedQualityStatus = visibleMediaStatuses.includes(
+    requestedMediaStatus
+  )
+    ? requestedMediaStatus
+    : requestData.status === MediaRequestStatus.PENDING
+      ? MediaStatus.PENDING
+      : MediaStatus.PROCESSING;
   const availabilityQualityBadges =
     requestData.type === 'movie' || requestData.type === 'tv'
       ? [
           {
-            quality: 'HD' as const,
-            status: requestData.media.status,
-            inProgress: (requestData.media.downloadStatus ?? []).length > 0,
+            quality: requestData.is4k ? ('4K' as const) : ('HD' as const),
+            status: requestedQualityStatus,
+            inProgress:
+              (getRequestDownloadStatus(requestData) ?? []).length > 0,
           },
-          {
-            quality: '4K' as const,
-            status: requestData.media.status4k,
-            inProgress: (requestData.media.downloadStatus4k ?? []).length > 0,
-          },
-        ].filter((badge) => visibleMediaStatuses.includes(badge.status))
+        ]
       : [
           {
             quality: undefined,
@@ -621,7 +626,6 @@ const RequestCard = ({
               (getRequestDownloadStatus(requestData) ?? []).length > 0,
           },
         ].filter((badge) => visibleMediaStatuses.includes(badge.status));
-
   return (
     <>
       {showEditModal && (
@@ -662,8 +666,8 @@ const RequestCard = ({
         />
       )}
       <div
-        className={`app-card-main relative flex w-72 overflow-hidden rounded-xl bg-gray-800 bg-cover bg-center p-4 text-gray-400 shadow ring-1 ring-gray-700 sm:w-96 ${
-          compact ? 'min-h-0' : 'min-h-[17rem]'
+        className={`app-card-main relative flex overflow-hidden rounded-xl bg-gray-800 bg-cover bg-center p-4 text-gray-400 shadow ring-1 ring-gray-700 ${
+          compact ? 'request-card-compact-layout' : 'min-h-[17rem] w-72 sm:w-96'
         }`}
         data-testid="request-card"
       >
@@ -701,9 +705,6 @@ const RequestCard = ({
                 mediaType={getMediaTypeBadgeType(requestData.type) ?? 'movie'}
                 variant="button"
               />
-            )}
-            {requestData.type !== 'book' && requestData.is4k && (
-              <Badge badgeType="warning">4K</Badge>
             )}
             <span>
               {(isMovie(title)
@@ -809,18 +810,92 @@ const RequestCard = ({
               </span>
             </div>
           )}
-          <div className="mt-2 flex flex-wrap items-center gap-1 text-sm sm:mt-1">
-            {requestData.status === MediaRequestStatus.DECLINED ? (
+          <div className="request-status-action-row mt-2 flex flex-wrap items-center text-sm sm:mt-1">
+            {requestData.type === 'movie' || requestData.type === 'tv' ? (
+              requestData.status === MediaRequestStatus.FAILED ? (
+                <Link
+                  className="request-status-control request-status-control-link request-status-control-danger"
+                  href={getRequestDetailHref(requestData, true)}
+                >
+                  <FailedStatusIcon
+                    className="request-status-control-icon"
+                    aria-hidden="true"
+                  />
+                  {intl.formatMessage(globalMessages.failed)}
+                </Link>
+              ) : requestData.status === MediaRequestStatus.DECLINED ? (
+                <Link
+                  className="request-status-control request-status-control-link request-status-control-danger"
+                  href={getRequestDetailHref(requestData, true)}
+                >
+                  <FailedStatusIcon
+                    className="request-status-control-icon"
+                    aria-hidden="true"
+                  />
+                  {intl.formatMessage(globalMessages.declined)}
+                </Link>
+              ) : canFailDownload ? (
+                <Link
+                  className="request-status-control request-status-control-link request-status-control-warning"
+                  href={getRequestDetailHref(requestData, true)}
+                >
+                  <ProcessingStatusIcon
+                    className="request-status-control-icon"
+                    aria-hidden="true"
+                  />
+                  {intl.formatMessage(globalMessages.processing)}
+                </Link>
+              ) : requestedQualityStatus === MediaStatus.AVAILABLE ? (
+                <Link
+                  className="request-status-control request-status-control-link request-status-control-success"
+                  href={getRequestDetailHref(requestData, true)}
+                >
+                  <AvailableStatusIcon
+                    className="request-status-control-icon"
+                    aria-hidden="true"
+                  />
+                  {intl.formatMessage(globalMessages.available)}
+                </Link>
+              ) : requestData.status === MediaRequestStatus.PENDING ? (
+                <Link
+                  className="request-status-control request-status-control-link request-status-control-pending"
+                  href={getRequestDetailHref(requestData, true)}
+                >
+                  <PendingStatusIcon
+                    className="request-status-control-icon"
+                    aria-hidden="true"
+                  />
+                  {intl.formatMessage(globalMessages.pending)}
+                </Link>
+              ) : (
+                <Link
+                  className="request-status-control request-status-control-link request-status-control-warning"
+                  href={getRequestDetailHref(requestData, true)}
+                >
+                  <ProcessingStatusIcon
+                    className="request-status-control-icon"
+                    aria-hidden="true"
+                  />
+                  {intl.formatMessage(globalMessages.processing)}
+                </Link>
+              )
+            ) : requestData.status === MediaRequestStatus.DECLINED ? (
               <Badge badgeType="danger">
                 {intl.formatMessage(globalMessages.declined)}
               </Badge>
             ) : requestData.status === MediaRequestStatus.FAILED ? (
-              <Badge
-                badgeType="danger"
+              <Button
+                as="a"
+                buttonType="danger"
+                buttonSize="sm"
                 href={getRequestDetailHref(requestData, true)}
               >
+                <FailedStatusIcon
+                  className="request-status-control-icon"
+                  aria-hidden="true"
+                />
                 {intl.formatMessage(globalMessages.failed)}
-              </Badge>
+              </Button>
             ) : requestData.status === MediaRequestStatus.PENDING &&
               getRequestMediaStatus(requestData) === MediaStatus.DELETED ? (
               <Badge
@@ -829,34 +904,6 @@ const RequestCard = ({
               >
                 {intl.formatMessage(globalMessages.pending)}
               </Badge>
-            ) : canFailDownload ? (
-              <StatusBadge
-                status={getRequestMediaStatus(requestData)}
-                downloadItem={getRequestDownloadStatus(requestData)}
-                title={
-                  isMovie(title)
-                    ? title.title
-                    : isMusic(title)
-                      ? title.title
-                      : isBook(title)
-                        ? title.title
-                        : isComic(title)
-                          ? title.title
-                          : isMagazine(title)
-                            ? title.title
-                            : title.name
-                }
-                inProgress={
-                  (getRequestDownloadStatus(requestData) ?? []).length > 0
-                }
-                is4k={requestData.is4k}
-                tmdbId={requestData.media.tmdbId}
-                mediaType={requestData.type === 'tv' ? 'tv' : 'movie'}
-                plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
-                serviceUrl={getRequestServiceUrl(requestData)}
-                requestId={requestData.id}
-                canFailDownload
-              />
             ) : (
               availabilityQualityBadges.map((badge) => (
                 <StatusBadgeMini
@@ -865,27 +912,37 @@ const RequestCard = ({
                   quality={badge.quality}
                   inProgress={badge.inProgress}
                   shrink
+                  buttonStyle
                 />
               ))
             )}
+            {(requestData.type === 'movie' || requestData.type === 'tv') &&
+              availabilityQualityBadges.map((badge) => (
+                <StatusBadgeMini
+                  key={badge.quality ?? 'availability'}
+                  status={badge.status}
+                  quality={badge.quality}
+                  inProgress={badge.inProgress}
+                  shrink
+                  buttonStyle
+                />
+              ))}
+            {requestData.status === MediaRequestStatus.FAILED && canRetry && (
+              <Tooltip content={intl.formatMessage(messages.retryRequest)}>
+                <Button
+                  buttonType="warning"
+                  buttonSize="sm"
+                  disabled={isRetrying}
+                  buttonIcon="retry"
+                  aria-busy={isRetrying}
+                  onClick={() => retryRequest()}
+                >
+                  {intl.formatMessage(messages.retry)}
+                </Button>
+              </Tooltip>
+            )}
           </div>
           <div className="flex flex-1 items-end space-x-2">
-            {requestData.status === MediaRequestStatus.FAILED && canRetry && (
-              <Button
-                buttonType="primary"
-                buttonSize="lg"
-                disabled={isRetrying}
-                onClick={() => retryRequest()}
-              >
-                <ArrowPathIcon
-                  className={isRetrying ? 'animate-spin' : ''}
-                  style={{ marginRight: '0', animationDirection: 'reverse' }}
-                />
-                <span className="ml-1.5">
-                  {intl.formatMessage(messages.searchAgain)}
-                </span>
-              </Button>
-            )}
             {showApprovalActions &&
               requestData.status === MediaRequestStatus.PENDING &&
               hasPermission(Permission.MANAGE_REQUESTS) && (

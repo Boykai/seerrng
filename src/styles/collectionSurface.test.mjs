@@ -1,24 +1,162 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { styleContract } from './cssContract.mjs';
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8');
+const assertNativeDeclaration = (contract, selector, property, expected) => {
+  const values = contract
+    .rulesFor(selector)
+    .flatMap((rule) =>
+      rule.nodes
+        .filter((node) => node.type === 'decl' && node.prop === property)
+        .map((node) => `${node.value}${node.important ? ' !important' : ''}`)
+    );
+  assert.deepEqual(values, [expected], `${selector} owns ${property} once`);
+  assert.equal(contract.applies(selector).size, 0, `${selector} is native CSS`);
+};
+const assertFramedConsumer = (source) => {
+  const classes = [...source.matchAll(/className="([^"]*)"/g)]
+    .map((match) => match[1].split(/\s+/))
+    .filter((tokens) => tokens.includes('detail-item-surface'));
+  assert.ok(classes.length, 'consumer attaches the shared fill');
+  for (const tokens of classes) {
+    assert.ok(
+      tokens.includes('app-card-sub'),
+      'consumer attaches the shared frame'
+    );
+    for (const token of tokens)
+      assert.doesNotMatch(
+        token,
+        /^(?:rounded(?:-|$)|border(?:-|$)|bg-)/,
+        'consumer cannot compete with surface or frame'
+      );
+  }
+};
+const assertSharedSurface = (css) => {
+  const contract = styleContract(css);
+  assertNativeDeclaration(
+    contract,
+    '.detail-item-surface',
+    'background-color',
+    'rgb(var(--color-gray-900) / 0.3)'
+  );
+  // Framed consumers use the shared masked frame. Legacy standalone consumers
+  // keep geometry only through the low-specificity fallback that excludes it.
+  const standalone =
+    ':where(.detail-item-surface:not(.app-card-sub):not(.app-card-inset))';
+  assertNativeDeclaration(
+    contract,
+    standalone,
+    'border',
+    '1px solid rgb(var(--color-gray-700))'
+  );
+  assertNativeDeclaration(
+    contract,
+    standalone,
+    'border-radius',
+    'var(--control-corner-radius)'
+  );
+  for (const rule of contract.rulesFor('.detail-item-surface')) {
+    for (const node of rule.nodes.filter((node) => node.type === 'decl'))
+      assert.doesNotMatch(
+        node.prop,
+        /^border(?:-|$)/,
+        'surface must not own frame geometry'
+      );
+  }
+  const frame = ':is(.app-card-sub, .app-card-inset)';
+  assertNativeDeclaration(contract, frame, '--app-card-frame-width', '1px');
+  assertNativeDeclaration(contract, frame, 'border-radius', '0.5rem');
+  const frameBody = ':is(.app-card-main, .app-card-sub, .app-card-inset)';
+  assertNativeDeclaration(contract, frameBody, 'border-width', '0 !important');
+  const decoration = frameBody + '::after';
+  assertNativeDeclaration(
+    contract,
+    decoration,
+    'padding',
+    'var(--app-card-frame-width)'
+  );
+  assertNativeDeclaration(
+    contract,
+    decoration,
+    'background',
+    'var(--app-card-frame-background)'
+  );
+  assertNativeDeclaration(contract, decoration, 'mask-composite', 'exclude');
+  assertNativeDeclaration(contract, decoration, 'pointer-events', 'none');
+  assertNativeDeclaration(
+    contract,
+    '.detail-item-interactive:hover',
+    'background-color',
+    'rgb(var(--color-indigo-500) / 0.15)'
+  );
+  assertNativeDeclaration(
+    contract,
+    '.detail-item-interactive:hover',
+    'border-color',
+    'rgb(var(--color-indigo-400))'
+  );
+};
 test('cast, crew and collection items share the same 30-percent surface', () => {
   const css = read('./globals.css');
-  assert.match(
-    css,
-    /\.detail-item-surface\s*\{\s*@apply rounded-lg border border-gray-700 bg-gray-900\/30;/
-  );
-  assert.match(
-    css,
-    /\.detail-item-interactive\s*\{[^}]*hover:bg-indigo-500\/15/
-  );
+  assertSharedSurface(css);
   for (const file of [
     'MediaDetails/ExpandableCreditList.tsx',
     'CollectionDetails/CollectionSummaryCard.tsx',
     'CollectionDetails/index.tsx',
   ]) {
-    assert.match(read('../components/' + file), /detail-item-surface/);
+    assertFramedConsumer(read('../components/' + file));
   }
+});
+test('surface consumer check rejects missing shared owners and competing utilities', () => {
+  const source = read(
+    '../components/CollectionDetails/CollectionSummaryCard.tsx'
+  );
+  for (const mutant of [
+    source.replace('app-card-sub ', ''),
+    source.replace('detail-item-surface ', ''),
+    source.replace('detail-item-surface ', 'detail-item-surface rounded-lg '),
+  ])
+    assert.throws(() => assertFramedConsumer(mutant), assert.AssertionError);
+});
+test('surface check rejects competing geometry, lost frame and changed hover paint', () => {
+  const css = read('./globals.css');
+  const hoverRules = styleContract(css).rulesFor(
+    '.detail-item-interactive:hover'
+  );
+  const hoverPaint = hoverRules.flatMap((rule) =>
+    rule.nodes.filter(
+      (node) => node.type === 'decl' && node.prop === 'background-color'
+    )
+  );
+  assert.equal(
+    hoverPaint.length,
+    1,
+    'mutant targets one shared hover paint owner'
+  );
+  hoverPaint[0].value = 'transparent';
+  const changedHoverPaint = hoverPaint[0].root().toString();
+  for (const mutant of [
+    css + '\n.detail-item-surface { border-radius: 1rem; }',
+    css.replace(
+      ':where(.detail-item-surface:not(.app-card-sub):not(.app-card-inset))',
+      '.detail-item-surface'
+    ),
+    css.replace('mask-composite: exclude;', 'mask-composite: add;'),
+    changedHoverPaint,
+  ])
+    assert.throws(() => assertSharedSurface(mutant), assert.AssertionError);
+});
+
+test('surface check rejects loss of the shared grouped fill owner', () => {
+  const css = read('./globals.css');
+  assert.throws(
+    () =>
+      assertSharedSurface(
+        css.replace('.detail-item-surface,', '.unrelated-surface,')
+      ),
+    assert.AssertionError
+  );
 });
 test('collection disclosure is a single standard subcard with an inline overview', () => {
   const collection = read(
@@ -41,19 +179,38 @@ test('collection disclosure is a single standard subcard with an inline overview
 
 test('media-page overview expands fully and genres occupy the last two rows', () => {
   const css = read('./globals.css');
-  const overviewRule = css.match(
-    /\.collection-summary-overview-value\s*\{([^}]+)\}/
-  )?.[1];
-  assert.match(overviewRule, /col-end-\[-1\]/);
-  assert.match(overviewRule, /overflow-wrap: anywhere/);
-  assert.doesNotMatch(overviewRule, /line-clamp|overflow-hidden|max-height/);
+  const contract = styleContract(css);
+  const overview = contract.applies('.collection-summary-overview-value');
+  assert.ok(overview.has('col-end-[-1]'));
+  assert.equal(
+    contract.declaration('.collection-summary-overview-value', 'overflow-wrap'),
+    'anywhere'
+  );
+  assert.equal(
+    contract.declaration('.collection-summary-overview-value', 'max-height'),
+    undefined
+  );
+  for (const token of overview)
+    assert.doesNotMatch(token, /line-clamp|overflow-hidden/);
+  const rows = contract
+    .rulesFor('.collection-summary-table')
+    .flatMap((rule) =>
+      rule.nodes.filter(
+        (node) => node.type === 'decl' && node.prop === 'grid-template-rows'
+      )
+    );
+  assert.equal(rows.length, 2);
   assert.match(
-    css,
-    /\.collection-summary-table\s*\{[^}]*grid-template-rows:\s*minmax\(calc\(3 \* var\(--detail-row-height\)\), auto\)\s*repeat\(2, minmax\(var\(--detail-row-height\), auto\)\)/
+    rows[0].value,
+    /repeat\(3, minmax\(var\(--detail-row-height\), auto\)\)/
   );
   assert.match(
-    css,
-    /\.collection-summary-genres-value\s*\{[^}]*grid-row: 2 \/ 4;/
+    rows[1].value,
+    /repeat\(2, minmax\(var\(--detail-row-height\), auto\)\)/
+  );
+  assert.equal(
+    contract.declaration('.collection-summary-genres-value', 'grid-row'),
+    '2 / 4'
   );
 });
 

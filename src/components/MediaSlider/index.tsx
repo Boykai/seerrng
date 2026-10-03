@@ -72,6 +72,7 @@ interface MediaSliderProps {
   onNewTitles?: (titleCount: number) => void;
   randomizeOrder?: boolean;
   prioritizeFirstRow?: boolean;
+  posterTitleWeight?: 'regular';
 }
 
 type SliderTitle =
@@ -95,6 +96,7 @@ const MediaSlider = ({
   onNewTitles,
   randomizeOrder = false,
   prioritizeFirstRow = false,
+  posterTitleWeight,
 }: MediaSliderProps) => {
   const settings = useSettings();
   const { visibility } = useCardTextVisibility();
@@ -425,6 +427,7 @@ const MediaSlider = ({
         case 'movie':
           return (
             <TitleCard
+              titleWeight={posterTitleWeight}
               key={title.id}
               id={title.id}
               isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
@@ -448,6 +451,7 @@ const MediaSlider = ({
         case 'tv':
           return (
             <TitleCard
+              titleWeight={posterTitleWeight}
               key={title.id}
               id={title.id}
               isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
@@ -480,6 +484,7 @@ const MediaSlider = ({
         case 'album':
           return (
             <TitleCard
+              titleWeight={posterTitleWeight}
               key={title.id}
               id={title.id}
               isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
@@ -503,6 +508,7 @@ const MediaSlider = ({
         case 'book':
           return (
             <TitleCard
+              titleWeight={posterTitleWeight}
               key={title.id}
               id={title.id}
               image={title.posterPath}
@@ -519,6 +525,7 @@ const MediaSlider = ({
         case 'artist':
           return (
             <TitleCard
+              titleWeight={posterTitleWeight}
               key={title.id}
               id={title.id}
               image={title.artistThumb ?? undefined}
@@ -547,6 +554,7 @@ const MediaSlider = ({
     data,
     linkUrl,
     prioritizeFirstRow,
+    posterTitleWeight,
     renderableTitles.length,
     showMorePosters,
     visibleTitles,
@@ -573,35 +581,36 @@ const MediaSlider = ({
 
   return (
     <div ref={ref}>
-      <div className="slider-header">
-        {linkUrl ? (
-          <Link href={linkUrl} className="slider-title min-w-0">
-            <span className="truncate">{title}</span>
-          </Link>
-        ) : (
-          <div className="slider-title">
-            <span>{title}</span>
-          </div>
-        )}
-        {visibleMediaTypes.length > 0 && (
-          <CardTextVisibilityToggle mediaType={visibleMediaTypes} />
-        )}
-        {randomizeOrder && (
-          <Tooltip content={`Refresh ${title}`}>
-            <Button
-              type="button"
-              buttonType="trailer"
-              buttonSize="sm"
-              onClick={refreshRandomizedOrder}
-              className="h-8 w-8 p-0"
-              aria-label={`Refresh ${title}`}
-            >
-              <ArrowPathIcon className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-        )}
-      </div>
       <Slider
+        heading={
+          <>
+            {linkUrl ? (
+              <Link href={linkUrl} className="page-heading">
+                <span>{title}</span>
+              </Link>
+            ) : (
+              <div className="page-heading">
+                <span>{title}</span>
+              </div>
+            )}
+            {visibleMediaTypes.length > 0 && (
+              <CardTextVisibilityToggle mediaType={visibleMediaTypes} />
+            )}
+            {randomizeOrder && (
+              <Tooltip content={`Refresh ${title}`}>
+                <Button
+                  type="button"
+                  buttonType="trailer"
+                  buttonSize="sm"
+                  onClick={refreshRandomizedOrder}
+                  aria-label={`Refresh ${title}`}
+                >
+                  <ArrowPathIcon />
+                </Button>
+              </Tooltip>
+            )}
+          </>
+        }
         sliderKey={sliderKey}
         isLoading={snapshotHydrated && shouldLoad && !data && !error}
         isEmpty={!!data && hasReachedEnd && !renderableTitles.length}

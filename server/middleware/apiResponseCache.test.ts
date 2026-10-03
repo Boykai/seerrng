@@ -17,6 +17,12 @@ const createApp = (authenticated = true) => {
   app.use(apiResponseCache);
   app.get('/discover/books', (_req, res) => res.json({ results: [] }));
   app.get('/book/OL1W', (_req, res) => res.json({ id: 'OL1W' }));
+  app.get('/tv/42/media-server-collections', (_req, res) =>
+    res.json({ available: true, collections: [] })
+  );
+  app.get('/tv/42/media-server-saved-item', (_req, res) =>
+    res.json({ available: true, saved: false })
+  );
   app.get('/settings/public', (_req, res) => res.json({ initialized: true }));
   app.get('/settings/discover', (_req, res) => res.json([]));
   app.get('/request/count', (_req, res) => res.json({ pending: 0 }));
@@ -56,6 +62,18 @@ describe('apiResponseCache', () => {
     assert.equal(res.status, 200);
     assert.match(res.headers['cache-control'], /private/);
     assert.match(res.headers['cache-control'], /max-age=300/);
+  });
+
+  it('never caches mutable media-server collection or saved-item state', async () => {
+    for (const path of [
+      '/tv/42/media-server-collections?is4k=false',
+      '/tv/42/media-server-saved-item?is4k=false',
+    ]) {
+      const res = await request(createApp()).get(path);
+
+      assert.equal(res.status, 200);
+      assert.equal(res.headers['cache-control'], 'private, no-store');
+    }
   });
 
   it('never stores responses authenticated by API key headers', async () => {
