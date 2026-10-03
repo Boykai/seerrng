@@ -117,7 +117,7 @@ const ScanTip = () => {
   );
 };
 
-const ConfidenceBadge = ({ confidence }: { confidence: string }) => {
+export const ConfidenceBadge = ({ confidence }: { confidence: string }) => {
   const intl = useIntl();
   const strength = getProposalStrength(confidence);
 
@@ -128,7 +128,11 @@ const ConfidenceBadge = ({ confidence }: { confidence: string }) => {
   ) : null;
 };
 
-const MatchedBy = ({ binding }: { binding: MangaLibraryBinding }) => {
+export const MatchedBy = ({
+  binding,
+}: {
+  binding: Pick<MangaLibraryBinding, 'matchedBy' | 'confidence'>;
+}) => {
   const intl = useIntl();
 
   switch (binding.matchedBy) {
@@ -167,7 +171,9 @@ const MatchedBy = ({ binding }: { binding: MangaLibraryBinding }) => {
   }
 };
 
-const bindingStatus = (binding: MangaLibraryBinding): MangaAvailability => {
+export const bindingStatus = (
+  binding: MangaLibraryBinding
+): MangaAvailability => {
   const state: string = binding.state;
 
   if (state === 'ORPHANED') {

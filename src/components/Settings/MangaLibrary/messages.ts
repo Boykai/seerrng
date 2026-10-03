@@ -103,7 +103,7 @@ const errorMessages: Record<MangaLibraryErrorCode, MessageDescriptor> = {
   MANGA_SUWAYOMI_LOOKUP_FAILED: messages.errorLookup,
 };
 
-const readErrorBody = (error: unknown): Record<string, unknown> => {
+export const readErrorBody = (error: unknown): Record<string, unknown> => {
   const data = (error as { response?: { data?: unknown } } | null | undefined)
     ?.response?.data;
   return data && typeof data === 'object'
