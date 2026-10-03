@@ -8,6 +8,8 @@ import {
 } from '@server/api/anilist/failures';
 import type { AnilistMangaDetails } from '@server/api/anilist/manga';
 import {
+  MangaAttentionCode,
+  MangaChapterQueueState,
   MangaDispatchError,
   MangaRequestCheckpoint,
 } from '@server/constants/mangaRequest';
@@ -17,6 +19,7 @@ import {
   MediaType,
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import MangaRequestChapter from '@server/entity/MangaRequestChapter';
 import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
@@ -25,8 +28,24 @@ import { User } from '@server/entity/User';
 import notificationManager from '@server/lib/notifications';
 import requestDispatchManager from '@server/lib/requestDispatch';
 import { getSettings, type SuwayomiSettings } from '@server/lib/settings';
+import { invalidateSuwayomiClients } from '@server/lib/suwayomi/clientFactory';
+import * as instanceAdmission from '@server/lib/suwayomi/instanceAdmission';
 import { checkUser } from '@server/middleware/auth';
 import { setupTestDb } from '@server/test/db';
+import { graphqlErrors } from '@server/test/fakeSuwayomi';
+import {
+  dispatchInstanceFor,
+  fakeDispatchChapters,
+  fakeDispatchManga,
+  seedDispatchBinding,
+} from '@server/test/fakeSuwayomiDispatch';
+import {
+  PROGRESS_READ_OPERATIONS,
+  assertProgressTraffic,
+  seedProgressRequest,
+  startFakeProgressSuwayomi,
+  type FakeProgressSuwayomi,
+} from '@server/test/fakeSuwayomiProgress';
 import { waitForBackgroundTasks } from '@server/utils/backgroundTasks';
 import type { Express } from 'express';
 import express from 'express';
@@ -553,6 +572,164 @@ describe('manga request routes', () => {
         })
       ).status,
       MediaRequestStatus.APPROVED
+    );
+  });
+});
+
+describe('manga chapter retry route', () => {
+  let fake: FakeProgressSuwayomi | undefined;
+
+  afterEach(async () => {
+    if (!fake) return;
+    try {
+      assertProgressTraffic(
+        fake.server,
+        new Set([...PROGRESS_READ_OPERATIONS, 'EnqueueChapters'])
+      );
+    } finally {
+      invalidateSuwayomiClients();
+      await fake.close();
+      fake = undefined;
+    }
+  });
+
+  /**
+   * Friend's approved request, enqueued on a fake instance 1, whose first
+   * chapter failed there: the poll recorded CHAPTER_ERROR.
+   */
+  const seedFailedChapter = async () => {
+    const manga = fakeDispatchManga(11, {
+      inLibrary: true,
+      chapters: fakeDispatchChapters(11, [1, 2]),
+    });
+    const started = await startFakeProgressSuwayomi([manga]);
+    fake = started;
+    invalidateSuwayomiClients();
+    getSettings().suwayomi = [dispatchInstanceFor(started.server)];
+    await seedDispatchBinding(manga);
+    const seeded = await seedProgressRequest(manga, {
+      mediaStatus: MediaStatus.PROCESSING,
+    });
+    started.state.queue.push(1101, 1102);
+    started.queueItems.set(1101, { state: 'ERROR', tries: 3 });
+    const [failed, waiting] = seeded.rows;
+    await getRepository(MangaRequestChapter).update(failed.id, {
+      lastQueueState: MangaChapterQueueState.ERROR,
+    });
+    await getRepository(MangaRequestChapter).update(waiting.id, {
+      lastQueueState: MangaChapterQueueState.QUEUED,
+    });
+    await getRepository(MangaRequestManifest).update(seeded.manifest.id, {
+      attentionCode: MangaAttentionCode.CHAPTER_ERROR,
+      attentionAt: new Date(),
+      chaptersTotal: 2,
+      chaptersQueued: 1,
+      chaptersErrored: 1,
+    });
+    const owner = await getRepository(MediaRequest).findOneOrFail({
+      where: { id: seeded.request.id },
+      relations: { requestedBy: true },
+    });
+    assert.strictEqual(owner.requestedBy.email, 'friend@seerr.dev');
+    return {
+      fake: started,
+      requestId: seeded.request.id,
+      manifestId: seeded.manifest.id,
+    };
+  };
+
+  const attentionOf = async (manifestId: number) =>
+    (
+      await getRepository(MangaRequestManifest).findOneByOrFail({
+        id: manifestId,
+      })
+    ).attentionCode;
+
+  it('lets only an administrator queue the failed chapters again, once', async () => {
+    const { fake, requestId, manifestId } = await seedFailedChapter();
+    const admission = mock.method(
+      instanceAdmission,
+      'runWithSuwayomiInstanceAdmission'
+    );
+    const friend = await loginAs('friend@seerr.dev');
+    const admin = await loginAs('admin@seerr.dev');
+
+    const denied = await friend.post(`/request/${requestId}/retry`);
+
+    assert.strictEqual(denied.status, 403);
+    assert.strictEqual(
+      denied.body.message,
+      'You do not have permission to retry this request.'
+    );
+    assert.deepStrictEqual(fake.operationNames(), []);
+
+    const retried = await admin.post(`/request/${requestId}/retry`);
+
+    assert.strictEqual(retried.status, 200);
+    assert.strictEqual(retried.body.status, MediaRequestStatus.APPROVED);
+    assert.deepStrictEqual(fake.enqueuedIds(), [1101]);
+    // The retry queues the chapters itself; dispatch does not run again.
+    assert.deepStrictEqual(enqueued, []);
+    assert.strictEqual(admission.mock.callCount(), 0);
+    const manifest = await getRepository(MangaRequestManifest).findOneByOrFail({
+      id: manifestId,
+    });
+    assert.strictEqual(manifest.attentionCode, null);
+    assert.strictEqual(
+      manifest.checkpoint,
+      MangaRequestCheckpoint.CHAPTERS_ENQUEUED
+    );
+
+    const again = await admin.post(`/request/${requestId}/retry`);
+
+    assert.strictEqual(again.status, 409);
+    assert.strictEqual(
+      again.body.message,
+      'This request cannot be retried from its current state.'
+    );
+    assert.deepStrictEqual(fake.enqueuedIds(), [1101]);
+  });
+
+  it('answers 503, 502 or 409 when the manga service fails, and leaves the request as it was', async () => {
+    const { fake, requestId, manifestId } = await seedFailedChapter();
+    const admin = await loginAs('admin@seerr.dev');
+
+    fake.failNext('Queue');
+    const unavailable = await admin.post(`/request/${requestId}/retry`);
+
+    assert.strictEqual(unavailable.status, 503);
+    assert.strictEqual(
+      unavailable.body.message,
+      'The manga service is unavailable. Try again later.'
+    );
+
+    // The chapter IDs were gone by the time they were queued: no outage, so
+    // trying again won't help.
+    fake.server.onOperation(
+      'EnqueueChapters',
+      graphqlErrors(['Chapter not found'])
+    );
+    const rejected = await admin.post(`/request/${requestId}/retry`);
+
+    assert.strictEqual(rejected.status, 502);
+    assert.strictEqual(
+      rejected.body.message,
+      'The manga service could not queue the chapters.'
+    );
+    assert.deepStrictEqual(fake.enqueuedIds(), [1101]);
+
+    getSettings().suwayomi = [];
+    const removed = await admin.post(`/request/${requestId}/retry`);
+
+    assert.strictEqual(removed.status, 409);
+    assert.strictEqual(
+      removed.body.message,
+      'The manga service this request was sent to is no longer configured.'
+    );
+    assert.deepStrictEqual(fake.enqueuedIds(), [1101]);
+    assert.strictEqual(
+      await attentionOf(manifestId),
+      MangaAttentionCode.CHAPTER_ERROR
     );
   });
 });

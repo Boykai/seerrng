@@ -13,6 +13,7 @@ import IssueComment from '@server/entity/IssueComment';
 import Media from '@server/entity/Media';
 import { MediaSearchMetadata } from '@server/entity/MediaSearchMetadata';
 import { User } from '@server/entity/User';
+import { createMangaMedia } from '@server/lib/mangaMedia';
 import notificationManager from '@server/lib/notifications';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
@@ -282,6 +283,104 @@ describe('Issue route validation', () => {
       response.body.results.map(({ id }: { id: number }) => id),
       [magazineIssue.id]
     );
+  });
+
+  it('filters manga issues by media type without metadata controls', async () => {
+    const user = await getRepository(User).findOneByOrFail({
+      email: 'admin@seerr.dev',
+    });
+    const media = await createMangaMedia(
+      getRepository(Media).manager,
+      9001,
+      MediaStatus.PARTIALLY_AVAILABLE
+    );
+    const mangaIssue = await getRepository(Issue).save(
+      new Issue({
+        createdBy: user,
+        issueType: IssueType.OTHER,
+        status: IssueStatus.OPEN,
+        media,
+        comments: [new IssueComment({ user, message: 'Pages are blank.' })],
+      })
+    );
+    await createIssue(
+      'admin@seerr.dev',
+      116,
+      IssueType.OTHER,
+      IssueStatus.OPEN,
+      MediaType.MOVIE
+    );
+    const agent = await login();
+
+    // Manga keeps no search metadata, so its controls must not hide it.
+    const responses = await Promise.all([
+      agent.get('/issue').query({ mediaType: MediaType.MANGA }),
+      agent.get('/issue').query({
+        mediaType: MediaType.MANGA,
+        releaseYear: '2024',
+        genre: 'action',
+      }),
+    ]);
+
+    for (const response of responses) {
+      assert.strictEqual(response.status, 200);
+      assert.deepStrictEqual(
+        response.body.results.map(({ id }: { id: number }) => id),
+        [mangaIssue.id]
+      );
+      assert.deepStrictEqual(response.body.counts, {
+        all: 1,
+        open: 1,
+        resolved: 0,
+      });
+    }
+  });
+
+  it('creates manga issues without a reason, quality or episodes', async () => {
+    const media = await createMangaMedia(
+      getRepository(Media).manager,
+      9001,
+      MediaStatus.AVAILABLE
+    );
+    const agent = await login();
+
+    const created = await agent.post('/issue').send({
+      issueType: IssueType.OTHER,
+      mediaId: media.id,
+      message: 'Chapter 3 has blank pages.',
+      is4k: true,
+    });
+
+    assert.strictEqual(created.status, 200);
+    assert.strictEqual(created.body.is4k, false);
+    const persisted = await getRepository(Issue).findOneOrFail({
+      where: { id: created.body.id },
+      relations: { media: true },
+    });
+    assert.strictEqual(persisted.media.mediaType, MediaType.MANGA);
+    assert.strictEqual(persisted.issueSubtype ?? null, null);
+    assert.strictEqual(persisted.is4k, false);
+
+    const [withReason, withEpisodes] = await Promise.all([
+      agent.post('/issue').send({
+        issueType: IssueType.OTHER,
+        issueSubtype: 'missing_issue',
+        mediaId: media.id,
+        message: 'A chapter is missing.',
+      }),
+      agent.post('/issue').send({
+        issueType: IssueType.OTHER,
+        mediaId: media.id,
+        message: 'A chapter is missing.',
+        problemEpisodes: [1],
+      }),
+    ]);
+
+    assert.strictEqual(withReason.status, 400);
+    assert.match(withReason.body.message, /not valid for manga reports/);
+    assert.strictEqual(withEpisodes.status, 400);
+    assert.match(withEpisodes.body.message, /require a series issue/);
+    assert.strictEqual(await getRepository(Issue).count(), 1);
   });
 
   it('filters movie issues through the media-specific metadata controls', async () => {

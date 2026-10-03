@@ -1,4 +1,10 @@
 import {
+  MangaAttentionCode,
+  MangaDispatchError,
+  MangaRequestBindingState,
+  MangaRequestCheckpoint,
+} from '@server/constants/mangaRequest';
+import {
   MediaRequestStatus,
   MediaStatus,
   MediaType,
@@ -8,7 +14,11 @@ import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import type { DownloadingItem } from './downloadtracker';
 import downloadTracker from './downloadtracker';
-import { RequestStatusStage, getRequestStatus } from './requestStatus';
+import {
+  RequestStatusStage,
+  getRequestStatus,
+  type MangaProgressLike,
+} from './requestStatus';
 
 const date = new Date('2026-01-01T00:00:00.000Z');
 
@@ -710,6 +720,7 @@ test('manga requests never borrow book progress, service names or links', () => 
     assert.equal(approved.percent, null);
     assert.equal(approved.service, null);
 
+    // An old terminal event never decides a manga stage; the manifest does.
     const unavailable = getRequestStatus(manga, {
       latestEvent: {
         id: 1,
@@ -732,11 +743,376 @@ test('manga requests never borrow book progress, service names or links', () => 
         createdAt: new Date(date.getTime() + 1_000),
       },
     });
-    assert.equal(unavailable.stage, RequestStatusStage.UNAVAILABLE);
+    assert.equal(unavailable.stage, RequestStatusStage.APPROVED);
     assert.equal(unavailable.service, null);
-    assert.equal(unavailable.retryable, true);
+    assert.equal(unavailable.retryable, false);
+    assert.equal(unavailable.needsAttention, false);
     assert.equal(bookProgress.mock.callCount(), 0);
   } finally {
+    bookProgress.mock.restore();
+  }
+});
+
+const mangaRequest = (overrides: Record<string, unknown> = {}) =>
+  request({
+    type: MediaType.MANGA,
+    serverId: 1,
+    media: {
+      ...request().media,
+      mediaType: MediaType.MANGA,
+      status: MediaStatus.PROCESSING,
+      serviceId: null,
+      externalServiceId: null,
+    },
+    ...overrides,
+  });
+
+const mangaProgress = (
+  overrides: Partial<MangaProgressLike> = {}
+): MangaProgressLike => ({
+  instanceId: 1,
+  anilistId: 9001,
+  bindingState: MangaRequestBindingState.BOUND,
+  checkpoint: MangaRequestCheckpoint.CHAPTERS_ENQUEUED,
+  lastError: null,
+  attentionCode: null,
+  chaptersTotal: 4,
+  chaptersVerified: 1,
+  chaptersQueued: 1,
+  chaptersDownloading: 1,
+  chaptersErrored: 0,
+  ...overrides,
+});
+
+/** The status of an approved manga request, its tracker reads stubbed. */
+const mangaStatus = (
+  progress: MangaProgressLike | null,
+  overrides: Record<string, unknown> = {}
+) => {
+  const tracker = mock.method(downloadTracker, 'getMangaProgress', () => []);
+  try {
+    return getRequestStatus(mangaRequest(overrides), {
+      mangaProgress: progress,
+    });
+  } finally {
+    tracker.mock.restore();
+  }
+};
+
+test('manga stages follow the manifest through dispatch and delivery', () => {
+  assert.equal(
+    mangaStatus(mangaProgress(), { status: MediaRequestStatus.PENDING }).stage,
+    RequestStatusStage.REQUESTED
+  );
+
+  const unsent = mangaStatus(null);
+  assert.equal(unsent.stage, RequestStatusStage.APPROVED);
+  assert.equal(unsent.needsAttention, false);
+  assert.equal(unsent.retryable, false);
+  assert.equal(
+    unsent.message,
+    'Your request was approved and is waiting to be sent to the connected manga service.'
+  );
+
+  const parked = mangaStatus(
+    mangaProgress({
+      bindingState: MangaRequestBindingState.AWAITING_BINDING,
+      checkpoint: null,
+      lastError: MangaDispatchError.BINDING_MISSING,
+    })
+  );
+  assert.equal(parked.stage, RequestStatusStage.APPROVED);
+  assert.match(parked.message, /matched on the connected manga service/);
+  assert.equal(parked.needsAttention, false);
+  assert.equal(parked.retryable, false);
+
+  assert.equal(
+    mangaStatus(mangaProgress({ checkpoint: null })).stage,
+    RequestStatusStage.APPROVED
+  );
+  for (const checkpoint of [
+    MangaRequestCheckpoint.BINDING_VERIFIED,
+    MangaRequestCheckpoint.LIBRARY_ADDED,
+    MangaRequestCheckpoint.MANIFEST_FROZEN,
+  ]) {
+    const searching = mangaStatus(mangaProgress({ checkpoint }));
+    assert.equal(searching.stage, RequestStatusStage.SEARCHING, checkpoint);
+    assert.equal(searching.needsAttention, false);
+    assert.equal(searching.percent, null);
+    assert.equal(searching.downloadCount, 0);
+  }
+
+  const downloading = mangaStatus(mangaProgress());
+  assert.equal(downloading.stage, RequestStatusStage.DOWNLOADING);
+  assert.equal(downloading.percent, 25);
+  assert.equal(downloading.downloadCount, 2);
+  assert.equal(downloading.needsAttention, false);
+  assert.equal(downloading.retryable, false);
+  assert.equal(
+    downloading.message,
+    'The connected manga service is downloading the requested chapters.'
+  );
+  assert.equal(
+    mangaStatus(mangaProgress({ chaptersTotal: 3, chaptersVerified: 1 }))
+      .percent,
+    33.3
+  );
+  const empty = mangaStatus(
+    mangaProgress({
+      chaptersTotal: 0,
+      chaptersVerified: 0,
+      chaptersQueued: 0,
+      chaptersDownloading: 0,
+    })
+  );
+  assert.equal(empty.stage, RequestStatusStage.DOWNLOADING);
+  assert.equal(empty.percent, null);
+
+  const delivered = mangaStatus(mangaProgress({ chaptersVerified: 4 }));
+  assert.equal(delivered.stage, RequestStatusStage.AVAILABLE);
+  assert.equal(delivered.needsAttention, false);
+  assert.equal(
+    mangaStatus(null, { status: MediaRequestStatus.COMPLETED }).stage,
+    RequestStatusStage.AVAILABLE
+  );
+
+  const failed = mangaStatus(mangaProgress(), {
+    status: MediaRequestStatus.FAILED,
+  });
+  assert.equal(failed.stage, RequestStatusStage.FAILED);
+  assert.equal(failed.retryable, true);
+  assert.equal(
+    failed.message,
+    'The connected manga service could not accept this request. Check its connection and settings, then retry.'
+  );
+  assert.equal(
+    mangaStatus(mangaProgress(), { status: MediaRequestStatus.DECLINED }).stage,
+    RequestStatusStage.DECLINED
+  );
+});
+
+test('a library-wide media status never decides a manga stage', () => {
+  for (const status of [
+    MediaStatus.AVAILABLE,
+    MediaStatus.PARTIALLY_AVAILABLE,
+    MediaStatus.DELETED,
+  ]) {
+    const media = { ...mangaRequest().media, status, status4k: status };
+    assert.equal(
+      mangaStatus(mangaProgress(), { media }).stage,
+      RequestStatusStage.DOWNLOADING,
+      MediaStatus[status]
+    );
+    assert.equal(
+      mangaStatus(null, { media }).stage,
+      RequestStatusStage.APPROVED,
+      MediaStatus[status]
+    );
+    assert.equal(
+      mangaStatus(mangaProgress({ chaptersVerified: 4 }), {
+        media: { ...media, status: MediaStatus.UNKNOWN },
+      }).stage,
+      RequestStatusStage.AVAILABLE
+    );
+  }
+});
+
+test('failed and dropped manga chapters fail the stage for an administrator retry', () => {
+  for (const attentionCode of [
+    MangaAttentionCode.CHAPTER_ERROR,
+    MangaAttentionCode.CHAPTER_NOT_QUEUED,
+  ]) {
+    const failed = mangaStatus(
+      mangaProgress({ attentionCode, chaptersErrored: 1, chaptersQueued: 0 })
+    );
+    assert.equal(failed.stage, RequestStatusStage.FAILED, attentionCode);
+    assert.equal(failed.needsAttention, true);
+    assert.equal(failed.retryable, true);
+    assert.equal(failed.isTerminal, true);
+    assert.equal(failed.percent, 25);
+    assert.equal(failed.downloadCount, 1);
+    assert.match(failed.message, /retry here/);
+  }
+
+  // A retry can't fix a lost match, library entry or server.
+  for (const attentionCode of [
+    MangaAttentionCode.CHAPTER_MISSING,
+    MangaAttentionCode.CHAPTER_FILE_MISSING,
+    MangaAttentionCode.CHAPTER_LENGTH_UNKNOWN,
+    MangaAttentionCode.NOT_IN_LIBRARY,
+    MangaAttentionCode.INSTANCE_REMOVED,
+    MangaAttentionCode.BINDING_ORPHANED,
+  ]) {
+    const flagged = mangaStatus(mangaProgress({ attentionCode }));
+    assert.equal(flagged.stage, RequestStatusStage.DOWNLOADING, attentionCode);
+    assert.equal(flagged.needsAttention, true);
+    assert.equal(flagged.retryable, false);
+    assert.equal(flagged.percent, 25);
+  }
+
+  const lastError = mangaStatus(
+    mangaProgress({ lastError: MangaDispatchError.INSTANCE_CHANGED })
+  );
+  assert.equal(lastError.stage, RequestStatusStage.DOWNLOADING);
+  assert.equal(lastError.needsAttention, true);
+  assert.match(lastError.message, /address or login changed/);
+
+  const waiting = mangaStatus(
+    mangaProgress({
+      checkpoint: MangaRequestCheckpoint.CHAPTERS_FETCHED,
+      lastError: MangaDispatchError.NO_MATCHING_CHAPTERS,
+      // A stale poll code before the enqueue is not shown.
+      attentionCode: MangaAttentionCode.CHAPTER_ERROR,
+    })
+  );
+  assert.equal(waiting.stage, RequestStatusStage.SEARCHING);
+  assert.equal(waiting.needsAttention, true);
+  assert.equal(waiting.retryable, false);
+  assert.match(waiting.message, /every day/);
+});
+
+test('a code that holds back completion keeps a delivered manga request open', () => {
+  // Only these codes can stand once every chapter is delivered.
+  for (const attentionCode of [
+    MangaAttentionCode.NOT_IN_LIBRARY,
+    MangaAttentionCode.BINDING_ORPHANED,
+    MangaAttentionCode.INSTANCE_REMOVED,
+  ]) {
+    const held = mangaStatus(
+      mangaProgress({
+        attentionCode,
+        chaptersVerified: 4,
+        chaptersQueued: 0,
+        chaptersDownloading: 0,
+      })
+    );
+    assert.equal(held.stage, RequestStatusStage.DOWNLOADING, attentionCode);
+    assert.equal(held.isTerminal, false);
+    assert.equal(held.needsAttention, true);
+    assert.equal(held.retryable, false);
+    assert.equal(held.percent, 100);
+    assert.equal(held.downloadCount, 0);
+    assert.equal(
+      held.message,
+      mangaStatus(mangaProgress({ attentionCode })).message
+    );
+  }
+});
+
+test('a bound manga whose matched title is gone waits like an unconfirmed match', () => {
+  // Dispatch keeps the request bound, before the freeze, and tries again.
+  const waitingOn = (lastError: MangaDispatchError) =>
+    mangaStatus(
+      mangaProgress({
+        checkpoint: null,
+        lastError,
+        chaptersTotal: 0,
+        chaptersVerified: 0,
+        chaptersQueued: 0,
+        chaptersDownloading: 0,
+      })
+    );
+  const gone = waitingOn(MangaDispatchError.BINDING_MISSING);
+  const unconfirmed = waitingOn(MangaDispatchError.BINDING_UNCONFIRMED);
+
+  assert.equal(gone.stage, RequestStatusStage.APPROVED);
+  assert.equal(gone.needsAttention, true);
+  assert.equal(gone.retryable, false);
+  assert.match(gone.message, /no longer has the matched manga/);
+  assert.match(gone.message, /SeerrNG tries again by itself/);
+  assert.deepEqual(
+    { ...gone, message: undefined },
+    { ...unconfirmed, message: undefined }
+  );
+});
+
+test('each manga code has one fixed message that names no service product', () => {
+  const messages = new Map<string, string>();
+  for (const code of Object.values(MangaDispatchError)) {
+    messages.set(
+      code,
+      mangaStatus(
+        mangaProgress({
+          checkpoint: MangaRequestCheckpoint.BINDING_VERIFIED,
+          lastError: code,
+        })
+      ).message
+    );
+  }
+  for (const code of Object.values(MangaAttentionCode)) {
+    messages.set(
+      code,
+      mangaStatus(mangaProgress({ attentionCode: code })).message
+    );
+  }
+  const fallback = mangaStatus(
+    mangaProgress({ attentionCode: 'MANGA_SOMETHING_NEW' })
+  ).message;
+  assert.equal(
+    fallback,
+    'This request needs an administrator. Check the connected manga service and the SeerrNG logs.'
+  );
+
+  assert.equal(
+    messages.size,
+    Object.values(MangaDispatchError).length +
+      Object.values(MangaAttentionCode).length
+  );
+  assert.equal(new Set(messages.values()).size, messages.size);
+  for (const [code, message] of messages) {
+    assert.notEqual(message, fallback, code);
+    assert.doesNotMatch(message, /suwayomi/i, code);
+    assert.match(message, /administrator|no action is needed/, code);
+  }
+});
+
+test('manga downloads come from the progress tracker, never the book queue', () => {
+  const chapter = download({
+    mediaType: MediaType.MANGA,
+    externalId: 9001,
+    size: 1_000,
+    sizeLeft: 100,
+    title: 'Chapter 2',
+    downloadId: 'manga-7',
+  });
+  const tracker = mock.method(downloadTracker, 'getMangaProgress', () => [
+    chapter,
+  ]);
+  const bookProgress = mock.method(downloadTracker, 'getBookProgress', () => [
+    download({ mediaType: MediaType.BOOK }),
+  ]);
+  try {
+    const progress = mangaProgress({ instanceId: 2, anilistId: 777 });
+    const downloading = getRequestStatus(mangaRequest(), {
+      mangaProgress: progress,
+    });
+    assert.deepEqual(
+      tracker.mock.calls.map((call) => call.arguments),
+      [[2, 777]]
+    );
+    // The manifest's verified share, not the queue's byte progress.
+    assert.equal(downloading.percent, 25);
+    assert.equal(downloading.downloadCount, 2);
+    assert.equal(downloading.downloadId, 'manga-7');
+
+    for (const [overrides, mangaOptions] of [
+      [
+        {},
+        mangaProgress({ checkpoint: MangaRequestCheckpoint.CATEGORY_READY }),
+      ],
+      [{ status: MediaRequestStatus.COMPLETED }, progress],
+      [{ status: MediaRequestStatus.FAILED }, progress],
+      [{}, mangaProgress({ chaptersVerified: 4 })],
+      [{}, null],
+    ] as const) {
+      getRequestStatus(mangaRequest(overrides), {
+        mangaProgress: mangaOptions,
+      });
+    }
+    assert.equal(tracker.mock.callCount(), 1);
+    assert.equal(bookProgress.mock.callCount(), 0);
+  } finally {
+    tracker.mock.restore();
     bookProgress.mock.restore();
   }
 });

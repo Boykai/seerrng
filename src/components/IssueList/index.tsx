@@ -18,6 +18,7 @@ import IssueItem from '@app/components/IssueList/IssueItem';
 import useDebouncedState from '@app/hooks/useDebouncedState';
 import useMediaFilterPin from '@app/hooks/useMediaFilterPin';
 import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
+import useSettings from '@app/hooks/useSettings';
 import {
   getPositiveQueryParamNumber,
   useUpdateQueryParams,
@@ -25,6 +26,7 @@ import {
 import globalMessages from '@app/i18n/globalMessages';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
+import { isConfiguredMediaCategoryEnabled } from '@app/utils/serviceAvailability';
 import {
   BarsArrowDownIcon,
   BarsArrowUpIcon,
@@ -87,7 +89,7 @@ type Sort = 'added' | 'modified' | 'status';
 type Direction = 'asc' | 'desc';
 type TimeFrame = '7d' | '14d' | '30d' | '6m' | 'all';
 type MediaFilter =
-  'all' | 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine';
+  'all' | 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'manga';
 type IssueTypeFilter = 'all' | 'audio' | 'video' | 'subtitle' | 'other';
 
 const IssueList = () => {
@@ -99,10 +101,17 @@ const IssueList = () => {
   const [direction, setDirection] = useState<Direction>('desc');
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('all');
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
+  const { currentSettings } = useSettings();
+  const mangaEnabled = isConfiguredMediaCategoryEnabled(
+    'manga',
+    currentSettings
+  );
   const mediaPin = useMediaFilterPin<MediaFilter>({
     scope: 'issues',
     selected: mediaFilter,
-    values: ['all', 'movie', 'tv', 'music', 'book'],
+    values: mangaEnabled
+      ? ['all', 'movie', 'tv', 'music', 'book', 'manga']
+      : ['all', 'movie', 'tv', 'music', 'book'],
     restore: setMediaFilter,
   });
   const [issueTypeFilter, setIssueTypeFilter] =
@@ -127,7 +136,12 @@ const IssueList = () => {
     mediaType: mediaFilter,
     issueType: issueTypeFilter,
   });
-  if (mediaFilter !== 'all') {
+  const hasMetadataFilters =
+    mediaFilter !== 'all' &&
+    mediaFilter !== 'comic' &&
+    mediaFilter !== 'magazine' &&
+    mediaFilter !== 'manga';
+  if (hasMetadataFilters) {
     if (releaseYearFilter !== 'any') {
       params.set('releaseYear', releaseYearFilter);
     }
@@ -333,6 +347,9 @@ const IssueList = () => {
               ['book', messages.books],
               ['comic', messages.comics],
               ['magazine', messages.magazines],
+              ...(mangaEnabled
+                ? ([['manga', globalMessages.manga]] as const)
+                : []),
             ] as const
           ).map(([value, label]) => (
             <MediaFilterOption
@@ -396,36 +413,34 @@ const IssueList = () => {
               className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0 text-xs font-medium text-gray-200 placeholder:text-gray-500 focus:ring-0"
             />
           </label>
-          {mediaFilter !== 'all' &&
-            mediaFilter !== 'comic' &&
-            mediaFilter !== 'magazine' && (
-              <>
-                <CompactSelect
-                  label={intl.formatMessage(
-                    mediaFilter === 'music'
-                      ? messages.releaseYear
-                      : mediaFilter === 'book'
-                        ? messages.firstPublished
-                        : messages.releaseDate
-                  )}
-                  value={releaseYearFilter}
-                  options={yearOptions}
-                  onChange={(value) => {
-                    setReleaseYearFilter(value);
-                    resetPage();
-                  }}
-                />
-                <CompactSelect
-                  label={intl.formatMessage(messages.genres)}
-                  value={genreFilter}
-                  options={genreOptions}
-                  onChange={(value) => {
-                    setGenreFilter(value);
-                    resetPage();
-                  }}
-                />
-              </>
-            )}
+          {hasMetadataFilters && (
+            <>
+              <CompactSelect
+                label={intl.formatMessage(
+                  mediaFilter === 'music'
+                    ? messages.releaseYear
+                    : mediaFilter === 'book'
+                      ? messages.firstPublished
+                      : messages.releaseDate
+                )}
+                value={releaseYearFilter}
+                options={yearOptions}
+                onChange={(value) => {
+                  setReleaseYearFilter(value);
+                  resetPage();
+                }}
+              />
+              <CompactSelect
+                label={intl.formatMessage(messages.genres)}
+                value={genreFilter}
+                options={genreOptions}
+                onChange={(value) => {
+                  setGenreFilter(value);
+                  resetPage();
+                }}
+              />
+            </>
+          )}
           {mediaFilter === 'movie' && (
             <CompactSelect
               label={intl.formatMessage(messages.studio)}

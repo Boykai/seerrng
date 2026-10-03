@@ -73,7 +73,7 @@ const linkedValues = (values: LinkedValue[]) =>
 
 interface IssueMediaSummaryProps {
   data: IssueMediaDetails;
-  mediaType: 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine';
+  mediaType: 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'manga';
   is4k?: boolean;
   mediaHref?: string;
   artwork?: string;

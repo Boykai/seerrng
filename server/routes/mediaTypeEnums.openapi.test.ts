@@ -62,10 +62,6 @@ const MANGA_ENUM_EXCLUSIONS: Record<string, Exclusion> = {
     reason:
       'Bulk requests cover music and book selections; manga requests are single-title in the MVP.',
   },
-  'GET /issue query mediaType': {
-    owner: 'L12',
-    reason: 'Issue reporting parity for manga lands with progress tracking.',
-  },
   'schema Watchlist mediaType': { owner: 'P4', reason: WATCHLIST },
   'DELETE /watchlist/{mediaId} query mediaType': {
     owner: 'P4',

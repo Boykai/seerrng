@@ -16423,6 +16423,8 @@ paths:
       description: |
         Retries a failed or unavailable request by returning it to the normal dispatch/search flow. The request owner may retry their own request when they still have permission to request that media; users with `MANAGE_REQUESTS` or `ADMIN` may retry any request.
 
+        An approved manga request whose chapters are already queued on its manga service is not dispatched again. When its status reports chapters whose download failed or that left the service's queue (`retryable` is true), a user with `MANAGE_REQUESTS` or `ADMIN` may queue those chapters once more. The request stays approved, its chapter scope is unchanged, and nothing is deleted or downloaded again from the start. The request owner cannot retry it from this state.
+
       tags:
         - request
       parameters:
@@ -16440,6 +16442,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MediaRequest'
+        '403':
+          description: The user may not retry this request. Only `MANAGE_REQUESTS` or `ADMIN` may retry a manga request whose chapters are already queued.
+        '409':
+          description: The request cannot be retried from its current state. For a manga request whose chapters are already queued, also returned when its manga service is no longer configured, no longer has the manga, or changed during the retry.
+        '502':
+          description: The manga service could not queue the chapters, and trying again will not help until it is fixed.
+        '503':
+          description: The manga service is unavailable. Try again later.
   /request/{requestId}/status:
     delete:
       summary: Delete request status entry
@@ -18043,7 +18053,7 @@ paths:
           name: mediaType
           schema:
             type: string
-            enum: [all, movie, tv, music, book, comic, magazine]
+            enum: [all, movie, tv, music, book, comic, magazine, manga]
             default: all
         - in: query
           name: issueType

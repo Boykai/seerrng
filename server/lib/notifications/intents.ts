@@ -24,16 +24,15 @@ import type { NotificationPayload } from './agents/agent';
 import type { NotificationOutboxIntent } from './outbox';
 
 // Manga details stay network-free, except a delivered request's (below): the
-// AniList identifier names the series.
+// AniList identifier names the series. Issue intents load media without its
+// identifiers, so they stay on the media for the webhook's media_externalid.
 const getMangaDetails = async (
   media: Media
 ): Promise<{ anilistId?: string; title: string }> => {
-  const identifiers =
-    media.identifiers ??
-    (await getRepository(MediaIdentifier).find({
-      where: { media: { id: media.id } },
-    }));
-  const anilistId = identifiers.find(
+  media.identifiers ??= await getRepository(MediaIdentifier).find({
+    where: { media: { id: media.id } },
+  });
+  const anilistId = media.identifiers.find(
     ({ provider }) => provider === MediaIdentifierProvider.ANILIST
   )?.value;
   return { anilistId, title: anilistId ? `AniList ${anilistId}` : 'Manga' };

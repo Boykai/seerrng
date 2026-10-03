@@ -24,6 +24,7 @@ import {
 import {
   ArrowDownTrayIcon,
   ArrowTopRightOnSquareIcon,
+  ExclamationTriangleIcon,
   EyeSlashIcon,
   InformationCircleIcon,
 } from '@heroicons/react/24/solid';
@@ -42,6 +43,10 @@ import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
+  ssr: false,
+});
+
+const IssueModal = dynamic(() => import('@app/components/IssueModal'), {
   ssr: false,
 });
 
@@ -68,6 +73,7 @@ const messages = defineMessages('components.MangaDetails', {
   viewOnAniList: 'View on AniList',
   viewOnMyAnimeList: 'View on MyAnimeList',
   viewRequest: 'View Request',
+  reportissue: 'Report an Issue',
   formatManga: 'Manga',
   formatOneShot: 'One Shot',
   formatNovel: 'Novel',
@@ -140,6 +146,7 @@ const MangaDetails = () => {
   const [isBlocklisting, setIsBlocklisting] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [editRequest, setEditRequest] = useState<MangaScopedRequest>();
+  const [showIssueModal, setShowIssueModal] = useState(false);
   const mangaId =
     typeof router.query.mangaId === 'string' ? router.query.mangaId : '';
 
@@ -200,6 +207,14 @@ const MangaDetails = () => {
       mediaStatus === MediaStatus.DELETED ||
       mediaStatus === MediaStatus.PARTIALLY_AVAILABLE) &&
     activeRequests.length === 0;
+  const canUseReportIssue = hasPermission(
+    [Permission.MANAGE_ISSUES, Permission.CREATE_ISSUES],
+    { type: 'or' }
+  );
+  const isReportIssueAvailable =
+    !!data.mediaInfo?.id &&
+    (data.mediaInfo.status === MediaStatus.AVAILABLE ||
+      data.mediaInfo.status === MediaStatus.PARTIALLY_AVAILABLE);
   const availability = getMangaAvailability(
     data.mediaInfo?.status,
     data.inSuwayomiLibrary
@@ -280,6 +295,16 @@ const MangaDetails = () => {
   return (
     <>
       <PageTitle title={data.title} />
+      {showIssueModal && (
+        <IssueModal
+          show={showIssueModal}
+          mediaType="manga"
+          mediaId={data.mediaInfo?.id}
+          title={data.title}
+          backdrop={posterSrc}
+          onCancel={() => setShowIssueModal(false)}
+        />
+      )}
       {showBlocklistModal && (
         <ExternalBlocklistModal
           show
@@ -404,6 +429,28 @@ const MangaDetails = () => {
                     )}
                   >
                     <EyeSlashIcon />
+                  </Button>
+                </Tooltip>
+              )}
+              {canUseReportIssue && (
+                <Tooltip
+                  content={intl.formatMessage(
+                    isReportIssueAvailable
+                      ? messages.reportissue
+                      : globalMessages.reportIssueUnavailable
+                  )}
+                >
+                  <Button
+                    buttonType="reportIssue"
+                    buttonSize="sm"
+                    onClick={() => setShowIssueModal(true)}
+                    disabled={!isReportIssueAvailable}
+                    disabledReason={intl.formatMessage(
+                      globalMessages.reportIssueUnavailable
+                    )}
+                    aria-label={intl.formatMessage(messages.reportissue)}
+                  >
+                    <ExclamationTriangleIcon />
                   </Button>
                 </Tooltip>
               )}

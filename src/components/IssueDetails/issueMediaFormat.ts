@@ -1,7 +1,7 @@
 import { MediaStatus, MediaType } from '@server/constants/media';
 
 export type IssueMediaType =
-  'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine';
+  'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'manga';
 export type IssueQuality = 'hd' | '4k';
 
 export const getIssueMediaAndFormatLabel = (
@@ -21,6 +21,9 @@ export const getIssueMediaAndFormatLabel = (
     case MediaType.MAGAZINE:
     case 'magazine':
       return 'Magazine';
+    case MediaType.MANGA:
+    case 'manga':
+      return 'Manga';
     default:
       return 'Book';
   }
