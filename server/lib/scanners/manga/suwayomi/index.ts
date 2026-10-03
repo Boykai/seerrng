@@ -59,6 +59,7 @@ import type {
 } from './matching';
 import {
   hasTrackerConflict,
+  lookupShare,
   newLookupBudget,
   resolveLibraryMatches,
 } from './matching';
@@ -119,6 +120,8 @@ interface ScanRun {
   unreadable: Set<number>;
   /** Lookup calls left in this run, shared by every instance. */
   lookups: LookupBudget;
+  /** Instances still to scan in this run, the current one included. */
+  instancesLeft: number;
 }
 
 interface StoredRows {
@@ -308,6 +311,7 @@ class MangaLibraryScanner
       completed: new Set(),
       unreadable: new Set(),
       lookups: newLookupBudget(),
+      instancesLeft: 0,
     };
     this.controller = controller;
     this.counts = run.counts;
@@ -318,8 +322,9 @@ class MangaLibraryScanner
       this.progress = 0;
       this.instanceCount = instanceIds.length;
       await this.orphanRemovedInstances(run, new Set(instanceIds));
-      for (const instanceId of instanceIds) {
+      for (const [index, instanceId] of instanceIds.entries()) {
         if (run.signal.aborted) break;
+        run.instancesLeft = instanceIds.length - index;
         await this.scanInstance(run, instanceId);
         this.progress += 1;
       }
@@ -529,15 +534,26 @@ class MangaLibraryScanner
     if (conflicts > 0) {
       this.warn(run, 'AMBIGUOUS_TRACKER_LINK', instanceId, conflicts);
     }
+    const deferred: Partial<LookupBudget> = {};
     const matches = await resolveLibraryMatches(
       {
         signal: run.signal,
         lookups: run.lookups,
+        share: lookupShare(run.lookups, run.instancesLeft),
         warn: (code, count, cause) =>
           this.warn(run, code, instanceId, count, cause),
+        defer: (step, count) => {
+          deferred[step] = (deferred[step] ?? 0) + count;
+        },
       },
       unmatched
     );
+    if (Object.keys(deferred).length > 0) {
+      this.log('Manga library lookups left for a later run', 'info', {
+        instanceId,
+        ...deferred,
+      });
+    }
     for (const [id, target] of matches) targets.set(id, target);
     const needStates = listing.items.filter((item) => {
       const kind = targets.get(item.id)?.kind;

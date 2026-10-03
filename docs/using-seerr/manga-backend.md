@@ -133,7 +133,8 @@ The scan tries these steps in order and stops at the first that matches:
   two different AniList titles or two different MyAnimeList IDs, steps 2 and 3
   are skipped and the manga only gets a proposal.
 - When AniList lists two or more titles for one MyAnimeList ID, step 2 matches
-  nothing and steps 3 and 4 still run.
+  nothing, even when an administrator rejected all but one of them, and steps
+  3 and 4 still run.
 - SeerrNG never matches or proposes a title that an administrator rejected for
   that manga.
 - A match stays in place on later scans, even if the manga's tracker records
@@ -171,9 +172,13 @@ category.
 
 Each run sends at most 10 requests of each kind: MyAnimeList lookups (up to 50
 IDs each), MangaDex lookups (up to 100 UUIDs each), and title searches (one
-title each). A large library is therefore matched over several runs: with the
-daily schedule, up to 10 manga get a title proposal each day. Run the job by
-hand to speed this up. Manga that were never looked up go first, and a
+title each). With several Suwayomi servers, each server gets an equal part of
+the requests left in the run, and a server that needs fewer leaves the rest to
+the servers scanned after it; a MyAnimeList lookup that a server has started
+can still read its last pages. The scan logs how many manga each server left
+for a later run. A large library is therefore matched over several runs: with
+the daily schedule, up to 10 manga get a title proposal each day. Run the job
+by hand to speed this up. Manga that were never looked up go first, and a
 finished lookup is repeated after 30 days. A lookup that fails or is rate
 limited is retried on a later run, and the manga waits for its later steps
 until then. When MangaDex rate limits or refuses requests, SeerrNG pauses

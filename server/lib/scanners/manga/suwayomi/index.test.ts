@@ -304,6 +304,14 @@ const proposals = async () =>
     candidate.proposalScore,
   ]);
 
+/** Per instance: the MAL, MangaDex and title lookups the cap left over. */
+const deferredLookups = (logs: unknown[]) =>
+  (logs as [string, Record<string, unknown>][])
+    .filter(
+      ([message]) => message === 'Manga library lookups left for a later run'
+    )
+    .map(([, meta]) => [meta.instanceId, meta.mal, meta.mangadex, meta.title]);
+
 beforeEach(() => {
   settings.main.enabledMediaCategories = { ...categories, manga: true };
   configure();
@@ -848,6 +856,7 @@ describe('manga library scan: lookups', () => {
       hasNextPage: true,
       links: [],
     }));
+    const logs = captureLogs();
 
     const counts = await scan();
 
@@ -855,6 +864,8 @@ describe('manga library scan: lookups', () => {
     assert.deepEqual(counts, { ...NO_CHANGES, candidatesCreated: 1 });
     assert.deepEqual(await progress(), [[1, null, false, false, false]]);
     assert.deepEqual(titleSearches(), []);
+    // The cap is not a warning, but the deferred work is logged.
+    assert.deepEqual(deferredLookups(logs), [[1, 1, undefined, undefined]]);
   });
 
   it('sends MangaDex only the UUID of a /manga/<uuid> URL', async () => {
@@ -1091,23 +1102,34 @@ describe('manga library scan: lookups', () => {
     lookups.mangadex.mock.mockImplementation(
       async () => new Map([[uuid(1), 201]])
     );
-    lookups.titles.mock.mockImplementation(async () => [
-      anilistManga(201, 'Fake Library Title 1'),
-      anilistManga(202, 'Fake Library Title 1 Remake'),
-    ]);
+    lookups.titles.mock.mockImplementation(async (search: string) =>
+      search === 'Fake Library Title 1'
+        ? [
+            anilistManga(201, 'Fake Library Title 1'),
+            anilistManga(202, 'Fake Library Title 1 Remake'),
+          ]
+        : [anilistManga(203, search)]
+    );
 
-    await scan();
+    const counts = await scan();
 
-    // The rejected ID is left out first, so 56 names only 204.
+    // 56 names two AniList manga, so rejecting one of them does not make
+    // the other an exact link.
+    assert.deepEqual(counts.warnings, { AMBIGUOUS_MAL_LINK: 1 });
     assert.deepEqual(await bound(), [
       [1, null, 201, MangaBindingState.REJECTED, UNKNOWN],
       [1, null, 203, MangaBindingState.REJECTED, UNKNOWN],
-      [1, 2, 204, MangaBindingState.ACTIVE, UNKNOWN],
     ]);
-    assert.deepEqual(await progress(), [[1, 55, true, true, true]]);
+    assert.deepEqual(await progress(), [
+      [1, 55, true, true, true],
+      [2, 56, true, false, true],
+    ]);
     assert.deepEqual(
       (await proposals()).map(([id, anilistId]) => [id, anilistId]),
-      [[1, 202]]
+      [
+        [1, 202],
+        [2, null],
+      ]
     );
   });
 
@@ -1732,6 +1754,61 @@ describe('manga library scan: several instances', () => {
     await scan();
     assert.equal(between, AVAILABLE);
     assert.equal(await mediaStatus(101), PARTIALLY_AVAILABLE);
+  });
+
+  it("shares each run's lookups between the instances", async () => {
+    const library = (from: number, count: number) => ({
+      mangas: Array.from({ length: count }, (_, index) =>
+        fakeLibraryManga(from + index)
+      ),
+    });
+    const one = await start(library(1, 12));
+    const two = await start(library(21, 2));
+    const three = await start(library(31, 12));
+    configure(instanceFor(one, 1), instanceFor(two, 2), instanceFor(three, 3));
+    const logs = captureLogs();
+
+    await scan();
+
+    // Of 10 searches, the first of three instances gets 4, the second needs
+    // only 2 of its 3, and the last gets the 4 left.
+    assert.deepEqual(
+      titleSearches(),
+      [1, 2, 3, 4, 21, 22, 31, 32, 33, 34].map(
+        (id) => `Fake Library Title ${id}`
+      )
+    );
+    assert.deepEqual(deferredLookups(logs), [
+      [1, undefined, undefined, 8],
+      [3, undefined, undefined, 8],
+    ]);
+  });
+
+  it('lets a started MAL lookup finish on the calls left in the run', async () => {
+    const one = await start({ mangas: [malTracked(1, 55)] });
+    const two = await start({ mangas: [malTracked(2, 56)] });
+    configure(instanceFor(one, 1), instanceFor(two, 2));
+    // Instance 1's share is 5 calls, but its lookup has 7 pages.
+    lookups.mal.mock.mockImplementation(
+      async (malIds: readonly number[], page: number) => ({
+        hasNextPage: malIds.includes(55) && page < 7,
+        links:
+          page === 1
+            ? malIds.map((malId) => ({ anilistId: malId + 100, malId }))
+            : [],
+      })
+    );
+
+    const counts = await scan();
+
+    assert.equal(counts.bindingsCreated, 2);
+    assert.deepEqual(
+      lookups.mal.mock.calls.map(({ arguments: [malIds, page] }) => [
+        malIds,
+        page,
+      ]),
+      [...[1, 2, 3, 4, 5, 6, 7].map((page) => [[55], page]), [[56], 1]]
+    );
   });
 });
 

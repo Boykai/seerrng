@@ -51,6 +51,24 @@ export const newLookupBudget = (): LookupBudget => ({
   ...MANGA_LOOKUP_CALLS_PER_RUN,
 });
 
+/**
+ * An instance's part of the calls left in a run: an equal split between the
+ * instances still to scan, so one large library cannot use every call. What an
+ * instance leaves unused goes to the instances scanned after it.
+ */
+export const lookupShare = (
+  left: Readonly<LookupBudget>,
+  instancesLeft: number
+): LookupBudget => {
+  const split = (calls: number) =>
+    Math.ceil(calls / Math.max(1, instancesLeft));
+  return {
+    mal: split(left.mal),
+    mangadex: split(left.mangadex),
+    title: split(left.title),
+  };
+};
+
 export type MatchingWarning =
   | 'AMBIGUOUS_MAL_LINK'
   | 'MAL_LOOKUP_FAILED'
@@ -101,8 +119,13 @@ export interface MatchInput {
 
 export interface MatchingContext {
   signal: AbortSignal;
+  /** Calls left in this run, across every instance. */
   lookups: LookupBudget;
+  /** This instance's part of `lookups`. */
+  share: LookupBudget;
   warn: (code: MatchingWarning, count: number, cause?: string) => void;
+  /** Items the call cap left for a later run; the cap is not a warning. */
+  defer: (step: keyof LookupBudget, count: number) => void;
 }
 
 interface Match {
@@ -161,26 +184,36 @@ const byAge =
     Number(a.input.item.id) - Number(b.input.item.id);
 
 /**
- * One call against the step's per-run budget. An exhausted budget returns no
- * cause, since the cap is not a failure. A failure ends the step for the run
- * unless `stops` says it concerns this call alone. A cancel always throws.
+ * One call against the step's budgets: the run's and the instance's share. A
+ * call that `continues` a started lookup needs only the run's, so a lookup of
+ * several pages can finish. An exhausted budget returns no cause, since the
+ * cap is not a failure. A failure ends the step for the run unless `stops`
+ * says it concerns this call alone. A cancel always throws.
  */
 const call = async <T>(
   context: MatchingContext,
   step: keyof LookupBudget,
   send: () => Promise<T>,
-  stops: (error: unknown) => boolean = () => true
+  {
+    stops = () => true,
+    continues = false,
+  }: { stops?: (error: unknown) => boolean; continues?: boolean } = {}
 ): Promise<CallResult<T>> => {
-  if (context.lookups[step] <= 0) return {};
+  const { lookups, share } = context;
+  if (lookups[step] <= 0 || (!continues && share[step] <= 0)) return {};
   context.signal.throwIfAborted();
-  context.lookups[step] -= 1;
+  lookups[step] -= 1;
+  share[step] = Math.max(0, share[step] - 1);
   try {
     const value = await send();
     context.signal.throwIfAborted();
     return { value };
   } catch (error) {
     if (context.signal.aborted) throw error;
-    if (stops(error)) context.lookups[step] = 0;
+    if (stops(error)) {
+      lookups[step] = 0;
+      share[step] = 0;
+    }
     return { cause: lookupFailureCode(error) };
   }
 };
@@ -249,10 +282,14 @@ const matchMalIds = async (
       // before any ID in the batch is decided.
       const found = new Map<number, Set<number>>();
       for (let page = 1; ; page += 1) {
-        const result = await call(context, 'mal', () =>
-          anilist().getMangaIdsByMalIds(malIds, page, {
-            signal: context.signal,
-          })
+        const result = await call(
+          context,
+          'mal',
+          () =>
+            anilist().getMangaIdsByMalIds(malIds, page, {
+              signal: context.signal,
+            }),
+          { continues: page > 1 }
         );
         if (!('value' in result)) return result;
         for (const { anilistId, malId } of result.value.links) {
@@ -262,10 +299,10 @@ const matchMalIds = async (
       }
     },
     (match, found, malId) => {
-      const ids = [...(found ?? [])].filter(
-        (id) => !match.input.rejected.has(id)
-      );
-      if (ids.length === 1) {
+      // Several AniList manga for one MAL ID bind nothing, even when an admin
+      // rejected all but one of them.
+      const ids = [...(found ?? [])];
+      if (ids.length === 1 && !match.input.rejected.has(ids[0])) {
         match.link = linkTo(
           ids[0],
           MangaBindingConfidence.TRACKER_LINK,
@@ -280,6 +317,7 @@ const matchMalIds = async (
   );
   if (ambiguous > 0) context.warn('AMBIGUOUS_MAL_LINK', ambiguous);
   if (cause) context.warn('MAL_LOOKUP_FAILED', pending, cause);
+  else if (pending > 0) context.defer('mal', pending);
 };
 
 /** Step 4: the AniList link MangaDex keeps for a `/manga/<uuid>` item. */
@@ -321,6 +359,7 @@ const matchMangaDexLinks = async (
     }
   );
   if (cause) context.warn('MANGADEX_LOOKUP_FAILED', pending, cause);
+  else if (pending > 0) context.defer('mangadex', pending);
 };
 
 // A rate limit, an outage, a refusal or an unreachable AniList affects every
@@ -347,6 +386,7 @@ const proposeTitles = async (
     .sort(byAge(checkedAt));
   const policy = getMangaContentPolicy();
   let failed = 0;
+  let deferred = 0;
   let firstCause: string | undefined;
   for (const match of due) {
     const { item, rejected } = match.input;
@@ -364,12 +404,14 @@ const proposeTitles = async (
               signal: context.signal,
             }
           ),
-        stopsTitleSearch
+        { stops: stopsTitleSearch }
       );
       if (!('value' in result)) {
         if (result.cause) {
           failed += 1;
           firstCause ??= result.cause;
+        } else {
+          deferred += 1;
         }
         continue;
       }
@@ -384,6 +426,7 @@ const proposeTitles = async (
     });
   }
   if (failed > 0) context.warn('TITLE_SEARCH_FAILED', failed, firstCause);
+  if (deferred > 0) context.defer('title', deferred);
 };
 
 /**
