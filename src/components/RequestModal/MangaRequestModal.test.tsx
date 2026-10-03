@@ -40,6 +40,21 @@ vi.mock('swr', () => ({
 vi.mock('axios', () => ({
   default: { post: state.post, put: state.put, delete: state.delete },
 }));
+vi.mock('next/link', () => ({
+  default: ({
+    href,
+    children,
+    className,
+  }: {
+    href: string;
+    children: React.ReactNode;
+    className?: string;
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('@app/hooks/useToasts', () => ({
   default: () => ({ addToast: state.addToast }),
 }));
@@ -639,4 +654,50 @@ it('shows the waiting status only for an approved request awaiting a source', as
 
   await render(pendingRequest({ mangaScope: waiting }));
   expect(text()).not.toContain('Waiting for a source');
+});
+
+const waitingRequest = (serverId?: number) =>
+  pendingRequest({
+    status: MediaRequestStatus.APPROVED,
+    serverId,
+    media: { identifiers: [{ provider: 'anilist', value: '30013' }] } as never,
+    mangaScope: {
+      scope: MangaRequestScope.ALL_AT_DISPATCH,
+      latestCount: null,
+      rangeStart: null,
+      rangeEnd: null,
+      awaitingBinding: true,
+    },
+  });
+const sourceLink = () =>
+  host.querySelector('a[href^="/settings/manga-sources"]');
+
+it.each([0, 2])(
+  'links administrators from the waiting hint to instance %i',
+  async (serverId) => {
+    state.granted = [Permission.ADMIN, Permission.MANAGE_REQUESTS];
+
+    await render(waitingRequest(serverId));
+
+    expect(sourceLink()?.getAttribute('href')).toBe(
+      `/settings/manga-sources?anilistId=30013&instanceId=${serverId}`
+    );
+    expect(sourceLink()?.textContent).toBe('Choose Source');
+  }
+);
+
+it.each([
+  ['request managers', [Permission.MANAGE_REQUESTS], 0],
+  [
+    'a request with no instance',
+    [Permission.ADMIN, Permission.MANAGE_REQUESTS],
+    undefined,
+  ],
+])('leaves out Choose Source for %s', async (_case, granted, serverId) => {
+  state.granted = granted;
+
+  await render(waitingRequest(serverId));
+
+  expect(text()).toContain('an administrator may need to choose one.');
+  expect(sourceLink()).toBeNull();
 });

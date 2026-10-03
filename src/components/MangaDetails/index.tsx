@@ -17,6 +17,7 @@ import { encodeApiPathSegment } from '@app/utils/apiPath';
 import defineMessages from '@app/utils/defineMessages';
 import { getMangaImageUrl } from '@app/utils/mangaImages';
 import {
+  getMangaAniListId,
   isAwaitingMangaSource,
   type MangaScopedRequest,
 } from '@app/utils/mangaRequestScope';
@@ -362,6 +363,10 @@ const MangaDetails = () => {
                         ) : isAwaitingMangaSource(activeRequestData) ? (
                           <MangaWaitingStatus
                             showHint={hasPermission(Permission.MANAGE_REQUESTS)}
+                            anilistId={getMangaAniListId(
+                              activeRequestData?.media
+                            )}
+                            instanceId={activeRequestData?.serverId}
                           />
                         ) : (
                           intl.formatMessage(

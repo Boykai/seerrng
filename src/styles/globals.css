@@ -4219,6 +4219,7 @@
     gap: 5px;
   }
 
+  .request-manga-source-link,
   .settings-manga-sources-link,
   .settings-manga-library-link {
     @apply text-indigo-300 transition duration-300 hover:text-indigo-200 hover:underline;

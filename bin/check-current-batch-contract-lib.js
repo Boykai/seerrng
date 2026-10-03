@@ -4098,6 +4098,26 @@ const validateCurrentBatchContract = (files) => {
     'Manga Sources follows the same route gate.',
     'the style standard must govern the Manga Sources page'
   );
+  requireCssRule(
+    '.request-manga-source-link',
+    ['text-indigo-300'],
+    'the Choose Source text link must resolve through the shared indigo link class'
+  );
+  for (const token of [
+    'className="request-manga-source-link"',
+    'className="app-button app-button-manage button-sm"',
+  ]) {
+    requireText(
+      'src/components/Settings/MangaSources/ChooseSourceLink.tsx',
+      token,
+      'Choose Source must use the shared indigo text link and the small Manage button'
+    );
+  }
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'administrators reach a title waiting for a source through Choose Source',
+    'the style standard must govern the Choose Source link'
+  );
   requireText(
     'src/components/Settings/SettingsNetwork/index.tsx',
     'className="settings-http-warning"',

@@ -286,6 +286,48 @@ it('lets the waiting hint wrap inside the card', async () => {
   expect(hint?.classList.contains('whitespace-normal')).toBe(true);
 });
 
+const waitingHint =
+  'SeerrNG is looking for a source; an administrator may need to choose one.';
+const sourceLink = () => host.querySelector('a.request-manga-source-link');
+const waitingRequest = (values: Partial<MangaScopedRequest> = {}) =>
+  mangaRequest({
+    status: MediaRequestStatus.APPROVED,
+    mangaScope: scope({ awaitingBinding: true }),
+    ...values,
+  });
+
+it.each([0, 3])(
+  'links administrators from the waiting hint to instance %i',
+  async (serverId) => {
+    state.granted = [Permission.ADMIN, Permission.MANAGE_REQUESTS];
+
+    await render(waitingRequest({ serverId }));
+
+    expect(sourceLink()?.getAttribute('href')).toBe(
+      `/settings/manga-sources?anilistId=30013&instanceId=${serverId}`
+    );
+    const hint = sourceLink()?.parentElement;
+    expect(hint?.textContent).toBe(`${waitingHint} Choose Source`);
+    expect(hint?.classList.contains('whitespace-normal')).toBe(true);
+  }
+);
+
+it.each([
+  ['request managers', [Permission.MANAGE_REQUESTS], 0],
+  [
+    'a request with no instance',
+    [Permission.ADMIN, Permission.MANAGE_REQUESTS],
+    undefined,
+  ],
+])('leaves out Choose Source for %s', async (_case, granted, serverId) => {
+  state.granted = granted;
+
+  await render(waitingRequest({ serverId }));
+
+  expect(host.textContent).toContain(waitingHint);
+  expect(sourceLink()).toBeNull();
+});
+
 it('opens the manga edit modal for the requester', async () => {
   state.granted = [Permission.REQUEST_ADVANCED];
   await render(mangaRequest());

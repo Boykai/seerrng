@@ -203,6 +203,51 @@ it('shows request managers the waiting-for-a-source hint', async () => {
   );
 });
 
+const sourceLink = () =>
+  host.querySelector('a[href^="/settings/manga-sources"]');
+const withWaitingCopy = (serverId?: number) => {
+  state.responses['/api/v1/request/41'] = {
+    data: {
+      ...blockRequest({ serverId }),
+      mangaScope: scope({ awaitingBinding: true }),
+    },
+  };
+};
+
+it.each([0, 4])(
+  'links administrators from the waiting hint to instance %i',
+  async (serverId) => {
+    state.granted = [Permission.ADMIN, Permission.MANAGE_REQUESTS];
+    withWaitingCopy(serverId);
+
+    await render(blockRequest());
+
+    expect(sourceLink()?.getAttribute('href')).toBe(
+      `/settings/manga-sources?anilistId=30013&instanceId=${serverId}`
+    );
+    expect(sourceLink()?.textContent).toBe('Choose Source');
+  }
+);
+
+it.each([
+  ['request managers', [Permission.MANAGE_REQUESTS], 0],
+  [
+    'a request with no instance',
+    [Permission.ADMIN, Permission.MANAGE_REQUESTS],
+    undefined,
+  ],
+])('leaves out Choose Source for %s', async (_case, granted, serverId) => {
+  state.granted = granted;
+  withWaitingCopy(serverId);
+
+  await render(blockRequest());
+
+  expect(host.textContent).toContain(
+    'an administrator may need to choose one.'
+  );
+  expect(sourceLink()).toBeNull();
+});
+
 it('opens the manga edit modal and asks no Servarr service', async () => {
   await render(blockRequest({ status: MediaRequestStatus.PENDING }));
 

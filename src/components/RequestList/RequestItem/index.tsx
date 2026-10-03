@@ -9,6 +9,7 @@ import ConfirmButton from '@app/components/Common/ConfirmButton';
 import {
   formatMangaScope,
   mangaScopeMessages,
+  MangaWaitingHint,
   MangaWaitingStatus,
 } from '@app/components/Common/MangaRequestScope';
 import MediaTypeBadge, {
@@ -1110,9 +1111,10 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               )}
             </div>
             {showMangaWaitingHint && (
-              <span className="text-xs">
-                {intl.formatMessage(mangaScopeMessages.waitingForSourceHint)}
-              </span>
+              <MangaWaitingHint
+                anilistId={getMangaAniListId(requestData.media)}
+                instanceId={requestData.serverId}
+              />
             )}
             <div className="card-field">
               {hasPermission(

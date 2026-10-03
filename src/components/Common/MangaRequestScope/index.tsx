@@ -1,4 +1,5 @@
 import Badge from '@app/components/Common/Badge';
+import ChooseSourceLink from '@app/components/Settings/MangaSources/ChooseSourceLink';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { MangaRequestScope } from '@server/constants/mangaRequest';
@@ -46,14 +47,41 @@ export const formatMangaScope = (
   return intl.formatMessage(globalMessages.all);
 };
 
+interface MangaWaitingHintProps {
+  className?: string;
+  /** With both IDs, administrators also get a link to the source picker. */
+  anilistId?: number | null;
+  instanceId?: number | null;
+}
+
+/** Tells request managers who unblocks a request waiting for a source. */
+export const MangaWaitingHint = ({
+  className = 'text-xs',
+  anilistId,
+  instanceId,
+}: MangaWaitingHintProps) => {
+  const intl = useIntl();
+
+  return (
+    <span className={className}>
+      {intl.formatMessage(mangaScopeMessages.waitingForSourceHint)}
+      <ChooseSourceLink anilistId={anilistId} instanceId={instanceId} />
+    </span>
+  );
+};
+
 interface MangaWaitingStatusProps {
   /** Request managers also read who unblocks the request. */
   showHint?: boolean;
+  anilistId?: number | null;
+  instanceId?: number | null;
 }
 
 /** Shown in place of "Approved" while a manga request awaits a source. */
 export const MangaWaitingStatus = ({
   showHint = false,
+  anilistId,
+  instanceId,
 }: MangaWaitingStatusProps) => {
   const intl = useIntl();
 
@@ -61,9 +89,7 @@ export const MangaWaitingStatus = ({
     <>
       <Badge>{intl.formatMessage(mangaScopeMessages.waitingForSource)}</Badge>
       {showHint && (
-        <span className="text-xs">
-          {intl.formatMessage(mangaScopeMessages.waitingForSourceHint)}
-        </span>
+        <MangaWaitingHint anilistId={anilistId} instanceId={instanceId} />
       )}
     </>
   );

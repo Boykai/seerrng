@@ -83,6 +83,12 @@ test('current shared owners pass their checks and functional mutations fail', ()
       '  .settings-manga-library-stack {',
       'Manga Sources table geometry, title links, and detail lists must resolve through shared global classes',
     ],
+    [
+      'src/styles/globals.css',
+      '  .request-manga-source-link,\n  .settings-manga-sources-link,',
+      '  .settings-manga-sources-link,',
+      'the Choose Source text link must resolve through the shared indigo link class',
+    ],
   ];
   for (const [fileName, original, replacement, reason] of cases) {
     const source = readFileSync(

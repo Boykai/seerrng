@@ -27,6 +27,7 @@ import MediaFilterOption from '@app/components/Discover/MediaFilterOption';
 import PinnedFilterSection from '@app/components/Discover/PinnedFilterSection';
 import { RequestListboxControl } from '@app/components/RequestModal/AdvancedRequester';
 import SoftwareRequests from '@app/components/RequestStatus/SoftwareRequests';
+import ChooseSourceLink from '@app/components/Settings/MangaSources/ChooseSourceLink';
 import useDebouncedState from '@app/hooks/useDebouncedState';
 import useMediaFilterPin from '@app/hooks/useMediaFilterPin';
 import useRequestStatusScrollRestoration from '@app/hooks/useRequestStatusScrollRestoration';
@@ -2000,6 +2001,13 @@ export const RequestStatusCard = ({
               {statusLabel}
             </span>
           </Tooltip>
+          {awaitingSource && (
+            <ChooseSourceLink
+              asButton
+              anilistId={getMangaAniListId(item.request.media)}
+              instanceId={item.request.serverId}
+            />
+          )}
           {actionControls}
           <RequestDownloadAction
             requestId={item.request.id}
