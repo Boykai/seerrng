@@ -599,6 +599,8 @@ export interface FakeLibraryManga {
 
 export interface FakeLibrary {
   mangas: FakeLibraryManga[];
+  /** Manga the server knows that are not in the library. */
+  outside?: FakeLibraryManga[];
   /** Page size of LibraryPage; the client asks for 100. */
   pageSize?: number;
 }
@@ -637,6 +639,18 @@ const libraryNode = (manga: FakeLibraryManga) => {
   };
 };
 
+/** A MangaDetails node for `manga`, as the single-manga lookups return it. */
+export const fakeMangaDetailsNode = (
+  manga: FakeLibraryManga,
+  inLibrary: boolean
+) => ({
+  ...libraryNode(manga),
+  status: 'ONGOING',
+  inLibrary,
+  initialized: true,
+  meta: [],
+});
+
 const requestedIds = (request: FakeRequest) =>
   new Set(
     (Array.isArray(request.variables.ids) ? request.variables.ids : []).map(
@@ -645,17 +659,38 @@ const requestedIds = (request: FakeRequest) =>
   );
 
 /**
- * Serves Capabilities and the library-scan reads from `library`, which tests
- * may change between scans. Pages use keyset cursors (the last ID), as the
- * pinned server does for `order: [{ by: ID }]`.
+ * Serves Capabilities, the library-scan reads and the single-manga lookups
+ * from `library`, which tests may change between scans. Pages use keyset
+ * cursors (the last ID), as the pinned server does for `order: [{ by: ID }]`.
  */
 export const serveFakeLibrary = (
   server: FakeSuwayomi,
   library: FakeLibrary
 ): void => {
+  const known = () => [
+    ...library.mangas.map((manga) => fakeMangaDetailsNode(manga, true)),
+    ...(library.outside ?? []).map((manga) =>
+      fakeMangaDetailsNode(manga, false)
+    ),
+  ];
   server.onOperation(
     'Capabilities',
     capabilitiesData({ mangaFields: ['id', 'title', 'trackRecords'] })
+  );
+  server.onOperation('MangaDetails', (request) => {
+    const manga = known().find(({ id }) => id === request.variables.id);
+    return manga ? graphqlData({ manga }) : missingLookup('manga');
+  });
+  server.onOperation('ByNaturalKey', (request) =>
+    graphqlData({
+      mangas: {
+        nodes: known().filter(
+          ({ sourceId, url }) =>
+            sourceId === request.variables.sourceId &&
+            url === request.variables.url
+        ),
+      },
+    })
   );
   server.onOperation('LibraryPage', (request) => {
     const sorted = [...library.mangas].sort((a, b) => a.id - b.id);
