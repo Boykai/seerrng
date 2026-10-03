@@ -176,6 +176,11 @@ Promise.resolve()
     await getSettings().load();
   })
   .then(() => {
+    // Loading next.config.ts during `app.prepare()` deletes the `.ts` require
+    // hook (see the comment above), so later lazy `@server/*` imports fail in
+    // `pnpm dev`. Keep ts-node's hook to restore it; Next loads the config
+    // only once per process.
+    const tsRequireHook = dev ? require.extensions['.ts'] : undefined;
     // Select Webpack independently of filesystem polling for Linux-local previews.
     const app = next({
       dev,
@@ -194,6 +199,10 @@ Promise.resolve()
     }
 
     return app.prepare().then(async () => {
+      if (tsRequireHook && !require.extensions['.ts']) {
+        require.extensions['.ts'] = tsRequireHook;
+      }
+
       // Run Overseerr to Seerr migration
       await checkOverseerrMerge();
 
