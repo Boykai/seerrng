@@ -1740,6 +1740,34 @@
     padding-top: var(--card-spacing);
   }
 
+  .request-download-copy-panel {
+    /* Its own line at the end of the action row, inside the card, which clips
+       anything that floats. */
+    order: 1;
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .request-download-copy-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+    gap: var(--card-spacing);
+    /* About ten single-line rows before scrolling. */
+    max-height: calc(10 * 1.25rem + 9 * var(--card-spacing));
+    margin-top: var(--card-spacing);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .request-download-copy-list > li {
+    min-width: 0;
+  }
+
+  .request-download-copy-link {
+    @apply block text-xs leading-5 text-indigo-300 hover:text-indigo-200 focus:ring-2 focus:ring-indigo-400 focus:outline-none focus:ring-inset;
+    overflow-wrap: anywhere;
+  }
+
   .app-control-standard-radius {
     border-radius: var(--control-corner-radius);
   }

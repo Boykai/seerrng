@@ -59,6 +59,13 @@ copies** and choose the episode, book format, comic issue, or magazine issue to
 save. The browser handles transfer progress after the download starts; SeerrNG
 keeps the request's availability and history on this page.
 
+Manga chapters become downloadable one at a time, as soon as SeerrNG verifies
+each one in Suwayomi, while the rest of the request is still downloading and
+also after the request failed. Each chapter downloads as its own CBZ file, and
+newly verified chapters join the list without reloading the page. There is no
+**Download all**. Manga chapters need no path mapping; see
+[Download copy](./manga-backend.md#download-copy) for the limits.
+
 ROM and PC game requests also appear in Request Status with their provider
 confirmed lifecycle states and download actions. See
 [Software requests](./software-acquisition.md) for provider setup, emulation

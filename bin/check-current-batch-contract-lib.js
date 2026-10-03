@@ -4202,6 +4202,31 @@ const validateCurrentBatchContract = (files) => {
     'className="request-status-action-row"',
     'request cards must resolve wrapping action alignment through the shared global style'
   );
+  requireText(
+    'src/components/Requests/index.tsx',
+    'className="request-download-copy-panel app-card-inset refreshed-inset-surface"',
+    'request download copies must open as an inset list inside the request card'
+  );
+  rejectText(
+    'src/components/Requests/index.tsx',
+    '<details',
+    'request download copies must not open as a floating menu that the request card clips'
+  );
+  requireCssRule(
+    '.request-download-copy-panel',
+    ['order: 1;', 'flex-basis: 100%;'],
+    'request download copies must open on their own line at the end of the request action row'
+  );
+  requireCssRule(
+    '.request-download-copy-list',
+    ['max-height:', 'overflow-y: auto;'],
+    'request download copies must scroll inside their inset list'
+  );
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'Never open it as a floating menu that the card would clip.',
+    'the style standard must govern request download copies'
+  );
   for (const filterPage of [
     'src/components/Requests/index.tsx',
     'src/components/Blocklist/index.tsx',

@@ -1,14 +1,8 @@
-import { MediaType } from '@server/constants/media';
-import type { MediaRequest } from '@server/entity/MediaRequest';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import {
-  listRequestDownloadAssets,
-  openRequestDownloadAsset,
-  openVerifiedMappedFile,
-} from './requestDownloadAssets';
+import { openVerifiedMappedFile } from './requestDownloadAssets';
 
 const temporaryDirectories: string[] = [];
 
@@ -56,26 +50,5 @@ it('rejects a parent symlink that redirects a mapped file outside its root', asy
 
   await expect(
     openVerifiedMappedFile(path.join(root, 'linked', 'secret.txt'), root)
-  ).resolves.toBeUndefined();
-});
-
-it('lists and opens no local copies for manga requests', async () => {
-  // Linked service fields prove manga does not reach a book or comic provider.
-  const request = {
-    id: 1,
-    type: MediaType.MANGA,
-    is4k: false,
-    media: {
-      id: 2,
-      mediaType: MediaType.MANGA,
-      serviceId: 3,
-      externalServiceId: 4,
-      comicServiceType: 'mylar',
-    },
-  } as unknown as MediaRequest;
-
-  await expect(listRequestDownloadAssets(request)).resolves.toEqual([]);
-  await expect(
-    openRequestDownloadAsset(request, 'a'.repeat(43))
   ).resolves.toBeUndefined();
 });

@@ -414,3 +414,42 @@ describe('SuwayomiAPI manga thumbnail', () => {
     );
   });
 });
+
+describe('SuwayomiAPI byte request failures', () => {
+  const cases: [string, FakeReply, string][] = [
+    ['a 400', { status: 400, body: 'x'.repeat(5_000) }, 'NOT_DOWNLOADED'],
+    [
+      'a zero length',
+      { status: 200, headers: { ...ZIP, 'Content-Length': '0' } },
+      'NOT_DOWNLOADED',
+    ],
+    ['a 404', { status: 404, body: 'missing' }, 'NOT_FOUND'],
+    ['a 500', { status: 500, body: 'failure' }, 'HTTP_ERROR'],
+    [
+      'an oversize length on a stalled body',
+      {
+        headers: { ...ZIP, 'Content-Length': '2000' },
+        chunks: [Buffer.alloc(100), Buffer.alloc(1_900)],
+        stallAfterChunks: 1,
+      },
+      'RESPONSE_TOO_LARGE',
+    ],
+  ];
+  for (const [name, reply, code] of cases) {
+    it(`releases the socket after ${name}`, { timeout: 10_000 }, async () => {
+      const server = await start();
+      server.onRoute('GET', ARCHIVE, reply);
+      const api = connect(server, {
+        limits: { chapterArchiveBytes: 1_000 },
+        timeouts: { bytes: 30_000 },
+      });
+      await assert.rejects(api.streamChapterArchive('11'), { code });
+      // Well under both the request timeout and the server's keep-alive.
+      const deadline = Date.now() + 2_000;
+      while (pooled(globalAgent.sockets, server) > 0 && Date.now() < deadline) {
+        await sleep(10);
+      }
+      assert.equal(pooled(globalAgent.sockets, server), 0);
+    });
+  }
+});
