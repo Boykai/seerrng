@@ -4,12 +4,14 @@ import test from 'node:test';
 import { AddMangaIdentityUniqueness1790986402000 as PortableMangaIdentityMigration } from '@server/migration/sqlite/1790986402000-AddMangaIdentityUniqueness';
 import { AddMangaLibraryBindings1790986404000 as PortableMangaLibraryMigration } from '@server/migration/sqlite/1790986404000-AddMangaLibraryBindings';
 import { AddMangaRequestManifests1790986406000 as PortableMangaRequestMigration } from '@server/migration/sqlite/1790986406000-AddMangaRequestManifests';
+import { AddMangaSourceResolution1790986408000 as PortableMangaSourceResolutionMigration } from '@server/migration/sqlite/1790986408000-AddMangaSourceResolution';
 import { DataSource, type QueryRunner } from 'typeorm';
 import { AddMangaIdentityUniqueness1790986402000 } from './1790986402000-AddMangaIdentityUniqueness';
 import { AddMangaQuota1790986403000 } from './1790986403000-AddMangaQuota';
 import { AddMangaLibraryBindings1790986404000 } from './1790986404000-AddMangaLibraryBindings';
 import { AddMangaMatchProposals1790986405000 } from './1790986405000-AddMangaMatchProposals';
 import { AddMangaRequestManifests1790986406000 } from './1790986406000-AddMangaRequestManifests';
+import { AddMangaSourceResolution1790986408000 } from './1790986408000-AddMangaSourceResolution';
 
 const postgresUrl = process.env.SEERR_TEST_POSTGRES_URL;
 const postgresTest = postgresUrl ? test : test.skip;
@@ -558,6 +560,121 @@ postgresTest(
         [{ manifestId: manifestIds[1] }]
       );
       await rejects(() => insertManifest(3), /foreign key/i);
+
+      await migration.down(queryRunner);
+      await migration.down(queryRunner);
+
+      assert.deepStrictEqual(await objects(), []);
+    });
+  }
+);
+
+test('PostgreSQL manga source resolution migration creates the SQLite indexes and drops both tables', async () => {
+  const migration = new AddMangaSourceResolution1790986408000();
+  const indexes = (statements: string[]) =>
+    statements.filter((statement) => / INDEX /.test(statement));
+  const postgres = await recordStatements((queryRunner) =>
+    migration.up(queryRunner)
+  );
+
+  assert.equal(migration.name, 'AddMangaSourceResolution1790986408000');
+  assert.equal(indexes(postgres).length, 2);
+  assert.deepStrictEqual(
+    indexes(postgres),
+    indexes(
+      await recordStatements((queryRunner) =>
+        new PortableMangaSourceResolutionMigration().up(queryRunner)
+      )
+    )
+  );
+  assert.deepStrictEqual(
+    await recordStatements((queryRunner) => migration.down(queryRunner)),
+    [
+      `DROP TABLE IF EXISTS "manga_source_candidate"`,
+      `DROP TABLE IF EXISTS "manga_source_resolution"`,
+    ]
+  );
+});
+
+postgresTest(
+  'PostgreSQL manga source resolution migration keys titles and candidates reversibly',
+  async () => {
+    await withPostgresQueryRunner(async (queryRunner) => {
+      // A private schema keeps the migrated database's tables out of reach,
+      // and the rollback removes it again.
+      await queryRunner.query(`CREATE SCHEMA "manga_source_check"`);
+      await queryRunner.query(`SET LOCAL search_path TO "manga_source_check"`);
+      const objects = async () =>
+        (
+          (await queryRunner.query(
+            `SELECT c."relkind" AS "kind", c."relname" AS "name"
+             FROM pg_class c
+             JOIN pg_namespace n ON n."oid" = c."relnamespace"
+             WHERE n."nspname" = 'manga_source_check'
+               AND c."relkind" IN ('r', 'i')
+             ORDER BY c."relkind", c."relname"`
+          )) as { kind: string; name: string }[]
+        ).map(({ kind, name }) => `${kind} ${name}`);
+      const rejectsDuplicate = async (insert: () => Promise<unknown>) => {
+        await queryRunner.query('SAVEPOINT manga_source_check');
+        await assert.rejects(insert(), /unique/i);
+        await queryRunner.query('ROLLBACK TO SAVEPOINT manga_source_check');
+      };
+      const insertResolution = (anilistId: number) =>
+        queryRunner.query(
+          `INSERT INTO "manga_source_resolution" ("instanceId", "anilistId") VALUES (1, $1)`,
+          [anilistId]
+        );
+      const insertCandidate = (anilistId: number, item: string) =>
+        queryRunner.query(
+          `INSERT INTO "manga_source_candidate" ("instanceId", "anilistId", "sourceId", "url", "urlHash", "suwayomiMangaId", "title", "score", "confidence", "matchedBy")
+           VALUES (1, $1, '1001', $2, $3, 7, 'Synthetic Title', 800, 'MEDIUM', 'title')`,
+          [anilistId, `/fake/${item}`, `hash-${item}`]
+        );
+
+      const migration = new AddMangaSourceResolution1790986408000();
+      await migration.up(queryRunner);
+      await migration.up(queryRunner);
+
+      assert.deepStrictEqual(await objects(), [
+        'i PK_manga_source_candidate',
+        'i PK_manga_source_resolution',
+        'i UQ_manga_source_candidate_item',
+        'i UQ_manga_source_resolution_title',
+        'r manga_source_candidate',
+        'r manga_source_resolution',
+      ]);
+
+      await insertResolution(900001);
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "status", "reason", "attempts", "nextAttemptAt", "lastError", "createdAt" IS NOT NULL AS "stamped"
+           FROM "manga_source_resolution"`
+        ),
+        [
+          {
+            status: 'QUEUED',
+            reason: null,
+            attempts: 0,
+            nextAttemptAt: null,
+            lastError: null,
+            stamped: true,
+          },
+        ]
+      );
+      await rejectsDuplicate(() => insertResolution(900001));
+      await insertResolution(900002);
+
+      await insertCandidate(900001, 'a');
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "sourceName", "sourceLang", "inLibrary" FROM "manga_source_candidate"`
+        ),
+        [{ sourceName: '', sourceLang: '', inLibrary: false }]
+      );
+      await rejectsDuplicate(() => insertCandidate(900001, 'a'));
+      await insertCandidate(900001, 'b');
+      await insertCandidate(900002, 'a');
 
       await migration.down(queryRunner);
       await migration.down(queryRunner);

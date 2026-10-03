@@ -125,6 +125,53 @@ const MANGA_SCHEMA_OBJECTS: readonly SchemaObject[] = [
       name,
     })
   ),
+  // The source resolver's per-title state and its candidates.
+  ...[
+    'instanceId',
+    'anilistId',
+    'status',
+    'reason',
+    'mangadexUuid',
+    'searchRequestedAt',
+    'checkedAt',
+    'searchedAt',
+    'attempts',
+    'nextAttemptAt',
+    'lastError',
+  ].map((name): SchemaObject => ({
+    kind: 'column',
+    table: 'manga_source_resolution',
+    name,
+  })),
+  {
+    kind: 'index',
+    table: 'manga_source_resolution',
+    name: 'UQ_manga_source_resolution_title',
+  },
+  ...[
+    'instanceId',
+    'anilistId',
+    'sourceId',
+    'sourceName',
+    'sourceLang',
+    'url',
+    'urlHash',
+    'suwayomiMangaId',
+    'title',
+    'inLibrary',
+    'score',
+    'confidence',
+    'matchedBy',
+  ].map((name): SchemaObject => ({
+    kind: 'column',
+    table: 'manga_source_candidate',
+    name,
+  })),
+  {
+    kind: 'index',
+    table: 'manga_source_candidate',
+    name: 'UQ_manga_source_candidate_item',
+  },
 ];
 
 const driver = isPgsql ? 'postgres' : 'sqlite';
