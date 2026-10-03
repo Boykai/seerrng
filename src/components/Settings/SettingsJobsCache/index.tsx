@@ -100,6 +100,7 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages(
     'backissue-scan': 'BackIssue Comics Scan',
     'magazine-scan': 'LazyLibrarian Magazine Scan',
     'manga-library-scan': 'Manga Library Scan',
+    'manga-source-resolve': 'Manga Source Resolve',
     'download-sync': 'Download Sync',
     'software-request-reconciliation': 'Software Request Reconciliation',
     'download-recovery': 'Download Recovery',
