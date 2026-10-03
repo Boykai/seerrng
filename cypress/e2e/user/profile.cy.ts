@@ -37,16 +37,19 @@ describe('User Profile', () => {
 
     cy.wait('@getWatchlist');
 
-    const sliderHeader = cy.contains('.slider-header', 'Watchlist');
+    // Reveal the lazy item's layout wrapper before requiring its metadata
+    // request. This also works while its card is still a loading placeholder.
+    cy.contains('.slider-header', 'Watchlist')
+      .closest('[data-testid=media-slider]')
+      .find('.slider-item')
+      .first()
+      .scrollIntoView()
+      .should('be.visible');
 
-    sliderHeader.scrollIntoView();
+    cy.wait('@getTmdbMovie').its('response.statusCode').should('eq', 200);
 
-    cy.wait('@getTmdbMovie');
-    // Wait a little longer to make sure the movie component reloaded
-    cy.wait(500);
-
-    sliderHeader
-      .next('[data-testid=media-slider]')
+    cy.contains('.slider-header', 'Watchlist')
+      .closest('[data-testid=media-slider]')
       .find('[data-testid=title-card]')
       .first()
       .trigger('mouseover')
@@ -54,7 +57,7 @@ describe('User Profile', () => {
       .invoke('text')
       .then((text) => {
         cy.contains('.slider-header', 'Watchlist')
-          .next('[data-testid=media-slider]')
+          .closest('[data-testid=media-slider]')
           .find('[data-testid=title-card]')
           .first()
           .click();

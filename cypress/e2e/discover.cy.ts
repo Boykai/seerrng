@@ -1,6 +1,6 @@
 const clickFirstTitleCardInSlider = (sliderTitle: string): void => {
   cy.contains('.slider-header', sliderTitle)
-    .next('[data-testid=media-slider]')
+    .closest('[data-testid=media-slider]')
     .find('[data-testid=title-card]', { timeout: 15000 })
     .first()
     .trigger('mouseover')
@@ -8,7 +8,7 @@ const clickFirstTitleCardInSlider = (sliderTitle: string): void => {
     .invoke('text')
     .then((text) => {
       cy.contains('.slider-header', sliderTitle)
-        .next('[data-testid=media-slider]')
+        .closest('[data-testid=media-slider]')
         .find('[data-testid=title-card]')
         .first()
         .click();
@@ -121,7 +121,7 @@ describe('Discover', () => {
     cy.visit('/');
     cy.wait('@getMedia');
     cy.contains('.slider-header', 'Recently Added')
-      .next('[data-testid=media-slider]')
+      .closest('[data-testid=media-slider]')
       .find('[data-testid=title-card]')
       .first()
       .find('[data-testid=title-card-title]')
@@ -197,7 +197,7 @@ describe('Discover', () => {
     cy.visit('/');
     cy.wait('@getRequests');
     cy.contains('.slider-header', 'Recent Requests')
-      .next('[data-testid=media-slider]')
+      .closest('[data-testid=media-slider]')
       .scrollIntoView()
       .should('be.visible')
       .find('[data-testid=request-card]')
@@ -322,14 +322,14 @@ describe('Discover', () => {
     cy.visit('/');
     cy.wait('@getRequests');
     cy.contains('.slider-header', 'Recent Requests')
-      .next('[data-testid=media-slider]')
+      .closest('[data-testid=media-slider]')
       .scrollIntoView()
       .should('be.visible')
       .contains('[data-testid=request-card]', 'Failed Card Book')
       .find('a[href="/book/OLCARDFAILEDW?manage=1&format=ebook"]')
       .should('contain', 'Failed');
     cy.contains('.slider-header', 'Recent Requests')
-      .next('[data-testid=media-slider]')
+      .closest('[data-testid=media-slider]')
       .scrollIntoView()
       .should('be.visible')
       .contains('[data-testid=request-card]', 'Failed Card Album')

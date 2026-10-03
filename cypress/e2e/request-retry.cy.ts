@@ -135,7 +135,7 @@ describe('failed request retry', () => {
       });
       cy.wait('@getFailedRequests');
       cy.contains('.slider-header', 'Recent Requests')
-        .next('[data-testid=media-slider]')
+        .closest('[data-testid=media-slider]')
         .scrollIntoView()
         .should('be.visible')
         .contains('[data-testid=request-card]', 'Owned Failed Audiobook');
@@ -144,11 +144,30 @@ describe('failed request retry', () => {
         .parents('[data-testid=request-card]')
         .scrollIntoView()
         .within(() => {
-          cy.contains('button', 'Search Again')
+          cy.contains('button', /^Retry$/)
             .should('be.visible')
             .and(($button) => {
-              expect($button[0].getBoundingClientRect().height).to.be.at.least(
-                44
+              const button = $button[0];
+              const document = button.ownerDocument;
+              const view = document.defaultView!;
+              const probe = document.createElement('div');
+              probe.style.position = 'absolute';
+              probe.style.visibility = 'hidden';
+              probe.style.height = view
+                .getComputedStyle(button)
+                .getPropertyValue('--action-control-height');
+              document.body.appendChild(probe);
+              const sharedHeight = parseFloat(
+                view.getComputedStyle(probe).height
+              );
+              probe.remove();
+              expect(
+                sharedHeight,
+                'configured shared action height'
+              ).to.be.greaterThan(0);
+              expect(button.getBoundingClientRect().height).to.be.closeTo(
+                sharedHeight,
+                0.5
               );
             })
             .click();
@@ -158,7 +177,7 @@ describe('failed request retry', () => {
         .should('include', '/api/v1/request/801/retry');
       cy.contains('Someone Else’s Failed Audiobook')
         .parents('[data-testid=request-card]')
-        .should('not.contain', 'Search Again');
+        .should('not.contain', 'Retry');
     });
   });
 });

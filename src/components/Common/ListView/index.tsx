@@ -6,6 +6,7 @@ import TitleCard from '@app/components/TitleCard';
 import LibraryTitleCard from '@app/components/TitleCard/LibraryTitleCard';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import useCardTextVisibility from '@app/hooks/useCardTextVisibility';
+import useSettings from '@app/hooks/useSettings';
 import { Permission, useUser } from '@app/hooks/useUser';
 import useVerticalScroll from '@app/hooks/useVerticalScroll';
 import useWarmImageCache, {
@@ -86,13 +87,14 @@ const ListView = ({
   const intl = useIntl();
   const { visibility } = useCardTextVisibility();
   const { hasPermission } = useUser();
+  const { currentSettings } = useSettings();
   const canManageBlocklist = hasPermission(Permission.MANAGE_BLOCKLIST);
 
   const visibleItems = useMemo(
     () =>
       items?.filter(
         (title) =>
-          canManageBlocklist ||
+          (canManageBlocklist && !currentSettings.hideBlocklisted) ||
           (
             title as
               | TvResult
@@ -103,7 +105,7 @@ const ListView = ({
               | MagazineResult
           ).mediaInfo?.status !== MediaStatus.BLOCKLISTED
       ),
-    [items, canManageBlocklist]
+    [items, canManageBlocklist, currentSettings.hideBlocklisted]
   );
 
   useWarmImageCache(visibleItems ?? [], {

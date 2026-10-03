@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import type { TestContext } from 'node:test';
 import { afterEach, before, describe, it, mock } from 'node:test';
 
 import CoverArtArchive from '@server/api/coverartarchive';
@@ -166,10 +165,10 @@ const albumDetails = {
 // Successful ListenBrainz detail fixtures still ask MusicBrainz for taxonomy.
 // Model an explicitly unavailable supplemental record, not a swallowed socket error.
 function mockAlbumEnrichment(
-  t: TestContext,
   mbId: string,
   options: { taxonomy?: boolean; artwork?: boolean } = {}
 ) {
+  const assertions: (() => void)[] = [];
   if (options.taxonomy !== false) {
     const taxonomy = mock.method(
       MusicBrainz.prototype,
@@ -180,7 +179,7 @@ function mockAlbumEnrichment(
         );
       }
     );
-    t.after(() =>
+    assertions.push(() =>
       assert.deepStrictEqual(
         taxonomy.mock.calls.map((call) => call.arguments),
         [[{ releaseGroupId: mbId }]]
@@ -193,13 +192,19 @@ function mockAlbumEnrichment(
       'getCoverArt',
       async () => ({ images: [], release: `/release/${mbId}` })
     );
-    t.after(() =>
+    assertions.push(() =>
       assert.deepStrictEqual(
         artwork.mock.calls.map((call) => call.arguments),
         [[mbId]]
       )
     );
   }
+  // Assert before afterEach restores spies; Vitest clears their call history.
+  return () => {
+    for (const assertion of assertions) {
+      assertion();
+    }
+  };
 }
 
 describe('GET /music/:id artist lists', () => {
@@ -353,8 +358,8 @@ describe('GET /music/:id', () => {
     assert.strictEqual(getAlbum.mock.callCount(), 0);
   });
 
-  it('returns album details when optional ListenBrainz stats and tags are absent', async (t) => {
-    mockAlbumEnrichment(t, 'release-group-id');
+  it('returns album details when optional ListenBrainz stats and tags are absent', async () => {
+    const assertEnrichment = mockAlbumEnrichment('release-group-id');
     mock.method(ListenBrainzAPI.prototype, 'getAlbum', async () => ({
       release_group_mbid: 'release-group-id',
       type: 'Album',
@@ -391,10 +396,13 @@ describe('GET /music/:id', () => {
     assert.deepStrictEqual(res.body.tags.artist, []);
     assert.deepStrictEqual(res.body.stats.listeners, []);
     assert.deepStrictEqual(res.body.tracks[0].artists, []);
+    assertEnrichment();
   });
 
-  it('includes release labels when MusicBrainz exposes them', async (t) => {
-    mockAlbumEnrichment(t, 'release-group-id', { artwork: false });
+  it('includes release labels when MusicBrainz exposes them', async () => {
+    const assertEnrichment = mockAlbumEnrichment('release-group-id', {
+      artwork: false,
+    });
     const releaseId = '00000000-0000-0000-0000-000000000001';
     mock.method(ListenBrainzAPI.prototype, 'getAlbum', async () => ({
       caa_release_mbid: releaseId,
@@ -458,20 +466,17 @@ describe('GET /music/:id', () => {
       res.body.recordLabel,
       'Example Records, Example Records Publishing'
     );
+    assertEnrichment();
   });
 
-  it('falls back to MusicBrainz when ListenBrainz has no album detail page', async (t) => {
-    mockAlbumEnrichment(t, 'release-group-id', { taxonomy: false });
+  it('falls back to MusicBrainz when ListenBrainz has no album detail page', async () => {
+    const assertEnrichment = mockAlbumEnrichment('release-group-id', {
+      taxonomy: false,
+    });
     const images = mock.method(
       TheAudioDb.prototype,
       'getArtistImages',
       async () => ({ artistThumb: null, artistBackground: null })
-    );
-    t.after(() =>
-      assert.deepStrictEqual(
-        images.mock.calls.map((call) => call.arguments),
-        [['artist-id']]
-      )
     );
     mock.method(ListenBrainzAPI.prototype, 'getAlbum', async () => {
       throw new Error('[ListenBrainz] Failed to fetch album details: 404');
@@ -512,6 +517,11 @@ describe('GET /music/:id', () => {
     assert.deepStrictEqual(res.body.tags.releaseGroup, [
       { count: 5, genreMbid: '', tag: 'jazz' },
     ]);
+    assert.deepStrictEqual(
+      images.mock.calls.map((call) => call.arguments),
+      [['artist-id']]
+    );
+    assertEnrichment();
   });
 
   it('returns the normalized MusicBrainz release-group rating and vote count', async () => {
@@ -588,8 +598,8 @@ describe('GET /music/:id', () => {
     assert.strictEqual(res.body.message, 'Album not found');
   });
 
-  it('filters saved media request users from music detail responses', async (t) => {
-    mockAlbumEnrichment(t, 'release-group-id');
+  it('filters saved media request users from music detail responses', async () => {
+    const assertEnrichment = mockAlbumEnrichment('release-group-id');
     mock.method(ListenBrainzAPI.prototype, 'getAlbum', async () => ({
       release_group_mbid: 'release-group-id',
       type: 'Album',
@@ -628,10 +638,11 @@ describe('GET /music/:id', () => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.mediaInfo.mbId, 'release-group-id');
+    assertEnrichment();
   });
 
   it('returns every available Lidarr quality without exposing completed requests', async (t) => {
-    mockAlbumEnrichment(t, 'quality-release-group-id');
+    const assertEnrichment = mockAlbumEnrichment('quality-release-group-id');
     const albums = mock.method(LidarrAPI.prototype, 'getAlbums', async () => [
       {
         id: 10,
@@ -783,10 +794,11 @@ describe('GET /music/:id', () => {
       { serverId: 2, quality: 'FLAC' },
     ]);
     assert.strictEqual(res.body.mediaInfo.requests.length, 0);
+    assertEnrichment();
   });
 
-  it('hydrates independent request and issue trees without dropping detail state', async (t) => {
-    mockAlbumEnrichment(t, 'release-group-id');
+  it('hydrates independent request and issue trees without dropping detail state', async () => {
+    const assertEnrichment = mockAlbumEnrichment('release-group-id');
     mock.method(ListenBrainzAPI.prototype, 'getAlbum', async () => ({
       release_group_mbid: 'release-group-id',
       type: 'Album',
@@ -845,5 +857,6 @@ describe('GET /music/:id', () => {
       res.body.mediaInfo.issues[0].comments[0].message,
       'Independent issue comment'
     );
+    assertEnrichment();
   });
 });

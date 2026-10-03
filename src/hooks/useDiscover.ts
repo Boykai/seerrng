@@ -304,7 +304,10 @@ const useDiscover = <
       );
     }
 
-    if (hideBlocklisted && !canManageBlocklist) {
+    if (
+      hideBlocklisted &&
+      (!canManageBlocklist || settings.currentSettings.hideBlocklisted)
+    ) {
       filteredTitles = filteredTitles.filter(
         (i) => !i.mediaInfo || i.mediaInfo.status !== MediaStatus.BLOCKLISTED
       );
@@ -318,6 +321,7 @@ const useDiscover = <
     hideBlocklisted,
     canManageBlocklist,
     settings.currentSettings.hideAvailable,
+    settings.currentSettings.hideBlocklisted,
   ]);
 
   const lastResultPage = data?.[data.length - 1];

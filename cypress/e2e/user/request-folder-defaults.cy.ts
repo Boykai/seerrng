@@ -127,7 +127,8 @@ describe('Per-user request destination folders', () => {
     });
     cy.get('[role="dialog"]')
       .contains('button', '/media/Movies/David')
-      .should('have.class', 'bg-indigo-500/20');
+      .should('have.attr', 'data-table-part', 'choice-row')
+      .and('have.attr', 'aria-pressed', 'true');
   });
 
   it('shows the service default when a saved folder is no longer available', () => {
@@ -186,6 +187,7 @@ describe('Per-user request destination folders', () => {
     cy.wait('@getRequestRootFolders');
     cy.get('[role="dialog"]')
       .contains('button', '/media/Movies')
-      .should('have.class', 'bg-indigo-500/20');
+      .should('have.attr', 'data-table-part', 'choice-row')
+      .and('have.attr', 'aria-pressed', 'true');
   });
 });

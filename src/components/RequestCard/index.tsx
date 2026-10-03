@@ -521,6 +521,12 @@ const RequestCard = ({
     getRequestDownloadStatus(requestData)?.some((item) => item.downloadId) &&
     canRetry
   );
+  const { mediaUrl: plexUrl, mediaUrl4k: plexUrl4k } = useDeepLinks({
+    mediaUrl: requestData?.media?.mediaUrl,
+    mediaUrl4k: requestData?.media?.mediaUrl4k,
+    iOSPlexUrl: requestData?.media?.iOSPlexUrl,
+    iOSPlexUrl4k: requestData?.media?.iOSPlexUrl4k,
+  });
   const modifyRequest = async (type: 'approve' | 'decline') => {
     setUpdatingType(type);
     try {
@@ -835,16 +841,41 @@ const RequestCard = ({
                   {intl.formatMessage(globalMessages.declined)}
                 </Link>
               ) : canFailDownload ? (
-                <Link
+                <StatusBadge
+                  status={getRequestMediaStatus(requestData)}
+                  downloadItem={getRequestDownloadStatus(requestData)}
+                  title={
+                    isMovie(title)
+                      ? title.title
+                      : isMusic(title)
+                        ? title.title
+                        : isBook(title)
+                          ? title.title
+                          : isComic(title)
+                            ? title.title
+                            : isMagazine(title)
+                              ? title.title
+                              : title.name
+                  }
+                  inProgress={
+                    (getRequestDownloadStatus(requestData) ?? []).length > 0
+                  }
+                  is4k={requestData.is4k}
+                  tmdbId={requestData.media.tmdbId}
+                  mediaType={requestData.type === 'tv' ? 'tv' : 'movie'}
+                  plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
+                  serviceUrl={getRequestServiceUrl(requestData)}
+                  requestId={requestData.id}
+                  canFailDownload
+                  showQuality={false}
                   className="request-status-control request-status-control-link request-status-control-warning"
-                  href={getRequestDetailHref(requestData, true)}
-                >
-                  <ProcessingStatusIcon
-                    className="request-status-control-icon"
-                    aria-hidden="true"
-                  />
-                  {intl.formatMessage(globalMessages.processing)}
-                </Link>
+                  leadingIcon={
+                    <ProcessingStatusIcon
+                      className="request-status-control-icon"
+                      aria-hidden="true"
+                    />
+                  }
+                />
               ) : requestedQualityStatus === MediaStatus.AVAILABLE ? (
                 <Link
                   className="request-status-control request-status-control-link request-status-control-success"

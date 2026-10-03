@@ -283,8 +283,14 @@ describe('manual fail and search from request status', () => {
       cy.get('.app-tooltip')
         .contains('button', 'Fail this download and search again')
         .should('be.visible')
+        .and('have.class', 'app-button')
+        .and('have.class', 'button-sm')
         .and(($button) => {
-          expect($button[0].getBoundingClientRect().height).to.be.at.least(44);
+          const bounds = $button[0].getBoundingClientRect();
+          expect(bounds.height).to.eq(16);
+          expect(window.getComputedStyle($button[0]).fontSize).to.eq('12px');
+          expect(bounds.left).to.be.at.least(0);
+          expect(bounds.right).to.be.at.most(Cypress.config('viewportWidth'));
         })
         .click();
       cy.get('.app-tooltip')
@@ -299,10 +305,9 @@ describe('manual fail and search from request status', () => {
       cy.contains('The release was failed and a new search was started.')
         .should('be.visible')
         .and(($message) => {
-          expect($message.closest('.pointer-events-auto')).to.have.css(
-            'opacity',
-            '1'
-          );
+          const notification = $message.closest('.toast').children().first();
+          expect(notification).to.have.css('opacity', '1');
+          expect(notification).to.have.css('pointer-events', 'auto');
         });
       cy.contains('Someone Else’s Movie')
         .parents('[data-testid=request-card]')

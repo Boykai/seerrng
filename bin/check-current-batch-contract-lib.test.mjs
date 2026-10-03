@@ -28,6 +28,104 @@ const repositoryFilesWith = (overrides = {}) =>
     },
   });
 
+test('Series request entry evidence follows actions rather than retired test titles', () => {
+  const file = 'cypress/e2e/tv-details.cy.ts';
+  const source = repositoryFilesWith()[file];
+  const reason =
+    'Series details must exercise one request-screen entry, in-dialog HD and 4K choices and observed zero submissions';
+  const passes = (changed) =>
+    !validateCurrentBatchContract(
+      repositoryFilesWith({ [file]: changed })
+    ).some((error) => error.includes(reason));
+  assert.equal(passes(source), true, 'actual entry/quality/no-write evidence');
+  assert.equal(
+    passes(
+      source.replace(
+        'opens one request screen and chooses HD or 4K inside it without submitting',
+        'an independently named behavioral test'
+      )
+    ),
+    true,
+    'test title is not the contract'
+  );
+  assert.equal(
+    passes(source.replaceAll('submissions', 'observedWrites')),
+    true,
+    'counter identifier is not the contract'
+  );
+  const mutations = [
+    ['POST observer', "cy.intercept('POST'", "cy.intercept('GET'"],
+    ['request endpoint', "'/api/v1/request*'", "'/api/v1/unrelated*'"],
+    ['write observation', 'submissions += 1;', 'submissions += 0;'],
+    ['fresh counter', 'let submissions = 0;', 'let submissions = 1;'],
+    ['zero assertion', ').to.eq(0)', ').to.eq(1)'],
+    ['queued zero assertion', 'cy.then(() =>', 'immediateAssertion(() =>'],
+    ['entry action', ".filter(':visible')", ".filter(':hidden')"],
+    ['entry enabled', ".should('be.enabled')", ".should('be.disabled')"],
+    [
+      'entry click',
+      ".should('be.enabled')\n      .click();",
+      ".should('be.enabled');",
+    ],
+    [
+      'dialog owner',
+      'cy.get(\'[role="dialog"]\')',
+      'cy.get(\'[role="region"]\')',
+    ],
+    [
+      'visible dialog',
+      ".should('be.visible')\n      .within",
+      ".should('not.be.visible')\n      .within",
+    ],
+    [
+      'quality owner',
+      '[role="group"][aria-label="Quality"]',
+      '[role="group"][aria-label="Other"]',
+    ],
+    ['HD choice', '/^HD$/', '/^SD$/'],
+    ['4K choice', '/^4K$/', '/^8K$/'],
+    [
+      '4K choice action',
+      ".should('be.enabled')\n          .click();",
+      ".should('be.enabled');",
+    ],
+    ['selected state', "'aria-pressed', 'true'", "'aria-pressed', 'false'"],
+    ['retired control absence', ".should('not.exist');", ".should('exist');"],
+    [
+      'return to HD',
+      ".click()\n          .should('have.attr', 'aria-pressed', 'true');",
+      ".should('have.attr', 'aria-pressed', 'true');",
+    ],
+  ];
+  for (const [edge, before, after] of mutations) {
+    assert.ok(
+      source.includes(before),
+      `${edge}: mutation matches actual source`
+    );
+    assert.equal(
+      passes(source.replaceAll(before, after)),
+      false,
+      `${edge}: missing behavioral edge fails closed`
+    );
+  }
+  const movieFile = 'cypress/e2e/movie-details.cy.ts';
+  assert.ok(
+    validateCurrentBatchContract(
+      repositoryFilesWith({
+        [movieFile]: repositoryFilesWith()[movieFile].replace(
+          'shows standard and 4K requests in one segmented control',
+          'removed Movie segmented evidence'
+        ),
+      })
+    ).some((error) =>
+      error.includes(
+        'Movie details must test the shared segmented request control'
+      )
+    ),
+    'Movie segmented behavior remains required'
+  );
+});
+
 test('upstream public commands preserve build-time translation and visual guards', () => {
   const packageSource = repositoryFilesWith()['package.json'];
   const baseline = validateCurrentBatchContract(repositoryFilesWith());

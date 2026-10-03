@@ -118,6 +118,232 @@ const parsedJsx = (source) => {
   };
 };
 
+// Read connected Cypress actions/assertions, not a test title or retired format
+// control. One test must exercise entry, both in-dialog choices and zero writes.
+const validateSeriesRequestEntryEvidence = (source) => {
+  try {
+    const { ts, tree } = parsedJsx(source);
+    const callsWithin = (root) => {
+      const calls = [];
+      const visit = (node) => {
+        if (ts.isCallExpression(node)) calls.push(node);
+        ts.forEachChild(node, visit);
+      };
+      visit(root);
+      return calls;
+    };
+    const chain = (node) => {
+      if (!node || !ts.isCallExpression(node)) return [];
+      if (ts.isIdentifier(node.expression))
+        return [{ name: node.expression.text, args: node.arguments }];
+      if (!ts.isPropertyAccessExpression(node.expression)) return [];
+      let owner = node.expression.expression;
+      while (ts.isPropertyAccessExpression(owner)) owner = owner.expression;
+      const prior = ts.isCallExpression(owner)
+        ? chain(owner)
+        : ts.isIdentifier(owner) && owner.text === 'cy'
+          ? [{ name: 'cy', args: [] }]
+          : [];
+      return prior.length
+        ? [...prior, { name: node.expression.name.text, args: node.arguments }]
+        : [];
+    };
+    const text = (node) =>
+      node && ts.isStringLiteral(node) ? node.text : undefined;
+    const has = (steps, name, first, second) =>
+      steps.some(
+        (step) =>
+          step.name === name &&
+          (first === undefined || text(step.args[0]) === first) &&
+          (second === undefined || text(step.args[1]) === second)
+      );
+    const assertion = (steps, name, value) =>
+      has(steps, 'should', name, value) || has(steps, 'and', name, value);
+    const label = (node, expected) => {
+      if (!node) return false;
+      if (ts.isStringLiteral(node)) return node.text === expected;
+      if (!ts.isRegularExpressionLiteral(node)) return false;
+      const match = node.text.match(/^\/(.*)\/([a-z]*)$/);
+      if (!match || !match[1].startsWith('^') || !match[1].endsWith('$'))
+        return false;
+      const pattern = new RegExp(match[1], match[2]);
+      return pattern.test(expected) && !pattern.test(`${expected} Extra`);
+    };
+    const contains = (steps, expected) =>
+      steps.some(
+        (step) =>
+          step.name === 'contains' &&
+          text(step.args[0]) === 'button' &&
+          label(step.args[1], expected)
+      );
+    const tests = callsWithin(tree).filter(
+      (call) =>
+        ts.isIdentifier(call.expression) && call.expression.text === 'it'
+    );
+    return tests.some((test) => {
+      const body = test.arguments.find(ts.isArrowFunction)?.body;
+      if (!body) return false;
+      const calls = callsWithin(body);
+      const entry = calls.find((call) => {
+        const steps = chain(call);
+        return (
+          steps[0]?.name === 'cy' &&
+          contains(steps, 'Request') &&
+          has(steps, 'filter', ':visible') &&
+          assertion(steps, 'be.enabled') &&
+          steps.at(-1)?.name === 'click'
+        );
+      });
+      const dialog = calls.find((call) => {
+        const steps = chain(call);
+        return (
+          has(steps, 'get', '[role="dialog"]') &&
+          assertion(steps, 'be.visible') &&
+          steps.at(-1)?.name === 'within'
+        );
+      });
+      if (!entry || !dialog || entry.pos >= dialog.pos) return false;
+      const choiceCalls = callsWithin(dialog.arguments[0]?.body ?? dialog);
+      const choices = choiceCalls.map(chain);
+      const quality = (steps, expected) =>
+        has(steps, 'get', '[role="group"][aria-label="Quality"]') &&
+        contains(steps, expected);
+      const pressed = (steps) =>
+        steps.some(
+          (step) =>
+            ['should', 'and'].includes(step.name) &&
+            text(step.args[0]) === 'have.attr' &&
+            text(step.args[1]) === 'aria-pressed' &&
+            text(step.args[2]) === 'true'
+        );
+      if (
+        !choices.some((steps) => quality(steps, 'HD') && pressed(steps)) ||
+        !choices.some(
+          (steps) =>
+            quality(steps, 'HD') && has(steps, 'click') && pressed(steps)
+        ) ||
+        !choices.some(
+          (steps) =>
+            quality(steps, '4K') &&
+            assertion(steps, 'be.enabled') &&
+            has(steps, 'click')
+        ) ||
+        !choices.some((steps) => quality(steps, '4K') && pressed(steps)) ||
+        !calls.some((call) => {
+          const steps = chain(call);
+          return (
+            call.pos < entry.pos &&
+            has(steps, 'get', '[data-testid=format-request-option-standard]') &&
+            assertion(steps, 'not.exist')
+          );
+        })
+      )
+        return false;
+      const switch4k = choiceCalls.find((call) => {
+        const steps = chain(call);
+        return quality(steps, '4K') && has(steps, 'click');
+      });
+      const selected4k = choiceCalls.find(
+        (call) =>
+          call.pos > switch4k.pos &&
+          quality(chain(call), '4K') &&
+          pressed(chain(call))
+      );
+      if (
+        !selected4k ||
+        !choiceCalls.some(
+          (call) =>
+            call.pos < switch4k.pos &&
+            quality(chain(call), 'HD') &&
+            pressed(chain(call))
+        ) ||
+        !choiceCalls.some(
+          (call) =>
+            call.pos > selected4k.pos &&
+            quality(chain(call), 'HD') &&
+            has(chain(call), 'click') &&
+            pressed(chain(call))
+        )
+      )
+        return false;
+      return calls.some((call) => {
+        const steps = chain(call);
+        const expectation = steps[0];
+        const counter = expectation?.args[0];
+        const zero = steps.at(-1);
+        if (
+          expectation?.name !== 'expect' ||
+          !counter ||
+          !ts.isIdentifier(counter) ||
+          zero?.name !== 'eq' ||
+          !zero.args[0] ||
+          !ts.isNumericLiteral(zero.args[0]) ||
+          zero.args[0].text !== '0' ||
+          call.pos <= dialog.pos
+        )
+          return false;
+        let queuedAssertion = false;
+        for (
+          let owner = call.parent;
+          owner && owner !== body;
+          owner = owner.parent
+        ) {
+          if (ts.isCallExpression(owner) && has(chain(owner), 'then'))
+            queuedAssertion = true;
+        }
+        const initialized = body.statements?.some(
+          (statement) =>
+            ts.isVariableStatement(statement) &&
+            statement.declarationList.declarations.some(
+              (declaration) =>
+                ts.isIdentifier(declaration.name) &&
+                declaration.name.text === counter.text &&
+                declaration.initializer &&
+                ts.isNumericLiteral(declaration.initializer) &&
+                declaration.initializer.text === '0'
+            )
+        );
+        const observed = calls.some((intercept) => {
+          const observer = intercept.arguments[2];
+          if (
+            intercept.pos >= entry.pos ||
+            !has(chain(intercept), 'intercept', 'POST', '/api/v1/request*') ||
+            !observer ||
+            !ts.isArrowFunction(observer)
+          )
+            return false;
+          let incremented = false;
+          const scan = (node) => {
+            if (
+              (ts.isPostfixUnaryExpression(node) ||
+                ts.isPrefixUnaryExpression(node)) &&
+              node.operator === ts.SyntaxKind.PlusPlusToken &&
+              ts.isIdentifier(node.operand) &&
+              node.operand.text === counter.text
+            )
+              incremented = true;
+            if (
+              ts.isBinaryExpression(node) &&
+              node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
+              ts.isIdentifier(node.left) &&
+              node.left.text === counter.text &&
+              ts.isNumericLiteral(node.right) &&
+              node.right.text === '1'
+            )
+              incremented = true;
+            ts.forEachChild(node, scan);
+          };
+          scan(observer.body);
+          return incremented;
+        });
+        return initialized && observed && queuedAssertion;
+      });
+    });
+  } catch {
+    return false;
+  }
+};
+
 const validateRequestFolders = (source, stylesheet, aspect) => {
   try {
     const { elements, roles, text, expression, compact, within } =
@@ -2964,7 +3190,7 @@ const validateCurrentBatchContract = (files) => {
   requireText(
     requestButton,
     '<FormatRequestControl options={requestOptions}',
-    'Movie and Series detail requests must use the shared segmented control'
+    'Movie detail requests must retain the shared segmented control'
   );
   requireText(
     requestButton,
@@ -2986,14 +3212,18 @@ const validateCurrentBatchContract = (files) => {
     'hides the 4K request action without 4K request permission',
     'Movie details must test that the 4K action is hidden without permission'
   );
-  for (const fileName of [
+  requireText(
     'cypress/e2e/movie-details.cy.ts',
-    'cypress/e2e/tv-details.cy.ts',
-  ]) {
-    requireText(
-      fileName,
-      'shows standard and 4K requests in one segmented control',
-      'Movie and Series details must test the shared segmented request control'
+    'shows standard and 4K requests in one segmented control',
+    'Movie details must test the shared segmented request control'
+  );
+  if (
+    !validateSeriesRequestEntryEvidence(
+      requireFile('cypress/e2e/tv-details.cy.ts')
+    )
+  ) {
+    errors.push(
+      'cypress/e2e/tv-details.cy.ts: Series details must exercise one request-screen entry, in-dialog HD and 4K choices and observed zero submissions'
     );
   }
 
