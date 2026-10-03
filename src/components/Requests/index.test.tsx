@@ -204,6 +204,12 @@ const chip = () =>
   host.querySelector('.request-status-action-row [tabindex="0"]');
 
 it('shows a manga request with its title, artwork, link and chapters', async () => {
+  state.responses['/api/v1/manga/30013'] = {
+    data: {
+      ...(state.responses['/api/v1/manga/30013'].data as object),
+      genres: ['Drama', 'Comedy', 'Mystery', 'Sports'],
+    },
+  };
   await render(
     mangaItem({
       mangaScope: scope({
@@ -214,12 +220,17 @@ it('shows a manga request with its title, artwork, link and chapters', async () 
   );
 
   expect(state.keys).toContain('/api/v1/manga/30013');
-  expect(
-    [...host.querySelectorAll('a')].map((link) => link.getAttribute('href'))
-  ).toContain('/manga/30013');
+  const links = [...host.querySelectorAll('a')].map((link) =>
+    link.getAttribute('href')
+  );
+  expect(links).toContain('/manga/30013');
   expect(host.textContent).toContain('Sample Manga (1994)');
   expect(host.textContent).toContain('Manga · Manga');
-  expect(host.textContent).toContain('Chapters:Latest 25 chapters');
+  expect(host.textContent).toContain('Chapters:Latest 25');
+  // No discover page filters manga by genre, so the names aren't links.
+  expect(host.textContent).toContain('Genres:Drama, Comedy, Mystery');
+  expect(host.textContent).not.toContain('Sports');
+  expect(links.some((href) => href?.includes('genre'))).toBe(false);
   expect(host.textContent).not.toContain('Director');
   expect(host.textContent).not.toContain('Studio');
   expect(

@@ -12,14 +12,21 @@ import RequestCard from '.';
 
 const state = vi.hoisted(() => ({
   keys: [] as unknown[],
-  responses: {} as Record<string, { data?: unknown; error?: unknown }>,
+  responses: {} as Record<
+    string,
+    { data?: unknown; error?: unknown; isLoading?: boolean }
+  >,
   granted: [] as number[],
 }));
 vi.mock('swr', () => ({
   default: (key: string | null, options?: { fallbackData?: unknown }) => {
     state.keys.push(key);
     if (key?.startsWith('/api/v1/request/')) {
-      return { data: options?.fallbackData, mutate: vi.fn() };
+      return {
+        data: options?.fallbackData,
+        mutate: vi.fn(),
+        ...state.responses[key],
+      };
     }
     return (key && state.responses[key]) ?? {};
   },
@@ -214,19 +221,13 @@ it('loads a manga title from the manga API and links to its page', async () => {
 });
 
 it.each([
-  [scope(), 'All chapters'],
-  [
-    scope({ scope: MangaRequestScope.LATEST_N, latestCount: 25 }),
-    'Latest 25 chapters',
-  ],
+  [scope(), 'All'],
+  [scope({ scope: MangaRequestScope.LATEST_N, latestCount: 25 }), 'Latest 25'],
   [
     scope({ scope: MangaRequestScope.RANGE, rangeStart: 10, rangeEnd: 20 }),
-    'Chapters 10–20',
+    '10–20',
   ],
-  [
-    scope({ scope: MangaRequestScope.RANGE, rangeStart: 10 }),
-    'Chapters 10 onward',
-  ],
+  [scope({ scope: MangaRequestScope.RANGE, rangeStart: 10 }), '10 onward'],
 ])('summarizes the requested chapters in one line', async (value, text) => {
   await render(mangaRequest({ mangaScope: value }));
 
@@ -293,6 +294,30 @@ it('shows the not-found card when the AniList ID is missing', async () => {
   const badge = host.querySelector('[data-testid="status-badge"]');
   expect(badge?.getAttribute('data-media-type')).toBe('manga');
   expect(badge?.hasAttribute('data-external-id')).toBe(false);
+});
+
+it('takes the AniList ID from the request when the list item has none', async () => {
+  // The user request list sends media without identifiers or a scope.
+  const listItem = mangaRequest({ mangaScope: undefined }, []);
+  state.responses['/api/v1/request/41'] = { isLoading: true };
+  await render(listItem);
+
+  expect(host.querySelector('.animate-pulse')).toBeTruthy();
+  expect(host.textContent).not.toContain('Manga Not Found');
+  expect(
+    state.keys.some((key) => String(key).startsWith('/api/v1/manga'))
+  ).toBe(false);
+
+  state.responses['/api/v1/request/41'] = {
+    data: mangaRequest({
+      mangaScope: scope({ scope: MangaRequestScope.LATEST_N, latestCount: 25 }),
+    }),
+  };
+  await render(listItem);
+
+  expect(state.keys).toContain('/api/v1/manga/30013');
+  expect(host.textContent).toContain('Sample Manga');
+  expect(host.textContent).toContain('ChaptersLatest 25');
 });
 
 it('keeps the waiting status on the not-found card', async () => {

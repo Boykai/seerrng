@@ -19,22 +19,22 @@ const scope = (
 });
 
 it.each([
-  ['no scope', undefined, 'All chapters'],
-  ['every chapter', scope({}), 'All chapters'],
+  ['no scope', undefined, 'All'],
+  ['every chapter', scope({}), 'All'],
   [
     'one latest chapter',
     scope({ scope: MangaRequestScope.LATEST_N, latestCount: 1 }),
-    'Latest 1 chapter',
+    'Latest 1',
   ],
   [
     'the latest chapters',
     scope({ scope: MangaRequestScope.LATEST_N, latestCount: 2500 }),
-    'Latest 2,500 chapters',
+    'Latest 2,500',
   ],
   [
     'a closed range',
     scope({ scope: MangaRequestScope.RANGE, rangeStart: 10, rangeEnd: 20 }),
-    'Chapters 10–20',
+    '10–20',
   ],
   [
     'a decimal range',
@@ -43,17 +43,17 @@ it.each([
       rangeStart: 0.5,
       rangeEnd: 1000000,
     }),
-    'Chapters 0.5–1,000,000',
+    '0.5–1,000,000',
   ],
   [
     'an open range',
     scope({ scope: MangaRequestScope.RANGE, rangeStart: 10 }),
-    'Chapters 10 onward',
+    '10 onward',
   ],
   [
     'a range from chapter 0',
     scope({ scope: MangaRequestScope.RANGE, rangeStart: 0 }),
-    'Chapters 0 onward',
+    '0 onward',
   ],
 ])('summarizes %s', (_case, value, expected) => {
   expect(formatMangaScope(intl, value)).toBe(expected);

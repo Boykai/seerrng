@@ -1,4 +1,5 @@
 import Badge from '@app/components/Common/Badge';
+import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { MangaRequestScope } from '@server/constants/mangaRequest';
 import type { MangaRequestScopeValue } from '@server/lib/mangaRequests';
@@ -10,16 +11,15 @@ export const mangaScopeMessages = defineMessages(
   {
     chapters: 'Chapters',
     allChapters: 'All chapters',
-    latestChapters:
-      '{count, plural, one {Latest # chapter} other {Latest # chapters}}',
-    chapterRange: 'Chapters {start}–{end}',
-    chaptersFrom: 'Chapters {start} onward',
+    latestChapters: 'Latest {count, number}',
+    chapterRange: '{start}–{end}',
+    chaptersFrom: '{start} onward',
     waitingForSource: 'Waiting for a source',
     waitingForSourceHint: 'An administrator must link a source first.',
   }
 );
 
-/** One line naming the chapters a manga request asks for. */
+/** The chapters a manga request asks for, shown beside a "Chapters" label. */
 export const formatMangaScope = (
   intl: IntlShape,
   scope?: MangaRequestScopeValue | null
@@ -42,7 +42,7 @@ export const formatMangaScope = (
         })
       : intl.formatMessage(mangaScopeMessages.chaptersFrom, { start });
   }
-  return intl.formatMessage(mangaScopeMessages.allChapters);
+  return intl.formatMessage(globalMessages.all);
 };
 
 interface MangaWaitingStatusProps {

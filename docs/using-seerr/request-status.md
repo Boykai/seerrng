@@ -42,7 +42,7 @@ series requests.
 
 Manga requests show a **Manga** badge, and the **Manga** media filter lists
 them on their own. Each card's **Chapters** row shows the requested chapters,
-for example "All chapters", "Latest 25 chapters", or "Chapters 10 onward". An
+for example "All", "Latest 25", "10–20", or "10 onward". An
 approved manga request whose title has no current match on the Suwayomi server
 shows **Waiting for a source** instead of **Approved**; see
 [Manga Backend](./manga-backend.md#waiting-for-a-source). SeerrNG does not send

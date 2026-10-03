@@ -126,7 +126,8 @@ to request:
 
 SeerrNG chooses the chapters when it sends the request to Suwayomi, not when
 the request is made. Request cards, request lists, and the **Requests** page
-show the choice, for example "Latest 25 chapters" or "Chapters 10 onward".
+show the choice in a **Chapters** row, for example "All", "Latest 25", "10–20",
+or "10 onward".
 
 ### Permissions and quotas
 

@@ -475,6 +475,22 @@ const RequestCard = ({
     'approve' | 'decline' | null
   >(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const {
+    data: requestData,
+    error: requestError,
+    isLoading: isRequestLoading,
+    mutate: revalidate,
+  } = useSWR<MangaScopedRequest>(`/api/v1/request/${request.id}`, {
+    fallbackData: request,
+    refreshInterval: refreshIntervalHelper(
+      {
+        downloadStatus: request.media.downloadStatus,
+        downloadStatus4k: request.media.downloadStatus4k,
+        audiobookDownloadStatus: request.media.audiobookDownloadStatus,
+      },
+      15000
+    ),
+  });
   const bookId =
     request.type === 'book' ? getNormalizedBookId(request) : undefined;
   const musicId =
@@ -482,10 +498,16 @@ const RequestCard = ({
   const comicId = request.type === 'comic' ? getComicId(request) : undefined;
   const magazineId =
     request.type === 'magazine' ? getMagazineId(request) : undefined;
+  // The user request list sends manga media without identifiers, so the
+  // AniList ID can arrive with the request detail instead.
   const mangaId =
-    request.type === 'manga' ? getMangaAniListId(request.media) : undefined;
+    request.type === 'manga'
+      ? (getMangaAniListId(request.media) ??
+        getMangaAniListId(requestData?.media))
+      : undefined;
   // Without an AniList ID the title can't load; show the error card.
-  const missingMangaId = request.type === 'manga' && mangaId === undefined;
+  const missingMangaId =
+    request.type === 'manga' && mangaId === undefined && !isRequestLoading;
   const url =
     request.type === 'movie'
       ? `/api/v1/movie/${request.media.tmdbId}`
@@ -504,21 +526,6 @@ const RequestCard = ({
                   : null;
 
   const { data: title, error } = useSWR<RequestCardData>(inView ? url : null);
-  const {
-    data: requestData,
-    error: requestError,
-    mutate: revalidate,
-  } = useSWR<MangaScopedRequest>(`/api/v1/request/${request.id}`, {
-    fallbackData: request,
-    refreshInterval: refreshIntervalHelper(
-      {
-        downloadStatus: request.media.downloadStatus,
-        downloadStatus4k: request.media.downloadStatus4k,
-        audiobookDownloadStatus: request.media.audiobookDownloadStatus,
-      },
-      15000
-    ),
-  });
   const hasPartialBookService =
     requestData?.type === 'book' &&
     requestData.bookFormat === 'both' &&

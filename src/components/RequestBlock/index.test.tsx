@@ -170,7 +170,7 @@ it('shows the waiting status in place of Approved while a source is missing', as
   expect(host.textContent).toContain('Waiting for a source');
   expect(host.textContent).not.toContain('Approved');
   expect(host.textContent).not.toContain('administrator');
-  expect(host.textContent).toContain('ChaptersChapters 10 onward');
+  expect(host.textContent).toContain('Chapters10 onward');
 });
 
 it('keeps Approved once a source is linked', async () => {
@@ -180,7 +180,7 @@ it('keeps Approved once a source is linked', async () => {
 
   expect(host.textContent).toContain('Approved');
   expect(host.textContent).not.toContain('Waiting for a source');
-  expect(host.textContent).toContain('ChaptersAll chapters');
+  expect(host.textContent).toContain('ChaptersAll');
 });
 
 it('takes the status from the block, not the fetched copy', async () => {

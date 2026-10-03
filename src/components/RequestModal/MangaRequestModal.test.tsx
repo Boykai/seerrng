@@ -519,7 +519,7 @@ it('edits a pending request scope with a PUT', async () => {
   await render(pendingRequest());
 
   expect(text()).toContain('Pending Manga Request');
-  expect(text()).toContain('Latest 25 chapters');
+  expect(text()).toContain('Chapters:Latest 25');
   expect(input('Number of chapters')?.value).toBe('25');
   await type('Number of chapters', '30');
   await submit();
@@ -570,7 +570,7 @@ it('waits for the request scope before showing an edit form', async () => {
     }),
   };
   await render(pendingRequest({ mangaScope: undefined }));
-  expect(text()).toContain('Chapters 10 onward');
+  expect(text()).toContain('Chapters:10 onward');
   expect(input('From chapter')?.value).toBe('10');
 });
 
@@ -595,7 +595,7 @@ it('shows other users a read-only request', async () => {
   expect(button('modal-ok-button')).toBeNull();
   expect(button('modal-secondary-button')).toBeNull();
   expect(text()).toContain("Reader's request is pending approval.");
-  expect(text()).toContain('Latest 25 chapters');
+  expect(text()).toContain('Chapters:Latest 25');
 });
 
 it('shows the waiting status only for an approved request awaiting a source', async () => {

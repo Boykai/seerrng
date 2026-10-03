@@ -1034,7 +1034,7 @@ const getSecondaryDetails = (
 
 type GenreLink = {
   name: string;
-  href: string;
+  href?: string;
 };
 
 const getGenres = (
@@ -1069,6 +1069,12 @@ const getGenres = (
   if (item.request.type === 'comic') {
     // ComicVine has no genre-equivalent field.
     return [];
+  }
+  if (item.request.type === 'manga') {
+    // No discover page filters manga by genre, so these stay plain text.
+    return (details as MangaDetails).genres
+      .slice(0, 3)
+      .map((name) => ({ name }));
   }
   return (
     (details as BookDetails).subjects
@@ -1778,12 +1784,16 @@ export const RequestStatusCard = ({
                       {genres.map((genre, index) => (
                         <span key={`${genre.href}-${genre.name}`}>
                           {index > 0 && ', '}
-                          <Link
-                            href={genre.href}
-                            className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                          >
-                            {genre.name}
-                          </Link>
+                          {genre.href ? (
+                            <Link
+                              href={genre.href}
+                              className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                            >
+                              {genre.name}
+                            </Link>
+                          ) : (
+                            genre.name
+                          )}
                         </span>
                       ))}
                     </dd>
