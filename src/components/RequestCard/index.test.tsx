@@ -266,6 +266,26 @@ it('shows request managers the waiting-for-a-source hint', async () => {
   );
 });
 
+it('lets the waiting hint wrap inside the card', async () => {
+  // Card sliders keep text on one line. jsdom has no layout, so this pins the
+  // class that lets the hint wrap instead of overflowing the card.
+  state.granted = [Permission.MANAGE_REQUESTS];
+
+  await render(
+    mangaRequest({
+      status: MediaRequestStatus.APPROVED,
+      mangaScope: scope({ awaitingBinding: true }),
+    })
+  );
+
+  const hint = [...host.querySelectorAll('span')].find(
+    (span) =>
+      span.textContent ===
+      'SeerrNG is looking for a source; an administrator may need to choose one.'
+  );
+  expect(hint?.classList.contains('whitespace-normal')).toBe(true);
+});
+
 it('opens the manga edit modal for the requester', async () => {
   state.granted = [Permission.REQUEST_ADVANCED];
   await render(mangaRequest());

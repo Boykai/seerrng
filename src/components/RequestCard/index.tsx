@@ -876,9 +876,17 @@ const RequestCard = ({
                 {intl.formatMessage(globalMessages.declined)}
               </Badge>
             ) : isAwaitingMangaSource(requestData) ? (
-              <MangaWaitingStatus
-                showHint={hasPermission(Permission.MANAGE_REQUESTS)}
-              />
+              <>
+                <MangaWaitingStatus />
+                {hasPermission(Permission.MANAGE_REQUESTS) && (
+                  // Card sliders don't wrap text; let this sentence wrap.
+                  <span className="text-xs whitespace-normal">
+                    {intl.formatMessage(
+                      mangaScopeMessages.waitingForSourceHint
+                    )}
+                  </span>
+                )}
+              </>
             ) : requestData.status === MediaRequestStatus.FAILED ? (
               <Badge
                 badgeType="danger"

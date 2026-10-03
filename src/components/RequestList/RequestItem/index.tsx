@@ -820,6 +820,10 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
     );
   }
 
+  const showMangaWaitingHint =
+    isAwaitingMangaSource(requestData) &&
+    hasPermission(Permission.MANAGE_REQUESTS);
+
   return (
     <>
       <RequestModal
@@ -861,7 +865,12 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
           setShowEditModal(false);
         }}
       />
-      <div className="relative flex w-full flex-col justify-between overflow-hidden rounded-xl bg-gray-800 py-2 text-gray-400 shadow-md ring-1 ring-gray-700 xl:h-28 xl:flex-row">
+      {/* The waiting hint takes extra lines, so that row may grow on wide screens. */}
+      <div
+        className={`relative flex w-full flex-col justify-between overflow-hidden rounded-xl bg-gray-800 py-2 text-gray-400 shadow-md ring-1 ring-gray-700 xl:flex-row ${
+          showMangaWaitingHint ? 'xl:min-h-28' : 'xl:h-28'
+        }`}
+      >
         {!isMusic(title) &&
           !isBook(title) &&
           !isComic(title) &&
@@ -1009,9 +1018,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                   {intl.formatMessage(globalMessages.declined)}
                 </Badge>
               ) : isAwaitingMangaSource(requestData) ? (
-                <MangaWaitingStatus
-                  showHint={hasPermission(Permission.MANAGE_REQUESTS)}
-                />
+                <MangaWaitingStatus />
               ) : requestData.status === MediaRequestStatus.FAILED ? (
                 <Badge
                   badgeType="danger"
@@ -1102,6 +1109,11 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                 />
               )}
             </div>
+            {showMangaWaitingHint && (
+              <span className="text-xs">
+                {intl.formatMessage(mangaScopeMessages.waitingForSourceHint)}
+              </span>
+            )}
             <div className="card-field">
               {hasPermission(
                 [Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW],

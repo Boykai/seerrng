@@ -270,6 +270,88 @@ it('shows request managers the waiting-for-a-source hint', async () => {
   );
 });
 
+// jsdom has no layout, so these tests pin the structure that keeps the hint
+// readable: status fields truncate, and wide rows have a fixed height.
+const waitingHint =
+  'SeerrNG is looking for a source; an administrator may need to choose one.';
+const row = () => host.firstElementChild;
+
+it('puts the waiting hint below the status field and lets its row grow', async () => {
+  state.granted = [Permission.MANAGE_REQUESTS];
+
+  await render(
+    mangaRequest({
+      status: MediaRequestStatus.APPROVED,
+      mangaScope: scope({ awaitingBinding: true }),
+    })
+  );
+
+  const hint = [...host.querySelectorAll('span')].find(
+    (span) => span.textContent === waitingHint
+  );
+  expect(hint).toBeTruthy();
+  expect(hint?.closest('.card-field')?.className).toBeUndefined();
+  expect(
+    [...host.querySelectorAll('.card-field')].map((field) => field.textContent)
+  ).toContain('StatusWaiting for a source');
+  expect(row()?.classList.contains('rounded-xl')).toBe(true);
+  expect(row()?.classList.contains('xl:min-h-28')).toBe(true);
+  expect(row()?.classList.contains('xl:h-28')).toBe(false);
+});
+
+it.each([
+  [
+    'a waiting request seen without the hint',
+    [],
+    mangaRequest({
+      status: MediaRequestStatus.APPROVED,
+      mangaScope: scope({ awaitingBinding: true }),
+    }),
+  ],
+  ['a pending manga request', [Permission.MANAGE_REQUESTS], mangaRequest()],
+  [
+    'an approved manga request',
+    [Permission.MANAGE_REQUESTS],
+    mangaRequest({ status: MediaRequestStatus.APPROVED }),
+  ],
+  [
+    'a movie request',
+    [Permission.MANAGE_REQUESTS],
+    mangaRequest({
+      type: 'movie',
+      mangaScope: undefined,
+      media: {
+        id: 10,
+        tmdbId: 4242,
+        status: MediaStatus.PENDING,
+        status4k: MediaStatus.UNKNOWN,
+        downloadStatus: [],
+        downloadStatus4k: [],
+      },
+    } as unknown as Partial<MangaScopedRequest>),
+  ],
+])('keeps the fixed row height for %s', async (_case, granted, request) => {
+  state.granted = granted;
+  state.responses['/api/v1/movie/4242'] = {
+    data: {
+      id: 4242,
+      title: 'Sample Movie',
+      originalTitle: 'Sample Movie',
+      releaseDate: '1994-05-01',
+      posterPath: '/poster.jpg',
+      backdropPath: '/backdrop.jpg',
+    },
+  };
+
+  await render(request);
+
+  expect(host.textContent).toMatch(/Sample (Manga|Movie)/);
+  expect(host.textContent).not.toContain(waitingHint);
+  expect(row()?.classList.contains('rounded-xl')).toBe(true);
+  expect(row()?.classList.contains('xl:h-28')).toBe(true);
+  expect(row()?.classList.contains('xl:min-h-28')).toBe(false);
+});
+
 it('opens the manga edit modal for a request manager', async () => {
   state.granted = [Permission.MANAGE_REQUESTS];
   await render(mangaRequest());
