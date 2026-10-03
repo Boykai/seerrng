@@ -87,6 +87,7 @@ import {
 } from '@server/utils/bookshelfLookup';
 import { mapWithConcurrency } from '@server/utils/concurrency';
 import { withNestedTransaction } from '@server/utils/nestedTransaction';
+import { getTransactionDepth } from '@server/utils/transactionDeferrals';
 import { isEqual } from 'lodash';
 import type {
   EntityManager,
@@ -95,6 +96,7 @@ import type {
   RemoveEvent,
   TransactionCommitEvent,
   TransactionRollbackEvent,
+  TransactionStartEvent,
   UpdateEvent,
 } from 'typeorm';
 import { EventSubscriber, In, Not } from 'typeorm';
@@ -3132,6 +3134,16 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         manager: event.manager as EntityManager,
       }
     );
+  }
+
+  // Nothing can be queued yet when an outermost transaction starts, so any
+  // deferred work still held for its query runner is stale.
+  public afterTransactionStart(event: TransactionStartEvent): void {
+    if (getTransactionDepth(event.queryRunner) !== 1) {
+      return;
+    }
+    notificationManager.discardStaleDeferredNotifications(event.queryRunner);
+    requestDispatchManager.discardStale(event.queryRunner);
   }
 
   public afterTransactionCommit(event: TransactionCommitEvent): void {
