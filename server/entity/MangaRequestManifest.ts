@@ -24,6 +24,10 @@ import { MediaRequest } from './MediaRequest';
   'bindingSourceId',
   'bindingUrlHash',
 ])
+@Index('IDX_manga_request_manifest_follow_due', [
+  'followEnabled',
+  'followNextAt',
+])
 export class MangaRequestManifest {
   @PrimaryGeneratedColumn()
   public id: number;
@@ -139,6 +143,21 @@ export class MangaRequestManifest {
 
   @Column({ type: 'integer', default: 0 })
   public chaptersMissing: number;
+
+  /** The owner's consent to add chapters the source publishes later. */
+  @Column({ type: 'boolean', default: false })
+  public followEnabled: boolean;
+
+  /** When the follow job checks the source again; null means now. */
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public followNextAt: Date | null;
+
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public followLastAt: Date | null;
+
+  /** A `MangaFollowStopReason`; never free text. */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  public followStopReason: string | null;
 
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public createdAt: Date;
