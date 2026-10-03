@@ -539,6 +539,7 @@ export type JobId =
   | 'backissue-scan'
   | 'magazine-scan'
   | 'manga-library-scan'
+  | 'manga-source-resolve'
   | 'download-sync'
   | 'software-request-reconciliation'
   | 'download-recovery'
@@ -884,6 +885,9 @@ class Settings {
         },
         'manga-library-scan': {
           schedule: '0 45 5 * * *',
+        },
+        'manga-source-resolve': {
+          schedule: '0 */10 * * * *',
         },
         'availability-sync': {
           schedule: '0 0 5 * * *',
@@ -1772,6 +1776,9 @@ class Settings {
         },
         'manga-library-scan': {
           schedule: '0 45 5 * * *',
+        },
+        'manga-source-resolve': {
+          schedule: '0 */10 * * * *',
         },
         'availability-sync': {
           schedule: '0 0 5 * * *',

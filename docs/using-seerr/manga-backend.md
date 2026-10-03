@@ -356,3 +356,126 @@ Available. A title that stopped being available moves to the front again when
 it becomes available again. Titles that the **Manga Content** switches hide
 are left out. The row now also appears when Manga is the only one of the
 Movies, Series, and Manga categories that is on.
+
+## Source resolution
+
+To download a requested manga through Suwayomi, SeerrNG needs a match between
+the AniList title and a manga in one of the sources you selected for
+Suwayomi. The **Manga Source Resolve** job looks for these matches. It runs
+every 10 minutes; change its schedule or run it now under **Settings → Jobs &
+Cache**. It does nothing while the Manga category is off or no Suwayomi
+server is configured.
+
+The job only matches by itself when it finds an exact link through MangaDex.
+Everything else waits for an administrator.
+
+### What the job searches
+
+Each run handles up to 20 requested titles that have no match on the
+Suwayomi server yet. Titles that an administrator asked to search go first,
+then the rest, oldest request first.
+
+- The job searches titles of approved requests. A title whose request is
+  still pending is searched only when an administrator asks for it.
+- Before each search, SeerrNG reads the title from AniList again and checks
+  the **Manga Content** switches. A title that they hide is marked
+  **Excluded** and is not searched; SeerrNG checks it again a day later. Its
+  request stays as it is.
+- A title that already has a match on the server is not searched again; its
+  request is marked as matched.
+
+### Exact links
+
+1. SeerrNG searches the public catalog of [MangaDex](https://mangadex.org/)
+   for the title's English, romaji, and native titles, at most three
+   searches, and stops at the first search that finds a MangaDex entry
+   listing the title's AniList ID.
+2. When exactly one MangaDex entry lists it, Suwayomi looks that entry up by
+   its MangaDex ID (an `id:` search) in the selected sources, at most five
+   lookups per title. A result counts only when its address in Suwayomi has
+   the form `/manga/<UUID>` with the same UUID. SeerrNG remembers which
+   sources answered such a lookup and asks the others again at most once a
+   week.
+3. SeerrNG matches the title to the best result by itself: the source whose
+   language comes first in your preferred languages, then the source selected
+   first. When you set preferred languages, only a source in one of them, or
+   a source that Suwayomi lists as `all` or `multi` languages, is matched by
+   itself.
+
+An exact result is only offered to an administrator, and is not matched by
+itself, when:
+
+- MangaDex lists two or more entries for the title;
+- only a title search found it, not an `id:` lookup;
+- its source's language is not one of your preferred languages;
+- the manga is already in the Suwayomi library; the library scan or an
+  administrator matches it instead;
+- the manga is matched to a different AniList title;
+- an administrator rejected the title for that manga.
+
+These matches use data from MangaDex and record `matchedBy` as
+`mangadex-link`; credit MangaDex wherever you show them.
+
+### Title searches
+
+Without an exact match, Suwayomi searches up to 20 selected sources, in the
+order you selected them, with up to two of the title's names each. For a
+source in the title's original language, the native title goes first.
+SeerrNG keeps the closest result from each source, compared with the title's
+romaji, English, native, and alternative titles, plus a bonus when the
+source credits one of the title's story or art staff. Results are ranked
+High, Medium, and Low as in [Matching](#matching); one-shots and novels are
+never ranked High. Each title keeps at most 10 suggestions.
+
+A title search never matches a title by itself, whatever its ranking: an
+administrator picks one.
+
+While **Include Adult Manga** is off, title searches go only to sources that
+Suwayomi marks as safe, so a source with an unknown rating is not searched.
+While it is on, they go to every selected source. `id:` lookups go to every
+selected source either way, because a result must carry the MangaDex ID of a
+title that the **Manga Content** switches allow.
+
+### Statuses and retries
+
+| Status | Meaning | Next search |
+| --- | --- | --- |
+| **Awaiting Approval** | Only pending requests wait, and no search that an administrator asked for is open. | When a request is approved or an administrator asks for a search. |
+| **Queued** | Not searched yet, asked for by an administrator, or waiting for a source again after losing its match. | The next run, or within an hour after a search that failed. |
+| **Needs Pick** | Suggestions wait for an administrator. | After 7 days, or after 1 hour when MangaDex or a source failed during the search. |
+| **No Match** | No source returned a usable result. | After 1 hour, 6 hours, and 24 hours, then every 7 days. |
+| **Excluded** | The **Manga Content** switches hide the title, or AniList no longer lists it. | After 24 hours. |
+| **Bound** | The title has a match on the server. | None. |
+
+- When MangaDex or a source fails, the job still uses the others, keeps the
+  title's wait as it was, and searches the title again within an hour, so an
+  outage never makes a title wait a week. While MangaDex or AniList rate
+  limits requests, or when AniList fails, titles wait for a later run without
+  a longer wait.
+- A title that no selected source may search, because none of them is
+  installed or **Include Adult Manga** leaves none, waits as **No Match**
+  does.
+- An administrator's search request resets the wait.
+- When a title's match is rejected or its manga leaves the server, its
+  request waits for a source again and the next run searches it.
+- Each run makes at most 60 Suwayomi searches per server, `id:` lookups
+  included, three at a time, and stops each after 30 seconds. A source that
+  fails or times out is skipped for that title. When Suwayomi cannot be
+  reached, refuses the login, or no longer passes SeerrNG's checks, the run
+  stops for that server.
+
+### What leaves your server
+
+- To AniList: the IDs of requested titles. These requests share SeerrNG's
+  AniList request budget.
+- To MangaDex's public API: the English, romaji, and native titles of
+  requested titles. SeerrNG sends no address and no source. These requests
+  share the pause rules of the library scan's MangaDex lookups, and the
+  answers are cached for a day.
+- Through Suwayomi: Suwayomi sends the `id:` lookups and title searches to
+  the selected sources, and stores the manga it finds in its own database
+  without adding them to its library. A source search is the only change the
+  job makes in Suwayomi.
+
+The job sends these requests only for requested titles. It logs counts, IDs,
+and codes, never titles, search text, or addresses.

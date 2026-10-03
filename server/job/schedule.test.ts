@@ -135,6 +135,22 @@ describe('scheduled job lifecycle', () => {
     assert.equal(mangaJob.running?.(), false);
   });
 
+  it('registers the manga source resolver as a scheduled process task', () => {
+    startJobs();
+
+    const resolveJob = scheduledJobs.find(
+      (job) => job.id === 'manga-source-resolve'
+    );
+
+    assert.ok(resolveJob);
+    assert.equal(resolveJob.name, 'Manga Source Resolve');
+    assert.equal(resolveJob.type, 'process');
+    assert.equal(resolveJob.interval, 'minutes');
+    assert.equal(resolveJob.cronSchedule, '0 */10 * * * *');
+    assert.equal(typeof resolveJob.cancelFn, 'function');
+    assert.equal(resolveJob.running?.(), false);
+  });
+
   it('cancels future invocations and waits for active work', async () => {
     let cancelCalled = false;
     let release: (() => void) | undefined;

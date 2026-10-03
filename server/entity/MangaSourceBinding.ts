@@ -37,6 +37,9 @@ export const MANGA_MATCHED_BY_TITLE = 'title';
 /** An admin chose the AniList title. */
 export const MANGA_MATCHED_BY_MANUAL = 'manual';
 
+/** The source resolver bound a requested title through an exact link. */
+export const MANGA_BINDING_ORIGIN_RESOLVER = 'resolver';
+
 /** The `urlHash` of bindings and candidates: SHA-256 of the URL, in hex. */
 export const hashMangaSourceUrl = (url: string): string =>
   createHash('sha256').update(url).digest('hex');

@@ -7,6 +7,7 @@ import downloadRecovery from '@server/lib/downloadRecovery';
 import downloadTracker from '@server/lib/downloadtracker';
 import episodeWatchAhead from '@server/lib/episodeWatchAhead';
 import ImageProxy from '@server/lib/imageproxy';
+import { mangaSourceResolver } from '@server/lib/mangaResolver';
 import refreshToken from '@server/lib/refreshToken';
 import { captureReleaseCalendarHistory } from '@server/lib/releaseCalendar/history';
 import { reconcileActiveRequests } from '@server/lib/requestStatus';
@@ -486,6 +487,25 @@ export const startJobs = (): void => {
     }),
     running: () => mangaLibraryScanner.status().running,
     cancelFn: () => mangaLibraryScanner.cancel(),
+  });
+
+  // Binds requested manga to Suwayomi sources; only exact links bind alone.
+  scheduledJobs.push({
+    id: 'manga-source-resolve',
+    name: 'Manga Source Resolve',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['manga-source-resolve'].schedule,
+    job: schedule.scheduleJob(jobs['manga-source-resolve'].schedule, () => {
+      logger.debug('Starting scheduled job: Manga Source Resolve', {
+        label: 'Jobs',
+      });
+      return runTrackedJob('Manga Source Resolve', () =>
+        mangaSourceResolver.run()
+      );
+    }),
+    running: () => mangaSourceResolver.status().running,
+    cancelFn: () => mangaSourceResolver.cancel(),
   });
 
   // Checks if media is still available in plex/sonarr/radarr libs
