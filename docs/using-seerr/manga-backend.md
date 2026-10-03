@@ -864,7 +864,9 @@ without being downloaded. Chapters that following queued are handed back like
 the others when the request ends; see [When a request ends](#when-a-request-ends).
 Following never changes the library, the **SeerrNG** category, the request
 notes, the server marker, or Suwayomi's settings, and it does not need
-Suwayomi's own automatic chapter downloads.
+Suwayomi's own automatic chapter downloads. The
+[request notes](#what-seerrng-writes-to-suwayomi) can therefore leave out a
+complete request that following opened again; SeerrNG never acts on them.
 
 Change the job's schedule or run it now under **Settings → Jobs & Cache**.
 While the Manga category is off, the job does nothing. When a server cannot be
