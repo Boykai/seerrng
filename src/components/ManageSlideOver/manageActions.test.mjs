@@ -131,12 +131,22 @@ test('disabled View Issues shares normal disabled styling without text or icon s
   assert.doesNotMatch(base, /disabled:brightness|disabled:grayscale/);
 });
 
-test('English wording uses the current catalog instead of a preserved state snapshot', () => {
+test('English wording renders from the component defaults, never a catalogue snapshot', () => {
   const app = read('../../pages/_app.tsx');
+  const hook = read('../../hooks/useLocaleMessages.ts');
+  assert.doesNotMatch(app, /locale\/en\.json/);
+  assert.doesNotMatch(app, /enMessages|loadedMessages/);
   assert.match(
     app,
-    /messages=\{currentLocale === 'en' \? enMessages : loadedMessages\}/
+    /const intlLocale = useLocaleMessages\(currentLocale, loadLocaleData\);/
   );
+  assert.match(app, /locale=\{intlLocale\.locale\}/);
+  assert.match(app, /messages=\{intlLocale\.messages\}/);
+  assert.match(
+    hook,
+    /englishLocaleMessages: LoadedLocaleMessages = \{\s*locale: 'en',\s*messages: \{\},\s*\}/
+  );
+  assert.doesNotMatch(hook, /import[^;]*locale\/en\.json/);
 });
 
 for (const file of [
