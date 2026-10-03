@@ -102,6 +102,7 @@ import {
   RequestActionConfirmation,
   requestActionMessageText,
 } from './destructiveActions';
+import { MangaFollowControl, MangaFollowStatusLine } from './MangaFollow';
 
 const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
   ssr: false,
@@ -1589,6 +1590,10 @@ export const RequestStatusCard = ({
           </span>
         </Tooltip>
       )}
+      <MangaFollowControl
+        request={item.request}
+        onUpdated={refreshRequestStatus}
+      />
       {canModeratePending && (
         <>
           <Tooltip content={intl.formatMessage(messages.approveTooltip)}>
@@ -2078,6 +2083,8 @@ export const RequestStatusCard = ({
             />
           </Button>
         </div>
+
+        <MangaFollowStatusLine request={item.request} />
 
         {isHistoryOpen && (
           <section className="app-card-inset refreshed-inset-surface card-spacing-before relative z-10 rounded-lg border border-gray-700 p-3">

@@ -1768,6 +1768,11 @@
     overflow-wrap: anywhere;
   }
 
+  .request-status-note {
+    @apply relative z-10 text-xs;
+    padding-top: var(--card-spacing);
+  }
+
   .app-control-standard-radius {
     border-radius: var(--control-corner-radius);
   }

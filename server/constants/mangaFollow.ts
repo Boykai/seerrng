@@ -1,3 +1,5 @@
+import { MediaRequestStatus } from '@server/constants/media';
+
 const HOUR_MS = 60 * 60 * 1_000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -31,6 +33,13 @@ export const MANGA_FOLLOW_PAUSE_REASONS: ReadonlySet<string> = new Set([
   MangaFollowStopReason.BINDING_CHANGED,
   MangaFollowStopReason.MANGA_NOT_FOUND,
 ]);
+
+/** Request statuses in which the owner may turn following on. */
+export const MANGA_FOLLOW_ENABLE_STATUSES: readonly MediaRequestStatus[] = [
+  MediaRequestStatus.PENDING,
+  MediaRequestStatus.APPROVED,
+  MediaRequestStatus.COMPLETED,
+];
 
 /** Checks one follow run makes on one Suwayomi instance. */
 export const MANGA_FOLLOW_CHECKS_PER_INSTANCE = 20;

@@ -3,6 +3,7 @@ import RadarrAPI from '@server/api/servarr/radarr';
 import ReadarrAPI from '@server/api/servarr/readarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
 import { SuwayomiError } from '@server/api/suwayomi/errors';
+import { MANGA_FOLLOW_ENABLE_STATUSES } from '@server/constants/mangaFollow';
 import { MangaRequestCheckpoint } from '@server/constants/mangaRequest';
 import {
   MediaRequestStatus,
@@ -3954,12 +3955,6 @@ requestRoutes.put<{ requestId: string }>(
   }
 );
 
-const FOLLOW_ENABLE_STATUSES: readonly MediaRequestStatus[] = [
-  MediaRequestStatus.PENDING,
-  MediaRequestStatus.APPROVED,
-  MediaRequestStatus.COMPLETED,
-];
-
 const followError = (status: number, message: string) =>
   Object.assign(new Error(message), { status });
 
@@ -4038,7 +4033,7 @@ requestRoutes.put<{ requestId: string }>(
                   select: { id: true, followEnabled: true },
                 });
                 if (enabled) {
-                  if (!FOLLOW_ENABLE_STATUSES.includes(current.status)) {
+                  if (!MANGA_FOLLOW_ENABLE_STATUSES.includes(current.status)) {
                     throw followError(
                       409,
                       'Following new chapters can only be turned on for pending, approved, or completed requests.'
