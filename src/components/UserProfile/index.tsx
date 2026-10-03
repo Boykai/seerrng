@@ -44,6 +44,7 @@ const messages = defineMessages('components.UserProfile', {
   bookrequests: 'Book Requests',
   comicrequests: 'Comic Requests',
   magazinerequests: 'Magazine Requests',
+  mangarequests: 'Manga Requests',
   recentlywatched: 'Recently Watched',
   plexwatchlist: 'Watchlist',
   localWatchlist: "{username}'s Watchlist",
@@ -480,6 +481,10 @@ const UserProfile = () => {
               <QuotaSummaryCard
                 title={intl.formatMessage(messages.magazinerequests)}
                 quota={quota.magazine}
+              />
+              <QuotaSummaryCard
+                title={intl.formatMessage(messages.mangarequests)}
+                quota={quota.manga}
               />
             </dl>
           </div>

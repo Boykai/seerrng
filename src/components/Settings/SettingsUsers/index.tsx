@@ -43,6 +43,7 @@ const messages = defineMessages('components.Settings.SettingsUsers', {
   bookRequestLimitLabel: 'Global Book Request Limit',
   comicRequestLimitLabel: 'Global Comic Request Limit',
   magazineRequestLimitLabel: 'Global Magazine Request Limit',
+  mangaRequestLimitLabel: 'Global Manga Request Limit',
   softwareRequestLimitLabel: 'Global Software Request Limit',
   defaultPermissions: 'Default Permissions',
   defaultPermissionsTip: 'Initial permissions assigned to new users',
@@ -128,6 +129,8 @@ const SettingsUsers = () => {
             comicQuotaDays: data?.defaultQuotas.comic.quotaDays ?? 7,
             magazineQuotaLimit: data?.defaultQuotas.magazine.quotaLimit ?? 0,
             magazineQuotaDays: data?.defaultQuotas.magazine.quotaDays ?? 7,
+            mangaQuotaLimit: data?.defaultQuotas.manga.quotaLimit ?? 0,
+            mangaQuotaDays: data?.defaultQuotas.manga.quotaDays ?? 7,
             softwareQuotaLimit: data?.defaultQuotas.software.quotaLimit ?? 0,
             softwareQuotaDays: data?.defaultQuotas.software.quotaDays ?? 7,
             defaultPermissions: data?.defaultPermissions ?? 0,
@@ -164,6 +167,10 @@ const SettingsUsers = () => {
                   magazine: {
                     quotaLimit: values.magazineQuotaLimit,
                     quotaDays: values.magazineQuotaDays,
+                  },
+                  manga: {
+                    quotaLimit: values.mangaQuotaLimit,
+                    quotaDays: values.mangaQuotaDays,
                   },
                   software: {
                     quotaLimit: values.softwareQuotaLimit,
@@ -385,6 +392,21 @@ const SettingsUsers = () => {
                       mediaType="comic"
                       defaultDays={values.comicQuotaDays}
                       defaultLimit={values.comicQuotaLimit}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label htmlFor="mangaRequestLimit" className="text-label">
+                    {intl.formatMessage(messages.mangaRequestLimitLabel)}
+                  </label>
+                  <div className="form-input-area">
+                    <QuotaSelector
+                      onChange={setFieldValue}
+                      dayFieldName="mangaQuotaDays"
+                      limitFieldName="mangaQuotaLimit"
+                      mediaType="manga"
+                      defaultDays={values.mangaQuotaDays}
+                      defaultLimit={values.mangaQuotaLimit}
                     />
                   </div>
                 </div>

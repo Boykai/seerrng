@@ -37,6 +37,8 @@ export const messages = defineMessages('components.PermissionEdit', {
   requestMagazines: 'Request Magazines',
   requestMagazinesDescription:
     'Grant permission to submit magazine requests through LazyLibrarian.',
+  requestManga: 'Request Manga',
+  requestMangaDescription: 'Grant permission to submit manga requests.',
   autoapprove: 'Auto-Approve',
   autoapproveDescription:
     'Grant automatic approval for all non-4K media requests.',
@@ -55,6 +57,8 @@ export const messages = defineMessages('components.PermissionEdit', {
   autoapproveMagazines: 'Auto-Approve Magazines',
   autoapproveMagazinesDescription:
     'Grant automatic approval for magazine requests.',
+  autoapproveManga: 'Auto-Approve Manga',
+  autoapproveMangaDescription: 'Grant automatic approval for manga requests.',
   autoapprove4k: 'Auto-Approve 4K',
   autoapprove4kDescription:
     'Grant automatic approval for all 4K media requests.',
@@ -245,6 +249,12 @@ export const PermissionEdit = ({
           description: intl.formatMessage(messages.requestMagazinesDescription),
           permission: Permission.REQUEST_MAGAZINE,
         },
+        {
+          id: 'request-manga',
+          name: intl.formatMessage(messages.requestManga),
+          description: intl.formatMessage(messages.requestMangaDescription),
+          permission: Permission.REQUEST_MANGA,
+        },
       ],
     },
     {
@@ -330,6 +340,18 @@ export const PermissionEdit = ({
           requires: [
             {
               permissions: [Permission.REQUEST, Permission.REQUEST_MAGAZINE],
+              type: 'or',
+            },
+          ],
+        },
+        {
+          id: 'autoapprovemanga',
+          name: intl.formatMessage(messages.autoapproveManga),
+          description: intl.formatMessage(messages.autoapproveMangaDescription),
+          permission: Permission.AUTO_APPROVE_MANGA,
+          requires: [
+            {
+              permissions: [Permission.REQUEST, Permission.REQUEST_MANGA],
               type: 'or',
             },
           ],

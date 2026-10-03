@@ -41,7 +41,8 @@ interface StatusBadgeProps {
   tmdbId?: number;
   mbId?: string;
   externalId?: string;
-  mediaType?: 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine';
+  mediaType?:
+    'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'manga';
   bookFormat?: RequestedBookFormat;
   title?: string | string[];
   statusLabelOverride?: string;
@@ -112,6 +113,7 @@ const StatusBadge = ({
     mediaType !== 'book' &&
     mediaType !== 'comic' &&
     mediaType !== 'magazine' &&
+    mediaType !== 'manga' &&
     (!is4k ||
       (mediaType === 'movie'
         ? settings.currentSettings.movie4kEnabled
@@ -155,6 +157,14 @@ const StatusBadge = ({
       mediaLinkDescription = intl.formatMessage(messages.managemedia, {
         mediaType: 'Magazine',
       });
+    } else if (mediaType === 'manga') {
+      // Manga has no play or service links; managers open the title page.
+      if (externalId) {
+        mediaLink = `/manga/${encodeApiPathSegment(externalId)}`;
+        mediaLinkDescription = intl.formatMessage(messages.managemedia, {
+          mediaType: intl.formatMessage(globalMessages.manga),
+        });
+      }
     } else if (mediaType && tmdbId) {
       mediaLink = `/${mediaType}/${tmdbId}?manage=1`;
       mediaLinkDescription = intl.formatMessage(messages.managemedia, {

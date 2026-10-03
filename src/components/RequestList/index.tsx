@@ -60,11 +60,11 @@ type Sort = 'added' | 'modified';
 
 type SortDirection = 'asc' | 'desc';
 
-type MediaType = 'all' | 'movie' | 'tv' | 'music' | 'book';
+type MediaType = 'all' | 'movie' | 'tv' | 'music' | 'book' | 'manga';
 
 const isMediaType = (value: unknown): value is MediaType =>
   typeof value === 'string' &&
-  ['all', 'movie', 'tv', 'music', 'book'].includes(value);
+  ['all', 'movie', 'tv', 'music', 'book', 'manga'].includes(value);
 const REQUEST_FILTER_OPTIONS = Object.values(Filter);
 const REQUEST_SORT_OPTIONS: readonly Sort[] = ['added', 'modified'];
 const SORT_DIRECTION_OPTIONS: readonly SortDirection[] = ['asc', 'desc'];
@@ -249,6 +249,9 @@ const RequestList = () => {
               </option>
               <option value="book">
                 {intl.formatMessage(globalMessages.books)}
+              </option>
+              <option value="manga">
+                {intl.formatMessage(globalMessages.manga)}
               </option>
             </select>
           </div>
