@@ -376,7 +376,8 @@ Suwayomi server yet. Titles that an administrator asked to search go first,
 then the rest, oldest request first.
 
 - The job searches titles of approved requests. A title whose request is
-  still pending is searched only when an administrator asks for it.
+  still pending is searched only when an administrator asks for it; see
+  [Resolve sources by hand](#resolve-sources-by-hand).
 - Before each search, SeerrNG reads the title from AniList again and checks
   the **Manga Content** switches. A title that they hide is marked
   **Excluded** and is not searched; SeerrNG checks it again a day later. Its
@@ -464,6 +465,41 @@ title that the **Manga Content** switches allow.
   reached, refuses the login, or no longer passes SeerrNG's checks, the run
   stops for that server.
 
+### Resolve sources by hand
+
+A picker on the settings pages arrives in a later release. Until then,
+administrators use the API under `/api/v1/manga/resolve`. The routes require
+administrator permission; while the Manga category is off, they return the
+normal not-found response.
+
+| Method and route | Purpose |
+| --- | --- |
+| `GET /` | List titles that wait for a source, with their status, 20 per page by default. Filter by `status`: `QUEUED`, `NEEDS_PICK`, `NO_MATCH`, `EXCLUDED`, or `AWAITING_APPROVAL` for a pending request with no open search request. |
+| `GET /{anilistId}?instanceId=` | Show a title's status, its suggestions, and its current matches on that Suwayomi server. |
+| `POST /{anilistId}/search` | Search the title at the next run, or start a run now, with a fresh wait. This also searches a title whose request is still pending. |
+| `POST /{anilistId}/select` | Match the title to one of its suggestions. |
+| `POST /{anilistId}/bind` | Match the title to a manga that Suwayomi already knows. Name the manga by its Suwayomi ID, or by its source ID and its address in Suwayomi. |
+
+- Before a match, SeerrNG reads the manga from Suwayomi. When Suwayomi no
+  longer knows a suggestion, the match returns HTTP `409`. A manga that
+  Suwayomi has never stored returns HTTP `404`; search for it first, in
+  Suwayomi or with the search route, so that Suwayomi stores it.
+- SeerrNG refuses Suwayomi's local source and sources that are not selected
+  for the server with HTTP `400`. A manga that is matched to a different
+  AniList title returns HTTP `409`.
+- A manga that is already in the Suwayomi library gets a library match, as
+  in [Review matches](#review-matches).
+- Picking an exact suggestion for a manga outside the Suwayomi library keeps
+  its MangaDex credit; every other match is recorded as `manual`.
+- A match makes the title's requests stop waiting for a source right away. A
+  pending request stays pending.
+
+Matches made here or by the job also appear on the **Manga Library** page
+under **Library Matches**, with the status **Active** while the manga is not
+in the Suwayomi library. Reject a match there to undo it: the title's
+requests wait for a source again, and the job never matches that manga to
+the title by itself again.
+
 ### What leaves your server
 
 - To AniList: the IDs of requested titles. These requests share SeerrNG's
@@ -478,4 +514,5 @@ title that the **Manga Content** switches allow.
   job makes in Suwayomi.
 
 The job sends these requests only for requested titles. It logs counts, IDs,
-and codes, never titles, search text, or addresses.
+and codes, never titles, search text, or addresses. The request and response
+schemas and every error code are in the [REST API reference](../../seerr-api.yml).
