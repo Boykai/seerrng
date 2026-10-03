@@ -155,8 +155,12 @@ const MangaDetails = () => {
         request.status === MediaRequestStatus.PENDING ||
         request.status === MediaRequestStatus.APPROVED
     ) ?? [];
+  // Other users' requests can arrive without a requester, so a match needs
+  // the loaded user.
   const activeRequest =
-    activeRequests.find((request) => request.requestedBy?.id === user?.id) ??
+    activeRequests.find(
+      (request) => user !== undefined && request.requestedBy?.id === user.id
+    ) ??
     (hasPermission(Permission.MANAGE_REQUESTS) && activeRequests.length === 1
       ? activeRequests[0]
       : undefined);

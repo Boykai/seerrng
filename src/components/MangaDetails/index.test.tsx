@@ -553,10 +553,16 @@ it("opens another user's request only for request managers", async () => {
   expect(requestRow()).toBe('Pending');
 });
 
-it.each([MediaRequestStatus.PENDING, MediaRequestStatus.APPROVED])(
-  "offers no new request while another user's request (status %s) is active",
-  async (status) => {
+it.each([
+  ['pending', 'after', MediaRequestStatus.PENDING, { id: 7 }],
+  ['approved', 'after', MediaRequestStatus.APPROVED, { id: 7 }],
+  ['pending', 'before', MediaRequestStatus.PENDING, undefined],
+  ['approved', 'before', MediaRequestStatus.APPROVED, undefined],
+])(
+  "shows another user's %s request as Requested, with no Request button, %s the user loads",
+  async (_status, _timing, status, user) => {
     state.settings = { suwayomiEnabled: true };
+    state.user = user;
     // Other users' requests arrive without their id or requester.
     state.swr = {
       data: details({
@@ -576,6 +582,38 @@ it.each([MediaRequestStatus.PENDING, MediaRequestStatus.APPROVED])(
     ).toBe(false);
   }
 );
+
+it('shows Requested to a request manager when two requests are active', async () => {
+  state.settings = { suwayomiEnabled: true };
+  state.granted = [Permission.REQUEST, Permission.MANAGE_REQUESTS];
+  state.swr = {
+    data: details({
+      mediaInfo: {
+        status: MediaStatus.PARTIALLY_AVAILABLE,
+        requests: [
+          {
+            id: 41,
+            status: MediaRequestStatus.PENDING,
+            requestedBy: { id: 8 },
+          },
+          {
+            id: 42,
+            status: MediaRequestStatus.APPROVED,
+            requestedBy: { id: 9 },
+          },
+        ],
+      } as unknown as MangaDetailsType['mediaInfo'],
+    }),
+  };
+  await render();
+
+  expect(buttonLabels()).not.toContain('Request');
+  expect(buttonLabels()).not.toContain('View Request');
+  expect(requestRow()).toBe('Requested');
+  expect(
+    state.keys.some((key) => String(key).startsWith('/api/v1/request/'))
+  ).toBe(false);
+});
 
 it.each([
   ['the requester', [Permission.REQUEST], 7, false],
