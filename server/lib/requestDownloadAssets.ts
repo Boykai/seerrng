@@ -9,6 +9,11 @@ import { MediaType } from '@server/constants/media';
 import { MediaIdentifierProvider } from '@server/entity/MediaIdentifier';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
+import {
+  getMangaDownloadErrorFields,
+  loadMangaDownloadCopies,
+  type MangaDownloadCopy,
+} from '@server/lib/mangaDownloadCopy';
 import type { DownloadPathService } from '@server/lib/settings';
 import logger from '@server/logger';
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -34,11 +39,26 @@ export interface OpenRequestDownloadAsset {
 type ResolvedAsset = RequestDownloadAsset & {
   source:
     | { type: 'file'; filePath: string; rootPath: string }
-    | { type: 'mylar'; serviceId: number; issueId: string };
+    | { type: 'mylar'; serviceId: number; issueId: string }
+    | {
+        type: 'suwayomi';
+        instanceId: number;
+        manifestId: number;
+        urlHash: string;
+      };
 };
 
 const maxAssetsPerRequest = 1_000;
 const maxRemotePathLength = 10_000;
+const assetIdPattern = /^[A-Za-z0-9_-]{43}$/;
+
+const matchesAssetId = (candidate: string, assetId: string): boolean => {
+  const expected = Buffer.from(candidate);
+  const provided = Buffer.from(assetId);
+  return (
+    expected.length === provided.length && timingSafeEqual(expected, provided)
+  );
+};
 
 const isWindowsPath = (value: string): boolean =>
   /^[a-zA-Z]:[\\/]/.test(value) || /^\\\\/.test(value);
@@ -161,7 +181,7 @@ const findMappedPath = (
 
 const createAssetId = (
   requestId: number,
-  serviceType: DownloadPathService | 'mylar',
+  serviceType: DownloadPathService | 'mylar' | 'suwayomi',
   serviceId: number,
   remotePath: string
 ): string => {
@@ -563,6 +583,60 @@ const getBackIssueAssets = async (
   }
 };
 
+const mangaAssetId = (requestId: number, copy: MangaDownloadCopy): string =>
+  createAssetId(
+    requestId,
+    'suwayomi',
+    copy.instanceId,
+    `chapter:${copy.urlHash}`
+  );
+
+/** Verified manga chapters, listed without contacting Suwayomi. */
+const getMangaAssets = async (
+  request: MediaRequest,
+  assets: ResolvedAsset[]
+): Promise<void> => {
+  let copies: MangaDownloadCopy[];
+  try {
+    copies = await loadMangaDownloadCopies(request);
+  } catch (error) {
+    // Codes only: a message could carry a title or a source address.
+    logger.warn('Unable to list manga download copies', {
+      label: 'Request Downloads',
+      requestId: request.id,
+      ...getMangaDownloadErrorFields(error),
+    });
+    return;
+  }
+  for (const copy of copies.slice(0, maxAssetsPerRequest - assets.length)) {
+    assets.push({
+      id: mangaAssetId(request.id, copy),
+      name: sanitizeAssetName(copy.name),
+      source: {
+        type: 'suwayomi',
+        instanceId: copy.instanceId,
+        manifestId: copy.manifestId,
+        urlHash: copy.urlHash,
+      },
+    });
+  }
+};
+
+/**
+ * The verified chapter an asset ID names, matched against every chapter of
+ * the request rather than only the listed ones.
+ */
+export const findMangaDownloadAsset = async (
+  request: MediaRequest,
+  assetId: string
+): Promise<MangaDownloadCopy | undefined> => {
+  if (!assetIdPattern.test(assetId)) return undefined;
+  const copy = (await loadMangaDownloadCopies(request)).find((candidate) =>
+    matchesAssetId(mangaAssetId(request.id, candidate), assetId)
+  );
+  return copy && { ...copy, name: sanitizeAssetName(copy.name) };
+};
+
 const resolveRequestAssets = async (
   request: MediaRequest
 ): Promise<ResolvedAsset[]> => {
@@ -580,8 +654,7 @@ const resolveRequestAssets = async (
             ? getMylarAssets(request, assets)
             : Promise.resolve(),
     [MediaType.MAGAZINE]: () => getLazyLibrarianAssets(request, assets),
-    // Manga has no download backend yet, so it lists no local copies.
-    [MediaType.MANGA]: () => Promise.resolve(),
+    [MediaType.MANGA]: () => getMangaAssets(request, assets),
   };
   const resolve = providers[request.type];
   if (!resolve) return assets;
@@ -651,17 +724,15 @@ export const openRequestDownloadAsset = async (
   request: MediaRequest,
   assetId: string
 ): Promise<OpenRequestDownloadAsset | undefined> => {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(assetId)) return undefined;
-  const asset = (await resolveRequestAssets(request)).find((candidate) => {
-    const expected = Buffer.from(candidate.id);
-    const provided = Buffer.from(assetId);
-    return (
-      expected.length === provided.length && timingSafeEqual(expected, provided)
-    );
-  });
+  if (!assetIdPattern.test(assetId)) return undefined;
+  const asset = (await resolveRequestAssets(request)).find((candidate) =>
+    matchesAssetId(candidate.id, assetId)
+  );
   if (!asset) return undefined;
 
   const source = asset.source;
+  // Manga chapters stream through the request route's own path.
+  if (source.type === 'suwayomi') return undefined;
   if (source.type === 'mylar') {
     const server = getExternalRuntimeConfig().mylar.find(
       (instance) => instance.id === source.serviceId

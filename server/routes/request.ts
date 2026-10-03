@@ -55,6 +55,15 @@ import { normalizeValidIsbn } from '@server/lib/isbn';
 import { cleanMagazineTitle } from '@server/lib/magazineIdentity';
 import { sendAnilistFailure } from '@server/lib/mangaCatalog';
 import {
+  MANGA_DOWNLOAD_RETRY_AFTER_SECONDS,
+  MangaDownloadLimitError,
+  acquireMangaDownloadSlot,
+  getMangaDownloadErrorFields,
+  guardMangaDownload,
+  openMangaDownloadCopy,
+  type MangaDownloadGuard,
+} from '@server/lib/mangaDownloadCopy';
+import {
   MangaCatalogUnavailableError,
   MangaRequestNotFoundError,
   MangaRequestScopeError,
@@ -76,6 +85,7 @@ import { aliasDownloadId } from '@server/lib/mediaResponse';
 import { Permission } from '@server/lib/permissions';
 import requestDispatchManager from '@server/lib/requestDispatch';
 import {
+  findMangaDownloadAsset,
   listRequestDownloadAssets,
   openRequestDownloadAsset,
 } from '@server/lib/requestDownloadAssets';
@@ -123,7 +133,13 @@ import {
   parseOptionalBoundedString,
   parseOptionalNonNegativeInteger,
 } from '@server/utils/validation';
-import { Router, type Request } from 'express';
+import {
+  Router,
+  type NextFunction,
+  type Request,
+  type Response,
+} from 'express';
+import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
 const requestRoutes = Router();
@@ -749,6 +765,140 @@ const getDownloadContentDisposition = (fileName: string): string => {
     (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`
   );
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+};
+
+/** Stages in which a manga request offers its verified chapters. */
+const MANGA_DOWNLOAD_STAGES: ReadonlySet<RequestStatusStage> = new Set([
+  RequestStatusStage.DOWNLOADING,
+  RequestStatusStage.FAILED,
+  RequestStatusStage.AVAILABLE,
+]);
+
+/**
+ * Whether a request in this stage offers download copies. A manga chapter
+ * is offered once it is verified, while the rest of the request may still be
+ * downloading or may have failed; other media wait for AVAILABLE.
+ */
+const offersRequestDownloads = (
+  request: MediaRequest,
+  stage: RequestStatusStage | undefined
+): boolean =>
+  stage === RequestStatusStage.AVAILABLE ||
+  (request.type === MediaType.MANGA &&
+    stage !== undefined &&
+    MANGA_DOWNLOAD_STAGES.has(stage));
+
+const isMissingChapterError = (error: unknown): boolean =>
+  error instanceof SuwayomiError &&
+  (error.code === 'NOT_DOWNLOADED' || error.code === 'NOT_FOUND');
+
+/**
+ * Streams one verified manga chapter from Suwayomi as a CBZ. It answers every
+ * failure itself with a fixed message and logs codes only, so no upstream
+ * text reaches a response or a log.
+ */
+const sendMangaDownloadCopy = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+  request: MediaRequest,
+  assetId: string
+): Promise<void> => {
+  const controller = new AbortController();
+  const onClose = () => {
+    if (!res.writableFinished) controller.abort();
+  };
+  res.once('close', onClose);
+  let instanceId: number | undefined;
+  let release: (() => void) | undefined;
+  let stream: Readable | undefined;
+  let guard: MangaDownloadGuard | undefined;
+  try {
+    const copy = await findMangaDownloadAsset(request, assetId);
+    if (!copy) {
+      return next({ status: 404, message: 'Download copy not found.' });
+    }
+    instanceId = copy.instanceId;
+    const headers: Record<string, string> = {
+      'Cache-Control': 'private, no-store',
+      'Content-Disposition': getDownloadContentDisposition(copy.name),
+      'Content-Type': 'application/octet-stream',
+      'X-Content-Type-Options': 'nosniff',
+    };
+    // Express answers HEAD with this handler: report the checks only.
+    if (req.method === 'HEAD') {
+      res.status(200).set(headers).end();
+      return;
+    }
+
+    release = acquireMangaDownloadSlot(req.user!.id, copy.instanceId);
+    if (!release) {
+      res.set('Retry-After', String(MANGA_DOWNLOAD_RETRY_AFTER_SECONDS));
+      return next({
+        status: 429,
+        message: 'Too many downloads are running. Try again shortly.',
+      });
+    }
+    const opened = await openMangaDownloadCopy(copy, controller.signal);
+    stream = opened?.stream;
+    if (controller.signal.aborted) return;
+    if (!opened) {
+      return next({ status: 404, message: 'Download copy not found.' });
+    }
+    // No Range: Suwayomi's support for it is unproven.
+    if (opened.contentLength !== undefined) {
+      headers['Content-Length'] = String(opened.contentLength);
+    }
+    res.status(200).set(headers);
+    guard = guardMangaDownload(opened.stream, res);
+    await pipeline(opened.stream, res);
+  } catch (error) {
+    // A stopped download may surface only as a stream closed early.
+    const failure = guard?.stopped ?? error;
+    const fields = {
+      label: 'Request Downloads',
+      requestId: request.id,
+      instanceId,
+      ...getMangaDownloadErrorFields(failure),
+    };
+    if (res.headersSent || res.destroyed || controller.signal.aborted) {
+      // A client that went away is not a failure worth a log line.
+      if (
+        failure instanceof MangaDownloadLimitError ||
+        (failure instanceof SuwayomiError && failure.code !== 'ABORTED')
+      ) {
+        logger.warn('Stopped a manga download copy', fields);
+      }
+      res.destroy();
+      return;
+    }
+    if (isMissingChapterError(error)) {
+      return next({ status: 404, message: 'Download copy not found.' });
+    }
+    // 5xx bodies are answered here: the shared handler would replace them.
+    if (error instanceof SuwayomiError) {
+      logger.warn('Unable to open a manga download copy', fields);
+      const message =
+        error.code === 'RESPONSE_TOO_LARGE'
+          ? 'This chapter is larger than the download size limit.'
+          : 'Unable to download this chapter right now.';
+      res.status(502).json({ status: 502, message });
+      return;
+    }
+    logger.error(
+      'Something went wrong streaming a manga download copy',
+      fields
+    );
+    res.status(500).json({
+      status: 500,
+      message: 'Unable to download this copy.',
+    });
+  } finally {
+    guard?.dispose();
+    res.off('close', onClose);
+    stream?.destroy();
+    release?.();
+  }
 };
 
 const parseOptionalRequestString = (
@@ -3383,7 +3533,7 @@ requestRoutes.get('/status/:requestId/downloads', async (req, res, next) => {
     }
 
     const current = await recordRequestStatus(access.request.id);
-    if (current?.stage !== RequestStatusStage.AVAILABLE) {
+    if (!offersRequestDownloads(access.request, current?.stage)) {
       return res.status(200).json({ results: [] });
     }
     const results = await listRequestDownloadAssets(access.request);
@@ -3424,8 +3574,17 @@ requestRoutes.get(
       }
 
       const current = await recordRequestStatus(access.request.id);
-      if (current?.stage !== RequestStatusStage.AVAILABLE) {
+      if (!offersRequestDownloads(access.request, current?.stage)) {
         return next({ status: 404, message: 'Download copy not found.' });
+      }
+      if (access.request.type === MediaType.MANGA) {
+        return await sendMangaDownloadCopy(
+          req,
+          res,
+          next,
+          access.request,
+          req.params.assetId
+        );
       }
       file = await openRequestDownloadAsset(access.request, req.params.assetId);
       if (!file) {

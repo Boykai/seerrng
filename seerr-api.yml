@@ -16142,7 +16142,7 @@ paths:
   /request/status/{requestId}/downloads:
     get:
       summary: List downloadable copies for a request
-      description: Returns verified imported files only when the caller may view the request and its current lifecycle stage is available. Filesystem paths and provider credentials are never returned.
+      description: Returns verified copies only when the caller may view the request. A manga request offers its verified chapters while it is downloading, has failed, or is available; any other request offers its verified imported files only when available. In every other stage the list is empty. Filesystem paths, provider URLs, and credentials are never returned.
       tags:
         - request
       parameters:
@@ -16174,6 +16174,7 @@ paths:
                         size:
                           type: integer
                           minimum: 0
+                          description: Size in bytes when known. Manga chapters omit it.
                       required: [id, name]
                 required: [results]
         '403':
@@ -16183,7 +16184,7 @@ paths:
   /request/status/{requestId}/downloads/{assetId}:
     get:
       summary: Download a request asset through SeerrNG
-      description: Streams one verified request asset after rechecking request access and availability. Provider URLs, credentials, and filesystem paths stay server-side.
+      description: Streams one verified request asset after rechecking request access and the request's stage. A manga chapter streams from Suwayomi as a CBZ archive, whole and without byte ranges; each user may run two chapter downloads at once and each Suwayomi server four. Provider URLs, credentials, and filesystem paths stay server-side.
       tags:
         - request
       parameters:
@@ -16214,6 +16215,15 @@ paths:
           description: Caller may not view this request
         '404':
           description: Request or asset not found or no longer available
+        '429':
+          description: Too many manga chapter downloads are running for this user or Suwayomi server. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+        '502':
+          description: Suwayomi could not provide the manga chapter, or the chapter is larger than the download size limit
   /request/{requestId}:
     get:
       summary: Get MediaRequest
