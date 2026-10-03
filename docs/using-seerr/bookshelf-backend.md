@@ -64,11 +64,12 @@ profile storage.
 
 Operators can set `BOOKSHELF_SEERRNG_API_KEY` in BookshelfNG from a container or
 Kubernetes secret and use it in both SeerrNG service entries. This credential
-is limited to BookshelfNG status, library/search/profile/root-folder, queue,
-book-history, and command-status reads; author/book add or update operations;
-and a `BookSearch` command for one book at a time. It cannot change system
-settings, run other commands, or delete authors or files. The global
-BookshelfNG API key remains supported for existing clients.
+is limited to BookshelfNG status/capability, library/search, tag,
+quality/metadata-profile and root-folder, queue, book-file, book-history, and
+command-status reads; author/book add or update operations; and a `BookSearch`
+command for one book at a time. It cannot manage API keys or system settings,
+run other commands, or delete authors or files. The global BookshelfNG API key
+remains supported for existing clients.
 
 [ChaptarrNG](https://github.com/snapetech/chaptarrng) is Snapetech's maintained
 fork of [Chaptarr](https://github.com/Chaptarr/chaptarr), supported as a

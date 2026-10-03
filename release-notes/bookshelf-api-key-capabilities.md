@@ -5,4 +5,4 @@ area: bookshelf
 action: none
 breaking: false
 ---
-BookshelfNG's dedicated SeerrNG API key now documents the exact status and request operations it allows, including one-book searches, and its limits around system settings, other commands, and file deletion.
+SeerrNG's guide now lists the dedicated BookshelfNG key's status, capability, library, tag, profile, root-folder, queue, book-file, history, command-status, author/book add or update, and one-book search access, plus the system, key-management, other-command, and deletion operations it cannot perform.
