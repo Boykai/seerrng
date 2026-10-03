@@ -35,6 +35,7 @@ import {
   assertMangaRequestable,
   buildMangaRequestChapterRows,
   getNextMangaRequestCheckpoint,
+  loadMangaRequestPolicy,
   loadMangaRequestScopeSummaries,
   parseMangaRequestId,
   parseMangaRequestScope,
@@ -599,6 +600,36 @@ describe('assertMangaRequestable', () => {
         error instanceof MangaCatalogUnavailableError &&
         error.failure === failure
     );
+  });
+});
+
+describe('loadMangaRequestPolicy', () => {
+  it('keeps checking titles after Next removes the .ts loader in pnpm dev', async () => {
+    const loading = loadMangaRequestPolicy();
+    assert.strictEqual(loadMangaRequestPolicy(), loading);
+    const [{ default: client }] = await loading;
+    assert.strictEqual(client, AnilistAPI);
+    mock.method(AnilistAPI.prototype, 'getMangaDetails', async () =>
+      details({ format: 'MANGA' })
+    );
+
+    // Next deletes ts-node's `.ts` handler once it has loaded
+    // next.config.ts. Only `pnpm test:node` loads modules through that
+    // handler; under vitest this checks only that the modules are kept.
+    const extensions = require.extensions;
+    const hadTsHandler = '.ts' in extensions;
+    const tsHandler = extensions['.ts'];
+    delete extensions['.ts'];
+    try {
+      await assertMangaRequestable(900001);
+    } finally {
+      if (hadTsHandler) {
+        extensions['.ts'] = tsHandler;
+      } else {
+        delete extensions['.ts'];
+      }
+    }
+    assert.strictEqual(loadMangaRequestPolicy(), loading);
   });
 });
 
