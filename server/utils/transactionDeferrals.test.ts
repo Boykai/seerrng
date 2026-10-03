@@ -458,6 +458,13 @@ describe('deferred work on a real transaction', () => {
   });
 
   it('discards deferred work whose transaction never reported its end', async (t) => {
+    if (dataSource.options.type === 'postgres') {
+      // SQLite runs every transaction on one shared query runner, so the next
+      // transaction meets the work an interrupted one left behind. PostgreSQL
+      // gives each transaction a runner of its own.
+      t.skip('needs the query runner SQLite shares between transactions');
+      return;
+    }
     const request = await createPendingRequest(81021);
     notificationManager.registerAgents([
       { shouldSend: () => true, send: async () => true },

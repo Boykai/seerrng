@@ -320,6 +320,48 @@ describe('request status events on PostgreSQL', () => {
     }
   );
 
+  postgresIt(
+    'still fails an insert that conflicts on another key',
+    async () => {
+      const { dataSource, getRepository, MediaRequestStatusEvent } = modules;
+      const { RequestStatusStage, insertRequestStatusEvent } =
+        modules.requestStatus;
+      const requestId = 92026;
+      await insertRequestStatusEvent(
+        statusEvent(requestId, RequestStatusStage.APPROVED)
+      );
+      const [existing] = await eventsOf(requestId);
+      // The next id already belongs to a row, as after rows were copied in
+      // with their ids.
+      const reuseExistingId = () =>
+        dataSource.query(
+          `SELECT setval(pg_get_serial_sequence('media_request_status_event', 'id'), $1, false)`,
+          [existing.id]
+        );
+
+      await reuseExistingId();
+      await assert.rejects(
+        dataSource.transaction((manager) =>
+          insertRequestStatusEvent(
+            statusEvent(requestId, RequestStatusStage.FAILED),
+            { manager }
+          )
+        ),
+        /duplicate key value violates unique constraint "PK_/
+      );
+      // A conflict clause without a target would hide the same conflict.
+      await reuseExistingId();
+      await getRepository(MediaRequestStatusEvent)
+        .createQueryBuilder()
+        .insert()
+        .into(MediaRequestStatusEvent)
+        .values(statusEvent(requestId, RequestStatusStage.FAILED))
+        .orIgnore()
+        .execute();
+      assert.strictEqual((await eventsOf(requestId)).length, 1);
+    }
+  );
+
   postgresIt('cuts long values to their column lengths', async () => {
     const { dataSource } = modules;
     const { RequestStatusStage, insertRequestStatusEvent } =
@@ -515,6 +557,7 @@ describe('request retries on PostgreSQL', () => {
         [RequestStatusStage.APPROVED]
       );
       assert.strictEqual(statusPage.body.counts.active, 1);
+      assert.strictEqual(statusPage.body.counts.attention, 0);
       assert.strictEqual(statusPage.body.counts.failed, 0);
     }
   );

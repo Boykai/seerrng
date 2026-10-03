@@ -26,6 +26,12 @@ import {
 
 setupTestDb();
 
+// PostgreSQL always takes a row's id from its sequence, so the explicit id
+// below cannot conflict there; requestStatus.postgres.test.ts covers that.
+const sqliteIt = dataSource.options.type === 'postgres' ? it.skip : it;
+const NOT_NULL_VIOLATION =
+  /NOT NULL constraint failed|violates not-null constraint/;
+
 const REQUEST_ID = 9001;
 const fingerprintOf = (stage: RequestStatusStage) =>
   `${stage}:0:unknown:unknown:unknown:0:unknown`;
@@ -202,7 +208,7 @@ describe('request status event inserts', () => {
     assert.ok(long.startsWith(reentry.slice(0, reentry.indexOf(':after:'))));
   });
 
-  it('still fails an insert that conflicts on another key', async () => {
+  sqliteIt('still fails an insert that conflicts on another key', async () => {
     await observe(RequestStatusStage.APPROVED);
     const existing = await latestOf();
     const duplicateKey = statusEvent(
@@ -238,7 +244,7 @@ describe('request status event inserts', () => {
       dataSource.transaction((manager) =>
         insertRequestStatusEvent(invalid, { manager })
       ),
-      /NOT NULL constraint failed/
+      NOT_NULL_VIOLATION
     );
     assert.strictEqual(warn.mock.callCount(), 0);
 
@@ -250,7 +256,7 @@ describe('request status event inserts', () => {
     ];
     assert.strictEqual(message, 'Unable to persist request status event');
     assert.strictEqual(meta.requestId, REQUEST_ID);
-    assert.match(meta.errorMessage, /NOT NULL constraint failed/);
+    assert.match(meta.errorMessage, NOT_NULL_VIOLATION);
     assert.strictEqual((await eventsOf()).length, 0);
   });
 
