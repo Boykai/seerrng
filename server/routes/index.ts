@@ -71,6 +71,7 @@ import issueCommentRoutes from './issueComment';
 import magazineRoutes from './magazine';
 import mangaRoutes, { mangaDiscoverRoutes } from './manga';
 import mangaLibraryRoutes from './mangaLibrary';
+import mangaResolveRoutes from './mangaResolve';
 import mediaRoutes from './media';
 import movieRoutes from './movie';
 import musicRoutes from './music';
@@ -525,6 +526,13 @@ router.use(
   isAuthenticated(Permission.ADMIN),
   categoryAvailabilityGuard(['manga']),
   mangaLibraryRoutes
+);
+// Mounted ahead of /manga: admin-only; its searches run in the resolver job.
+router.use(
+  '/manga/resolve',
+  isAuthenticated(Permission.ADMIN),
+  categoryAvailabilityGuard(['manga']),
+  mangaResolveRoutes
 );
 router.use(
   '/manga',

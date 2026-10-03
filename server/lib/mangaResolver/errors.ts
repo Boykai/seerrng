@@ -1,5 +1,6 @@
 import type { SuwayomiErrorCode } from '@server/api/suwayomi/errors';
 import type { MangaResolveErrorCode } from '@server/interfaces/api/mangaResolveInterfaces';
+import { MangaLibraryError } from '@server/lib/mangaLibraryReview';
 
 const ERRORS: Record<MangaResolveErrorCode, [status: number, message: string]> =
   {
@@ -42,3 +43,24 @@ export class MangaResolveError extends Error {
     return ERRORS[this.code][0];
   }
 }
+
+const LIBRARY_CODES: Partial<
+  Record<MangaLibraryError['code'], MangaResolveErrorCode>
+> = {
+  MANGA_INVALID_REQUEST: 'MANGA_INVALID_REQUEST',
+  MANGA_INSTANCE_NOT_FOUND: 'MANGA_INSTANCE_NOT_FOUND',
+  MANGA_ITEM_NOT_FOUND: 'MANGA_ITEM_NOT_FOUND',
+  MANGA_UNSUPPORTED_SERVER: 'MANGA_UNSUPPORTED_SERVER',
+  MANGA_INSTANCE_CHANGED: 'MANGA_INSTANCE_CHANGED',
+  MANGA_UNIQUE_CONFLICT: 'MANGA_UNIQUE_CONFLICT',
+  MANGA_SUWAYOMI_LOOKUP_FAILED: 'MANGA_SUWAYOMI_LOOKUP_FAILED',
+};
+
+/** A library review failure as a picker failure; anything else unchanged. */
+export const asMangaResolveError = (error: unknown): unknown =>
+  error instanceof MangaLibraryError
+    ? new MangaResolveError(
+        LIBRARY_CODES[error.code] ?? 'MANGA_ITEM_CHANGED',
+        error.suwayomiCode
+      )
+    : error;
