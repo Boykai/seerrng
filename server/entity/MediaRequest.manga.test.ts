@@ -214,11 +214,20 @@ const manifestOf = (request: MediaRequest) =>
 const reload = (request: MediaRequest) =>
   getRepository(MediaRequest).findOneOrFail({ where: { id: request.id } });
 
-const assertHeld = async () => {
+const assertNotQueued = async () => {
   await waitForBackgroundTasks();
   assert.deepStrictEqual(enqueued, []);
   assert.strictEqual(dispatches, 0);
   assert.strictEqual(await getRepository(RequestDispatchOutbox).count(), 0);
+};
+
+const assertQueued = async (requestIds: number[]) => {
+  await waitForBackgroundTasks();
+  assert.deepStrictEqual(
+    [...enqueued].sort((a, b) => a - b),
+    [...requestIds].sort((a, b) => a - b)
+  );
+  assert.strictEqual(dispatches, requestIds.length);
 };
 
 const assertNothingWritten = async () => {
@@ -261,7 +270,7 @@ describe('manga requests', () => {
     assert.deepStrictEqual(anilistCalls, [TITLE]);
     assert.deepStrictEqual(externalCalls, []);
     assert.deepStrictEqual(notifications, [Notification.MEDIA_PENDING]);
-    await assertHeld();
+    await assertNotQueued();
   });
 
   it('records the request bound when the binding exists first', async () => {
@@ -280,7 +289,7 @@ describe('manga requests', () => {
       (await manifestOf(elsewhere)).bindingState,
       AWAITING_BINDING
     );
-    await assertHeld();
+    await assertNotQueued();
   });
 
   it('releases a parked request when a library scan binds its title, without approving it', async () => {
@@ -291,14 +300,17 @@ describe('manga requests', () => {
     );
 
     await seedBinding(TITLE, 1, MediaStatus.AVAILABLE);
+    const tally = newMangaMediaTally();
     await reconcileMangaMedia([TITLE], {
       completedInstanceIds: new Set([1]),
-      tally: newMangaMediaTally(),
+      tally,
     });
 
     const manifest = await manifestOf(request);
     assert.strictEqual(manifest.bindingState, BOUND);
     assert.ok(manifest.boundAt instanceof Date);
+    // The caller queues these after its admission; a pending one never is.
+    assert.deepStrictEqual(tally.boundRequestIds, [request.id]);
     assert.strictEqual(
       (await getRepository(Media).findOneByOrFail({ id: request.media.id }))
         .status,
@@ -309,10 +321,10 @@ describe('manga requests', () => {
       MediaRequestStatus.PENDING
     );
     assert.ok(!notifications.includes(Notification.MEDIA_AVAILABLE));
-    await assertHeld();
+    await assertNotQueued();
   });
 
-  it('holds auto-approved requests out of dispatch, bound or not', async () => {
+  it('queues auto-approved requests for dispatch, bound or not', async () => {
     await seedBinding(TITLE + 1, 1);
     const user = await createUser(
       'auto@seerr.dev',
@@ -335,10 +347,11 @@ describe('manga requests', () => {
       Notification.MEDIA_AUTO_APPROVED,
       Notification.MEDIA_AUTO_APPROVED,
     ]);
-    await assertHeld();
+    // The dispatcher lets a parked one leave the outbox; binding re-queues it.
+    await assertQueued([parked.id, bound.id]);
   });
 
-  it('holds a request an admin approves, while a movie still enqueues', async () => {
+  it('queues a request an admin approves, like a movie', async () => {
     await seedBinding(TITLE, 1);
     const request = await requestManga(await requester());
     const approver = await admin();
@@ -356,7 +369,7 @@ describe('manga requests', () => {
       Notification.MEDIA_PENDING,
       Notification.MEDIA_APPROVED,
     ]);
-    await assertHeld();
+    await assertQueued([request.id]);
 
     const movie = await getRepository(MediaRequest).save(
       new MediaRequest({
@@ -375,7 +388,7 @@ describe('manga requests', () => {
       })
     );
     await waitForBackgroundTasks();
-    assert.deepStrictEqual(enqueued, [movie.id]);
+    assert.deepStrictEqual(enqueued, [request.id, movie.id]);
   });
 
   it('refuses adult, novel and unknown titles before writing any row', async () => {
@@ -393,7 +406,7 @@ describe('manga requests', () => {
 
     assert.deepStrictEqual(anilistCalls, [900002, 900003, 900004]);
     await assertNothingWritten();
-    await assertHeld();
+    await assertNotQueued();
   });
 
   it('reports an AniList failure as the catalog being unavailable', async () => {
@@ -477,7 +490,7 @@ describe('manga requests', () => {
     assert.strictEqual(promoted.status, MediaRequestStatus.APPROVED);
     assert.strictEqual(await getRepository(MediaRequest).count(), 1);
     assert.strictEqual(await getRepository(MangaRequestManifest).count(), 1);
-    await assertHeld();
+    await assertQueued([pending.id]);
   });
 
   it('refuses blocklisted and available titles', async () => {

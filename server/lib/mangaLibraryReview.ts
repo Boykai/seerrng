@@ -32,7 +32,10 @@ import {
   newMangaMediaTally,
   reconcileMangaMedia,
 } from '@server/lib/mangaMedia';
-import { syncMangaRequestBindings } from '@server/lib/mangaRequestBindings';
+import {
+  enqueueMangaRequestDispatch,
+  syncMangaRequestBindings,
+} from '@server/lib/mangaRequestBindings';
 import type { SuwayomiSettings } from '@server/lib/settings';
 import { getSuwayomiClient } from '@server/lib/suwayomi/clientFactory';
 import {
@@ -336,8 +339,14 @@ export const readMangaLibraryItem = async (
   }
 };
 
-/** Media follows the decision; only the decision's instance counts as read. */
-const reconcileAfter = async (instanceId: number, anilistIds: number[]) => {
+/**
+ * Media follows the decision; only the decision's instance counts as read.
+ * Returns the requests it moved to BOUND.
+ */
+const reconcileAfter = async (
+  instanceId: number,
+  anilistIds: number[]
+): Promise<number[]> => {
   const tally = newMangaMediaTally();
   try {
     await reconcileMangaMedia(anilistIds, {
@@ -361,20 +370,23 @@ const reconcileAfter = async (instanceId: number, anilistIds: number[]) => {
       identityConflicts,
     });
   }
+  return tally.boundRequestIds;
 };
 
 /**
  * Requests on the decided titles follow the decision, including a link whose
- * chapter counts were unreadable and so was not reconciled.
+ * chapter counts were unreadable and so was not reconciled. Returns the
+ * requests it moved to BOUND.
  */
-const syncRequestsAfter = async (anilistIds: number[]) => {
+const syncRequestsAfter = async (anilistIds: number[]): Promise<number[]> => {
   try {
-    await syncMangaRequestBindings(dataSource.manager, anilistIds);
+    return await syncMangaRequestBindings(dataSource.manager, anilistIds);
   } catch (error) {
     logger.warn('Manga request binding sync failed after a review', {
       label: LABEL,
       code: error instanceof Error ? error.name : 'UNKNOWN',
     });
+    return [];
   }
 };
 
@@ -386,6 +398,18 @@ const translateWriteError = (error: unknown): never => {
     throw new MangaLibraryError('MANGA_UNIQUE_CONFLICT');
   }
   throw error;
+};
+
+/** Queues the requests a decision bound, once its admissions are released. */
+const enqueueBoundRequests = async ({
+  state,
+  bound,
+}: {
+  state: MangaLibraryItemState;
+  bound: number[];
+}): Promise<MangaLibraryItemState> => {
+  await enqueueMangaRequestDispatch(bound);
+  return state;
 };
 
 /**
@@ -473,16 +497,20 @@ export const linkMangaLibraryItem = (
         anilistId,
         rejectedAnilistId: demoted,
       });
-      await reconcileAfter(instanceId, [
+      const bound = await reconcileAfter(instanceId, [
         ...(read.counts ? [anilistId] : []),
         ...(demoted === undefined ? [] : [demoted]),
       ]);
-      await syncRequestsAfter(
-        demoted === undefined ? [anilistId] : [anilistId, demoted]
+      bound.push(
+        ...(await syncRequestsAfter(
+          demoted === undefined ? [anilistId] : [anilistId, demoted]
+        ))
       );
-      return loadItemState(read);
+      return { state: await loadItemState(read), bound };
     })
-  ).catch(translateWriteError);
+  )
+    .catch(translateWriteError)
+    .then(enqueueBoundRequests);
 };
 
 /**
@@ -561,9 +589,11 @@ export const rejectMangaLibraryPair = async (
         instanceId,
         anilistId,
       });
-      await reconcileAfter(instanceId, [anilistId]);
-      await syncRequestsAfter([anilistId]);
-      return loadItemState(key);
+      const bound = await reconcileAfter(instanceId, [anilistId]);
+      bound.push(...(await syncRequestsAfter([anilistId])));
+      return { state: await loadItemState(key), bound };
     })
-  ).catch(translateWriteError);
+  )
+    .catch(translateWriteError)
+    .then(enqueueBoundRequests);
 };

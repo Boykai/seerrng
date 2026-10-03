@@ -16,6 +16,7 @@ import {
   reconcileMangaMedia,
 } from '@server/lib/mangaMedia';
 import {
+  enqueueMangaRequestDispatch,
   hasActiveMangaBinding,
   syncMangaRequestBindings,
 } from '@server/lib/mangaRequestBindings';
@@ -55,15 +56,21 @@ const errorName = (error: unknown) =>
 /**
  * Media and the title's requests follow its bindings. Runs inside the
  * caller's admissions; a failure only logs, since the binding stands.
+ * Returns the requests it moved to BOUND, to queue once those admissions
+ * are released.
  */
-const reconcileAfter = async (instanceId: number, anilistId: number) => {
+const reconcileAfter = async (
+  instanceId: number,
+  anilistId: number
+): Promise<number[]> => {
+  const tally = newMangaMediaTally();
   try {
     await reconcileMangaMedia([anilistId], {
       completedInstanceIds: new Set([instanceId]),
-      tally: newMangaMediaTally(),
+      tally,
       admitted: true,
     });
-    return;
+    return tally.boundRequestIds;
   } catch (error) {
     logger.warn('Manga media reconcile failed after a source binding', {
       label: LABEL,
@@ -73,7 +80,10 @@ const reconcileAfter = async (instanceId: number, anilistId: number) => {
     });
   }
   try {
-    await syncMangaRequestBindings(dataSource.manager, [anilistId]);
+    return [
+      ...tally.boundRequestIds,
+      ...(await syncMangaRequestBindings(dataSource.manager, [anilistId])),
+    ];
   } catch (error) {
     logger.warn('Manga request binding sync failed after a source binding', {
       label: LABEL,
@@ -81,6 +91,7 @@ const reconcileAfter = async (instanceId: number, anilistId: number) => {
       anilistId,
       code: errorName(error),
     });
+    return tally.boundRequestIds;
   }
 };
 
@@ -98,7 +109,8 @@ const translateWriteError = (error: unknown): never => {
  * Binds a source manga outside the library to the title, as an ACTIVE row
  * that is not in the library yet. Takes the title's request admission, then
  * the instance's, then one transaction that re-reads every row it decides
- * on; no outside call happens under them.
+ * on; no outside call happens under them. Approved requests the binding
+ * released are queued for dispatch once both admissions are released.
  *
  * `auto` never binds a title that has an ACTIVE binding on the instance, an
  * item bound to another title, or a pair an admin rejected. `admin` gets a
@@ -198,17 +210,24 @@ export const writeMangaResolverBinding = (
           confidence: result.binding.confidence,
         });
       }
-      if (result.outcome !== 'skipped') {
-        await reconcileAfter(instanceId, anilistId);
-      }
-      return result;
+      const bound =
+        result.outcome === 'skipped'
+          ? []
+          : await reconcileAfter(instanceId, anilistId);
+      return { result, bound };
     })
-  ).catch(translateWriteError);
+  )
+    .catch(translateWriteError)
+    .then(async ({ result, bound }) => {
+      await enqueueMangaRequestDispatch(bound);
+      return result;
+    });
 };
 
 /**
  * Lets the requests of a title that already has an ACTIVE binding catch up,
- * under the same locks as a binding write.
+ * under the same locks as a binding write, and queues the approved ones it
+ * released once those locks are released.
  */
 export const catchUpMangaResolverTitle = (
   snapshot: SuwayomiSettings,
@@ -218,4 +237,6 @@ export const catchUpMangaResolverTitle = (
     runWithSuwayomiInstanceAdmission(snapshot, () =>
       reconcileAfter(snapshot.id, anilistId)
     )
-  ).catch(translateWriteError);
+  )
+    .catch(translateWriteError)
+    .then((bound) => enqueueMangaRequestDispatch(bound));

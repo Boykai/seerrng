@@ -9,6 +9,7 @@ import {
 } from '@server/constants/media';
 import type { MediaAvailabilityCategoryKey } from '@server/constants/mediaCategories';
 import dataSource, { getRepository } from '@server/datasource';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import Media from '@server/entity/Media';
 import MediaIdentifier, {
   MediaIdentifierProvider,
@@ -4520,14 +4521,6 @@ requestRoutes.post<{
                 message: 'You do not have permission to retry this request.',
               });
             }
-            // Retry enqueues dispatch directly; manga requests are held until
-            // their dispatcher exists.
-            if (request.type === MediaType.MANGA) {
-              return next({
-                status: 409,
-                message: 'Manga requests are not dispatched yet.',
-              });
-            }
 
             const currentStatus = await recordRequestStatus(request.id);
             if (!currentStatus) {
@@ -4577,7 +4570,26 @@ requestRoutes.post<{
               request.status = MediaRequestStatus.APPROVED;
             }
             request.modifiedBy = actor;
-            await requestRepository.save(request);
+            if (request.type === MediaType.MANGA) {
+              // A retried manga request starts its dispatch over; steps
+              // already done on Suwayomi are skipped as they run again.
+              await dataSource.transaction(async (manager) => {
+                await manager.update(
+                  MangaRequestManifest,
+                  { requestId: request.id },
+                  {
+                    attempts: 0,
+                    retryNotBefore: null,
+                    lastError: null,
+                    checkpoint: null,
+                    checkpointAt: null,
+                  }
+                );
+                await manager.getRepository(MediaRequest).save(request);
+              });
+            } else {
+              await requestRepository.save(request);
+            }
             await requestDispatchManager.enqueue(request.id);
 
             return res

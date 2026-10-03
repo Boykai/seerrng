@@ -27,6 +27,7 @@ import type {
 import { createMangaMedia, getMangaAdmissionKey } from '@server/lib/mangaMedia';
 import { DEFAULT_MANGA_REQUEST_SCOPE } from '@server/lib/mangaRequests';
 import requestAdmissionCoordinator from '@server/lib/requestAdmission';
+import requestDispatchManager from '@server/lib/requestDispatch';
 import type { SuwayomiSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { invalidateSuwayomiClients } from '@server/lib/suwayomi/clientFactory';
@@ -76,6 +77,8 @@ let violations: string[] = [];
 let admissions: { resources: string[]; depth: number }[] = [];
 let depth = 0;
 let lookups: string[] = [];
+/** Requests queued for dispatch, with the admission depth at the time. */
+let queued: { requestId: number; depth: number }[] = [];
 
 const createApp = (): Express => {
   const app = express();
@@ -349,7 +352,12 @@ beforeEach(() => {
   admissions = [];
   depth = 0;
   lookups = [];
+  queued = [];
   mock.method(requestAdmissionCoordinator, 'run', observedRun);
+  // Dispatch has its own tests; a bind only queues it.
+  mock.method(requestDispatchManager, 'enqueue', async (requestId: number) => {
+    queued.push({ requestId, depth });
+  });
   // No picker route looks anything up outside Suwayomi.
   const lookup = (name: string) => async () => {
     lookups.push(name);
@@ -732,6 +740,7 @@ describe('manga resolve picker: select', () => {
     const candidate = await seedCandidate(T1, manga, { exact: true });
     const agent = await asAdmin();
     admissions = [];
+    queued = [];
 
     const res = await select(agent, T1, candidate.id);
 
@@ -754,6 +763,9 @@ describe('manga resolve picker: select', () => {
     assert.equal(res.body.binding.title, manga.title);
     assert.equal(await manifestOf(requestId), BOUND);
     assert.equal(await requestStatusOf(requestId), APPROVED);
+    // Queued for dispatch once the title's and the instance's admissions are
+    // released, inside the admin's.
+    assert.deepEqual(queued, [{ requestId, depth: 1 }]);
     // The admin's mutation admission comes first, as in the library review;
     // then the title's, the instance's, and the title's again for its status.
     const key = getMangaAdmissionKey(T1);

@@ -171,6 +171,11 @@ export interface MangaMediaTally {
   uniqueConflicts: number;
   /** Titles whose AniList ID belongs to media of another type. */
   identityConflicts: number;
+  /**
+   * Requests the reconcile moved to BOUND. The caller queues their dispatch
+   * with `enqueueMangaRequestDispatch` once it holds no admission.
+   */
+  boundRequestIds: number[];
 }
 
 export const newMangaMediaTally = (): MangaMediaTally => ({
@@ -178,6 +183,7 @@ export const newMangaMediaTally = (): MangaMediaTally => ({
   mediaUpdated: 0,
   uniqueConflicts: 0,
   identityConflicts: 0,
+  boundRequestIds: [],
 });
 
 /** The statuses to write, by AniList ID, for at most 500 IDs. */
@@ -329,6 +335,8 @@ export const reconcileMangaMedia = async (
     }
     // Requests on these titles follow their bindings: parked ones whose
     // binding appeared are released, and ones whose binding went are parked.
-    await syncMangaRequestBindings(dataSource.manager, slice);
+    tally.boundRequestIds.push(
+      ...(await syncMangaRequestBindings(dataSource.manager, slice))
+    );
   }
 };

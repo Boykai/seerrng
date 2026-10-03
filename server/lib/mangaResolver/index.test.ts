@@ -36,6 +36,7 @@ import {
 } from '@server/lib/mangaResolver';
 import { requestMangaTitleSearch } from '@server/lib/mangaResolver/titles';
 import requestAdmissionCoordinator from '@server/lib/requestAdmission';
+import requestDispatchManager from '@server/lib/requestDispatch';
 import type { SuwayomiSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { invalidateSuwayomiClients } from '@server/lib/suwayomi/clientFactory';
@@ -84,6 +85,8 @@ let mangadexCalls: string[] = [];
 let violations: string[] = [];
 let admissions: { resources: string[]; depth: number }[] = [];
 let depth = 0;
+/** Requests queued for dispatch, with the admission depth at the time. */
+let queued: { requestId: number; depth: number }[] = [];
 const anilistReplies = new Map<number, AnilistMangaDetails | null | Error>();
 const mangadexReplies = new Map<string, MangaDexTitleMatch[] | Error>();
 
@@ -396,6 +399,7 @@ beforeEach(() => {
   violations = [];
   admissions = [];
   depth = 0;
+  queued = [];
   anilistReplies.clear();
   mangadexReplies.clear();
   settings.main.enabledMediaCategories = {
@@ -406,6 +410,10 @@ beforeEach(() => {
   settings.main.mangaIncludeNovels = false;
   configure();
   mock.method(requestAdmissionCoordinator, 'run', observedRun);
+  // Dispatch has its own tests; the resolver only queues it.
+  mock.method(requestDispatchManager, 'enqueue', async (requestId: number) => {
+    queued.push({ requestId, depth });
+  });
   mock.method(AnilistAPI.prototype, 'getMangaDetails', async (id: number) => {
     outside('anilist');
     anilistCalls.push(id);
@@ -460,6 +468,7 @@ describe('manga source resolver: exact links', () => {
       search: probeFinds(U1, exactHit(101, U1)),
     });
     admissions = [];
+    queued = [];
 
     await resolver().run();
 
@@ -503,6 +512,8 @@ describe('manga source resolver: exact links', () => {
     );
     assert.equal(await manifestOf(requestId), BOUND);
     assert.equal(await requestStatusOf(requestId), APPROVED);
+    // Queued for dispatch once the binding's admissions are released.
+    assert.deepEqual(queued, [{ requestId, depth: 0 }]);
     assert.deepEqual(await stateOf(T1), {
       status: 'BOUND',
       reason: 'EXACT_LINK',
@@ -1007,12 +1018,14 @@ describe('manga source resolver: binding rules', () => {
     const requestId = await seedRequest(T1);
     await seedBinding(T1, '/fake-title/701');
     const server = await serve({ sources: [{ id: '1001' }] });
+    queued = [];
 
     await resolver().run();
 
     assert.equal(server.requests.length, 0);
     assert.deepEqual([anilistCalls, mangadexCalls], [[], []]);
     assert.equal(await manifestOf(requestId), BOUND);
+    assert.deepEqual(queued, [{ requestId, depth: 0 }]);
     assert.deepEqual(await stateOf(T1), {
       status: 'BOUND',
       reason: 'EXISTING_BINDING',

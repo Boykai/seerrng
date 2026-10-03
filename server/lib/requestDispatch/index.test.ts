@@ -13,6 +13,7 @@ import { MediaRequestSubscriber } from '@server/subscriber/MediaRequestSubscribe
 import { setupTestDb } from '@server/test/db';
 import { waitForBackgroundTasks } from '@server/utils/backgroundTasks';
 import assert from 'node:assert/strict';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { beforeEach, describe, it, mock } from 'node:test';
 import {
   REQUEST_DISPATCH_CONCURRENCY,
@@ -169,6 +170,53 @@ describe('RequestDispatchManager', () => {
     assert.ok(release);
     release();
     await waitForBackgroundTasks();
+    assert.strictEqual(await getRepository(RequestDispatchOutbox).count(), 0);
+  });
+
+  it('starts each dispatch outside the context that queued it', async (t) => {
+    const caller = new AsyncLocalStorage<string>();
+    const seen = new Map<number, string | undefined>();
+    const dispatchMock = mock.method(
+      MediaRequestSubscriber.prototype,
+      'dispatchRequestById',
+      async (requestId: number) => {
+        seen.set(requestId, caller.getStore());
+        return { delivered: true };
+      }
+    );
+    t.after(() => dispatchMock.mock.restore());
+    const immediate = await createPendingRequest(67892);
+    const requestedBy = await getRepository(User).findOneByOrFail({ id: 2 });
+    const media = await getRepository(Media).save(
+      new Media({
+        mediaType: MediaType.MOVIE,
+        tmdbId: 67893,
+        status: MediaStatus.PENDING,
+        status4k: MediaStatus.UNKNOWN,
+      })
+    );
+
+    // A route's or a job's admission ends before the dispatches it queued.
+    await caller.run('admission', async () => {
+      await new RequestDispatchManager().enqueue(immediate.id);
+      // Queued with the transaction and started by its commit.
+      await dataSource.transaction((manager) =>
+        manager.save(
+          new MediaRequest({
+            type: MediaType.MOVIE,
+            status: MediaRequestStatus.APPROVED,
+            media,
+            requestedBy,
+            is4k: false,
+            isAutoRequest: false,
+          })
+        )
+      );
+    });
+    await waitForBackgroundTasks();
+
+    assert.strictEqual(seen.size, 2);
+    assert.deepStrictEqual([...seen.values()], [undefined, undefined]);
     assert.strictEqual(await getRepository(RequestDispatchOutbox).count(), 0);
   });
 

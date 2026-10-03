@@ -8,6 +8,10 @@ import {
 } from '@server/api/anilist/failures';
 import type { AnilistMangaDetails } from '@server/api/anilist/manga';
 import {
+  MangaDispatchError,
+  MangaRequestCheckpoint,
+} from '@server/constants/mangaRequest';
+import {
   MediaRequestStatus,
   MediaStatus,
   MediaType,
@@ -189,7 +193,7 @@ const countMangaRows = async () => ({
 const NO_ROWS = { requests: 0, media: 0, manifests: 0 };
 
 describe('manga request routes', () => {
-  it('records a manga request with its chapter scope and holds dispatch', async () => {
+  it('records a manga request with its chapter scope and leaves a pending one undispatched', async () => {
     const friend = await loginAs('friend@seerr.dev');
 
     const response = await requestManga(friend, {
@@ -489,24 +493,66 @@ describe('manga request routes', () => {
     );
   });
 
-  it('approves a manga request without dispatching it and refuses a retry', async () => {
+  it('queues an approved manga request and retries a failed one from a reset manifest', async () => {
     const friend = await loginAs('friend@seerr.dev');
     const created = await requestManga(friend);
     assert.strictEqual(created.status, 201);
     const admin = await loginAs('admin@seerr.dev');
 
     const approved = await admin.post(`/request/${created.body.id}/approve`);
-    const retry = await admin.post(`/request/${created.body.id}/retry`);
+    const queuedRetry = await admin.post(`/request/${created.body.id}/retry`);
 
     assert.strictEqual(approved.status, 200);
     assert.strictEqual(approved.body.status, MediaRequestStatus.APPROVED);
     assert.strictEqual(approved.body.mangaScope.awaitingBinding, true);
-    assert.strictEqual(retry.status, 409);
+    assert.deepStrictEqual(enqueued, [created.body.id]);
+    // An approved request is still queued, so there is nothing to retry.
+    assert.strictEqual(queuedRetry.status, 409);
     assert.strictEqual(
-      retry.body.message,
-      'Manga requests are not dispatched yet.'
+      queuedRetry.body.message,
+      'This request cannot be retried from its current state.'
     );
-    assert.deepStrictEqual(enqueued, []);
-    assert.strictEqual(await getRepository(RequestDispatchOutbox).count(), 0);
+
+    const manifest = await getRepository(MangaRequestManifest).findOneOrFail({
+      where: { requestId: created.body.id },
+    });
+    const frozenAt = new Date();
+    await getRepository(MangaRequestManifest).update(manifest.id, {
+      checkpoint: MangaRequestCheckpoint.CHAPTERS_FETCHED,
+      checkpointAt: new Date(),
+      attempts: 7,
+      lastError: MangaDispatchError.SUWAYOMI_UNAVAILABLE,
+      retryNotBefore: new Date(Date.now() + 60_000),
+      frozenAt,
+    });
+    await getRepository(MediaRequest).update(created.body.id, {
+      status: MediaRequestStatus.FAILED,
+    });
+
+    const retried = await admin.post(`/request/${created.body.id}/retry`);
+
+    assert.strictEqual(retried.status, 200);
+    assert.strictEqual(retried.body.status, MediaRequestStatus.APPROVED);
+    // Both the save and the route queue it; the outbox keeps one row.
+    assert.ok(enqueued.length > 1);
+    assert.ok(enqueued.every((id) => id === created.body.id));
+    const reset = await getRepository(MangaRequestManifest).findOneOrFail({
+      where: { id: manifest.id },
+    });
+    assert.strictEqual(reset.checkpoint, null);
+    assert.strictEqual(reset.checkpointAt, null);
+    assert.strictEqual(reset.attempts, 0);
+    assert.strictEqual(reset.lastError, null);
+    assert.strictEqual(reset.retryNotBefore, null);
+    // The frozen scope stays; dispatch replays its steps against it.
+    assert.strictEqual(reset.frozenAt?.getTime(), frozenAt.getTime());
+    assert.strictEqual(
+      (
+        await getRepository(MediaRequest).findOneOrFail({
+          where: { id: created.body.id },
+        })
+      ).status,
+      MediaRequestStatus.APPROVED
+    );
   });
 });

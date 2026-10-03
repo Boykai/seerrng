@@ -484,8 +484,9 @@ export class MediaRequest {
 
   /**
    * Records a manga request. The caller holds the title's canonical admission
-   * and the target instance's admission. Nothing is dispatched: the request
-   * is parked until its title has an ACTIVE source binding on the instance.
+   * and the target instance's admission. An approved request is queued for
+   * dispatch when it is saved; while its title has no ACTIVE source binding
+   * on the instance it stays parked, and the binding sync queues it again.
    */
   private static async requestManga(
     requestBody: MediaRequestBody,

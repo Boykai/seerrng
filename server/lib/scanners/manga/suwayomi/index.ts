@@ -25,7 +25,10 @@ import {
   newMangaMediaTally,
   reconcileMangaMedia,
 } from '@server/lib/mangaMedia';
-import { syncMangaRequestBindings } from '@server/lib/mangaRequestBindings';
+import {
+  enqueueMangaRequestDispatch,
+  syncMangaRequestBindings,
+} from '@server/lib/mangaRequestBindings';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import type {
   RunnableScanner,
@@ -342,12 +345,14 @@ class MangaLibraryScanner
 
   /**
    * Every unfrozen manga request follows the bindings the run left, including
-   * titles no instance reconciled this time. Takes no admission and never
-   * enqueues dispatch.
+   * titles no instance reconciled this time. Takes no admission; requests
+   * that became BOUND are queued for dispatch afterwards.
    */
   private async syncRequestBindings(): Promise<void> {
     try {
-      await syncMangaRequestBindings(dataSource.manager);
+      await enqueueMangaRequestDispatch(
+        await syncMangaRequestBindings(dataSource.manager)
+      );
     } catch (error) {
       this.log('Manga request binding sync failed', 'warn', {
         code: failureCode(error),
@@ -897,6 +902,8 @@ class MangaLibraryScanner
     } finally {
       run.counts.mediaCreated += tally.mediaCreated;
       run.counts.mediaUpdated += tally.mediaUpdated;
+      // Outside every admission; never throws.
+      await enqueueMangaRequestDispatch(tally.boundRequestIds);
       const instanceId = snapshot?.id;
       if (tally.uniqueConflicts > 0) {
         this.warn(run, 'UNIQUE_CONFLICT', instanceId, tally.uniqueConflicts);

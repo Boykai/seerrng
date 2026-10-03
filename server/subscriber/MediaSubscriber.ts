@@ -87,7 +87,7 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
   ) {
     if (event.mediaType === MediaType.MANGA) {
       // Availability never approves a manga request: approval is an admin's
-      // or an auto-approve decision, and dispatch is held until it exists.
+      // or an auto-approve decision.
       return;
     }
 

@@ -33,6 +33,7 @@ import type { SuwayomiSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { invalidateSuwayomiClients } from '@server/lib/suwayomi/clientFactory';
 import logger from '@server/logger';
+import { MediaRequestSubscriber } from '@server/subscriber/MediaRequestSubscriber';
 import { setupTestDb } from '@server/test/db';
 import {
   capabilitiesData,
@@ -49,6 +50,7 @@ import {
   type FakeReply,
   type FakeSuwayomi,
 } from '@server/test/fakeSuwayomi';
+import { waitForBackgroundTasks } from '@server/utils/backgroundTasks';
 import { Kind, OperationTypeNode, parse } from 'graphql';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -2026,7 +2028,51 @@ describe('manga library scan: guards', () => {
 });
 
 describe('manga library scan: requests', () => {
-  /** A manga request as the request flow records it, before any dispatch. */
+  /**
+   * Outbox deliveries wait until `deliver()`, so the rows a scan writes stay
+   * visible. Each then runs the real dispatch.
+   */
+  let gate: Promise<void> = Promise.resolve();
+  let open = () => {};
+  const hold = () => {
+    gate = new Promise((resolve) => {
+      open = resolve;
+    });
+  };
+  const deliver = async () => {
+    open();
+    await waitForBackgroundTasks();
+    hold();
+  };
+
+  beforeEach(() => {
+    hold();
+    const subscriber = new MediaRequestSubscriber();
+    const dispatch = subscriber.dispatchRequestById.bind(subscriber);
+    mock.method(
+      MediaRequestSubscriber.prototype,
+      'dispatchRequestById',
+      async (requestId: number) => {
+        await gate;
+        return dispatch(requestId);
+      }
+    );
+  });
+
+  afterEach(async () => {
+    await deliver();
+  });
+
+  const outbox = async () =>
+    (
+      await getRepository(RequestDispatchOutbox).find({ order: { id: 'ASC' } })
+    ).map(({ requestId }) => requestId);
+
+  /**
+   * A manga request as the request flow records it. Its approval's delivery
+   * runs before the manifest exists, so it sends nothing and leaves the
+   * outbox.
+   */
   const recordRequest = async (
     anilistId: number,
     instanceId = 1,
@@ -2047,12 +2093,14 @@ describe('manga library scan: requests', () => {
         serverId: instanceId,
       })
     );
+    await deliver();
     await getRepository(MangaRequestManifest).insert({
       requestId: request.id,
       anilistId,
       instanceId,
       bindingState,
     });
+    return request.id;
   };
 
   const manifests = async () =>
@@ -2073,7 +2121,7 @@ describe('manga library scan: requests', () => {
     };
     const server = await start(library);
     configure(instanceFor(server));
-    await recordRequest(101);
+    const released = await recordRequest(101);
     await recordRequest(109);
     // A stale BOUND row for a title no binding names: only the sweep sees it.
     await recordRequest(555, 1, BOUND);
@@ -2085,6 +2133,8 @@ describe('manga library scan: requests', () => {
       [109, 1, AWAITING_BINDING, false],
       [555, 1, AWAITING_BINDING, false],
     ]);
+    // The scan queues the request its title's new binding released.
+    assert.deepEqual(await outbox(), [released]);
 
     library.mangas = [];
     await scan();
@@ -2094,7 +2144,12 @@ describe('manga library scan: requests', () => {
       [109, 1, AWAITING_BINDING, false],
       [555, 1, AWAITING_BINDING, false],
     ]);
+    // The re-park leaves the row. Its delivery finds the request parked and
+    // sends nothing.
+    assert.deepEqual(await outbox(), [released]);
+    await deliver();
     assert.equal(await getRepository(RequestDispatchOutbox).count(), 0);
+    assertReadsOnly(server);
   });
 
   it('keeps a request parked while only another instance holds its title', async () => {

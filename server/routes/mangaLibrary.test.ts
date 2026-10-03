@@ -28,6 +28,7 @@ import type { SuwayomiSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { invalidateSuwayomiClients } from '@server/lib/suwayomi/clientFactory';
 import logger from '@server/logger';
+import { MediaRequestSubscriber } from '@server/subscriber/MediaRequestSubscriber';
 import { setupTestDb } from '@server/test/db';
 import {
   capabilitiesData,
@@ -40,6 +41,7 @@ import {
   type FakeLibraryManga,
   type FakeSuwayomi,
 } from '@server/test/fakeSuwayomi';
+import { waitForBackgroundTasks } from '@server/utils/backgroundTasks';
 import type { Express } from 'express';
 import express from 'express';
 import * as OpenApiValidator from 'express-openapi-validator';
@@ -821,6 +823,7 @@ describe('manga library review: requests', () => {
       anilistId,
       instanceId: 1,
     });
+    return saved.id;
   };
 
   const requestStates = async () =>
@@ -862,6 +865,39 @@ describe('manga library review: requests', () => {
       [201, 'AWAITING_BINDING'],
       [202, 'AWAITING_BINDING'],
     ]);
+    assert.equal(await getRepository(RequestDispatchOutbox).count(), 0);
+  });
+
+  it('queues an approved request for dispatch once a bind releases it', async () => {
+    const manga = fakeLibraryManga(1, { chapterCount: 1, downloadCount: 1 });
+    await serve({ mangas: [manga] });
+    const requestId = await recordRequest(201);
+    await dataSource
+      .createQueryBuilder()
+      .update(MediaRequest)
+      .set({ status: MediaRequestStatus.APPROVED })
+      .where({ id: requestId })
+      .callListeners(false)
+      .execute();
+    const dispatched: number[] = [];
+    mock.method(
+      MediaRequestSubscriber.prototype,
+      'dispatchRequestById',
+      async (id: number) => {
+        dispatched.push(id);
+        return { delivered: true };
+      }
+    );
+    const agent = await asAdmin();
+
+    const bound = await agent
+      .post(`${BASE}/bind`)
+      .send({ instanceId: 1, anilistId: 201, suwayomiMangaId: 1 });
+    assert.equal(bound.status, 200);
+    await waitForBackgroundTasks();
+
+    assert.deepEqual(await requestStates(), [[201, 'BOUND']]);
+    assert.deepEqual(dispatched, [requestId]);
     assert.equal(await getRepository(RequestDispatchOutbox).count(), 0);
   });
 });

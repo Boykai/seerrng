@@ -151,6 +151,20 @@ describe('scheduled job lifecycle', () => {
     assert.equal(resolveJob.running?.(), false);
   });
 
+  it('registers the manga dispatch sweep as a five-minute process task', () => {
+    startJobs();
+
+    const sweepJob = scheduledJobs.find(
+      (job) => job.id === 'manga-dispatch-sweep'
+    );
+
+    assert.ok(sweepJob);
+    assert.equal(sweepJob.name, 'Manga Dispatch Sweep');
+    assert.equal(sweepJob.type, 'process');
+    assert.equal(sweepJob.interval, 'minutes');
+    assert.equal(sweepJob.cronSchedule, '0 */5 * * * *');
+  });
+
   it('cancels future invocations and waits for active work', async () => {
     let cancelCalled = false;
     let release: (() => void) | undefined;

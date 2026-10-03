@@ -5,6 +5,7 @@ import { AddMangaIdentityUniqueness1790986402000 as PortableMangaIdentityMigrati
 import { AddMangaLibraryBindings1790986404000 as PortableMangaLibraryMigration } from '@server/migration/sqlite/1790986404000-AddMangaLibraryBindings';
 import { AddMangaRequestManifests1790986406000 as PortableMangaRequestMigration } from '@server/migration/sqlite/1790986406000-AddMangaRequestManifests';
 import { AddMangaSourceResolution1790986408000 as PortableMangaSourceResolutionMigration } from '@server/migration/sqlite/1790986408000-AddMangaSourceResolution';
+import { AddMangaDispatch1790986411000 as PortableMangaDispatchMigration } from '@server/migration/sqlite/1790986411000-AddMangaDispatch';
 import { DataSource, type QueryRunner } from 'typeorm';
 import { AddMangaIdentityUniqueness1790986402000 } from './1790986402000-AddMangaIdentityUniqueness';
 import { AddMangaQuota1790986403000 } from './1790986403000-AddMangaQuota';
@@ -12,6 +13,7 @@ import { AddMangaLibraryBindings1790986404000 } from './1790986404000-AddMangaLi
 import { AddMangaMatchProposals1790986405000 } from './1790986405000-AddMangaMatchProposals';
 import { AddMangaRequestManifests1790986406000 } from './1790986406000-AddMangaRequestManifests';
 import { AddMangaSourceResolution1790986408000 } from './1790986408000-AddMangaSourceResolution';
+import { AddMangaDispatch1790986411000 } from './1790986411000-AddMangaDispatch';
 
 const postgresUrl = process.env.SEERR_TEST_POSTGRES_URL;
 const postgresTest = postgresUrl ? test : test.skip;
@@ -151,6 +153,47 @@ test('PostgreSQL manga request manifest migration creates the SQLite indexes and
     [
       `DROP TABLE IF EXISTS "manga_request_chapter"`,
       `DROP TABLE IF EXISTS "manga_request_manifest"`,
+    ]
+  );
+});
+
+test('PostgreSQL manga dispatch migration creates the SQLite index and keys, and drops what it adds', async () => {
+  const migration = new AddMangaDispatch1790986411000();
+  const indexes = (statements: string[]) =>
+    statements.filter((statement) => / INDEX /.test(statement));
+  const uniqueKeys = (statements: string[]) =>
+    statements.flatMap(
+      (statement) =>
+        statement.match(/CONSTRAINT "UQ_[^"]+" UNIQUE \([^)]+\)/g) ?? []
+    );
+  const postgres = await recordStatements((queryRunner) =>
+    migration.up(queryRunner)
+  );
+  // The SQLite migration asks before it adds each manifest column.
+  const portable: string[] = [];
+  await new PortableMangaDispatchMigration().up({
+    query: async (statement: string) => {
+      portable.push(statement);
+    },
+    hasColumn: async () => false,
+  } as unknown as QueryRunner);
+
+  assert.equal(migration.name, 'AddMangaDispatch1790986411000');
+  assert.equal(indexes(postgres).length, 1);
+  assert.deepStrictEqual(indexes(postgres), indexes(portable));
+  assert.equal(uniqueKeys(postgres).length, 4);
+  assert.deepStrictEqual(uniqueKeys(postgres), uniqueKeys(portable));
+  assert.deepStrictEqual(
+    await recordStatements((queryRunner) => migration.down(queryRunner)),
+    [
+      `DROP TABLE IF EXISTS "manga_instance_marker"`,
+      `DROP TABLE IF EXISTS "manga_chapter_ownership"`,
+      `DROP TABLE IF EXISTS "manga_library_ownership"`,
+      `DROP INDEX IF EXISTS "IDX_manga_request_manifest_binding"`,
+      `ALTER TABLE "manga_request_manifest" DROP COLUMN IF EXISTS "retryNotBefore"`,
+      `ALTER TABLE "manga_request_manifest" DROP COLUMN IF EXISTS "suwayomiMangaId"`,
+      `ALTER TABLE "manga_request_manifest" DROP COLUMN IF EXISTS "bindingUrlHash"`,
+      `ALTER TABLE "manga_request_manifest" DROP COLUMN IF EXISTS "bindingSourceId"`,
     ]
   );
 });
@@ -680,6 +723,150 @@ postgresTest(
       await migration.down(queryRunner);
 
       assert.deepStrictEqual(await objects(), []);
+    });
+  }
+);
+
+postgresTest(
+  'PostgreSQL manga dispatch migration keys what SeerrNG owns reversibly',
+  async () => {
+    await withPostgresQueryRunner(async (queryRunner) => {
+      // A private schema keeps the migrated database's tables out of reach,
+      // and the rollback removes it again.
+      await queryRunner.query(`CREATE SCHEMA "manga_dispatch_check"`);
+      await queryRunner.query(
+        `SET LOCAL search_path TO "manga_dispatch_check"`
+      );
+      await queryRunner.query(
+        `CREATE TABLE "media_request" ("id" integer PRIMARY KEY)`
+      );
+      const objects = async () =>
+        (
+          (await queryRunner.query(
+            `SELECT c."relkind" AS "kind", c."relname" AS "name"
+             FROM pg_class c
+             JOIN pg_namespace n ON n."oid" = c."relnamespace"
+             WHERE n."nspname" = 'manga_dispatch_check'
+               AND c."relkind" IN ('r', 'i')
+               AND (c."relname" LIKE '%ownership%'
+                 OR c."relname" LIKE '%marker%'
+                 OR c."relname" = 'IDX_manga_request_manifest_binding')`
+          )) as { kind: string; name: string }[]
+        )
+          .map(({ kind, name }) => `${kind} ${name}`)
+          .sort();
+      const manifestColumns = async () =>
+        (
+          (await queryRunner.query(
+            `SELECT "column_name" AS "name", "data_type" AS "type", "character_maximum_length" AS "length"
+             FROM information_schema.columns
+             WHERE "table_schema" = 'manga_dispatch_check'
+               AND "table_name" = 'manga_request_manifest'
+               AND "column_name" IN ('bindingSourceId', 'bindingUrlHash', 'suwayomiMangaId', 'retryNotBefore')
+             ORDER BY "ordinal_position"`
+          )) as { name: string; type: string; length: number | null }[]
+        ).map(({ name, type, length }) =>
+          length === null ? `${name} ${type}` : `${name} ${type}(${length})`
+        );
+      const rejects = async (
+        insert: () => Promise<unknown>,
+        pattern: RegExp
+      ) => {
+        await queryRunner.query('SAVEPOINT manga_dispatch_check');
+        await assert.rejects(insert(), pattern);
+        await queryRunner.query('ROLLBACK TO SAVEPOINT manga_dispatch_check');
+      };
+      const insertLibrary = (instanceId: number, urlHash: string) =>
+        queryRunner.query(
+          `INSERT INTO "manga_library_ownership" ("instanceId", "sourceId", "urlHash", "url", "addedBySeerrng") VALUES ($1, '1002', $2, $3, true)`,
+          [instanceId, urlHash, `/fake/manga/${urlHash}`]
+        );
+      const insertChapter = (mangaUrlHash: string, chapterUrlHash: string) =>
+        queryRunner.query(
+          `INSERT INTO "manga_chapter_ownership" ("instanceId", "sourceId", "mangaUrlHash", "chapterUrlHash", "chapterUrl") VALUES (1, '1002', $1, $2, $3)`,
+          [mangaUrlHash, chapterUrlHash, `/fake/chapter/${chapterUrlHash}`]
+        );
+      const insertMarker = (instanceId: number, marker: string) =>
+        queryRunner.query(
+          `INSERT INTO "manga_instance_marker" ("instanceId", "marker") VALUES ($1, $2)`,
+          [instanceId, marker]
+        );
+
+      await new AddMangaRequestManifests1790986406000().up(queryRunner);
+      const migration = new AddMangaDispatch1790986411000();
+      await migration.up(queryRunner);
+      await migration.up(queryRunner);
+
+      assert.deepStrictEqual(await objects(), [
+        'i IDX_manga_request_manifest_binding',
+        'i PK_manga_chapter_ownership',
+        'i PK_manga_instance_marker',
+        'i PK_manga_library_ownership',
+        'i UQ_manga_chapter_ownership_item',
+        'i UQ_manga_instance_marker_instance',
+        'i UQ_manga_instance_marker_marker',
+        'i UQ_manga_library_ownership_item',
+        'r manga_chapter_ownership',
+        'r manga_instance_marker',
+        'r manga_library_ownership',
+      ]);
+      assert.deepStrictEqual(await manifestColumns(), [
+        'bindingSourceId character varying(32)',
+        'bindingUrlHash character varying(64)',
+        'suwayomiMangaId integer',
+        'retryNotBefore timestamp with time zone',
+      ]);
+
+      // Existing manifests gain empty dispatch columns.
+      await queryRunner.query(`INSERT INTO "media_request" ("id") VALUES (1)`);
+      await queryRunner.query(
+        `INSERT INTO "manga_request_manifest" ("requestId", "anilistId", "instanceId") VALUES (1, 900001, 1)`
+      );
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "bindingSourceId", "bindingUrlHash", "suwayomiMangaId", "retryNotBefore" FROM "manga_request_manifest"`
+        ),
+        [
+          {
+            bindingSourceId: null,
+            bindingUrlHash: null,
+            suwayomiMangaId: null,
+            retryNotBefore: null,
+          },
+        ]
+      );
+
+      await insertLibrary(1, 'hash-a');
+      await rejects(() => insertLibrary(1, 'hash-a'), /unique/i);
+      await insertLibrary(2, 'hash-a');
+      await insertChapter('hash-a', 'hash-1');
+      await rejects(() => insertChapter('hash-a', 'hash-1'), /unique/i);
+      await insertChapter('hash-b', 'hash-1');
+      await insertMarker(1, 'marker-a');
+      await rejects(() => insertMarker(1, 'marker-b'), /unique/i);
+      await rejects(() => insertMarker(2, 'marker-a'), /unique/i);
+      await insertMarker(2, 'marker-b');
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT
+             (SELECT COUNT(*) FROM "manga_library_ownership" WHERE "createdAt" IS NOT NULL)::int AS "libraries",
+             (SELECT COUNT(*) FROM "manga_chapter_ownership" WHERE "enqueuedAt" IS NOT NULL)::int AS "chapters",
+             (SELECT COUNT(*) FROM "manga_instance_marker" WHERE "createdAt" IS NOT NULL)::int AS "markers"`
+        ),
+        [{ libraries: 2, chapters: 2, markers: 2 }]
+      );
+
+      await migration.down(queryRunner);
+      await migration.down(queryRunner);
+
+      assert.deepStrictEqual(await objects(), []);
+      assert.deepStrictEqual(await manifestColumns(), []);
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "requestId", "anilistId" FROM "manga_request_manifest"`
+        ),
+        [{ requestId: 1, anilistId: 900001 }]
+      );
     });
   }
 );
