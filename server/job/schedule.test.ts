@@ -165,6 +165,22 @@ describe('scheduled job lifecycle', () => {
     assert.equal(sweepJob.cronSchedule, '0 */5 * * * *');
   });
 
+  it('registers the manga progress poll as a two-minute process task', () => {
+    startJobs();
+
+    const progressJob = scheduledJobs.find(
+      (job) => job.id === 'manga-progress'
+    );
+
+    assert.ok(progressJob);
+    assert.equal(progressJob.name, 'Manga Progress');
+    assert.equal(progressJob.type, 'process');
+    assert.equal(progressJob.interval, 'minutes');
+    assert.equal(progressJob.cronSchedule, '0 */2 * * * *');
+    assert.equal(typeof progressJob.cancelFn, 'function');
+    assert.equal(progressJob.running?.(), false);
+  });
+
   it('cancels future invocations and waits for active work', async () => {
     let cancelCalled = false;
     let release: (() => void) | undefined;

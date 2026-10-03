@@ -96,6 +96,8 @@ export class DownloadTracker {
   private readarrServers: Record<number, DownloadingItem[]> = {};
   private kapowarrServers: Record<number, DownloadingItem[]> = {};
   private backissueServers: Record<number, DownloadingItem[]> = {};
+  /** Filled by the manga progress poll, not by `updateDownloads`. */
+  private mangaServers: Record<number, DownloadingItem[]> = {};
   private monitoredRefreshes = new Set<string>();
   private lastMonitoredRefresh = new Map<string, number>();
   private activeUpdate?: Promise<void>;
@@ -351,6 +353,55 @@ export class DownloadTracker {
     ].filter((item) => item.externalId === externalServiceId);
   }
 
+  /** Queued chapters of one AniList title's active requests on an instance. */
+  public getMangaProgress(
+    instanceId: number,
+    anilistId: number
+  ): DownloadingItem[] {
+    return (this.mangaServers[instanceId] ?? []).filter(
+      (item) => item.externalId === anilistId
+    );
+  }
+
+  /** Replaces what an instance lists for `anilistIds` with `items`. */
+  public setMangaProgress(
+    instanceId: number,
+    anilistIds: ReadonlySet<number>,
+    items: readonly DownloadingItem[]
+  ): void {
+    const next = [
+      ...(this.mangaServers[instanceId] ?? []).filter(
+        (item) => !anilistIds.has(item.externalId)
+      ),
+      ...items,
+    ];
+    if (next.length > 0) {
+      this.mangaServers[instanceId] = next;
+    } else {
+      delete this.mangaServers[instanceId];
+    }
+  }
+
+  /** Keeps only the titles `active` lists for each instance. */
+  public pruneMangaProgress(
+    active: ReadonlyMap<number, ReadonlySet<number>>
+  ): void {
+    for (const key of Object.keys(this.mangaServers)) {
+      const instanceId = Number(key);
+      const titles = active.get(instanceId);
+      const kept = titles
+        ? this.mangaServers[instanceId].filter((item) =>
+            titles.has(item.externalId)
+          )
+        : [];
+      if (kept.length > 0) {
+        this.mangaServers[instanceId] = kept;
+      } else {
+        delete this.mangaServers[instanceId];
+      }
+    }
+  }
+
   public async resetDownloadTracker() {
     // A reset that races an update can otherwise be undone when the older
     // queue fetch writes its results after the reset. Drain that local update
@@ -365,6 +416,7 @@ export class DownloadTracker {
     this.readarrServers = {};
     this.kapowarrServers = {};
     this.backissueServers = {};
+    this.mangaServers = {};
     this.lastMonitoredRefresh.clear();
   }
 

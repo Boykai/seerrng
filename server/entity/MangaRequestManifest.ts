@@ -106,6 +106,40 @@ export class MangaRequestManifest {
   @DbAwareColumn({ type: 'datetime', nullable: true })
   public retryNotBefore: Date | null;
 
+  /** A `MangaAttentionCode` the progress poll raised; never free text. */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  public attentionCode: string | null;
+
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public attentionAt: Date | null;
+
+  /** The last progress poll that looked at the manifest. */
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public progressAt: Date | null;
+
+  /** What the manga looked like at the last chapter read, hashed. */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  public progressSignature: string | null;
+
+  @Column({ type: 'integer', default: 0 })
+  public chaptersTotal: number;
+
+  /** Chapters whose file a HEAD request found non-empty. */
+  @Column({ type: 'integer', default: 0 })
+  public chaptersVerified: number;
+
+  @Column({ type: 'integer', default: 0 })
+  public chaptersQueued: number;
+
+  @Column({ type: 'integer', default: 0 })
+  public chaptersDownloading: number;
+
+  @Column({ type: 'integer', default: 0 })
+  public chaptersErrored: number;
+
+  @Column({ type: 'integer', default: 0 })
+  public chaptersMissing: number;
+
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public createdAt: Date;
 

@@ -71,5 +71,65 @@ export const MANGA_DISPATCH_WAIT_MS = {
 /** Consecutive failed chapter fetches before the slower schedule starts. */
 export const MANGA_SOURCE_FETCH_ATTEMPTS = 5;
 
+/**
+ * Why an enqueued request needs someone to look at it. The progress poll
+ * owns these; dispatch keeps `lastError`. A code never fails, completes or
+ * re-dispatches a request by itself, and clears when its cause does.
+ */
+export enum MangaAttentionCode {
+  /** Suwayomi's queue holds one of the request's chapters in ERROR. */
+  CHAPTER_ERROR = 'MANGA_CHAPTER_ERROR',
+  /** A chapter is neither downloaded, queued nor in error on two polls. */
+  CHAPTER_NOT_QUEUED = 'MANGA_CHAPTER_NOT_QUEUED',
+  /** The source no longer lists a chapter, a day after it went. */
+  CHAPTER_MISSING = 'MANGA_CHAPTER_MISSING',
+  /** Suwayomi says a chapter is downloaded, but its file is empty twice. */
+  CHAPTER_FILE_MISSING = 'MANGA_CHAPTER_FILE_MISSING',
+  /** A downloaded chapter's file came without a size, so it never verifies. */
+  CHAPTER_LENGTH_UNKNOWN = 'MANGA_CHAPTER_LENGTH_UNKNOWN',
+  /** The bound manga left the Suwayomi library. */
+  NOT_IN_LIBRARY = 'MANGA_NOT_IN_LIBRARY',
+  /** The request's Suwayomi server is no longer configured. */
+  INSTANCE_REMOVED = 'MANGA_INSTANCE_REMOVED',
+  /** The bound manga no longer resolves, or its binding went away. */
+  BINDING_ORPHANED = 'MANGA_BINDING_ORPHANED',
+}
+
+/** The state a chapter row was last seen in, as the progress poll records it. */
+export enum MangaChapterQueueState {
+  QUEUED = 'QUEUED',
+  DOWNLOADING = 'DOWNLOADING',
+  ERROR = 'ERROR',
+  /** Suwayomi lists it as downloaded. */
+  DOWNLOADED = 'DOWNLOADED',
+  /** Not downloaded and not in the queue. */
+  NOT_QUEUED = 'NOT_QUEUED',
+  /** No current chapter matches the row. */
+  UNMAPPED = 'UNMAPPED',
+}
+
+/** What the last HEAD found when it could not verify a chapter's file. */
+export enum MangaChapterFileState {
+  /** One HEAD found no file. */
+  EMPTY = 'EMPTY',
+  /** HEADs on two or more polls found no file. */
+  MISSING = 'MISSING',
+  /** The answer carried no file size. */
+  NO_LENGTH = 'NO_LENGTH',
+}
+
+/** Manifests one progress poll looks at, least recently polled first. */
+export const MANGA_PROGRESS_MANIFESTS_PER_RUN = 200;
+/** Chapter files one progress poll checks on one instance. */
+export const MANGA_PROGRESS_HEADS_PER_INSTANCE = 50;
+/** How long a chapter may vanish from its source before it counts as missing. */
+export const MANGA_CHAPTER_MISSING_GRACE_MS = 24 * HOUR_MS;
+/**
+ * How long the poll waits before it checks a file again: a verified chapter
+ * Suwayomi stopped listing as downloaded, or one whose file was empty or came
+ * without a size.
+ */
+export const MANGA_PROGRESS_RECHECK_MS = HOUR_MS / 2;
+
 /** The Suwayomi category every requested manga joins. */
 export const MANGA_DISPATCH_CATEGORY = 'SeerrNG';

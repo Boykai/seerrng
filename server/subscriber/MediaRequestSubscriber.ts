@@ -667,10 +667,9 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         entity,
         event
       );
-    } else if (
-      entity.status === MediaRequestStatus.COMPLETED &&
-      (entity.type ?? entity.media.mediaType) !== MediaType.MANGA
-    ) {
+    } else if (entity.status === MediaRequestStatus.COMPLETED) {
+      // A manga request reaches COMPLETED only through
+      // `completeMangaRequest`, once every chapter it asked for is delivered.
       await this.enqueueRequestNotification(
         Notification.MEDIA_AVAILABLE,
         entity,

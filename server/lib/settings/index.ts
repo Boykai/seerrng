@@ -541,6 +541,7 @@ export type JobId =
   | 'manga-library-scan'
   | 'manga-source-resolve'
   | 'manga-dispatch-sweep'
+  | 'manga-progress'
   | 'download-sync'
   | 'software-request-reconciliation'
   | 'download-recovery'
@@ -892,6 +893,9 @@ class Settings {
         },
         'manga-dispatch-sweep': {
           schedule: '0 */5 * * * *',
+        },
+        'manga-progress': {
+          schedule: '0 */2 * * * *',
         },
         'availability-sync': {
           schedule: '0 0 5 * * *',
@@ -1786,6 +1790,9 @@ class Settings {
         },
         'manga-dispatch-sweep': {
           schedule: '0 */5 * * * *',
+        },
+        'manga-progress': {
+          schedule: '0 */2 * * * *',
         },
         'availability-sync': {
           schedule: '0 0 5 * * *',

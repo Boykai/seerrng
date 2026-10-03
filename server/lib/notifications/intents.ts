@@ -1,3 +1,4 @@
+import AnilistAPI from '@server/api/anilist';
 import ListenBrainzAPI from '@server/api/listenbrainz/index';
 import OpenLibraryAPI from '@server/api/openlibrary/index';
 import TheMovieDb from '@server/api/themoviedb/index';
@@ -22,8 +23,8 @@ import { Notification } from '.';
 import type { NotificationPayload } from './agents/agent';
 import type { NotificationOutboxIntent } from './outbox';
 
-// Manga details stay network-free until manga metadata exists: the AniList
-// identifier names the series.
+// Manga details stay network-free, except a delivered request's (below): the
+// AniList identifier names the series.
 const getMangaDetails = async (
   media: Media
 ): Promise<{ anilistId?: string; title: string }> => {
@@ -36,6 +37,29 @@ const getMangaDetails = async (
     ({ provider }) => provider === MediaIdentifierProvider.ANILIST
   )?.value;
   return { anilistId, title: anilistId ? `AniList ${anilistId}` : 'Manga' };
+};
+
+/**
+ * The AniList title and cover of a delivered manga, from the shared cached
+ * client. The payload is built when the outbox sends it, outside every lock
+ * and transaction. Any failure keeps the network-free subject.
+ */
+const getAnilistMangaCard = async (
+  anilistId: string | undefined
+): Promise<{ title: string; image?: string } | undefined> => {
+  if (!anilistId || !/^\d{1,9}$/.test(anilistId)) return undefined;
+  try {
+    const manga = await new AnilistAPI().getMangaDetails(Number(anilistId));
+    const title =
+      manga?.titles.english ?? manga?.titles.romaji ?? manga?.titles.native;
+    if (!manga || !title) return undefined;
+    return {
+      title: `${title}${manga.startYear ? ` (${manga.startYear})` : ''}`,
+      image: manga.coverImage,
+    };
+  } catch {
+    return undefined;
+  }
 };
 
 const getRequestMediaTypeLabel = (type: MediaType): string => {
@@ -334,6 +358,10 @@ export const buildMediaRequestNotificationPayload = async (
   }
   if (entity.type === MediaType.MANGA) {
     const { anilistId, title } = await getMangaDetails(media);
+    const card =
+      type === Notification.MEDIA_AVAILABLE
+        ? await getAnilistMangaCard(anilistId)
+        : undefined;
     return {
       ...base,
       mediaUrl:
@@ -342,8 +370,9 @@ export const buildMediaRequestNotificationPayload = async (
             ? `/manga/${encodeURIComponent(anilistId)}`
             : ''
         ) || undefined,
-      subject: title,
+      subject: card?.title ?? title,
       message: `${mediaType} request details are available in SeerrNG.`,
+      image: card?.image,
     };
   }
   throw new Error(`Unsupported media notification request ${entity.id}.`);
