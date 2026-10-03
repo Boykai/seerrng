@@ -32,6 +32,7 @@ import watchlistSync from '@server/lib/watchlistsync';
 import logger from '@server/logger';
 import { MediaRequestSubscriber } from '@server/subscriber/MediaRequestSubscriber';
 import schedule from 'node-schedule';
+import { AsyncResource } from 'node:async_hooks';
 import scheduledJobLeaseManager from './jobLease';
 
 export interface ScheduledJob {
@@ -49,6 +50,10 @@ export interface ScheduledJob {
 export const scheduledJobs: ScheduledJob[] = [];
 const activeJobRuns = new Set<Promise<void>>();
 const activeJobRunsByName = new Map<string, Promise<void>>();
+// Captured at module load, outside any request. A job started from a route
+// (Run Now) must not inherit the route's admission or credential context: that
+// context ends when the route returns, while the job keeps running.
+const jobScope = new AsyncResource('ScheduledJob');
 
 export const getScheduledJobLeaseName = (name: string): string =>
   `scheduled-job:${name}`;
@@ -75,48 +80,50 @@ export const runTrackedJob = (
     await task();
     taskCompleted = true;
   };
-  const run = Promise.resolve()
-    .then(async () => {
-      if (options.scope === 'instance') {
-        await executeTask();
-      } else {
-        const result = await scheduledJobLeaseManager.run(
-          getScheduledJobLeaseName(name),
-          executeTask
-        );
-        if (!result.acquired) {
-          logger.debug(
-            `Scheduled job is running on another instance: ${name}`,
-            {
-              label: 'Jobs',
-            }
+  const run = jobScope.runInAsyncScope(() =>
+    Promise.resolve()
+      .then(async () => {
+        if (options.scope === 'instance') {
+          await executeTask();
+        } else {
+          const result = await scheduledJobLeaseManager.run(
+            getScheduledJobLeaseName(name),
+            executeTask
           );
+          if (!result.acquired) {
+            logger.debug(
+              `Scheduled job is running on another instance: ${name}`,
+              {
+                label: 'Jobs',
+              }
+            );
+          }
         }
-      }
 
-      if (options.logCompletion && taskCompleted) {
-        logger.info(`Scheduled job completed: ${name}`, {
+        if (options.logCompletion && taskCompleted) {
+          logger.info(`Scheduled job completed: ${name}`, {
+            label: 'Jobs',
+            durationMs: Date.now() - startedAt,
+          });
+        }
+      })
+      .catch((error) => {
+        logger.error(`Scheduled job failed: ${name}`, {
           label: 'Jobs',
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : 'Unknown scheduled job error',
           durationMs: Date.now() - startedAt,
         });
-      }
-    })
-    .catch((error) => {
-      logger.error(`Scheduled job failed: ${name}`, {
-        label: 'Jobs',
-        errorMessage:
-          error instanceof Error
-            ? error.message
-            : 'Unknown scheduled job error',
-        durationMs: Date.now() - startedAt,
-      });
-    })
-    .finally(() => {
-      activeJobRuns.delete(run);
-      if (activeJobRunsByName.get(name) === run) {
-        activeJobRunsByName.delete(name);
-      }
-    });
+      })
+      .finally(() => {
+        activeJobRuns.delete(run);
+        if (activeJobRunsByName.get(name) === run) {
+          activeJobRunsByName.delete(name);
+        }
+      })
+  );
   activeJobRuns.add(run);
   activeJobRunsByName.set(name, run);
   return run;
@@ -558,7 +565,7 @@ export const startJobs = (): void => {
       logger.info('Starting scheduled job: Download Recovery', {
         label: 'Jobs',
       });
-      void downloadRecovery.run();
+      void jobScope.runInAsyncScope(() => downloadRecovery.run());
     }),
     running: () => downloadRecovery.status().running,
   });

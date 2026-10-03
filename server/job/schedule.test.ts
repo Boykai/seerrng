@@ -1,11 +1,17 @@
 import { MediaServerType } from '@server/constants/server';
+import downloadRecovery from '@server/lib/downloadRecovery';
 import episodeWatchAhead from '@server/lib/episodeWatchAhead';
+import requestAdmissionCoordinator, {
+  RequestAdmissionCoordinator,
+} from '@server/lib/requestAdmission';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
 import schedule from 'node-schedule';
 import assert from 'node:assert/strict';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { afterEach, describe, it, mock } from 'node:test';
+import type { DataSource, QueryRunner } from 'typeorm';
 import { runTrackedJob, scheduledJobs, startJobs, stopJobs } from './schedule';
 
 setupTestDb();
@@ -232,5 +238,80 @@ describe('scheduled job lifecycle', () => {
 
     release();
     await first;
+  });
+
+  it('runs a job in its own async context, so it takes its own admission', async (t) => {
+    const locks: string[] = [];
+    let connections = 0;
+    const source: Pick<DataSource, 'createQueryRunner'> = {
+      createQueryRunner: () => {
+        let connection = 0;
+        const runner = {
+          isTransactionActive: false,
+          connect: async () => {
+            connections += 1;
+            connection = connections;
+          },
+          startTransaction: async () => {
+            runner.isTransactionActive = true;
+          },
+          commitTransaction: async () => {
+            runner.isTransactionActive = false;
+          },
+          rollbackTransaction: async () => {
+            runner.isTransactionActive = false;
+          },
+          release: async () => undefined,
+          query: async (_sql: string, parameters?: unknown[]) => {
+            locks.push(`${connection}:${String(parameters?.[0])}`);
+            return [];
+          },
+        };
+        return runner as unknown as QueryRunner;
+      },
+    };
+    const coordinator = new RequestAdmissionCoordinator(source, true, 2);
+    const run: typeof requestAdmissionCoordinator.run = (keys, callback) =>
+      coordinator.run(keys, callback);
+    t.mock.method(requestAdmissionCoordinator, 'run', run);
+    const caller = new AsyncLocalStorage<string>();
+    let job: Promise<void> | undefined;
+    let seen: string | undefined = 'not run';
+
+    // Like the Run Now route: a handler inside an admission starts a job.
+    await caller.run('route', () =>
+      requestAdmissionCoordinator.run(['user-security:user:1'], async () => {
+        job = runTrackedJob(
+          'Detached Job',
+          () =>
+            requestAdmissionCoordinator.run(['job:detached'], async () => {
+              seen = caller.getStore();
+            }),
+          { scope: 'instance' }
+        );
+      })
+    );
+    await job;
+
+    assert.equal(seen, undefined);
+    assert.deepEqual(locks, ['1:user-security:user:1', '2:job:detached']);
+  });
+
+  it('runs download recovery outside the context of the caller that starts it', async (t) => {
+    const caller = new AsyncLocalStorage<string>();
+    let seen: string | undefined = 'not run';
+    t.mock.method(downloadRecovery, 'run', async () => {
+      seen = caller.getStore();
+    });
+    startJobs();
+    const recovery = scheduledJobs.find(
+      (job) => job.id === 'download-recovery'
+    );
+    assert.ok(recovery);
+
+    caller.run('route', () => recovery.job.invoke());
+    await waitFor(() => seen !== 'not run');
+
+    assert.equal(seen, undefined);
   });
 });
