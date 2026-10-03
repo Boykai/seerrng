@@ -40,6 +40,8 @@ const useComicRequestOverride = (request: MediaRequest): OverrideStatus => {
 };
 
 const useRequestOverride = (request: MediaRequest): OverrideStatus => {
+  // Manga requests name a Suwayomi instance, which has no Servarr listing.
+  const usesServarr = request.type !== 'comic' && request.type !== 'manga';
   const serviceType =
     request.type === 'movie'
       ? 'radarr'
@@ -49,11 +51,11 @@ const useRequestOverride = (request: MediaRequest): OverrideStatus => {
           ? 'readarr'
           : 'sonarr';
   const { data: allServers } = useSWR<ServiceCommonServer[]>(
-    request.type === 'comic' ? null : `/api/v1/service/${serviceType}`
+    usesServarr ? `/api/v1/service/${serviceType}` : null
   );
 
   const { data } = useSWR<ServiceCommonServerWithDetails>(
-    request.type !== 'comic' && request.serverId !== null
+    usesServarr && request.serverId !== null
       ? `/api/v1/service/${serviceType}/${request.serverId}`
       : null
   );
@@ -63,7 +65,7 @@ const useRequestOverride = (request: MediaRequest): OverrideStatus => {
     return comicOverride;
   }
 
-  if (!data || !allServers) {
+  if (!usesServarr || !data || !allServers) {
     return {};
   }
 

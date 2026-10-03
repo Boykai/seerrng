@@ -7,6 +7,10 @@ import BookFormatBadge, {
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import {
+  formatMangaScope,
+  mangaScopeMessages,
+} from '@app/components/Common/MangaRequestScope';
 import MediaTypeBadge, {
   type MediaTypeBadgeType,
 } from '@app/components/Common/MediaTypeBadge';
@@ -38,6 +42,12 @@ import {
 import { sortCrewPriority } from '@app/utils/creditHelpers';
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
+import { getMangaImageUrl } from '@app/utils/mangaImages';
+import {
+  getMangaAniListId,
+  isAwaitingMangaSource,
+  type MangaScopedRequest,
+} from '@app/utils/mangaRequestScope';
 import { hasLinkedWatchAheadAccount } from '@app/utils/watchAhead';
 import { Transition } from '@headlessui/react';
 import {
@@ -67,6 +77,7 @@ import type { RequestStatusSortField } from '@server/lib/requestStatusSort';
 import type { BookDetails } from '@server/models/Book';
 import type { ComicDetails } from '@server/models/Comic';
 import type { MagazineDetails } from '@server/models/Magazine';
+import type { MangaDetails } from '@server/models/Manga';
 import type { MovieDetails } from '@server/models/Movie';
 import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
@@ -131,6 +142,7 @@ const messages = defineMessages('components.Requests', {
   album: 'Album',
   comic: 'Comic',
   magazine: 'Magazine',
+  manga: 'Manga',
   bookAndAudiobook: 'Book + Audiobook',
   book: 'Book',
   fourK: '4K',
@@ -258,7 +270,8 @@ type MediaDetails =
   | MusicDetails
   | BookDetails
   | ComicDetails
-  | MagazineDetails;
+  | MagazineDetails
+  | MangaDetails;
 type StatusStage =
   | 'requested'
   | 'approved'
@@ -280,7 +293,8 @@ type MediaFilter =
   | 'book'
   | 'audiobook'
   | 'comic'
-  | 'magazine';
+  | 'magazine'
+  | 'manga';
 type UserSelection = Exclude<RequestStatusUserSelection, null>;
 type TimeFrame = '7d' | '14d' | '30d' | '6m' | 'all';
 type RemoveSelection = {
@@ -327,6 +341,7 @@ const mediaTypeValues: MediaFilter[] = [
   'audiobook',
   'comic',
   'magazine',
+  'manga',
 ];
 
 const sortDirectionValues = ['asc', 'desc'] as const;
@@ -499,6 +514,9 @@ const isComic = (details: MediaDetails): details is ComicDetails =>
 const isMagazine = (details: MediaDetails): details is MagazineDetails =>
   (details as MagazineDetails).mediaType === 'magazine';
 
+const isManga = (details: MediaDetails): details is MangaDetails =>
+  (details as MangaDetails).mediaType === 'manga';
+
 const getBookId = (item: RequestStatusItem): string | undefined =>
   item.request.media.identifiers?.find(
     (identifier) => identifier.provider === 'openlibrary'
@@ -533,6 +551,10 @@ const getDetailsUrl = (item: RequestStatusItem): string | null => {
       ? `/api/v1/magazine/${encodeApiPathSegment(magazineId)}`
       : null;
   }
+  if (request.type === 'manga') {
+    const mangaId = getMangaAniListId(request.media);
+    return mangaId ? `/api/v1/manga/${mangaId}` : null;
+  }
   const bookId = getBookId(item);
   return bookId
     ? `/api/v1/book/${encodeApiPathSegment(normalizeOpenLibraryWorkId(bookId))}`
@@ -554,6 +576,10 @@ const getDetailHref = (item: RequestStatusItem): string | null => {
   if (request.type === 'magazine') {
     const magazineId = getMagazineId(item);
     return magazineId ? `/magazine/${encodeApiPathSegment(magazineId)}` : null;
+  }
+  if (request.type === 'manga') {
+    const mangaId = getMangaAniListId(request.media);
+    return mangaId ? `/manga/${mangaId}` : null;
   }
   const bookId = getBookId(item);
   const bookFormat = getRequestedBookFormat(item.request.bookFormat);
@@ -589,6 +615,9 @@ const getTitle = (
   if (item.request.type === 'magazine') {
     return getMagazineId(item) ?? intl.formatMessage(messages.unknownTitle);
   }
+  if (item.request.type === 'manga') {
+    return intl.formatMessage(messages.unknownTitle);
+  }
   return `${item.request.type.toUpperCase()} #${item.request.media.tmdbId}`;
 };
 
@@ -603,6 +632,14 @@ const getPoster = (
   }
   if (isBook(details)) {
     return { src: details.posterPath, type: 'book' };
+  }
+  if (isManga(details)) {
+    return {
+      src:
+        getMangaImageUrl(details.posterPath) ??
+        '/images/seerr_poster_not_found.png',
+      type: 'tmdb',
+    };
   }
   return { src: getTmdbPosterImageUrl(details.posterPath), type: 'tmdb' };
 };
@@ -620,6 +657,12 @@ const getBackdrop = (
     return details.posterPath
       ? { src: details.posterPath, type: 'book' }
       : undefined;
+  }
+  if (isManga(details)) {
+    const src =
+      getMangaImageUrl(details.backdropPath) ??
+      getMangaImageUrl(details.posterPath);
+    return src ? { src, type: 'tmdb' } : undefined;
   }
   if (details.backdropPath) {
     return {
@@ -650,6 +693,7 @@ const getMediaBadge = (
   if (item.request.type === 'comic') return intl.formatMessage(messages.comic);
   if (item.request.type === 'magazine')
     return intl.formatMessage(messages.magazine);
+  if (item.request.type === 'manga') return intl.formatMessage(messages.manga);
   return intl.formatMessage(messages.book);
 };
 
@@ -661,6 +705,7 @@ const getMediaBadgeType = (
   if (item.request.type === 'music') return 'album';
   if (item.request.type === 'comic') return 'comic';
   if (item.request.type === 'magazine') return 'magazine';
+  if (item.request.type === 'manga') return 'manga';
   return undefined;
 };
 
@@ -679,6 +724,9 @@ const getMediaFormat = (
   }
   if (item.request.type === 'magazine') {
     return intl.formatMessage(messages.magazine);
+  }
+  if (item.request.type === 'manga') {
+    return intl.formatMessage(messages.manga);
   }
   return intl.formatMessage(
     getBookFormatMessage(getRequestedBookFormat(item.request.bookFormat))
@@ -704,6 +752,10 @@ const getReleaseDate = (
   }
   if (item.request.type === 'magazine') {
     return (details as MagazineDetails).latestIssue;
+  }
+  if (item.request.type === 'manga') {
+    const startYear = (details as MangaDetails).startYear;
+    return startYear ? String(startYear) : undefined;
   }
   const year = (details as BookDetails).firstPublishYear;
   return year ? String(year) : undefined;
@@ -778,7 +830,9 @@ const getRuntimeLabel = (
       ? messages.pages
       : item.request.type === 'magazine' || item.request.type === 'comic'
         ? messages.issues
-        : messages.runtime
+        : item.request.type === 'manga'
+          ? mangaScopeMessages.chapters
+          : messages.runtime
   );
 
 const getRuntimeOrPages = (
@@ -786,6 +840,12 @@ const getRuntimeOrPages = (
   details: MediaDetails | undefined,
   item: RequestStatusItem
 ): string => {
+  if (item.request.type === 'manga') {
+    return formatMangaScope(
+      intl,
+      (item.request as MangaScopedRequest).mangaScope
+    );
+  }
   if (item.request.type !== 'book') {
     return getRuntime(intl, details, item);
   }
@@ -821,7 +881,7 @@ const getFeaturedCredits = (
       ];
     }
 
-    if (item.request.type === 'comic') {
+    if (item.request.type === 'comic' || item.request.type === 'manga') {
       return [];
     }
 
@@ -877,6 +937,10 @@ const getFeaturedCredits = (
 
   if (item.request.type === 'comic') {
     // ComicVine's basic volume data has no creator/writer/artist credit.
+    return [];
+  }
+
+  if (item.request.type === 'manga') {
     return [];
   }
 
@@ -951,6 +1015,10 @@ const getSecondaryDetails = (
         href: network?.id ? `/discover/tv/network/${network.id}` : undefined,
       },
     ];
+  }
+
+  if (item.request.type === 'manga') {
+    return [];
   }
 
   const studio = (details as MovieDetails | undefined)
@@ -1151,7 +1219,7 @@ interface RequestStatusCardProps {
   onToggleHistory: (requestId: number) => void;
 }
 
-const RequestStatusCard = ({
+export const RequestStatusCard = ({
   item,
   isAdminView,
   onRetry,
@@ -1266,6 +1334,18 @@ const RequestStatusCard = ({
   );
   const mediaBadgeType = getMediaBadgeType(item) ?? 'movie';
   const StageIcon = stageIcon[currentStage] ?? InformationCircleIcon;
+  // A parked manga request stays APPROVED but reads as waiting for a source.
+  const awaitingSource =
+    currentStage === 'approved' &&
+    isAwaitingMangaSource(item.request as MangaScopedRequest);
+  const StatusIcon = awaitingSource ? ClockIcon : StageIcon;
+  const statusLabel = awaitingSource
+    ? intl.formatMessage(mangaScopeMessages.waitingForSource)
+    : getStageLabel(intl, currentStage);
+  const statusMessage =
+    awaitingSource && hasPermission(Permission.MANAGE_REQUESTS)
+      ? intl.formatMessage(mangaScopeMessages.waitingForSourceHint)
+      : current.message;
   const releaseDate = getReleaseDate(details, item);
   const releaseYear = releaseDate?.match(/\d{4}/)?.[0];
   const displayTitle = releaseYear ? `${title} (${releaseYear})` : title;
@@ -1535,14 +1615,15 @@ const RequestStatusCard = ({
 
   return (
     <>
-      {showEditModal && item.request.type !== 'manga' && (
+      {showEditModal && (
         <RequestModal
           show
           tmdbId={
             item.request.type === 'music' ||
             item.request.type === 'book' ||
             item.request.type === 'comic' ||
-            item.request.type === 'magazine'
+            item.request.type === 'magazine' ||
+            item.request.type === 'manga'
               ? undefined
               : item.request.media.tmdbId
           }
@@ -1555,6 +1636,11 @@ const RequestStatusCard = ({
           comicId={item.request.type === 'comic' ? getComicId(item) : undefined}
           magazineTitle={
             item.request.type === 'magazine' ? getMagazineId(item) : undefined
+          }
+          mangaId={
+            item.request.type === 'manga'
+              ? getMangaAniListId(item.request.media)
+              : undefined
           }
           type={item.request.type}
           is4k={item.request.is4k}
@@ -1894,14 +1980,14 @@ const RequestStatusCard = ({
         )}
 
         <div className="request-status-action-row">
-          <Tooltip content={current.message}>
+          <Tooltip content={statusMessage}>
             <span
-              className={`app-button app-control-standard-radius button-sm inline-flex flex-shrink-0 items-center justify-center gap-1.5 text-xs font-semibold whitespace-nowrap ${stageTone[currentStage] ?? stageTone.cancelled}`}
-              aria-label={`${getStageLabel(intl, currentStage)}: ${current.message}`}
+              className={`app-button app-control-standard-radius button-sm inline-flex flex-shrink-0 items-center justify-center gap-1.5 text-xs font-semibold whitespace-nowrap ${awaitingSource ? stageTone.requested : (stageTone[currentStage] ?? stageTone.cancelled)}`}
+              aria-label={`${statusLabel}: ${statusMessage}`}
               tabIndex={0}
             >
-              <StageIcon className="h-3 w-3" aria-hidden="true" />
-              {getStageLabel(intl, currentStage)}
+              <StatusIcon className="h-3 w-3" aria-hidden="true" />
+              {statusLabel}
             </span>
           </Tooltip>
           {actionControls}
@@ -2526,6 +2612,7 @@ const Requests = () => {
     { value: 'audiobook', label: 'audiobooks' },
     { value: 'comic', label: 'comics' },
     { value: 'magazine', label: 'magazines' },
+    { value: 'manga', label: 'manga' },
   ];
   const changePage = (nextPage: number) => {
     pushRouteQuery(routeQuery({ nextPage }));

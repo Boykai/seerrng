@@ -6,6 +6,11 @@ import BookFormatBadge, {
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
+import {
+  formatMangaScope,
+  mangaScopeMessages,
+  MangaWaitingStatus,
+} from '@app/components/Common/MangaRequestScope';
 import MediaTypeBadge, {
   getMediaTypeBadgeType,
 } from '@app/components/Common/MediaTypeBadge';
@@ -24,6 +29,12 @@ import {
 } from '@app/utils/apiPath';
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
+import { getMangaImageUrl } from '@app/utils/mangaImages';
+import {
+  getMangaAniListId,
+  isAwaitingMangaSource,
+  type MangaScopedRequest,
+} from '@app/utils/mangaRequestScope';
 import { refreshIntervalHelper } from '@app/utils/refreshIntervalHelper';
 import { hasLinkedWatchAheadAccount } from '@app/utils/watchAhead';
 import {
@@ -41,6 +52,7 @@ import type { ServiceCommonServer } from '@server/interfaces/api/serviceInterfac
 import type { BookDetails } from '@server/models/Book';
 import type { ComicDetails } from '@server/models/Comic';
 import type { MagazineDetails } from '@server/models/Magazine';
+import type { MangaDetails } from '@server/models/Manga';
 import type { MovieDetails } from '@server/models/Movie';
 import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
@@ -102,7 +114,8 @@ type RequestItemTitle =
   | MusicDetails
   | BookDetails
   | ComicDetails
-  | MagazineDetails;
+  | MagazineDetails
+  | MangaDetails;
 
 const isMovie = (media: RequestItemTitle): media is MovieDetails => {
   return (
@@ -125,6 +138,9 @@ const isComic = (media: RequestItemTitle): media is ComicDetails => {
 
 const isMagazine = (media: RequestItemTitle): media is MagazineDetails =>
   (media as MagazineDetails).mediaType === 'magazine';
+
+const isManga = (media: RequestItemTitle): media is MangaDetails =>
+  (media as MangaDetails).mediaType === 'manga';
 
 const getBookId = (request: NonFunctionProperties<MediaRequest>) =>
   request.media.identifiers?.find(
@@ -167,6 +183,8 @@ const getRequestDetailHref = (
   const musicId = getNormalizedMusicId(request);
   const comicId = getComicId(request);
   const magazineId = getMagazineId(request);
+  const mangaId =
+    request.type === 'manga' ? getMangaAniListId(request.media) : undefined;
 
   if (request.type === 'music' && musicId) {
     return `/music/${encodeApiPathSegment(musicId)}${suffix}`;
@@ -181,6 +199,9 @@ const getRequestDetailHref = (
   }
   if (request.type === 'magazine' && magazineId) {
     return `/magazine/${encodeApiPathSegment(magazineId)}${suffix}`;
+  }
+  if (mangaId) {
+    return `/manga/${mangaId}`;
   }
 
   return `/${request.type}/${request.media.tmdbId}${suffix}`;
@@ -312,7 +333,9 @@ const RequestItemError = ({
                           ? globalMessages.comic
                           : requestData?.type === 'magazine'
                             ? globalMessages.magazine
-                            : globalMessages.book
+                            : requestData?.type === 'manga'
+                              ? globalMessages.manga
+                              : globalMessages.book
                   : globalMessages.request
               ),
             })}
@@ -322,7 +345,8 @@ const RequestItemError = ({
               {requestData.type !== 'music' &&
                 requestData.type !== 'book' &&
                 requestData.type !== 'comic' &&
-                requestData.type !== 'magazine' && (
+                requestData.type !== 'magazine' &&
+                requestData.type !== 'manga' && (
                   <div className="card-field">
                     <span className="card-field-name">
                       {intl.formatMessage(messages.tmdbid)}
@@ -379,6 +403,8 @@ const RequestItemError = ({
                       ? intl.formatMessage(globalMessages.declined)
                       : intl.formatMessage(globalMessages.failed)}
                   </Badge>
+                ) : isAwaitingMangaSource(requestData) ? (
+                  <MangaWaitingStatus />
                 ) : (
                   <StatusBadge
                     status={getRequestMediaStatus(requestData)}
@@ -395,7 +421,9 @@ const RequestItemError = ({
                           ? getComicId(requestData)
                           : requestData.type === 'magazine'
                             ? getMagazineId(requestData)
-                            : undefined
+                            : requestData.type === 'manga'
+                              ? getMangaAniListId(requestData.media)?.toString()
+                              : undefined
                     }
                     mediaType={
                       requestData.type === 'music'
@@ -406,9 +434,11 @@ const RequestItemError = ({
                             ? 'comic'
                             : requestData.type === 'magazine'
                               ? 'magazine'
-                              : requestData.type === 'tv'
-                                ? 'tv'
-                                : 'movie'
+                              : requestData.type === 'manga'
+                                ? 'manga'
+                                : requestData.type === 'tv'
+                                  ? 'tv'
+                                  : 'movie'
                     }
                     bookFormat={
                       requestData.type === 'book'
@@ -576,6 +606,10 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
   const comicId = request.type === 'comic' ? getComicId(request) : undefined;
   const magazineId =
     request.type === 'magazine' ? getMagazineId(request) : undefined;
+  const mangaId =
+    request.type === 'manga' ? getMangaAniListId(request.media) : undefined;
+  // Without an AniList ID the title can't load; show the error item.
+  const missingMangaId = request.type === 'manga' && mangaId === undefined;
   const url =
     request.type === 'movie'
       ? `/api/v1/movie/${request.media.tmdbId}`
@@ -589,24 +623,27 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               ? `/api/v1/comic/${encodeApiPathSegment(comicId)}`
               : request.type === 'magazine' && magazineId
                 ? `/api/v1/magazine/${encodeApiPathSegment(magazineId)}`
-                : null;
+                : mangaId
+                  ? `/api/v1/manga/${mangaId}`
+                  : null;
   const { data: title, error } = useSWR<RequestItemTitle>(inView ? url : null);
   const { data: sonarrServers } = useSWR<ServiceCommonServer[]>(
     '/api/v1/service/sonarr'
   );
-  const { data: requestData, mutate: revalidate } = useSWR<
-    NonFunctionProperties<MediaRequest>
-  >(`/api/v1/request/${request.id}`, {
-    fallbackData: request,
-    refreshInterval: refreshIntervalHelper(
-      {
-        downloadStatus: request.media.downloadStatus,
-        downloadStatus4k: request.media.downloadStatus4k,
-        audiobookDownloadStatus: request.media.audiobookDownloadStatus,
-      },
-      15000
-    ),
-  });
+  const { data: requestData, mutate: revalidate } = useSWR<MangaScopedRequest>(
+    `/api/v1/request/${request.id}`,
+    {
+      fallbackData: request,
+      refreshInterval: refreshIntervalHelper(
+        {
+          downloadStatus: request.media.downloadStatus,
+          downloadStatus4k: request.media.downloadStatus4k,
+          audiobookDownloadStatus: request.media.audiobookDownloadStatus,
+        },
+        15000
+      ),
+    }
+  );
   const canFailDownload = Boolean(
     requestData &&
     requestData.status === MediaRequestStatus.APPROVED &&
@@ -765,7 +802,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
     iOSPlexUrl4k: requestData?.media?.iOSPlexUrl4k,
   });
 
-  if (!title && !error) {
+  if (!title && !error && !missingMangaId) {
     return (
       <div
         className="h-64 w-full animate-pulse rounded-xl bg-gray-800 xl:h-28"
@@ -791,7 +828,8 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
           request.type === 'music' ||
           request.type === 'book' ||
           request.type === 'comic' ||
-          request.type === 'magazine'
+          request.type === 'magazine' ||
+          request.type === 'manga'
             ? undefined
             : request.media.tmdbId
         }
@@ -799,6 +837,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
         bookId={request.type === 'book' ? bookId : undefined}
         comicId={request.type === 'comic' ? comicId : undefined}
         magazineTitle={magazineId}
+        mangaId={mangaId}
         type={
           request.type === 'music'
             ? 'music'
@@ -808,9 +847,11 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                 ? 'comic'
                 : request.type === 'magazine'
                   ? 'magazine'
-                  : request.type === 'tv'
-                    ? 'tv'
-                    : 'movie'
+                  : request.type === 'manga'
+                    ? 'manga'
+                    : request.type === 'tv'
+                      ? 'tv'
+                      : 'movie'
         }
         is4k={request.is4k}
         editRequest={request}
@@ -825,6 +866,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
           !isBook(title) &&
           !isComic(title) &&
           !isMagazine(title) &&
+          !isManga(title) &&
           title.backdropPath && (
             <div className="absolute inset-0 z-0 w-full bg-cover bg-center xl:w-2/3">
               <CachedImage
@@ -854,19 +896,22 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                         : 'tmdb'
                 }
                 src={
-                  (isMusic(title) ||
-                    isBook(title) ||
-                    isComic(title) ||
-                    isMagazine(title)) &&
-                  title.posterPath
-                    ? title.posterPath
-                    : !isMusic(title) &&
-                        !isBook(title) &&
-                        !isComic(title) &&
-                        !isMagazine(title) &&
+                  isManga(title)
+                    ? (getMangaImageUrl(title.posterPath) ??
+                      '/images/seerr_poster_not_found.png')
+                    : (isMusic(title) ||
+                          isBook(title) ||
+                          isComic(title) ||
+                          isMagazine(title)) &&
                         title.posterPath
-                      ? getTmdbPosterImageUrl(title.posterPath)
-                      : '/images/seerr_poster_not_found.png'
+                      ? title.posterPath
+                      : !isMusic(title) &&
+                          !isBook(title) &&
+                          !isComic(title) &&
+                          !isMagazine(title) &&
+                          title.posterPath
+                        ? getTmdbPosterImageUrl(title.posterPath)
+                        : '/images/seerr_poster_not_found.png'
                 }
                 alt=""
                 sizes="100vw"
@@ -899,7 +944,9 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                           ? title.startYear
                           : isMagazine(title)
                             ? title.latestIssue
-                            : title.firstAirDate
+                            : isManga(title)
+                              ? title.startYear?.toString()
+                              : title.firstAirDate
                   )?.slice(0, 4)}
                 </span>
               </div>
@@ -913,7 +960,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                     ? title.title
                     : isBook(title)
                       ? title.title
-                      : isComic(title) || isMagazine(title)
+                      : isComic(title) || isMagazine(title) || isManga(title)
                         ? title.title
                         : title.name}
               </Link>
@@ -961,6 +1008,10 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                 <Badge badgeType="danger">
                   {intl.formatMessage(globalMessages.declined)}
                 </Badge>
+              ) : isAwaitingMangaSource(requestData) ? (
+                <MangaWaitingStatus
+                  showHint={hasPermission(Permission.MANAGE_REQUESTS)}
+                />
               ) : requestData.status === MediaRequestStatus.FAILED ? (
                 <Badge
                   badgeType="danger"
@@ -987,7 +1038,9 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                         ? title.title
                         : isBook(title)
                           ? title.title
-                          : isComic(title) || isMagazine(title)
+                          : isComic(title) ||
+                              isMagazine(title) ||
+                              isManga(title)
                             ? title.title
                             : title.name
                   }
@@ -1001,7 +1054,8 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                       : requestData.type === 'book'
                         ? undefined
                         : requestData.type === 'comic' ||
-                            requestData.type === 'magazine'
+                            requestData.type === 'magazine' ||
+                            requestData.type === 'manga'
                           ? undefined
                           : requestData.media.tmdbId
                   }
@@ -1017,7 +1071,9 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                         ? getComicId(requestData)
                         : requestData.type === 'magazine'
                           ? getMagazineId(requestData)
-                          : undefined
+                          : requestData.type === 'manga'
+                            ? mangaId?.toString()
+                            : undefined
                   }
                   mediaType={
                     requestData.type === 'music'
@@ -1028,9 +1084,11 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                           ? 'comic'
                           : requestData.type === 'magazine'
                             ? 'magazine'
-                            : requestData.type === 'tv'
-                              ? 'tv'
-                              : 'movie'
+                            : requestData.type === 'manga'
+                              ? 'manga'
+                              : requestData.type === 'tv'
+                                ? 'tv'
+                                : 'movie'
                   }
                   bookFormat={
                     requestData.type === 'book'
@@ -1174,6 +1232,16 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                   format={getRequestedBookFormat(requestData.bookFormat)}
                   variant="compact"
                 />
+              </div>
+            )}
+            {requestData.type === 'manga' && (
+              <div className="card-field">
+                <span className="card-field-name">
+                  {intl.formatMessage(mangaScopeMessages.chapters)}
+                </span>
+                <span className="flex truncate text-sm text-gray-300">
+                  {formatMangaScope(intl, requestData.mangaScope)}
+                </span>
               </div>
             )}
             {hasPartialBookService && (

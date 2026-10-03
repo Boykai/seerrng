@@ -125,7 +125,8 @@ to request:
   decimals, such as 10.5.
 
 SeerrNG chooses the chapters when it sends the request to Suwayomi, not when
-the request is made.
+the request is made. Request cards, request lists, and the **Requests** page
+show the choice, for example "Latest 25 chapters" or "Chapters 10 onward".
 
 ### Permissions and quotas
 
@@ -141,10 +142,10 @@ form and on their profile.
 ### Change a pending request
 
 While a manga request is pending, select **View Request** on the title's
-details page to change the chapter choice. Requesters with the
-**Advanced Requests** permission can change their own requests, and users with
-**Manage Requests** can change any request. Requesters can also cancel their
-own pending requests there.
+details page, or edit the request from its request card, to change the chapter
+choice. Requesters with the **Advanced Requests** permission can change their
+own requests, and users with **Manage Requests** can change any request.
+Requesters can also cancel their own pending requests there.
 
 ### Waiting for a source
 
