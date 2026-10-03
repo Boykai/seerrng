@@ -11,6 +11,7 @@ import OverrideRuleTiles from '@app/components/Settings/OverrideRule/OverrideRul
 import { useSettingsPageAction } from '@app/components/Settings/SettingsLayout';
 import SettingsProwlarr from '@app/components/Settings/SettingsProwlarr';
 import SettingsSoftwareAcquisition from '@app/components/Settings/SettingsSoftwareAcquisition';
+import SettingsSuwayomi from '@app/components/Settings/Suwayomi/SettingsSuwayomi';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { getSafeHref } from '@app/utils/safeUrl';
@@ -1283,6 +1284,7 @@ const SettingsServices = () => {
           </>
         )}
       </div>
+      <SettingsSuwayomi />
       <div className="mt-10 mb-6">
         <h3 className="heading">
           {intl.formatMessage(messages.overrideRules)}
