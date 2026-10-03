@@ -15,7 +15,8 @@ export const mangaScopeMessages = defineMessages(
     chapterRange: '{start}–{end}',
     chaptersFrom: '{start} onward',
     waitingForSource: 'Waiting for a source',
-    waitingForSourceHint: 'An administrator must link a source first.',
+    waitingForSourceHint:
+      'SeerrNG is looking for a source; an administrator may need to choose one.',
   }
 );
 

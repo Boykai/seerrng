@@ -156,9 +156,12 @@ An approved request shows **Waiting for a source** instead of **Approved**
 while its title has no current match on the Suwayomi server, so SeerrNG does
 not know yet which manga in Suwayomi it belongs to; see [Matching](#matching).
 The request stays approved, and the requester does not need to do anything. It
-shows **Approved** again once the title is matched, for example by a library
-scan or on the [Manga Library page](#manga-library-page). Request managers also
-see that an administrator must link a source first.
+shows **Approved** again once the title is matched: by a library scan, on the
+[Manga Library page](#manga-library-page), or by the **Manga Source Resolve**
+job; see [Source resolution](#source-resolution). The job matches a title by
+itself only when it finds an exact link; otherwise an administrator chooses a
+source, as in [Resolve sources by hand](#resolve-sources-by-hand). Request
+managers also see that an administrator may need to choose a source.
 
 ## Library scan
 

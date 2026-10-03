@@ -141,7 +141,7 @@ export const draftFromMangaScope = (
   rangeEnd: draftNumber(scope?.rangeEnd),
 });
 
-/** An approved manga request parked until an administrator links a source. */
+/** An approved manga request parked until its title is matched to a source. */
 export const isAwaitingMangaSource = (
   request?: Pick<MangaScopedRequest, 'type' | 'status' | 'mangaScope'> | null
 ): boolean =>

@@ -642,9 +642,9 @@ it.each([
     expect(state.keys).toContain('/api/v1/request/41');
     expect(requestRow()).toContain('Waiting for a source');
     expect(requestRow()).not.toContain('Approved');
-    expect(requestRow()?.includes('An administrator must link a source')).toBe(
-      hint
-    );
+    expect(
+      requestRow()?.includes('an administrator may need to choose one')
+    ).toBe(hint);
   }
 );
 

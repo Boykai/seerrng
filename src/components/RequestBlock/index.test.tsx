@@ -192,14 +192,14 @@ it('takes the status from the block, not the fetched copy', async () => {
   expect(host.textContent).not.toContain('Waiting for a source');
 });
 
-it('tells request managers who links a source', async () => {
+it('shows request managers the waiting-for-a-source hint', async () => {
   state.granted = [Permission.MANAGE_REQUESTS];
   withScope(scope({ awaitingBinding: true }));
 
   await render(blockRequest());
 
   expect(host.textContent).toContain(
-    'Waiting for a sourceAn administrator must link a source first.'
+    'Waiting for a sourceSeerrNG is looking for a source; an administrator may need to choose one.'
   );
 });
 

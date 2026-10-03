@@ -371,7 +371,7 @@
   "components.Common.MangaRequestScope.chaptersFrom": "{start} onward",
   "components.Common.MangaRequestScope.latestChapters": "Latest {count, number}",
   "components.Common.MangaRequestScope.waitingForSource": "Waiting for a source",
-  "components.Common.MangaRequestScope.waitingForSourceHint": "An administrator must link a source first.",
+  "components.Common.MangaRequestScope.waitingForSourceHint": "SeerrNG is looking for a source; an administrator may need to choose one.",
   "components.Common.MediaServerPlayButton.failed": "The selected items could not be opened on {mediaServerName}.",
   "components.Common.MediaServerPlayButton.movieHelp": "Open this movie in your media server to play it.",
   "components.Common.MediaServerPlayButton.playHelp": "Open this media in your media server to play it.",

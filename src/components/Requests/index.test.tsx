@@ -272,13 +272,13 @@ it('shows the waiting status in place of Approved while a source is missing', as
   expect(chip()?.textContent).toBe('Requested');
 });
 
-it('tells request managers who links a source', async () => {
+it('shows request managers the waiting-for-a-source hint', async () => {
   state.granted = [Permission.MANAGE_REQUESTS];
 
   await render(mangaItem({ mangaScope: scope({ awaitingBinding: true }) }));
 
   expect(chip()?.getAttribute('aria-label')).toBe(
-    'Waiting for a source: An administrator must link a source first.'
+    'Waiting for a source: SeerrNG is looking for a source; an administrator may need to choose one.'
   );
 });
 

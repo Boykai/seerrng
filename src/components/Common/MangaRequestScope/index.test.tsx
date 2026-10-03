@@ -69,5 +69,7 @@ it('shows the hint for the waiting status only when asked', () => {
 
   expect(render()).toContain('Waiting for a source');
   expect(render()).not.toContain('administrator');
-  expect(render(true)).toContain('An administrator must link a source first.');
+  expect(render(true)).toContain(
+    'SeerrNG is looking for a source; an administrator may need to choose one.'
+  );
 });

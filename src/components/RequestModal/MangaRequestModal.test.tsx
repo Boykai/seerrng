@@ -631,7 +631,9 @@ it('shows the waiting status only for an approved request awaiting a source', as
     })
   );
   expect(text()).toContain('Waiting for a source');
-  expect(text()).toContain('An administrator must link a source first.');
+  expect(text()).toContain(
+    'SeerrNG is looking for a source; an administrator may need to choose one.'
+  );
   expect(text()).not.toContain('Approved');
   expect(button('modal-ok-button')).toBeNull();
 

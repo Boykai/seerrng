@@ -251,7 +251,7 @@ it('shows the waiting status only for approved requests awaiting a source', asyn
   expect(host.textContent).not.toContain('Waiting for a source');
 });
 
-it('tells request managers who links a source', async () => {
+it('shows request managers the waiting-for-a-source hint', async () => {
   state.granted = [Permission.MANAGE_REQUESTS];
 
   await render(
@@ -262,7 +262,7 @@ it('tells request managers who links a source', async () => {
   );
 
   expect(host.textContent).toContain(
-    'Waiting for a sourceAn administrator must link a source first.'
+    'Waiting for a sourceSeerrNG is looking for a source; an administrator may need to choose one.'
   );
 });
 
