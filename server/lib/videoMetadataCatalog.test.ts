@@ -153,6 +153,7 @@ describe('video metadata catalog', () => {
       mediaId: media.id,
       title: 'Cached title',
       overview: 'Cached overview',
+      posterPath: '/cached-poster.jpg',
       searchText: 'cached title cached overview',
       videoMetadataExpiresAt: records[0].expiresAt,
     });
@@ -167,6 +168,7 @@ describe('video metadata catalog', () => {
     ).findOneByOrFail({ mediaId: media.id });
     assert.equal(clearedSearchMetadata.title, null);
     assert.equal(clearedSearchMetadata.overview, null);
+    assert.equal(clearedSearchMetadata.posterPath, '/cached-poster.jpg');
     assert.equal(clearedSearchMetadata.searchText, '');
     assert.equal(clearedSearchMetadata.videoMetadataExpiresAt, null);
   });

@@ -1345,7 +1345,9 @@ export const pruneExpiredVideoMetadata = async (
     .set({
       title: null,
       overview: null,
-      posterPath: null,
+      // Keep the last known poster URL after the metadata snapshot expires.
+      // The image proxy can continue serving its disk-cached copy while the
+      // metadata providers are unavailable; clearing this path would orphan it.
       alternateTitle: null,
       releaseDate: null,
       genres: null,

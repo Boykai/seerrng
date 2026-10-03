@@ -53,6 +53,13 @@ import {
 } from '@server/lib/comicCatalogIndex';
 import { findComicMediaByComicVineIds } from '@server/lib/comicMediaMatcher';
 import {
+  getCachedDiscoverMovieFeed,
+  getDiscoverMovieFeedCacheKey,
+  getMovieFeedShelf,
+  saveDiscoverMovieFeed,
+  type DiscoverMovieFeedPage,
+} from '@server/lib/discoverMovieFeedCache';
+import {
   normalizeMusicBrainzId,
   normalizeOpenLibraryWorkId,
 } from '@server/lib/externalIds';
@@ -1053,6 +1060,7 @@ const MovieApiQuerySchema = QueryFilterOptions.omit({
 }).extend({
   sortBy: z.enum(MovieSortOptionsIterable).optional().catch(undefined),
 });
+
 const TvApiQuerySchema = QueryFilterOptions.omit({
   certificationMode: true,
 }).extend({
@@ -1614,83 +1622,194 @@ discoverRoutes.get('/movies', async (req, res, next) => {
         })
       );
     }
-    const matchingKeywordIdsPromise = query.search
-      ? findMatchingVideoKeywordIds(tmdb, query.search)
-      : Promise.resolve(undefined);
-    const data = query.search
-      ? await tmdb.searchMovies({
-          query: query.search,
-          page,
-          language: req.locale ?? query.language,
-        })
-      : await tmdb.getDiscoverMovies({
+    const feedShelf = getMovieFeedShelf(query);
+    const settings = getSettings();
+    const userRegion = req.user?.settings?.streamingRegion;
+    const userOriginalLanguage = req.user?.settings?.originalLanguage;
+    const feedCacheKey =
+      feedShelf && page <= 5
+        ? getDiscoverMovieFeedCacheKey({
+            shelf: feedShelf,
+            page,
+            language: req.locale ?? query.language ?? '',
+            region:
+              userRegion === 'all'
+                ? ''
+                : userRegion || settings.main.discoverRegion,
+            originalLanguage:
+              query.language === 'all'
+                ? ''
+                : query.language ||
+                  (userOriginalLanguage === 'all'
+                    ? ''
+                    : userOriginalLanguage || settings.main.originalLanguage),
+            includeAdult: settings.main.includeAdult === true,
+          })
+        : undefined;
+    const savedFeed = feedCacheKey
+      ? await getCachedDiscoverMovieFeed(feedCacheKey)
+      : undefined;
+
+    let rankedResults: TmdbMovieResult[];
+    let totalPages: number;
+    let totalResults: number;
+    let responsePage: number;
+    let keywordData: TmdbKeyword[] = [];
+    let stale = false;
+
+    if (feedCacheKey) {
+      let feed: DiscoverMovieFeedPage | undefined;
+      try {
+        const data = await tmdb.getDiscoverMovies({
           page,
           sortBy: query.sortBy,
           language: req.locale ?? query.language,
           originalLanguage: query.language,
-          genre: query.genre,
-          studio: query.studio,
-          country: query.country,
-          primaryReleaseDateLte: query.primaryReleaseDateLte
-            ? new Date(query.primaryReleaseDateLte).toISOString().split('T')[0]
-            : undefined,
           primaryReleaseDateGte: query.primaryReleaseDateGte
             ? new Date(query.primaryReleaseDateGte).toISOString().split('T')[0]
             : undefined,
-          keywords,
-          excludeKeywords,
-          withRuntimeGte: query.withRuntimeGte,
-          withRuntimeLte: query.withRuntimeLte,
-          voteAverageGte: query.voteAverageGte,
-          voteAverageLte: query.voteAverageLte,
-          voteCountGte: query.voteCountGte,
-          voteCountLte: query.voteCountLte,
-          watchProviders: query.watchProviders,
-          watchRegion: query.watchRegion,
-          certification: query.certification,
-          certificationGte: query.certificationGte,
-          certificationLte: query.certificationLte,
-          certificationCountry: query.certificationCountry,
         });
-    const matchingKeywordIds = await matchingKeywordIdsPromise;
-    const taggedData = matchingKeywordIds
-      ? await tmdb.getDiscoverMovies({
-          page,
-          language: req.locale ?? query.language,
-          keywords: matchingKeywordIds,
-        })
-      : undefined;
-    const taggedIds = new Set(taggedData?.results.map((result) => result.id));
-    const combinedResults = [...data.results, ...(taggedData?.results ?? [])];
-    data.results = await filterVideoSearchResults(
-      tmdb,
-      'movie',
-      combinedResults.filter(
-        (result, index) =>
-          combinedResults.findIndex(
-            (candidate) => candidate.id === result.id
-          ) === index
-      ),
-      query,
-      req.locale
-    );
-    const providerResults =
-      query.search || query.sortBy
-        ? data.results
-        : shuffleRankedWindow(
-            rankTmdbMovieResults(data.results, parsedShuffleSeed.value),
-            parsedShuffleSeed.value
-          );
-    const rankedResults = query.search
-      ? providerResults.filter(
-          (result) =>
-            taggedIds.has(result.id) ||
-            matchesAllSearchTerms(
-              [result.title, result.original_title],
-              query.search ?? ''
+        const filteredResults = await filterVideoSearchResults(
+          tmdb,
+          'movie',
+          data.results,
+          query,
+          req.locale
+        );
+        feed = {
+          page: data.page,
+          totalPages: data.total_pages,
+          totalResults: data.total_results,
+          results: filteredResults,
+        };
+        if (feed.results.length > 0) {
+          await saveDiscoverMovieFeed(feedCacheKey, feed);
+        }
+      } catch (error) {
+        if (!savedFeed) throw error;
+        feed = savedFeed.page;
+        stale = true;
+        logger.debug('TMDB movie discovery is unavailable; using saved feed', {
+          label: 'Discover Cache',
+          shelf: feedShelf,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      const results =
+        stale && feedShelf === 'upcoming'
+          ? feed.results.filter(
+              (result) =>
+                result.release_date &&
+                result.release_date >= query.primaryReleaseDateGte!
             )
-        )
-      : providerResults;
+          : feed.results;
+      rankedResults = shuffleRankedWindow(
+        rankTmdbMovieResults(results, parsedShuffleSeed.value),
+        parsedShuffleSeed.value
+      );
+      responsePage = feed.page;
+      totalPages = feed.totalPages;
+      totalResults =
+        stale && feedShelf === 'upcoming' ? results.length : feed.totalResults;
+    } else {
+      const matchingKeywordIdsPromise = query.search
+        ? findMatchingVideoKeywordIds(tmdb, query.search)
+        : Promise.resolve(undefined);
+      const data = query.search
+        ? await tmdb.searchMovies({
+            query: query.search,
+            page,
+            language: req.locale ?? query.language,
+          })
+        : await tmdb.getDiscoverMovies({
+            page,
+            sortBy: query.sortBy,
+            language: req.locale ?? query.language,
+            originalLanguage: query.language,
+            genre: query.genre,
+            studio: query.studio,
+            country: query.country,
+            primaryReleaseDateLte: query.primaryReleaseDateLte
+              ? new Date(query.primaryReleaseDateLte)
+                  .toISOString()
+                  .split('T')[0]
+              : undefined,
+            primaryReleaseDateGte: query.primaryReleaseDateGte
+              ? new Date(query.primaryReleaseDateGte)
+                  .toISOString()
+                  .split('T')[0]
+              : undefined,
+            keywords,
+            excludeKeywords,
+            withRuntimeGte: query.withRuntimeGte,
+            withRuntimeLte: query.withRuntimeLte,
+            voteAverageGte: query.voteAverageGte,
+            voteAverageLte: query.voteAverageLte,
+            voteCountGte: query.voteCountGte,
+            voteCountLte: query.voteCountLte,
+            watchProviders: query.watchProviders,
+            watchRegion: query.watchRegion,
+            certification: query.certification,
+            certificationGte: query.certificationGte,
+            certificationLte: query.certificationLte,
+            certificationCountry: query.certificationCountry,
+          });
+      const matchingKeywordIds = await matchingKeywordIdsPromise;
+      const taggedData = matchingKeywordIds
+        ? await tmdb.getDiscoverMovies({
+            page,
+            language: req.locale ?? query.language,
+            keywords: matchingKeywordIds,
+          })
+        : undefined;
+      const taggedIds = new Set(taggedData?.results.map((result) => result.id));
+      const combinedResults = [...data.results, ...(taggedData?.results ?? [])];
+      data.results = await filterVideoSearchResults(
+        tmdb,
+        'movie',
+        combinedResults.filter(
+          (result, index) =>
+            combinedResults.findIndex(
+              (candidate) => candidate.id === result.id
+            ) === index
+        ),
+        query,
+        req.locale
+      );
+      const providerResults =
+        query.search || query.sortBy
+          ? data.results
+          : shuffleRankedWindow(
+              rankTmdbMovieResults(data.results, parsedShuffleSeed.value),
+              parsedShuffleSeed.value
+            );
+      rankedResults = query.search
+        ? providerResults.filter(
+            (result) =>
+              taggedIds.has(result.id) ||
+              matchesAllSearchTerms(
+                [result.title, result.original_title],
+                query.search ?? ''
+              )
+          )
+        : providerResults;
+      responsePage = data.page;
+      totalPages = Math.max(data.total_pages, taggedData?.total_pages ?? 0);
+      totalResults = data.total_results + (taggedData?.total_results ?? 0);
+
+      if (keywords) {
+        const keywordResults = await Promise.all(
+          parsedKeywords.ids.map(async (keywordId) => {
+            return await tmdb.getKeywordDetails({ keywordId });
+          })
+        );
+
+        keywordData = keywordResults.filter(
+          (keyword): keyword is TmdbKeyword => keyword !== null
+        );
+      }
+    }
 
     const media = await Media.getRelatedMedia(
       req.user,
@@ -1701,23 +1820,11 @@ discoverRoutes.get('/movies', async (req, res, next) => {
       { includeActiveRequest: true }
     );
 
-    let keywordData: TmdbKeyword[] = [];
-    if (keywords) {
-      const keywordResults = await Promise.all(
-        parsedKeywords.ids.map(async (keywordId) => {
-          return await tmdb.getKeywordDetails({ keywordId });
-        })
-      );
-
-      keywordData = keywordResults.filter(
-        (keyword): keyword is TmdbKeyword => keyword !== null
-      );
-    }
-
     return res.status(200).json({
-      page: data.page,
-      totalPages: Math.max(data.total_pages, taggedData?.total_pages ?? 0),
-      totalResults: data.total_results + (taggedData?.total_results ?? 0),
+      page: responsePage,
+      totalPages,
+      totalResults,
+      stale,
       keywords: keywordData,
       results: rankedResults.map((result) =>
         mapMovieResult(
@@ -1730,13 +1837,14 @@ discoverRoutes.get('/movies', async (req, res, next) => {
       ),
     });
   } catch (e) {
-    logger.debug('Something went wrong retrieving popular movies', {
+    logger.debug('Something went wrong retrieving movie discovery results', {
       label: 'API',
       errorMessage: e.message,
     });
     return next({
       status: 500,
-      message: 'Unable to retrieve popular movies.',
+      message:
+        'Unable to retrieve movie discovery results from TMDB. Check your TMDB connection and try again.',
       cause: e,
     });
   }

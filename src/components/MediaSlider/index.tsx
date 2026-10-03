@@ -12,6 +12,7 @@ import { useUser } from '@app/hooks/useUser';
 import useWarmImageCache, {
   DISCOVER_SHELF_POSTER_CACHE_WARM_LIMIT,
 } from '@app/hooks/useWarmImageCache';
+import defineMessages from '@app/utils/defineMessages';
 import {
   buildDiscoverCacheContextKey,
   buildDiscoverSnapshotKey,
@@ -46,12 +47,14 @@ import axios from 'axios';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInView } from 'react-intersection-observer';
+import { useIntl } from 'react-intl';
 import useSWRInfinite from 'swr/infinite';
 
 interface MixedResult {
   page: number;
   totalResults: number;
   totalPages: number;
+  stale?: boolean;
   results: (
     | TvResult
     | MovieResult
@@ -61,6 +64,13 @@ interface MixedResult {
     | BookResult
   )[];
 }
+
+const messages = defineMessages('components.MediaSlider', {
+  tmdbUnavailable:
+    'TMDB movie discovery is unavailable. Check TMDB connectivity and try again.',
+  showingSavedResults: 'TMDB is unavailable. Showing saved results.',
+  tryAgain: 'Try Again',
+});
 
 interface MediaSliderProps {
   title: string;
@@ -96,6 +106,7 @@ const MediaSlider = ({
   randomizeOrder = false,
   prioritizeFirstRow = false,
 }: MediaSliderProps) => {
+  const intl = useIntl();
   const settings = useSettings();
   const { visibility } = useCardTextVisibility();
   const { user } = useUser();
@@ -348,6 +359,12 @@ const MediaSlider = ({
     settings.currentSettings.hideRequested,
   ]);
   const renderableTitles = titles;
+  const isTmdbMovieFeed = url === '/api/v1/discover/movies';
+  const showingSavedResults =
+    isTmdbMovieFeed &&
+    (data?.some((page) => page.stale) || (!!error && fallbackHasResults));
+  const showProviderError =
+    isTmdbMovieFeed && !!error && !renderableTitles.length;
   const visibleTitles = useMemo(
     () => renderableTitles.slice(0, MEDIA_SLIDER_TITLE_LIMIT),
     [renderableTitles]
@@ -601,6 +618,25 @@ const MediaSlider = ({
           </Tooltip>
         )}
       </div>
+      {(showingSavedResults || showProviderError) && (
+        <div className="description" role="status" aria-live="polite">
+          <span>
+            {intl.formatMessage(
+              showingSavedResults
+                ? messages.showingSavedResults
+                : messages.tmdbUnavailable
+            )}
+          </span>{' '}
+          <Button
+            type="button"
+            buttonType="primary"
+            buttonSize="sm"
+            onClick={() => void revalidate()}
+          >
+            {intl.formatMessage(messages.tryAgain)}
+          </Button>
+        </div>
+      )}
       <Slider
         sliderKey={sliderKey}
         isLoading={snapshotHydrated && shouldLoad && !data && !error}

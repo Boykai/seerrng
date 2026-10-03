@@ -10360,6 +10360,9 @@ paths:
                   totalResults:
                     type: number
                     example: 200
+                  stale:
+                    type: boolean
+                    description: True when saved results are served because TMDB is unavailable.
                   results:
                     type: array
                     items:

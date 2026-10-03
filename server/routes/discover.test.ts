@@ -267,6 +267,122 @@ describe('GET /discover/movies', () => {
     );
   });
 
+  it('serves the last successful home movie feed when TMDB is down', async () => {
+    let calls = 0;
+    mockPrivate(ExternalAPI.prototype, 'get', async (endpoint: unknown) => {
+      assert.strictEqual(endpoint, '/discover/movie');
+      calls += 1;
+      if (calls > 1) {
+        throw new Error('TMDB is offline');
+      }
+
+      return {
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [
+          {
+            id: 501,
+            media_type: 'movie',
+            title: 'Saved Home Movie',
+            original_title: 'Saved Home Movie',
+            release_date: '2026-10-02',
+            adult: false,
+            video: false,
+            popularity: 10,
+            poster_path: '/saved-home-movie.jpg',
+            backdrop_path: '/saved-home-movie-backdrop.jpg',
+            vote_count: 25,
+            vote_average: 7.5,
+            genre_ids: [],
+            overview: 'Saved movie feed data.',
+            original_language: 'en',
+          },
+        ],
+      };
+    });
+
+    const agent = await login();
+    const fresh = await agent.get('/discover/movies');
+    const stale = await agent.get('/discover/movies');
+
+    assert.strictEqual(fresh.status, 200);
+    assert.strictEqual(fresh.body.stale, false);
+    assert.strictEqual(stale.status, 200);
+    assert.strictEqual(stale.body.stale, true);
+    assert.strictEqual(stale.body.results[0].title, 'Saved Home Movie');
+    assert.match(stale.body.results[0].posterPath, /saved-home-movie\.jpg/);
+  });
+
+  it('keeps only unreleased titles from a saved Upcoming shelf', async () => {
+    let calls = 0;
+    mockPrivate(ExternalAPI.prototype, 'get', async (endpoint: unknown) => {
+      assert.strictEqual(endpoint, '/discover/movie');
+      calls += 1;
+      if (calls > 1) {
+        throw new Error('TMDB is offline');
+      }
+
+      return {
+        page: 1,
+        total_pages: 1,
+        total_results: 2,
+        results: [
+          {
+            id: 502,
+            media_type: 'movie',
+            title: 'Already Released',
+            original_title: 'Already Released',
+            release_date: '2026-10-02',
+            adult: false,
+            video: false,
+            popularity: 20,
+            poster_path: '/already-released.jpg',
+            backdrop_path: '/already-released-backdrop.jpg',
+            vote_count: 25,
+            vote_average: 7.5,
+            genre_ids: [],
+            overview: 'This title is no longer upcoming.',
+            original_language: 'en',
+          },
+          {
+            id: 503,
+            media_type: 'movie',
+            title: 'Still Upcoming',
+            original_title: 'Still Upcoming',
+            release_date: '2026-10-20',
+            adult: false,
+            video: false,
+            popularity: 15,
+            poster_path: '/still-upcoming.jpg',
+            backdrop_path: '/still-upcoming-backdrop.jpg',
+            vote_count: 15,
+            vote_average: 7,
+            genre_ids: [],
+            overview: 'This title is still upcoming.',
+            original_language: 'en',
+          },
+        ],
+      };
+    });
+
+    const agent = await login();
+    const fresh = await agent.get(
+      '/discover/movies?primaryReleaseDateGte=2026-10-01'
+    );
+    const stale = await agent.get(
+      '/discover/movies?primaryReleaseDateGte=2026-10-03'
+    );
+
+    assert.strictEqual(fresh.status, 200);
+    assert.strictEqual(stale.status, 200);
+    assert.strictEqual(stale.body.stale, true);
+    assert.deepStrictEqual(
+      stale.body.results.map((result: { title: string }) => result.title),
+      ['Still Upcoming']
+    );
+  });
+
   it('uses current Radarr file state and metadata for quality availability', async (t) => {
     const settings = getSettings();
     const priorRadarr = settings.radarr;
