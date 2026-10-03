@@ -676,17 +676,15 @@ const anilistStatusOf = async (
  * The status event of a re-opened request, written beside the re-open. It
  * starts a new attempt, so the computed events that follow never repeat a
  * fingerprint of the first delivery, and its own fingerprint is inserted
- * without a conflict that could fail the transaction. An AVAILABLE stage
- * becomes APPROVED; any other stage, an override included, carries over with
- * its message.
+ * without a conflict that could fail the transaction. A manga request's stage
+ * comes from its manifest alone, so nothing of the latest event carries over
+ * but its attempt and service.
  */
 const insertReopenEvent = async (
   manager: EntityManager,
   request: MediaRequest,
   latest: MediaRequestStatusEvent | null
 ): Promise<void> => {
-  const carried =
-    latest !== null && latest.stage !== RequestStatusStage.AVAILABLE;
   const attempt = (latest?.attempt ?? 0) + 1;
   await manager
     .createQueryBuilder()
@@ -697,11 +695,11 @@ const insertReopenEvent = async (
       requestedById: request.requestedBy.id,
       mediaId: request.media.id,
       mediaType: request.type,
-      stage: carried ? latest.stage : RequestStatusStage.APPROVED,
+      stage: RequestStatusStage.APPROVED,
       attempt,
       format: null,
       service: latest?.service ?? null,
-      message: carried ? (latest.message ?? null) : REOPEN_MESSAGE,
+      message: REOPEN_MESSAGE,
       percent: null,
       size: null,
       sizeLeft: null,
