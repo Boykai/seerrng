@@ -205,7 +205,7 @@ describe('BindModal', () => {
     expect(host.querySelectorAll('input')).toHaveLength(1);
     expect(
       host.querySelector<HTMLInputElement>('#mangaLibrarySearch')?.type
-    ).toBe('search');
+    ).toBe('text');
   });
 
   it('binds the title picked from the search results', async () => {

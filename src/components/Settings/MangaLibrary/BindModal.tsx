@@ -93,7 +93,7 @@ const BindModal = ({
             <div className="form-input-field">
               <input
                 id="mangaLibrarySearch"
-                type="search"
+                type="text"
                 value={search}
                 maxLength={MAX_QUERY_LENGTH}
                 placeholder={intl.formatMessage(searchMessages.searchManga)}
