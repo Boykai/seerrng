@@ -124,14 +124,14 @@ const ConfirmPanel = ({
   text,
   warning,
   busy,
-  cancelRef,
+  panelRef,
   onConfirm,
   onCancel,
 }: {
   text: string;
   warning?: string;
   busy: boolean;
-  cancelRef: RefObject<HTMLButtonElement | null>;
+  panelRef: RefObject<HTMLDivElement | null>;
   onConfirm: () => void;
   onCancel: () => void;
 }) => {
@@ -139,10 +139,15 @@ const ConfirmPanel = ({
   const id = useId();
 
   return (
+    // The panel takes the focus, not a button: the app-wide button help
+    // would cover the question and the warning.
     <div
+      ref={panelRef}
       className="settings-library-card settings-manga-sources-confirm"
       role="group"
+      tabIndex={-1}
       aria-labelledby={`${id}-text`}
+      aria-describedby={warning ? `${id}-warning` : undefined}
     >
       <p id={`${id}-text`}>{text}</p>
       {warning && (
@@ -152,7 +157,6 @@ const ConfirmPanel = ({
       )}
       <div className="settings-page-actions">
         <Button
-          ref={cancelRef}
           buttonType="danger"
           buttonSize="standard"
           buttonIcon="cancel"
@@ -472,7 +476,7 @@ const TitleDetail = ({
   const { addToast } = useToasts();
   const id = useId();
   const backdropRef = useRef<HTMLDivElement>(null);
-  const cancelConfirmRef = useRef<HTMLButtonElement>(null);
+  const confirmPanelRef = useRef<HTMLDivElement>(null);
   const confirmTriggerRef = useRef<HTMLElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const busyRef = useRef(false);
@@ -530,7 +534,7 @@ const TitleDetail = ({
   }, [busyKey, confirm]);
 
   useEffect(() => {
-    if (confirmVisible) cancelConfirmRef.current?.focus();
+    if (confirmVisible) confirmPanelRef.current?.focus();
   }, [confirmVisible, confirm]);
 
   const closeConfirm = () => {
@@ -806,7 +810,7 @@ const TitleDetail = ({
                 <ConfirmPanel
                   text={intl.formatMessage(messages.searchConfirm)}
                   busy={busy}
-                  cancelRef={cancelConfirmRef}
+                  panelRef={confirmPanelRef}
                   onConfirm={() => void search(true)}
                   onCancel={closeConfirm}
                 />
@@ -880,7 +884,7 @@ const TitleDetail = ({
                                 : undefined
                             }
                             busy={busy}
-                            cancelRef={cancelConfirmRef}
+                            panelRef={confirmPanelRef}
                             onConfirm={() => void select(candidate)}
                             onCancel={closeConfirm}
                           />

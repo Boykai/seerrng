@@ -508,7 +508,8 @@ describe('TitleDetail', () => {
       'Match this title to “Synthetic Manga 2”?'
     );
     expect(panel.textContent).not.toContain('second');
-    expect(document.activeElement?.textContent).toBe('Cancel');
+    expect(document.activeElement).toBe(panel);
+    expect(panel.hasAttribute('aria-describedby')).toBe(false);
     expect(
       [...panel.querySelectorAll('button')].map((item) => item.textContent)
     ).toEqual(['Cancel', 'Confirm']);
@@ -541,6 +542,9 @@ describe('TitleDetail', () => {
     expect(warning.textContent).toBe(
       'This title already has a library match. Confirming adds a second one.'
     );
+    // The focused panel reads the warning, and so does Confirm.
+    expect(document.activeElement).toBe(confirmPanel());
+    expect(confirmPanel()!.getAttribute('aria-describedby')).toBe(warning.id);
     expect(
       buttonIn(confirmPanel()!, 'Confirm')
         ?.getAttribute('aria-describedby')
@@ -605,7 +609,7 @@ describe('TitleDetail', () => {
     expect(confirmPanel()?.textContent).toContain(
       'Searching sends this title to MangaDex and to the selected sources, even though its request is not approved.'
     );
-    expect(document.activeElement?.textContent).toBe('Cancel');
+    expect(document.activeElement).toBe(confirmPanel());
     expect(state.post).not.toHaveBeenCalled();
 
     await click(buttonIn(confirmPanel()!, 'Confirm'));
@@ -621,7 +625,7 @@ describe('TitleDetail', () => {
     await render({ confirmSearch: true });
 
     expect(confirmPanel()?.textContent).toContain('Searching sends');
-    expect(document.activeElement?.textContent).toBe('Cancel');
+    expect(document.activeElement).toBe(confirmPanel());
 
     await click(buttonIn(confirmPanel()!, 'Cancel'));
     expect(confirmPanel()).toBeNull();
