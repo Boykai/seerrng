@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   post: vi.fn(),
   remove: vi.fn(),
   granted: [] as number[],
+  settings: {} as { suwayomiEnabled?: boolean },
 }));
 vi.mock('axios', () => ({
   default: { post: state.post, delete: state.remove },
@@ -34,7 +35,26 @@ vi.mock('next/link', () => ({
     </a>
   ),
 }));
-vi.mock('next/dynamic', () => ({ default: () => () => null }));
+vi.mock('next/dynamic', () => ({
+  default:
+    () =>
+    ({
+      show,
+      type,
+      mangaId,
+    }: {
+      show?: boolean;
+      type?: string;
+      mangaId?: number;
+    }) =>
+      show ? (
+        <div
+          data-testid="request-modal"
+          data-type={type}
+          data-manga-id={mangaId}
+        />
+      ) : null,
+}));
 vi.mock('@app/assets/spinner.svg', () => ({ default: () => null }));
 vi.mock('@headlessui/react', () => ({
   Transition: ({
@@ -81,7 +101,7 @@ vi.mock('@app/hooks/useToasts', () => ({
   default: () => ({ addToast: vi.fn() }),
 }));
 vi.mock('@app/hooks/useSettings', () => ({
-  default: () => ({ currentSettings: {} }),
+  default: () => ({ currentSettings: state.settings }),
 }));
 vi.mock('@app/hooks/useUser', async () => {
   const permissions = await import('@server/lib/permissions');
@@ -114,6 +134,7 @@ beforeEach(() => {
   root = createRoot(host);
   state.post.mockReset();
   state.remove.mockReset();
+  state.settings = {};
   state.granted = [
     Permission.REQUEST,
     Permission.REQUEST_MANGA,
@@ -211,4 +232,61 @@ it('removes a blocklisted manga card from the manga blocklist', async () => {
   expect(state.remove).toHaveBeenCalledWith(
     '/api/v1/blocklist/30013?mediaType=manga'
   );
+});
+
+const requestButton = () =>
+  [...host.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Request'
+  );
+
+it.each([
+  ['a manga request permission', true, [Permission.REQUEST_MANGA], true],
+  ['the general request permission', true, [Permission.REQUEST], true],
+  ['only another media permission', true, [Permission.REQUEST_COMIC], false],
+  [
+    'no configured Suwayomi server',
+    false,
+    [Permission.REQUEST, Permission.REQUEST_MANGA],
+    false,
+  ],
+])(
+  'shows the manga Request button with %s: %s',
+  async (_case, suwayomiEnabled, granted, shown) => {
+    state.settings = { suwayomiEnabled };
+    state.granted = granted;
+    await renderManga();
+    await openDetails();
+
+    expect(host.querySelector('a')?.getAttribute('href')).toBe('/manga/30013');
+    expect(!!requestButton()).toBe(shown);
+  }
+);
+
+it.each([
+  [undefined, true],
+  [MediaStatus.UNKNOWN, true],
+  [MediaStatus.DELETED, true],
+  [MediaStatus.PARTIALLY_AVAILABLE, true],
+  [MediaStatus.PENDING, false],
+  [MediaStatus.PROCESSING, false],
+  [MediaStatus.AVAILABLE, false],
+  [MediaStatus.BLOCKLISTED, false],
+])('offers a manga request at status %s: %s', async (status, shown) => {
+  state.settings = { suwayomiEnabled: true };
+  await renderManga(status);
+  await openDetails();
+
+  expect(!!requestButton()).toBe(shown);
+});
+
+it('opens the manga request modal with the AniList id', async () => {
+  state.settings = { suwayomiEnabled: true };
+  await renderManga();
+  await openDetails();
+  expect(host.querySelector('[data-testid="request-modal"]')).toBeNull();
+  await click(requestButton());
+
+  const modal = host.querySelector('[data-testid="request-modal"]');
+  expect(modal?.getAttribute('data-type')).toBe('manga');
+  expect(modal?.getAttribute('data-manga-id')).toBe('30013');
 });
