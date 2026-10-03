@@ -55,7 +55,7 @@ const CollectionAssociationsButton = ({
           buttonSize="sm"
           onClick={() => void open()}
         >
-          <MeshNetworkIcon className="h-4 w-4" />
+          <MeshNetworkIcon />
           <span>{intl.formatMessage(messages.associations)}</span>
         </Button>
       </Tooltip>

@@ -1,27 +1,81 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import postcss from 'postcss';
+import { styleContract } from './cssContract.mjs';
 
 const css = readFileSync(new URL('./globals.css', import.meta.url), 'utf8');
-test('only Blackout disables the corner spotlight and retains its blue gradient', () => {
-  const root = css.match(/:root\s*\{([^}]+)/)?.[1];
-  const blackout = css.match(
-    /\[data-theme-palette='blackout'\]\s*\{([^}]+)/
-  )?.[1];
-  assert.match(root, /--theme-page-spotlight-strength: 1;/);
-  assert.match(blackout, /--theme-page-spotlight-strength: 0;/);
-  assert.doesNotMatch(blackout, /--theme-page-spotlight-(center|edge):/);
-  for (const stop of [
-    'light: 40 68 120',
-    'main: 26 50 96',
-    'deep: 14 28 58',
-    'black: 0 0 0',
-  ]) {
-    assert.ok(blackout.includes('--theme-page-gradient-' + stop), stop);
+const themeContext = readFileSync(
+  new URL('../context/ThemeContext.tsx', import.meta.url),
+  'utf8'
+);
+const assertBlackoutBackground = (stylesheet) => {
+  // Blackout is the chrome family; its persisted/runtime palette identifier is seerr.
+  const palettes = [
+    ...themeContext.matchAll(/\{\s*id: '([^']+)',([^{}]*?)\},/g),
+  ];
+  const blackout = palettes.filter(([, , body]) =>
+    body.includes("chrome: 'blackout'")
+  );
+  assert.deepEqual(
+    blackout.map(([, id]) => id),
+    ['seerr']
+  );
+  assert.match(
+    themeContext,
+    /document\.documentElement\.dataset\.themePalette = themeTokens\.activePaletteId/
+  );
+  const palette = "[data-theme-palette='seerr']";
+  const contract = styleContract(stylesheet);
+  assert.equal(
+    contract.declaration(':root', '--theme-page-spotlight-strength'),
+    '1'
+  );
+  assert.equal(
+    contract.declaration(palette, '--theme-page-spotlight-strength'),
+    '0'
+  );
+  for (const property of ['center', 'edge'])
+    assert.equal(
+      contract.declaration(palette, '--theme-page-spotlight-' + property),
+      undefined
+    );
+  for (const [stop, value] of Object.entries({
+    light: '0 0 0',
+    main: '40 68 120',
+    deep: '14 28 58',
+    black: '0 0 0',
+  })) {
+    assert.equal(
+      contract.declaration(palette, '--theme-page-gradient-' + stop),
+      value
+    );
   }
   assert.equal(
-    (css.match(/--theme-page-spotlight-strength: 0;/g) || []).length,
-    1
+    contract.declaration(palette, '--theme-page-gradient-main-stop'),
+    '50%'
+  );
+  const disabledSpotlights = [];
+  postcss
+    .parse(stylesheet)
+    .walkDecls('--theme-page-spotlight-strength', (decl) => {
+      if (decl.value === '0') disabledSpotlights.push(...decl.parent.selectors);
+    });
+  assert.deepEqual(disabledSpotlights, [palette]);
+};
+
+test('only the runtime Blackout palette disables the spotlight and retains its blue gradient', () => {
+  assertBlackoutBackground(css);
+});
+
+test('Blackout check rejects a spotlight override leaked into another palette', () => {
+  assert.throws(
+    () =>
+      assertBlackoutBackground(
+        css +
+          "\n[data-theme-palette='classic'] { --theme-page-spotlight-strength: 0; }"
+      ),
+    assert.AssertionError
   );
 });
 test('every shared background spotlight honors the palette strength', () => {

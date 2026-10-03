@@ -56,6 +56,7 @@ interface RequestButtonProps {
   buttonSize?: 'standard' | 'default' | 'sm';
   buttonType?: 'primary' | 'ghost' | 'success' | 'detailRequest';
   className?: string;
+  singleRequestEntry?: boolean;
 }
 
 const RequestButton = ({
@@ -67,7 +68,8 @@ const RequestButton = ({
   is4kShowComplete = false,
   buttonSize = 'standard',
   buttonType = 'primary',
-  className = 'ml-2',
+  className,
+  singleRequestEntry = false,
 }: RequestButtonProps) => {
   const intl = useIntl();
   const settings = useSettings();
@@ -402,6 +404,25 @@ const RequestButton = ({
     return null;
   }
 
+  const entryOption = requestOptions.find((option) => !option.disabled);
+  const openRequestScreen = () => {
+    if (!entryOption || isModifying) {
+      return;
+    }
+    const is4k = entryOption.id === '4k';
+    const pendingRequest = is4k ? active4kRequest : activeRequest;
+    setEditRequest(
+      !!pendingRequest &&
+        (pendingRequest.requestedBy?.id === user?.id ||
+          hasPermission(Permission.MANAGE_REQUESTS))
+    );
+    if (is4k) {
+      setShowRequest4kModal(true);
+    } else {
+      setShowRequestModal(true);
+    }
+  };
+
   return (
     <>
       {showRequestModal && (
@@ -446,7 +467,25 @@ const RequestButton = ({
           <span>{button.text}</span>
         </Button>
       ))}
-      <FormatRequestControl options={requestOptions} className={className} />
+      {singleRequestEntry ? (
+        requestOptions.length > 0 && (
+          <Button
+            buttonSize={buttonSize}
+            buttonType={buttonType}
+            onClick={openRequestScreen}
+            disabled={!entryOption || isModifying}
+            disabledReason={
+              !entryOption ? requestOptions[0]?.disabledReason : undefined
+            }
+            className={className}
+          >
+            <ArrowDownTrayIcon aria-hidden="true" />
+            <span>{intl.formatMessage(globalMessages.request)}</span>
+          </Button>
+        )
+      ) : (
+        <FormatRequestControl options={requestOptions} className={className} />
+      )}
     </>
   );
 };

@@ -433,7 +433,8 @@ const FilterPanel = ({
   return (
     <section
       aria-label={intl.formatMessage(messages.filters)}
-      className={variant === 'search' ? 'contents' : undefined}
+      className="app-filter-panel"
+      data-filter-layout={variant === 'search' ? 'contents' : undefined}
     >
       {variant === 'discover' && (
         <div className="discover-filter-primary-row">
@@ -441,24 +442,21 @@ const FilterPanel = ({
             label={intl.formatMessage(messages.clearFilters)}
             selected={!hasActiveFilters}
             onClick={clearAllFilters}
-            className="order-1"
           />
-          <CardTextVisibilityToggle mediaType={type} className="order-2" />
+          <CardTextVisibilityToggle mediaType={type} />
           <AvailabilityQualityControl
             mediaType={type}
             value={currentFilters.availability}
             onChange={(value) => updateFilter('availability', value)}
-            className="order-3"
           />
         </div>
       )}
       <div
-        className={
-          variant === 'search' ? 'contents' : 'discover-filter-secondary-row'
-        }
+        className="discover-filter-secondary-row"
+        data-filter-layout={variant === 'search' ? 'contents' : undefined}
       >
         <form
-          className="discover-filter-control order-5 w-72 max-w-full flex-none"
+          className="discover-filter-control app-filter-search-control"
           onSubmit={(event) => {
             event.preventDefault();
             const values = {
@@ -477,7 +475,7 @@ const FilterPanel = ({
               searchValue.trim() ? 'discover-filter-control-label-active' : ''
             }`}
           >
-            <MagnifyingGlassIcon className="h-4 w-4" aria-hidden="true" />
+            <MagnifyingGlassIcon aria-hidden="true" />
             {intl.formatMessage(messages.keywordSearch)}
           </span>
           <input
@@ -490,12 +488,12 @@ const FilterPanel = ({
             aria-label={intl.formatMessage(
               type === 'movie' ? messages.searchMovies : messages.searchSeries
             )}
-            className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0 text-xs font-medium text-gray-200 placeholder:text-gray-500 focus:ring-0"
+            className="app-filter-search-input"
           />
         </form>
         {type === 'tv' && (
           <CompactSelect
-            className="status-filter order-6"
+            className="status-filter"
             label={intl.formatMessage(messages.status)}
             value={currentFilters.status?.split('|')[0] ?? ''}
             options={statusOptions}
@@ -503,7 +501,6 @@ const FilterPanel = ({
           />
         )}
         <CompactSelect
-          className={type === 'movie' ? 'order-6' : 'order-7'}
           label={intl.formatMessage(messages.releaseDate)}
           value={yearValue}
           options={yearOptions}
@@ -523,8 +520,30 @@ const FilterPanel = ({
             }
           }}
         />
+        <CompactSelect
+          label={intl.formatMessage(messages.genres)}
+          value={selectedGenre}
+          options={genreOptions}
+          onChange={(value) =>
+            updateFilter('genre', value === 'any' ? undefined : value)
+          }
+        />
+        <CompactSelect
+          label={intl.formatMessage(messages.certification)}
+          value={currentCertification}
+          options={certificationOptions}
+          onChange={(value) => {
+            updateFilters({
+              certification: value || undefined,
+              certificationCountry: value ? 'US' : undefined,
+              certificationGte: undefined,
+              certificationLte: undefined,
+              certificationMode: value ? 'exact' : undefined,
+            });
+          }}
+        />
         {type === 'movie' && (
-          <div className="discover-filter-control order-9">
+          <div className="discover-filter-control">
             <span
               className={`discover-filter-control-label ${
                 currentFilters.studio
@@ -543,42 +562,8 @@ const FilterPanel = ({
             />
           </div>
         )}
-        <CompactSelect
-          className={type === 'movie' ? 'order-7' : 'order-8'}
-          label={intl.formatMessage(messages.genres)}
-          value={selectedGenre}
-          options={genreOptions}
-          onChange={(value) =>
-            updateFilter('genre', value === 'any' ? undefined : value)
-          }
-        />
-        <CompactSelect
-          className="order-12"
-          label={intl.formatMessage(messages.language)}
-          value={currentLanguage}
-          options={languageOptions}
-          onChange={(value) => {
-            updateFilter('language', value === 'all' ? undefined : value);
-          }}
-        />
-        <CompactSelect
-          className={type === 'movie' ? 'order-8' : 'order-9'}
-          label={intl.formatMessage(messages.certification)}
-          value={currentCertification}
-          options={certificationOptions}
-          onChange={(value) => {
-            updateFilters({
-              certification: value || undefined,
-              certificationCountry: value ? 'US' : undefined,
-              certificationGte: undefined,
-              certificationLte: undefined,
-              certificationMode: value ? 'exact' : undefined,
-            });
-          }}
-        />
         {type === 'movie' && (
           <CompactSelect
-            className="order-10"
             label={intl.formatMessage(messages.runtime)}
             value={runtimeValue}
             options={currentRuntimeOptions}
@@ -594,7 +579,6 @@ const FilterPanel = ({
         )}
         {type === 'tv' && (
           <CompactSelect
-            className="order-10"
             label={intl.formatMessage(messages.network)}
             value={currentFilters.network ?? 'any'}
             options={networkOptions}
@@ -604,7 +588,6 @@ const FilterPanel = ({
           />
         )}
         <CompactRatingSelect
-          className="order-11"
           label={intl.formatMessage(messages.tmdbuserscore)}
           value={ratingValue}
           options={currentRatingOptions}
@@ -617,30 +600,40 @@ const FilterPanel = ({
             )
           }
         />
+        <CompactSelect
+          label={intl.formatMessage(messages.language)}
+          value={currentLanguage}
+          options={languageOptions}
+          onChange={(value) => {
+            updateFilter('language', value === 'all' ? undefined : value);
+          }}
+        />
         <button
           type="button"
           aria-expanded={isStreamingOpen}
           onClick={() => setIsStreamingOpen((current) => !current)}
-          className={`${getFilterToggleButtonClass(Boolean(currentFilters.watchProviders))} order-[13]`}
+          className={getFilterToggleButtonClass(
+            Boolean(currentFilters.watchProviders)
+          )}
         >
-          <TvIcon className="h-4 w-4" aria-hidden="true" />
+          <TvIcon aria-hidden="true" />
           {intl.formatMessage(messages.streamingservices)}
           {currentFilters.watchProviders && (
-            <span className="rounded-full bg-gray-900/50 px-1.5 py-0.5 text-[10px]">
+            <span className="app-filter-count">
               {currentFilters.watchProviders.split('|').length}
             </span>
           )}
           <ChevronDownIcon
-            className={`h-4 w-4 transition-transform ${isStreamingOpen ? 'rotate-180' : ''}`}
+            className="app-filter-select-chevron"
+            data-expanded={isStreamingOpen}
             aria-hidden="true"
           />
         </button>
       </div>
       {isStreamingOpen && (
         <section
-          className={`${
-            variant === 'search' ? 'w-full basis-full' : ''
-          } scrollable-card mt-2 max-h-80 overflow-y-auto rounded-lg border border-gray-700 bg-gray-900/40 p-3 pb-7`}
+          className="app-card-inset app-filter-panel scrollable-card"
+          data-filter-layout="expanded"
         >
           <WatchProviderSelector
             type={type}

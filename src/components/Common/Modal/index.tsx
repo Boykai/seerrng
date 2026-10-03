@@ -112,11 +112,8 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
         <TransitionChild
           as="div"
           data-testid="modal-root"
-          className={`app-modal-screen-backdrop fixed top-0 right-0 bottom-0 left-0 z-[60] flex h-full w-full justify-center overflow-y-auto ${
-            alignTop
-              ? 'items-start pt-[49px] pb-4 sm:pt-[65px]'
-              : 'items-center'
-          } transition-opacity duration-300 data-closed:opacity-0`}
+          className="page-overlay"
+          data-alignment={alignTop ? 'top' : 'center'}
           ref={parentRef}
         >
           <Transition
@@ -134,22 +131,18 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
             </div>
           </Transition>
           <Transition
-            className={`relative inline-block w-full overflow-auto bg-gray-800 px-4 pt-4 pb-4 text-left align-bottom shadow-xl ring-1 ring-gray-700 transition-all sm:max-w-3xl sm:rounded-lg sm:align-middle ${
-              alignTop
-                ? 'my-0 max-h-[calc(100dvh-65px)] sm:max-h-[calc(100dvh-81px)]'
-                : 'hide-scrollbar sm:my-8'
-            } ${dialogClass} transition duration-300 data-closed:scale-75 data-closed:opacity-0`}
+            className={[
+              'page-overlay-card',
+              !alignTop && 'hide-scrollbar',
+              dialogClass,
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            data-alignment={alignTop ? 'top' : 'center'}
             role="dialog"
             aria-modal="true"
             aria-labelledby={title || subTitle ? 'modal-headline' : undefined}
             aria-label={!title && !subTitle ? ariaLabel : undefined}
-            style={
-              alignTop
-                ? undefined
-                : {
-                    maxHeight: 'calc(100% - env(safe-area-inset-top) * 2)',
-                  }
-            }
             as="div"
             show={!loading}
             ref={modalRef}
@@ -188,7 +181,7 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
                   <div className="flex flex-col space-y-1">
                     {title && (
                       <span
-                        className="text-overseerr truncate pb-0.5 text-2xl leading-6 font-bold"
+                        className="page-title"
                         id="modal-headline"
                         data-testid="modal-title"
                       >

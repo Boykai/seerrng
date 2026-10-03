@@ -1,7 +1,10 @@
+import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
+import PageErrorMessage from '@app/components/Common/PageErrorMessage';
 import PageTitle from '@app/components/Common/PageTitle';
+import StarSlashIcon from '@app/components/Common/StarSlashIcon';
 import type { FilterOptions } from '@app/components/Discover/constants';
 import { prepareFilterValues } from '@app/components/Discover/constants';
 import MediaDiscoveryControls from '@app/components/Discover/MediaDiscoveryControls';
@@ -9,17 +12,24 @@ import { tvNetworks } from '@app/components/Discover/NetworkSlider';
 import useDiscover from '@app/hooks/useDiscover';
 import useDiscoverScrollRestoration from '@app/hooks/useDiscoverScrollRestoration';
 import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
-import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
+import { StarIcon } from '@heroicons/react/24/outline';
 import type { TvNetwork } from '@server/models/common';
 import type { TvResult } from '@server/models/Search';
 import { useRouter } from 'next/router';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.Discover.DiscoverTv', {
   series: 'Series',
   networkSeries: '{network} Series',
+  disableWatchlistPreview: 'Disable Watchlist',
+  enableWatchlistPreview: 'Enable Watchlist',
+  watchlistPreviewHelp: 'Enable or disable the Watchlist buttons.',
+  loadErrorTitle: 'Series Could Not Be Loaded',
+  loadErrorDescription:
+    'The discovery service did not respond, please try again.',
+  retryDescription: 'Retry loading series using the current filters.',
 });
 interface DiscoverTvProps {
   network?: TvNetwork;
@@ -38,6 +48,11 @@ const DiscoverTv = ({
 }: DiscoverTvProps = {}) => {
   const intl = useIntl();
   const router = useRouter();
+  const watchlistPreview =
+    process.env.NODE_ENV === 'development' &&
+    router.pathname === '/discover/tv';
+  const [watchlistPreviewDisabled, setWatchlistPreviewDisabled] =
+    useState(false);
   const preparedFilters = {
     ...initialFilters,
     ...prepareFilterValues(router.query),
@@ -53,10 +68,10 @@ const DiscoverTv = ({
     }
   );
   useSearchActivityReporter(
-    Boolean(preparedFilters.search || preparedFilters.availability) &&
-      (discover.isLoadingInitialData ||
-        discover.isValidating ||
-        discover.isSearchingAvailableQuality),
+    discover.isLoadingInitialData ||
+      discover.isLoadingMore ||
+      discover.isValidating ||
+      discover.isSearchingAvailableQuality,
     'series-discovery'
   );
   useDiscoverScrollRestoration({
@@ -67,7 +82,6 @@ const DiscoverTv = ({
     isReachingEnd: discover.isReachingEnd,
     fetchMore: discover.fetchMore,
   });
-  if (discover.error) return <ErrorPage statusCode={500} />;
   const title = network
     ? intl.formatMessage(messages.networkSeries, { network: network.name })
     : (titleOverride ?? intl.formatMessage(messages.series));
@@ -82,37 +96,68 @@ const DiscoverTv = ({
   return (
     <>
       <PageTitle title={title} />
-      <div className="mb-4">
+      <div className="app-filter-section-gap">
         <Header>{title}</Header>
         {mediaFilters}
         {networkLogo && (
-          <div className="relative mx-auto my-4 h-20 w-full max-w-sm sm:h-24">
+          <div className="catalog-branding">
             <CachedImage
               type="tmdb"
               src={networkLogo}
               alt={network?.name ?? ''}
-              className={`object-contain ${
-                curatedNetwork?.logoTone === 'white'
-                  ? 'brightness-0 invert'
-                  : ''
-              }`}
+              data-logo-tone={curatedNetwork?.logoTone}
               fill
             />
           </div>
         )}
         <MediaDiscoveryControls type="tv" currentFilters={preparedFilters} />
+        {watchlistPreview && (
+          <Button
+            type="button"
+            buttonType="warning"
+            title={intl.formatMessage(messages.watchlistPreviewHelp)}
+            aria-pressed={watchlistPreviewDisabled}
+            onClick={() => setWatchlistPreviewDisabled((disabled) => !disabled)}
+          >
+            {watchlistPreviewDisabled ? (
+              <StarIcon aria-hidden="true" />
+            ) : (
+              <StarSlashIcon />
+            )}
+            {intl.formatMessage(
+              watchlistPreviewDisabled
+                ? messages.enableWatchlistPreview
+                : messages.disableWatchlistPreview
+            )}
+          </Button>
+        )}
       </div>
-      <ListView
-        items={discover.titles}
-        isEmpty={discover.isEmpty}
-        isLoading={
-          discover.isLoadingInitialData ||
-          discover.isSearchingAvailableQuality ||
-          (discover.isLoadingMore && discover.titles.length > 0)
-        }
-        isReachingEnd={discover.isReachingEnd}
-        onScrollBottom={discover.fetchMore}
-      />
+      {discover.error ? (
+        <PageErrorMessage
+          title={intl.formatMessage(messages.loadErrorTitle)}
+          description={intl.formatMessage(messages.loadErrorDescription)}
+          retry={{
+            onClick: () => discover.mutate?.(),
+            tooltip: intl.formatMessage(messages.retryDescription),
+            busy: discover.isValidating,
+          }}
+        />
+      ) : (
+        <ListView
+          posterTitleWeight="regular"
+          watchlistPreview={watchlistPreview}
+          watchlistPreviewDisabled={watchlistPreviewDisabled}
+          items={discover.titles}
+          isEmpty={discover.isEmpty}
+          isLoading={
+            discover.isLoadingInitialData ||
+            discover.isSearchingAvailableQuality ||
+            (discover.isLoadingMore && discover.titles.length > 0)
+          }
+          isReachingEnd={discover.isReachingEnd}
+          onScrollBottom={discover.fetchMore}
+        />
+      )}
     </>
   );
 };

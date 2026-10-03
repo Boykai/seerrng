@@ -18,6 +18,7 @@ import defineMessages from '@app/utils/defineMessages';
 import { MediaStatus } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import type { DownloadingItem } from '@server/lib/downloadtracker';
+import type { ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.StatusBadge', {
@@ -48,6 +49,8 @@ interface StatusBadgeProps {
   className?: string;
   requestId?: number;
   canFailDownload?: boolean;
+  showQuality?: boolean;
+  leadingIcon?: ReactNode;
 }
 
 const StatusBadge = ({
@@ -67,10 +70,18 @@ const StatusBadge = ({
   className,
   requestId,
   canFailDownload = false,
+  showQuality = true,
+  leadingIcon,
 }: StatusBadgeProps) => {
   const intl = useIntl();
   const { hasPermission } = useUser();
   const settings = useSettings();
+  const formatStatusLabel = (statusText: string) =>
+    showQuality
+      ? intl.formatMessage(is4k ? messages.status4k : messages.status, {
+          status: statusText,
+        })
+      : statusText;
 
   let mediaLink: string | undefined;
   let mediaLinkDescription: string | undefined;
@@ -293,18 +304,16 @@ const StatusBadge = ({
           >
             {inProgress && badgeDownloadProgress}
             <div
-              className={`relative z-20 flex items-center ${
+              className={`request-status-control-content relative z-20 flex items-center ${
                 inProgress && 'px-2'
               }`}
             >
+              {leadingIcon}
               <span>
-                {intl.formatMessage(
-                  is4k ? messages.status4k : messages.status,
-                  {
-                    status: inProgress
-                      ? intl.formatMessage(globalMessages.processing)
-                      : intl.formatMessage(globalMessages.available),
-                  }
+                {formatStatusLabel(
+                  inProgress
+                    ? intl.formatMessage(globalMessages.processing)
+                    : intl.formatMessage(globalMessages.available)
                 )}
               </span>
               {inProgress && (
@@ -355,18 +364,16 @@ const StatusBadge = ({
           >
             {inProgress && badgeDownloadProgress}
             <div
-              className={`relative z-20 flex items-center ${
+              className={`request-status-control-content relative z-20 flex items-center ${
                 inProgress && 'px-2'
               }`}
             >
+              {leadingIcon}
               <span>
-                {intl.formatMessage(
-                  is4k ? messages.status4k : messages.status,
-                  {
-                    status: inProgress
-                      ? intl.formatMessage(globalMessages.processing)
-                      : intl.formatMessage(globalMessages.partiallyavailable),
-                  }
+                {formatStatusLabel(
+                  inProgress
+                    ? intl.formatMessage(globalMessages.processing)
+                    : intl.formatMessage(globalMessages.partiallyavailable)
                 )}
               </span>
               {inProgress && (
@@ -417,18 +424,16 @@ const StatusBadge = ({
           >
             {inProgress && badgeDownloadProgress}
             <div
-              className={`relative z-20 flex items-center ${
+              className={`request-status-control-content relative z-20 flex items-center ${
                 inProgress && 'px-2'
               }`}
             >
+              {leadingIcon}
               <span>
-                {intl.formatMessage(
-                  is4k ? messages.status4k : messages.status,
-                  {
-                    status: inProgress
-                      ? intl.formatMessage(globalMessages.processing)
-                      : intl.formatMessage(globalMessages.requested),
-                  }
+                {formatStatusLabel(
+                  inProgress
+                    ? intl.formatMessage(globalMessages.processing)
+                    : intl.formatMessage(globalMessages.requested)
                 )}
               </span>
               {inProgress && (
@@ -470,9 +475,7 @@ const StatusBadge = ({
             href={statusBadgeLink}
             className={className}
           >
-            {intl.formatMessage(is4k ? messages.status4k : messages.status, {
-              status: intl.formatMessage(globalMessages.pending),
-            })}
+            {formatStatusLabel(intl.formatMessage(globalMessages.pending))}
           </Badge>
         </Tooltip>
       );
@@ -485,11 +488,10 @@ const StatusBadge = ({
             href={statusBadgeLink}
             className={className}
           >
-            {intl.formatMessage(is4k ? messages.status4k : messages.status, {
-              status:
-                statusLabelOverride ??
-                intl.formatMessage(globalMessages.blocklisted),
-            })}
+            {formatStatusLabel(
+              statusLabelOverride ??
+                intl.formatMessage(globalMessages.blocklisted)
+            )}
           </Badge>
         </Tooltip>
       );
@@ -511,18 +513,16 @@ const StatusBadge = ({
           >
             {inProgress && badgeDownloadProgress}
             <div
-              className={`relative z-20 flex items-center ${
+              className={`request-status-control-content relative z-20 flex items-center ${
                 inProgress && 'px-2'
               }`}
             >
+              {leadingIcon}
               <span>
-                {intl.formatMessage(
-                  is4k ? messages.status4k : messages.status,
-                  {
-                    status: inProgress
-                      ? intl.formatMessage(globalMessages.processing)
-                      : intl.formatMessage(globalMessages.deleted),
-                  }
+                {formatStatusLabel(
+                  inProgress
+                    ? intl.formatMessage(globalMessages.processing)
+                    : intl.formatMessage(globalMessages.deleted)
                 )}
               </span>
               {inProgress && (

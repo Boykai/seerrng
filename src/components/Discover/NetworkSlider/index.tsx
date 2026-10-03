@@ -163,12 +163,14 @@ const NetworkSlider = () => {
   const intl = useIntl();
   return (
     <div>
-      <div className="slider-header">
-        <div className="slider-title">
-          <span>{intl.formatMessage(messages.networks)}</span>
-        </div>
-      </div>
       <Slider
+        heading={
+          <>
+            <div className="page-heading">
+              <span>{intl.formatMessage(messages.networks)}</span>
+            </div>
+          </>
+        }
         compact
         sliderKey="networks"
         isLoading={false}

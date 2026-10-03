@@ -19,18 +19,32 @@ const TvGenreList = () => {
     `/api/v1/discover/genreslider/tv`
   );
 
+  const title = intl.formatMessage(messages.seriesgenres);
+
   if (!data && !error) {
-    return <LoadingSpinner />;
+    return (
+      <>
+        <PageTitle title={title} />
+        <Header>{title}</Header>
+        <LoadingSpinner />
+      </>
+    );
   }
 
   if (!data) {
-    return <ErrorPage statusCode={404} />;
+    return (
+      <>
+        <PageTitle title={title} />
+        <Header>{title}</Header>
+        <ErrorPage statusCode={404} />
+      </>
+    );
   }
 
   return (
     <>
       <PageTitle title={intl.formatMessage(messages.seriesgenres)} />
-      <div className="mt-1 mb-5">
+      <div>
         <Header>{intl.formatMessage(messages.seriesgenres)}</Header>
       </div>
       <ul className="cards-horizontal">

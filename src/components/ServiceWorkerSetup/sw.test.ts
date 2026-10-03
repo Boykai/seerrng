@@ -233,6 +233,8 @@ describe('service worker runtime cache', () => {
       '/api/v1/media?filter=allavailable',
       '/api/v1/request',
       '/api/v1/request/count',
+      '/api/v1/tv/42/media-server-collections?is4k=false',
+      '/api/v1/tv/42/media-server-saved-item?is4k=false',
     ]) {
       assert.equal(
         await harness.fetchRequest(new Request(`https://seerr.test${path}`)),

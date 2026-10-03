@@ -104,7 +104,7 @@ const PlayOnDeviceButton = ({
                 void startPlayback(device);
               }}
             >
-              <ComputerDesktopIcon className="h-4 w-4 flex-none" />
+              <ComputerDesktopIcon />
               <span className="playback-device-label">
                 <span className="playback-device-name">{device.name}</span>
                 <span className="playback-device-description">

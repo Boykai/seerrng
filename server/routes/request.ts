@@ -64,6 +64,7 @@ import {
   RequestStatusStage,
   getRequestStatusHistory,
   getRequestStatusPage,
+  recordRequestRetry,
   recordRequestStatus,
 } from '@server/lib/requestStatus';
 import {
@@ -4365,6 +4366,7 @@ requestRoutes.post<{
             request.modifiedBy = actor;
             await requestRepository.save(request);
             await requestDispatchManager.enqueue(request.id);
+            await recordRequestRetry(request.id);
 
             return res
               .status(200)

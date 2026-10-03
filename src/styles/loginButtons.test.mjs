@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { styleContract } from './cssContract.mjs';
 
 const css = readFileSync(new URL('./globals.css', import.meta.url), 'utf8');
 const login = readFileSync(
@@ -8,25 +9,53 @@ const login = readFileSync(
   'utf8'
 );
 
-test('login scopes its original roomy button geometry separately from compact actions', () => {
-  assert.match(login, /className="auth-login-page /);
-  const rule = css.match(/\.auth-login-page \.app-button\s*\{([^}]+)\}/)?.[1];
-  assert.ok(rule);
-  for (const declaration of [
-    'height: auto;',
-    'min-height: 38px;',
-    'max-height: none;',
-    'padding-block: 8px;',
-    'padding-inline: 16px !important;',
-    'font-size: 14px;',
-    'line-height: 20px;',
-  ]) {
-    assert.ok(rule.includes(declaration));
+const assertLoginGeometry = (stylesheet) => {
+  const contract = styleContract(stylesheet);
+  for (const [property, value] of Object.entries({
+    height: 'auto',
+    'min-height': '38px',
+    'max-height': 'none',
+    'padding-block': '8px',
+    'padding-inline': 'var(--button-padding-x) !important',
+    'font-size': '14px',
+    'line-height': '20px',
+  })) {
+    assert.equal(
+      contract.declaration('.auth-login-page .app-button', property),
+      value
+    );
   }
-  assert.doesNotMatch(rule, /--action-control/);
-  assert.match(css, /--action-control-height: 1rem;/);
-  assert.match(
-    css,
-    /\.auth-login-page \.app-button svg\s*\{[^}]*height: 20px;[^}]*max-height: none;/s
+  assert.equal(
+    contract.declaration(':root', '--action-control-height'),
+    '1rem'
+  );
+  assert.equal(contract.declaration(':root', '--button-padding-x'), '5px');
+  assert.equal(
+    contract.declaration('.auth-login-page .app-button svg', 'height'),
+    '20px'
+  );
+  assert.equal(
+    contract.declaration('.auth-login-page .app-button svg', 'width'),
+    '20px'
+  );
+  assert.equal(
+    contract.declaration('.auth-login-page .app-button svg', 'max-height'),
+    'none'
+  );
+};
+
+test('login retains its taller button geometry while consuming shared horizontal padding', () => {
+  assert.match(login, /className="auth-login-page /);
+  assertLoginGeometry(css);
+});
+
+test('login geometry check rejects a restored competing padding owner', () => {
+  assert.throws(
+    () =>
+      assertLoginGeometry(
+        css +
+          '\n.auth-login-page .app-button { padding-inline: 16px !important; }'
+      ),
+    assert.AssertionError
   );
 });

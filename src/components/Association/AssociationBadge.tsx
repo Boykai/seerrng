@@ -15,6 +15,7 @@ import AssociationPopover from './AssociationPopover';
 
 const messages = defineMessages('components.Association', {
   associations: 'Associations',
+  associationsDescription: 'View media related or similar to this title.',
   browseMore: 'Browse More...',
 });
 
@@ -72,7 +73,7 @@ const AssociationBadge = ({
   const associationLabel = intl.formatMessage(messages.associations);
   const buttonClass =
     variant === 'card'
-      ? 'poster-control poster-control-association app-control-shadow-exempt shadow-md shadow-cyan-950/40'
+      ? 'poster-control poster-control-association app-control-shadow-exempt'
       : 'flex h-8 w-8 items-center justify-center rounded-full bg-gray-800/35 text-gray-300 ring-1 ring-gray-700 transition hover:bg-gray-700/55 hover:text-white active:bg-gray-700/70';
 
   const toggleAssociations = (event: React.MouseEvent) => {
@@ -86,7 +87,7 @@ const AssociationBadge = ({
 
   return (
     <>
-      <Tooltip content={associationLabel}>
+      <Tooltip content={intl.formatMessage(messages.associationsDescription)}>
         {variant === 'button' ? (
           <Button
             buttonType="association"
@@ -96,7 +97,7 @@ const AssociationBadge = ({
             disabled={hideWhenEmpty && isChecking}
             onClick={toggleAssociations}
           >
-            <MeshNetworkIcon className="h-4 w-4" aria-hidden="true" />
+            <MeshNetworkIcon aria-hidden="true" />
             <span>{associationLabel}</span>
           </Button>
         ) : (
@@ -109,7 +110,7 @@ const AssociationBadge = ({
             onClick={toggleAssociations}
           >
             <MeshNetworkIcon
-              className={variant === 'card' ? 'h-3.5 w-3.5' : 'h-4 w-4'}
+              className={variant === 'card' ? undefined : 'h-4 w-4'}
               aria-hidden="true"
             />
           </button>

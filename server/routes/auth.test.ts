@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import dns from 'node:dns/promises';
 import {
   after,
   afterEach,
@@ -28,6 +29,7 @@ import { checkUser } from '@server/middleware/auth';
 import { setupTestDb } from '@server/test/db';
 import { ApiError } from '@server/types/error';
 import { waitForBackgroundTasks } from '@server/utils/backgroundTasks';
+import { isSafeHttpUrl } from '@server/utils/security';
 import axios from 'axios';
 import cookieParser from 'cookie-parser';
 import type { Express } from 'express';
@@ -2710,6 +2712,35 @@ describe('POST /auth/reset-password/:guid', () => {
 });
 
 describe('OpenID Connect', () => {
+  let restoreFixtureDns = () => {};
+
+  beforeEach(() => {
+    // Fetch is mocked below; isolate only its explicit public issuer's DNS.
+    const lookup = mock.method(
+      dns,
+      'lookup',
+      async (hostname: string, options: unknown) => {
+        assert.deepStrictEqual(options, { all: true });
+        if (hostname !== 'example.com') {
+          throw new Error(`Unconfigured fixture DNS hostname: ${hostname}`);
+        }
+        return [{ address: '93.184.216.34', family: 4 }];
+      }
+    );
+    restoreFixtureDns = () => lookup.mock.restore();
+  });
+
+  afterEach(() => restoreFixtureDns());
+
+  it('isolates public fixture DNS without admitting unknown or private hosts', async () => {
+    assert.strictEqual(await isSafeHttpUrl('https://example.com/'), true);
+    assert.strictEqual(
+      await isSafeHttpUrl('https://unconfigured.example.com/'),
+      false
+    );
+    assert.strictEqual(await isSafeHttpUrl('https://127.0.0.1/'), false);
+  });
+
   it('bounds OIDC provider requests', () => {
     assert.strictEqual(OIDC_HTTP_TIMEOUT_SECONDS, 10);
   });

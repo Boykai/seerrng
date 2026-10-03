@@ -120,6 +120,11 @@ describe('GET /artist/:id/similar', () => {
   });
 
   it('returns paginated similar artists from the association graph', async () => {
+    const getMapping = mock.method(
+      TmdbPersonMapper.prototype,
+      'getMapping',
+      async () => ({ personId: null, profilePath: null })
+    );
     mock.method(ListenBrainzAPI.prototype, 'getArtist', async () =>
       artistDetails(3)
     );
@@ -132,6 +137,10 @@ describe('GET /artist/:id/similar', () => {
     );
 
     assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(
+      getMapping.mock.calls.map((call) => call.arguments),
+      [['root-artist', 'Root Artist']]
+    );
     assert.strictEqual(res.body.page, 2);
     assert.strictEqual(res.body.pageSize, 1);
     assert.strictEqual(res.body.totalPages, 3);
@@ -146,6 +155,11 @@ describe('GET /artist/:id/similar', () => {
   });
 
   it('normalizes invalid pagination input and caps page size', async () => {
+    const getMapping = mock.method(
+      TmdbPersonMapper.prototype,
+      'getMapping',
+      async () => ({ personId: null, profilePath: null })
+    );
     mock.method(ListenBrainzAPI.prototype, 'getArtist', async () =>
       artistDetails(60)
     );
@@ -158,6 +172,10 @@ describe('GET /artist/:id/similar', () => {
     );
 
     assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(
+      getMapping.mock.calls.map((call) => call.arguments),
+      [['root-artist', 'Root Artist']]
+    );
     assert.strictEqual(res.body.page, 500);
     assert.strictEqual(res.body.pageSize, 50);
     assert.strictEqual(res.body.totalPages, 2);

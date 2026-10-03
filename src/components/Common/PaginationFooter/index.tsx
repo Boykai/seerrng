@@ -1,4 +1,5 @@
 import Button from '@app/components/Common/Button';
+import { CompactSelect } from '@app/components/Discover/FilterPanel/CompactFilterSelect';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
@@ -31,56 +32,51 @@ const PaginationFooter = ({
 }: PaginationFooterProps) => {
   const intl = useIntl();
   const normalizedTotalPages = Math.max(totalPages, 1);
+  const pageSizeSelectOptions = pageSizeOptions.map((size) => ({
+    label: String(size),
+    value: String(size),
+  }));
 
   return (
     <nav
-      className="mt-5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2"
+      className="pagination-footer"
       aria-label={intl.formatMessage(messages.pagination)}
     >
-      <label className="discover-filter-control h-8 w-max">
-        <span
-          className={`discover-filter-control-label ${
-            pageSize !== defaultPageSize
-              ? 'discover-filter-control-label-active'
-              : ''
-          }`}
-        >
-          {intl.formatMessage(messages.resultsPerPage)}
-        </span>
-        <select
-          value={pageSize}
-          onChange={(event) => onPageSizeChange(Number(event.target.value))}
-          className="border-0 bg-transparent px-1.5 py-1 text-xs text-gray-300 focus:ring-0"
-        >
-          {pageSizeOptions.map((size) => (
-            <option key={size} value={size}>
-              {size}
-            </option>
-          ))}
-        </select>
-      </label>
-      <span className="justify-self-center text-sm whitespace-nowrap text-gray-400">
+      <CompactSelect
+        label={intl.formatMessage(messages.resultsPerPage)}
+        value={String(pageSize)}
+        options={pageSizeSelectOptions}
+        onChange={(value) => onPageSizeChange(Number(value))}
+        className="pagination-footer-page-size"
+        defaultValue={String(defaultPageSize)}
+      />
+      <span className="pagination-footer-page">
         {intl.formatMessage(messages.page, {
           page,
           pages: normalizedTotalPages,
         })}
       </span>
-      <div className="flex gap-2 justify-self-end">
+      <div className="pagination-footer-actions">
         <Button
           disabled={page <= 1}
+          buttonType="success"
           buttonSize="sm"
           onClick={() => onPageChange(page - 1)}
         >
-          <ChevronLeftIcon className="mr-1 h-4 w-4" aria-hidden="true" />
+          <ChevronLeftIcon className="app-navigation-icon" aria-hidden="true" />
           {intl.formatMessage(globalMessages.previous)}
         </Button>
         <Button
           disabled={page >= normalizedTotalPages}
+          buttonType="success"
           buttonSize="sm"
           onClick={() => onPageChange(page + 1)}
         >
           {intl.formatMessage(globalMessages.next)}
-          <ChevronRightIcon className="ml-1 h-4 w-4" aria-hidden="true" />
+          <ChevronRightIcon
+            className="app-navigation-icon"
+            aria-hidden="true"
+          />
         </Button>
       </div>
     </nav>

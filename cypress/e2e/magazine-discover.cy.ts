@@ -78,7 +78,7 @@ describe('Magazine discovery sources', () => {
     );
   });
 
-  it('offers tap-sized public catalog suggestions that start a search', () => {
+  it('offers shared-size public catalog suggestions that start a search', () => {
     const publicQueries: string[] = [];
     cy.intercept('GET', '/api/v1/discover/magazines*', (request) => {
       publicQueries.push(String(request.query.query ?? ''));
@@ -92,7 +92,26 @@ describe('Magazine discovery sources', () => {
     cy.contains('button', 'National Geographic')
       .should('be.visible')
       .and(($button) => {
-        expect($button[0].getBoundingClientRect().height).to.be.at.least(44);
+        const button = $button[0];
+        const document = button.ownerDocument;
+        const view = document.defaultView!;
+        const probe = document.createElement('div');
+        probe.style.position = 'absolute';
+        probe.style.visibility = 'hidden';
+        probe.style.height = view
+          .getComputedStyle(button)
+          .getPropertyValue('--action-control-height');
+        document.body.appendChild(probe);
+        const sharedHeight = parseFloat(view.getComputedStyle(probe).height);
+        probe.remove();
+        expect(
+          sharedHeight,
+          'configured shared action height'
+        ).to.be.greaterThan(0);
+        expect(button.getBoundingClientRect().height).to.be.closeTo(
+          sharedHeight,
+          0.5
+        );
       })
       .click();
 

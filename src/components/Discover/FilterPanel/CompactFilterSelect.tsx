@@ -56,7 +56,7 @@ export const FilterResetButton = ({
     className={`${getFilterResetButtonClass(selected)} ${className}`.trim()}
     onClick={onClick}
   >
-    <NoSymbolIcon className="h-4 w-4" aria-hidden="true" />
+    <NoSymbolIcon className="app-action-icon" aria-hidden="true" />
     {label}
   </button>
 );
@@ -98,7 +98,7 @@ export const CompactSelect = ({
 
   return (
     <Listbox value={selected} onChange={(option) => onChange(option.value)}>
-      <div className={`discover-filter-control relative ${className}`}>
+      <div className={`discover-filter-control ${className}`}>
         <span
           className={`discover-filter-control-label ${
             isActive ? 'discover-filter-control-label-active' : ''
@@ -111,18 +111,13 @@ export const CompactSelect = ({
           className="app-control-shadow-exempt app-filter-select-trigger"
           onClickCapture={(event) => closeOtherFilterMenus(event.currentTarget)}
         >
-          <span className="max-w-48 truncate">{selected.label}</span>
+          <span>{selected.label}</span>
           <ChevronDownIcon
             className="app-filter-select-chevron"
             aria-hidden="true"
           />
         </Listbox.Button>
-        <Transition
-          as={Fragment}
-          leave="transition ease-in duration-100"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
+        <Transition as={Fragment}>
           <Listbox.Options
             anchor="bottom start"
             portal
@@ -147,7 +142,7 @@ export const CompactSelect = ({
                         aria-hidden="true"
                       />
                     )}
-                    <span className="block truncate">{option.label}</span>
+                    <span>{option.label}</span>
                   </>
                 )}
               </Listbox.Option>
@@ -166,19 +161,16 @@ const RatingStars = ({
   score: number;
   maxScore: 5 | 10;
 }) => (
-  <span className="inline-flex gap-px" aria-hidden="true">
+  <span className="rating-stars" aria-hidden="true">
     {[0, 1, 2, 3, 4].map((starIndex) => {
       const fill = Math.max(0, Math.min(1, (score / maxScore) * 5 - starIndex));
 
       return (
-        <span key={starIndex} className="relative h-3.5 w-3.5">
-          <OutlineStarIcon className="absolute h-3.5 w-3.5 text-gray-500" />
+        <span key={starIndex} data-rating-part="star">
+          <OutlineStarIcon data-rating-part="outline" />
           {fill > 0 && (
-            <span
-              className="absolute inset-y-0 left-0 overflow-hidden"
-              style={{ width: `${fill * 100}%` }}
-            >
-              <SolidStarIcon className="h-3.5 w-3.5 max-w-none text-yellow-400" />
+            <span data-rating-part="fill" style={{ width: `${fill * 100}%` }}>
+              <SolidStarIcon />
             </span>
           )}
         </span>
@@ -213,7 +205,7 @@ export const CompactRatingSelect = ({
 
   return (
     <Listbox value={selected} onChange={(option) => onChange(option.value)}>
-      <div className={`discover-filter-control relative ${className}`}>
+      <div className={`discover-filter-control ${className}`}>
         <span
           className={`discover-filter-control-label ${
             isActive ? 'discover-filter-control-label-active' : ''
@@ -229,21 +221,14 @@ export const CompactRatingSelect = ({
           {selectedHasScore ? (
             <RatingStars score={selected.score ?? 0} maxScore={maxScore} />
           ) : (
-            <span className="max-w-48 truncate text-left">
-              {selected.label}
-            </span>
+            <span data-filter-region="value">{selected.label}</span>
           )}
           <ChevronDownIcon
             className="app-filter-select-chevron"
             aria-hidden="true"
           />
         </Listbox.Button>
-        <Transition
-          as={Fragment}
-          leave="transition ease-in duration-100"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
+        <Transition as={Fragment}>
           <Listbox.Options
             anchor="bottom start"
             portal
@@ -277,7 +262,7 @@ export const CompactRatingSelect = ({
                           maxScore={maxScore}
                         />
                       ) : (
-                        <span className="block truncate">{option.label}</span>
+                        <span>{option.label}</span>
                       )}
                     </>
                   )}

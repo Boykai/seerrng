@@ -43,10 +43,7 @@ const DropdownItems = ({
   return (
     <MenuItems
       transition
-      className={[
-        'app-dropdown-menu absolute top-full right-0 z-40 mt-2 -mr-1 w-56 origin-top-right transition duration-100 ease-out data-closed:scale-95 data-closed:opacity-0',
-        className,
-      ].join(' ')}
+      className={['app-dropdown-menu', className].join(' ')}
       {...props}
     >
       <div>{children}</div>
@@ -83,7 +80,7 @@ const Dropdown = ({
   };
 
   return (
-    <Menu as="div" className="relative z-10 inline-flex">
+    <Menu as="div" className="app-dropdown">
       <MenuButton
         type="button"
         className={[
@@ -98,7 +95,7 @@ const Dropdown = ({
         data-disabled-reason={!children ? disabledReason : undefined}
         {...props}
       >
-        <span className="inline-flex min-w-0 items-center">{text}</span>
+        <span>{text}</span>
         {children && (dropdownIcon ? dropdownIcon : <ChevronDownIcon />)}
       </MenuButton>
       {children && <DropdownItems>{children}</DropdownItems>}

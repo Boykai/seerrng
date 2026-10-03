@@ -36,6 +36,9 @@ export const mediaFilterValues = [
   'magazine',
   'author',
   'software',
+  'retro',
+  'modern',
+  'game',
 ] as const;
 export type MediaFilterValue = (typeof mediaFilterValues)[number];
 export type UserMediaFilterPins = Partial<
@@ -52,13 +55,16 @@ export interface UserSettingsCardTextResponse {
 export type UserRequestRootFolders = Record<string, string>;
 
 export type DetailDisclosurePin =
+  | 'overview'
   | 'cast'
   | 'crew'
   | 'artists'
   | 'subjectTags'
   | 'collection'
+  | 'mediaServer'
   | 'details'
   | 'advancedOptions'
+  | 'taskFilters'
   | 'filters'
   | 'mediaFilters'
   | 'sortBy';
@@ -66,12 +72,15 @@ export type DetailDisclosurePin =
 export type DetailDisclosureMediaType = 'movie' | 'tv' | 'music' | 'book';
 
 export interface UserSettingsDetailDisclosureResponse {
+  overview?: boolean;
   details?: boolean;
   advancedOptions?: boolean;
+  taskFilters?: boolean;
   filters?: boolean;
   mediaFilters?: boolean;
   sortBy?: boolean;
   collection?: boolean;
+  mediaServer?: boolean;
   cast?: boolean;
   crew?: boolean;
   artists?: boolean;

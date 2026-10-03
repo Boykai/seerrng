@@ -6,35 +6,25 @@ import ThemePicker from '@app/components/Layout/ThemePicker';
 import UserDropdown from '@app/components/Layout/UserDropdown';
 import UserWarnings from '@app/components/Layout/UserWarnings';
 import useLocale from '@app/hooks/useLocale';
-import useSearchActivity from '@app/hooks/useSearchActivity';
 import useSettings from '@app/hooks/useSettings';
 import { Permission, useUser } from '@app/hooks/useUser';
-import defineMessages from '@app/utils/defineMessages';
 import {
   DISCOVER_MEDIA_TYPES,
   isConfiguredMediaCategoryEnabled,
   isDiscoverMediaTypeEnabled,
   isOptionalCatalogPathEnabled,
 } from '@app/utils/serviceAvailability';
-import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import { ArrowLeftIcon, Bars3BottomLeftIcon } from '@heroicons/react/24/solid';
 import type { AvailableLocale } from '@server/types/languages';
 import { useRouter } from 'next/router';
 import { useEffect, useRef, useState } from 'react';
-import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 type LayoutProps = {
   children: React.ReactNode;
 };
 
-const messages = defineMessages('components.Layout', {
-  searching: 'Searching',
-});
-
 const Layout = ({ children }: LayoutProps) => {
-  const intl = useIntl();
-  const isSearching = useSearchActivity();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const isScrolledRef = useRef(false);
@@ -289,25 +279,11 @@ const Layout = ({ children }: LayoutProps) => {
           </div>
         </div>
 
-        <main className="relative top-16 z-0 focus:outline-none" tabIndex={0}>
+        <main className="page-layout" tabIndex={0}>
           <div className="mb-6">
-            <div className="max-w-8xl mx-auto px-4">
+            <div className="max-w-8xl mx-auto" data-page-layout-part="content">
               <UserWarnings />
-              <div className="global-search-progress-region">
-                <div
-                  className="global-search-progress-indicator"
-                  role="status"
-                  aria-live="polite"
-                >
-                  {isSearching && (
-                    <>
-                      <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                      <span>{intl.formatMessage(messages.searching)}</span>
-                    </>
-                  )}
-                </div>
-                {children}
-              </div>
+              {children}
             </div>
           </div>
         </main>

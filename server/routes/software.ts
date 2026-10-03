@@ -1247,6 +1247,7 @@ softwareRoutes.get('/status', async (req, res) => {
   const requestId =
     req.query.requestId === undefined ? undefined : Number(req.query.requestId);
   const rawFilter = req.query.filter;
+  const rawCategory = req.query.category;
   if (
     rawFilter !== undefined &&
     (typeof rawFilter !== 'string' ||
@@ -1258,6 +1259,14 @@ softwareRoutes.get('/status', async (req, res) => {
   }
   const filter = (rawFilter ?? 'all') as (typeof softwareStatusFilters)[number];
   const statuses = getStatusesForFilter(filter);
+  if (
+    rawCategory !== undefined &&
+    (typeof rawCategory !== 'string' ||
+      !['retro', 'modern', 'game'].includes(rawCategory))
+  ) {
+    return res.status(400).json({ error: 'Invalid software category.' });
+  }
+  const category = rawCategory as SoftwareRequestCategory | undefined;
   if (
     requestedBy !== undefined &&
     (!Number.isSafeInteger(requestedBy) || requestedBy <= 0)
@@ -1288,6 +1297,9 @@ softwareRoutes.get('/status', async (req, res) => {
   }
   if (requestId !== undefined) {
     query.andWhere('request.id = :requestId', { requestId });
+  }
+  if (category !== undefined) {
+    query.andWhere('request.category = :category', { category });
   }
   if (statuses?.length) {
     query.andWhere('request.status IN (:...statuses)', { statuses });

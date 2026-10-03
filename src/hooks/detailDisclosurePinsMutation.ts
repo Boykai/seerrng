@@ -17,9 +17,12 @@ export class DetailDisclosurePinsMutationState {
   private key = '';
   private revision = 0;
   private value: DetailDisclosurePins = {
+    overview: false,
     details: false,
     advancedOptions: false,
+    taskFilters: false,
     collection: false,
+    mediaServer: false,
     cast: false,
     crew: false,
     artists: false,

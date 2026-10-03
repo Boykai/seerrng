@@ -131,7 +131,7 @@ const BookFormatTabs = ({
   return (
     <nav
       aria-label={intl.formatMessage(messages.format)}
-      className={`flex flex-wrap gap-2 ${className}`}
+      className={`app-filter-row ${className}`}
       data-testid="book-format-tabs"
     >
       {tabs
@@ -156,9 +156,9 @@ const BookFormatTabs = ({
                 )}
                 aria-current={isSelected ? 'page' : undefined}
                 data-testid={`book-format-tab-${tab.format}`}
-                className="app-filter-segment-focus flex h-full items-center gap-1.5 px-2"
+                className="app-control-shadow-exempt app-filter-segment-focus"
               >
-                <Icon className="h-4 w-4" aria-hidden="true" />
+                <Icon className="app-action-icon" aria-hidden="true" />
                 <span>{intl.formatMessage(tab.label)}</span>
               </Link>
             </MediaFilterOption>

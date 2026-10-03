@@ -117,7 +117,7 @@ describe('Discover Customization', () => {
 
     // Confirming we have some results
     cy.contains('.slider-header', sliderTitle)
-      .next('[data-testid=media-slider]')
+      .closest('[data-testid=media-slider]')
       .find('[data-testid=title-card]');
 
     cy.get('[data-testid=create-discover-option-form]').submit();
@@ -155,7 +155,7 @@ describe('Discover Customization', () => {
     cy.visit('/');
 
     cy.contains('.slider-header', sliderTitle)
-      .next('[data-testid=media-slider]')
+      .closest('[data-testid=media-slider]')
       .find('[data-testid=title-card]');
 
     cy.get('[data-testid=discover-start-editing]').click();

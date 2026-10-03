@@ -1,7 +1,33 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import postcss from 'postcss';
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8');
+const propertyValues = (stylesheet, selector, property) => {
+  const values = [];
+  postcss.parse(stylesheet).walkRules((rule) => {
+    if (!rule.selectors.includes(selector)) return;
+    for (const node of rule.nodes ?? [])
+      if (node.type === 'decl' && node.prop === property)
+        values.push(node.value.replace(/\s+/g, ' '));
+  });
+  return values;
+};
+const verifyPairedTracks = (stylesheet) => {
+  for (const role of ['.media-detail-rows', '.card-table']) {
+    const selector = `.detail-paired-column-span ${role}.detail-paired-columns`;
+    assert.deepEqual(
+      propertyValues(stylesheet, selector, 'grid-column'),
+      ['1 / -1'],
+      'paired table spans its parent tracks'
+    );
+    assert.deepEqual(
+      propertyValues(stylesheet, selector, 'grid-template-columns'),
+      ['subgrid'],
+      'paired table inherits parent tracks'
+    );
+  }
+};
 test('shared middle groups center as one unit and stretch across their allotted rows', () => {
   const css = read('./globals.css');
   assert.match(
@@ -21,7 +47,7 @@ const files = [
   'Blocklist/index.tsx',
   'IssueDetails/IssueMediaSummary.tsx',
   'IssueList/IssueItem/index.tsx',
-  'RequestStatus/index.tsx',
+  'Requests/index.tsx',
   ...['Book', 'Movie', 'Music', 'Tv'].map(
     (x) => `RequestModal/${x}RequestModal.tsx`
   ),
@@ -47,10 +73,7 @@ for (const file of files)
   });
 test('paired spans share intrinsic parent tracks without fixed proportions', () => {
   const css = read('./globals.css');
-  assert.match(
-    css,
-    /\.detail-paired-column-span \.media-detail-rows\.detail-paired-columns\s*\{[^}]*grid-column: 1 \/ -1;[^}]*grid-template-columns: subgrid;/
-  );
+  verifyPairedTracks(css);
   assert.match(css, /\.detail-paired-column-span\s*\{\s*padding-right: 0;/);
   assert.match(
     css,
@@ -59,6 +82,28 @@ test('paired spans share intrinsic parent tracks without fixed proportions', () 
   assert.match(
     read('../components/MusicDetails/MusicDetailsLayout.tsx'),
     /detail-paired-column-span min-w-0/
+  );
+});
+
+test('paired table verification rejects copied tracks instead of shared subgrid', () => {
+  const root = postcss.parse(read('./globals.css'));
+  let changed = 0;
+  root.walkRules((rule) => {
+    if (
+      !rule.selectors.includes(
+        '.detail-paired-column-span .card-table.detail-paired-columns'
+      )
+    )
+      return;
+    rule.walkDecls('grid-template-columns', (decl) => {
+      decl.value = '1fr 1fr';
+      changed++;
+    });
+  });
+  assert.equal(changed, 1);
+  assert.throws(
+    () => verifyPairedTracks(root.toString()),
+    /paired table inherits parent tracks/
   );
 });
 
@@ -75,14 +120,48 @@ test('all three-column details layouts use the shared responsive grid', () => {
   }
   const css = read('./globals.css');
   assert.doesNotMatch(css, /--detail-(first|middle|final)-column-share/);
-  assert.match(
-    css,
-    /\.detail-three-column-grid\s*\{[^}]*grid-template-columns:\s*fit-content\(var\(--detail-first-column-limit\)\) minmax\(0, 1fr\)\s*fit-content\(var\(--detail-last-column-limit\)\)/
+  assert.ok(
+    propertyValues(
+      css,
+      '.detail-three-column-grid',
+      '--card-table-default-details-columns'
+    ).includes('minmax(0, 1fr)'),
+    'narrow details stack into one track'
   );
-  assert.match(
-    css,
-    /\.movie-summary-fields-with-ratings\s*\{[^}]*grid-template-columns:\s*max-content 0\.75rem fit-content\(var\(--detail-first-value-limit\)\) 0\.75rem\s*minmax\(0, 1fr\) fit-content\(var\(--detail-last-column-limit\)\)/
+  assert.ok(
+    propertyValues(
+      css,
+      '.detail-three-column-grid',
+      '--card-table-default-details-columns'
+    ).some((value) =>
+      /fit-content\(\s*var\(--detail-first-column-limit\)\s*\) minmax\(0, 1fr\) fit-content\(var\(--detail-last-column-limit\)\)/.test(
+        value
+      )
+    ),
+    'wide details retain intrinsic side tracks'
   );
+  assert.ok(
+    propertyValues(
+      css,
+      '.movie-summary-fields-with-ratings',
+      '--card-table-default-details-columns'
+    ).includes(
+      'max-content 0.75rem fit-content(var(--detail-first-value-limit)) 0.75rem minmax(0, 1fr) fit-content(var(--detail-last-column-limit))'
+    ),
+    'paired summaries retain shared six-track defaults'
+  );
+  for (const selector of [
+    '.detail-three-column-grid',
+    '.movie-summary-fields-with-ratings',
+  ])
+    assert.ok(
+      propertyValues(css, selector, 'grid-template-columns').some(
+        (value) =>
+          value.startsWith('var(') &&
+          value.includes('--card-table-details-columns')
+      ),
+      'details consume their independent configuration'
+    );
   assert.match(
     css,
     /\.detail-paired-simple-columns\s*\{[^}]*grid-template-columns: subgrid;/
@@ -113,6 +192,30 @@ test('details titles share their optical alignment without local negative margin
       'RequestModal/CollectionRequestModal.tsx',
     ])) {
     const source = read(`../components/${file}`);
+    if (file === 'RequestModal/CollectionRequestModal.tsx') {
+      assert.match(
+        source,
+        /<CollectionSummaryCard/,
+        'collection requests retain their shared summary consumer'
+      );
+      const summary = read(
+        '../components/CollectionDetails/CollectionSummaryCard.tsx'
+      );
+      assert.match(
+        summary,
+        /collection-summary-title/,
+        'shared collection summary retains its title role'
+      );
+      for (const line of summary
+        .split('\n')
+        .filter((line) => line.includes('collection-summary-title')))
+        assert.doesNotMatch(
+          line,
+          /-mt-/,
+          'shared collection title has no local optical offset'
+        );
+      continue;
+    }
     assert.match(source, /detail-summary-title/, file);
     for (const line of source
       .split('\n')

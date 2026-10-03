@@ -107,10 +107,11 @@ function ProviderTitleCard({ item }: { item: ProviderTitle }) {
 
   return (
     <article
-      className="w-48 overflow-hidden rounded-xl bg-gray-800 ring-1 ring-gray-700 md:w-56"
+      className="poster-layout overflow-hidden rounded-xl bg-gray-800 ring-1 ring-gray-700"
+      data-media-type={item.mediaType}
       data-testid="personal-discovery-unmatched-card"
     >
-      <div className="relative aspect-[2/3] bg-gray-700">
+      <div data-poster-region="frame" className="bg-gray-700">
         {image ? (
           <Image
             src={image}
@@ -128,7 +129,11 @@ function ProviderTitleCard({ item }: { item: ProviderTitle }) {
         )}
       </div>
       <div className="p-3 whitespace-normal">
-        <h3 className="line-clamp-2 font-semibold text-gray-100">
+        <h3
+          className="card-title"
+          data-title-weight="regular"
+          data-poster-region="title"
+        >
           {item.title}
         </h3>
         {item.year && <p className="text-sm text-gray-400">{item.year}</p>}
@@ -213,50 +218,58 @@ function PersonalizedRow({
       aria-label={intl.formatMessage(row.title)}
       data-testid={`personal-discovery-row-${row.id}`}
     >
-      <h2 className="mb-2 text-xl font-semibold text-white">
-        <FormattedMessage {...row.title} />
-      </h2>
-      {error && failure && (
-        <div
-          role="alert"
-          className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-yellow-600 bg-yellow-900/30 p-3 text-sm"
-        >
-          <span>
-            <FormattedMessage
-              {...errorMessage}
-              values={{
-                provider: providerNames[row.provider],
-                seconds: retryRemaining,
-              }}
-            />
-          </span>
-          {failure.kind === 'reconnect' ? (
-            <Link
-              href="/profile/settings/linked-accounts"
-              className="text-blue-300 underline"
+      <Slider
+        heading={
+          <h2 className="page-heading">
+            <FormattedMessage {...row.title} />
+          </h2>
+        }
+        isActive={inView}
+        notice={
+          error &&
+          failure && (
+            <div
+              role="alert"
+              className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-yellow-600 bg-yellow-900/30 p-3 text-sm"
             >
-              <FormattedMessage {...discoveryMessages['personalized.manage']} />
-            </Link>
-          ) : (
-            <Button
-              buttonSize="sm"
-              disabled={isLoading || retryRemaining > 0}
-              onClick={() => void mutate()}
-            >
-              <FormattedMessage {...discoveryMessages['personalized.retry']} />
-            </Button>
-          )}
-        </div>
-      )}
-      {inView && (
-        <Slider
-          sliderKey={row.id}
-          items={data?.items.map((item) => (
-            <ProviderTitleCard key={item.id} item={item} />
-          ))}
-          isLoading={isLoading}
-        />
-      )}
+              <span>
+                <FormattedMessage
+                  {...errorMessage}
+                  values={{
+                    provider: providerNames[row.provider],
+                    seconds: retryRemaining,
+                  }}
+                />
+              </span>
+              {failure.kind === 'reconnect' ? (
+                <Link
+                  href="/profile/settings/linked-accounts"
+                  className="text-blue-300 underline"
+                >
+                  <FormattedMessage
+                    {...discoveryMessages['personalized.manage']}
+                  />
+                </Link>
+              ) : (
+                <Button
+                  buttonSize="sm"
+                  disabled={isLoading || retryRemaining > 0}
+                  onClick={() => void mutate()}
+                >
+                  <FormattedMessage
+                    {...discoveryMessages['personalized.retry']}
+                  />
+                </Button>
+              )}
+            </div>
+          )
+        }
+        sliderKey={row.id}
+        items={data?.items.map((item) => (
+          <ProviderTitleCard key={item.id} item={item} />
+        ))}
+        isLoading={isLoading}
+      />
     </section>
   );
 }

@@ -155,7 +155,7 @@ const PersonDetails = () => {
   const cast = (sortedCast ?? []).length > 0 && (
     <>
       <div className="slider-header">
-        <div className="slider-title">
+        <div className="page-heading">
           <span>{intl.formatMessage(messages.appearsin)}</span>
         </div>
       </div>
@@ -202,7 +202,7 @@ const PersonDetails = () => {
   const crew = (sortedCrew ?? []).length > 0 && (
     <>
       <div className="slider-header">
-        <div className="slider-title">
+        <div className="page-heading">
           <span>{intl.formatMessage(messages.crewmember)}</span>
         </div>
       </div>

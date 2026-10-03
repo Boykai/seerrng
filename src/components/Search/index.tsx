@@ -690,7 +690,7 @@ const Search = () => {
   return (
     <>
       <PageTitle title={intl.formatMessage(messages.search)} />
-      <div className="mb-5 flow-root">
+      <div>
         <Header
           subtext={
             preferredBookFormat ? (
@@ -713,7 +713,7 @@ const Search = () => {
         label={intl.formatMessage(messages.mediaFilters)}
       >
         <div
-          className="flex flex-wrap items-center gap-2"
+          className="app-filter-row"
           aria-label={intl.formatMessage(messages.mediaFilters)}
         >
           {visibleSearchCategories.map((searchCategory) => {
@@ -729,7 +729,7 @@ const Search = () => {
               >
                 <button
                   type="button"
-                  className="app-control-shadow-exempt app-filter-segment-focus flex h-full items-center px-2"
+                  className="app-control-shadow-exempt app-filter-segment-focus"
                   aria-pressed={isSelected}
                   onClick={() => {
                     const nextQuery = getSearchCategoryQuery(router.query, {
@@ -761,7 +761,7 @@ const Search = () => {
           label={intl.formatMessage(messages.filter)}
         >
           <div
-            className="flex flex-wrap items-center gap-2"
+            className="app-filter-row"
             aria-label={intl.formatMessage(messages.filter)}
           >
             <FilterResetButton
@@ -791,7 +791,7 @@ const Search = () => {
           section="sortBy"
           label={intl.formatMessage(messages.sortBy)}
         >
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="app-filter-row">
             {sortOptions.map((sortOption) => {
               const isSelected = sortField === sortOption.field;
               const displayedOrder = isSelected
@@ -836,7 +836,7 @@ const Search = () => {
                     }}
                   >
                     {intl.formatMessage(sortOption.message)}
-                    <SortDirectionIcon className="h-4 w-4 flex-shrink-0" />
+                    <SortDirectionIcon />
                   </button>
                 </Tooltip>
               );

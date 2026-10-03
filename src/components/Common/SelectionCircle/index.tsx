@@ -1,4 +1,3 @@
-import { CheckIcon } from '@heroicons/react/24/solid';
 import type { FocusEventHandler, KeyboardEvent, MouseEvent } from 'react';
 
 export const selectFromRow = (
@@ -44,6 +43,42 @@ interface SelectionCircleProps {
   onClick: () => void;
 }
 
+const SelectionCircleGlyph = () => (
+  <svg
+    className="selection-circle-icon"
+    aria-hidden="true"
+    focusable="false"
+    viewBox="0 0 24 24"
+    fill="none"
+    strokeWidth="1.5"
+  >
+    <circle cx="12" cy="12" r="9" />
+    <path
+      d="M9 12.75 11.25 15 15 9.75"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/** Shared circle appearance inside an existing selection control, not a nested button. */
+export const SelectionCircleIndicator = ({
+  selected,
+  partial = false,
+  disabled = false,
+}: Pick<SelectionCircleProps, 'selected' | 'partial' | 'disabled'>) => (
+  <span
+    className="selection-circle"
+    data-selected={selected || undefined}
+    data-partial={partial || undefined}
+    data-disabled={disabled || undefined}
+    aria-hidden="true"
+  >
+    <SelectionCircleGlyph />
+  </span>
+);
+
 const SelectionCircle = ({
   selected,
   partial = false,
@@ -71,7 +106,7 @@ const SelectionCircle = ({
     data-partial={partial || undefined}
     className="selection-circle"
   >
-    <CheckIcon className="selection-circle-icon" aria-hidden="true" />
+    <SelectionCircleGlyph />
   </button>
 );
 

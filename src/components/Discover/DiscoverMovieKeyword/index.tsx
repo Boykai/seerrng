@@ -37,22 +37,29 @@ const DiscoverMovieKeyword = () => {
     { enabled: !!keywords }
   );
 
-  if (error) {
-    return <ErrorPage statusCode={500} />;
-  }
+  const title =
+    isLoadingInitialData || error || !firstResultData?.keywords?.length
+      ? intl.formatMessage(globalMessages.movies)
+      : intl.formatMessage(messages.keywordMovies, {
+          keywordTitle: firstResultData?.keywords
+            .map((k) => `${k.name[0].toUpperCase()}${k.name.substring(1)}`)
+            .join(', '),
+        });
 
-  const title = isLoadingInitialData
-    ? intl.formatMessage(globalMessages.loading)
-    : intl.formatMessage(messages.keywordMovies, {
-        keywordTitle: firstResultData?.keywords
-          .map((k) => `${k.name[0].toUpperCase()}${k.name.substring(1)}`)
-          .join(', '),
-      });
+  if (error) {
+    return (
+      <>
+        <PageTitle title={title} />
+        <Header>{title}</Header>
+        <ErrorPage statusCode={500} />
+      </>
+    );
+  }
 
   return (
     <>
       <PageTitle title={title} />
-      <div className="mt-1 mb-5">
+      <div>
         <Header>{title}</Header>
       </div>
       <ListView

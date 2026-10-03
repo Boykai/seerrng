@@ -28,6 +28,8 @@ interface StatusBadgeMiniProps {
   inProgress?: boolean;
   // Should the badge shrink on mobile to a smaller size? (TitleCard)
   shrink?: boolean;
+  // Request cards use the standard action-button geometry.
+  buttonStyle?: boolean;
 }
 
 const StatusBadgeMini = memo(
@@ -36,6 +38,7 @@ const StatusBadgeMini = memo(
     quality,
     inProgress = false,
     shrink = false,
+    buttonStyle = false,
   }: StatusBadgeMiniProps) => {
     const intl = useIntl();
     const badgeStyle = [
@@ -124,9 +127,19 @@ const StatusBadgeMini = memo(
           : status === MediaStatus.PENDING
             ? 'poster-control-pending'
             : 'poster-control-processing';
+      const buttonTone =
+        !inProgress && status === MediaStatus.AVAILABLE
+          ? 'app-button-success'
+          : !inProgress && status === MediaStatus.PENDING
+            ? 'app-button-pending'
+            : 'app-button-warning';
       const qualityBadge = (
         <div
-          className={`poster-control shadow-md ${tone}`}
+          className={
+            buttonStyle
+              ? `app-button button-sm request-quality-control ${buttonTone}`
+              : `poster-control ${tone}`
+          }
           data-testid="poster-quality-status-badge"
           role="img"
           aria-label={tooltipLabel}
@@ -134,11 +147,11 @@ const StatusBadgeMini = memo(
           {status === MediaStatus.AVAILABLE && !inProgress ? (
             <>
               <span>{quality}</span>
-              <AvailabilityIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <AvailabilityIcon aria-hidden />
             </>
           ) : (
             <>
-              <span className="h-3.5 w-3.5 shrink-0">{indicatorIcon}</span>
+              <span>{indicatorIcon}</span>
               <span>{quality}</span>
             </>
           )}
