@@ -103,12 +103,28 @@ describe('SettingsLayout', () => {
     ).toBeNull();
   });
 
+  it('lists Manga Sources right after Manga Library', async () => {
+    state.pathname = '/settings/manga-sources';
+    await render();
+
+    const index = routes().indexOf('/settings/manga-sources');
+    expect(index).toBeGreaterThan(0);
+    expect(routes()[index - 1]).toBe('/settings/manga-library');
+    expect(
+      host.querySelector('[data-route="/settings/manga-sources"]')?.textContent
+    ).toBe('Manga Sources');
+    // Each pick saves itself.
+    expect(
+      host.querySelector('[data-testid="settings-save-button"]')
+    ).toBeNull();
+  });
+
   it.each([
     ['the manga category is off', { manga: false }, true, true],
     ['Suwayomi is not configured', { manga: true }, false, true],
     ['the user is not an admin', { manga: true }, true, false],
   ])(
-    'hides Manga Library while %s',
+    'hides Manga Library and Manga Sources while %s',
     async (_, enabledMediaCategories, suwayomiEnabled, admin) => {
       state.settings = { enabledMediaCategories, suwayomiEnabled };
       state.admin = admin;
@@ -116,6 +132,7 @@ describe('SettingsLayout', () => {
       await render();
 
       expect(routes()).not.toContain('/settings/manga-library');
+      expect(routes()).not.toContain('/settings/manga-sources');
       expect(routes()).toContain('/settings/jobs');
     }
   );

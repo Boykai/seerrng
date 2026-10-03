@@ -8,6 +8,7 @@ import CachedImage from '@app/components/Common/CachedImage';
 import {
   formatMangaScope,
   mangaScopeMessages,
+  MangaWaitingHint,
   MangaWaitingStatus,
 } from '@app/components/Common/MangaRequestScope';
 import MediaTypeBadge, {
@@ -880,11 +881,11 @@ const RequestCard = ({
                 <MangaWaitingStatus />
                 {hasPermission(Permission.MANAGE_REQUESTS) && (
                   // Card sliders don't wrap text; let this sentence wrap.
-                  <span className="text-xs whitespace-normal">
-                    {intl.formatMessage(
-                      mangaScopeMessages.waitingForSourceHint
-                    )}
-                  </span>
+                  <MangaWaitingHint
+                    className="text-xs whitespace-normal"
+                    anilistId={getMangaAniListId(requestData.media)}
+                    instanceId={requestData.serverId}
+                  />
                 )}
               </>
             ) : requestData.status === MediaRequestStatus.FAILED ? (

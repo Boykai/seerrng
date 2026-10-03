@@ -77,6 +77,18 @@ test('current shared owners pass their checks and functional mutations fail', ()
       ".gradiant-text {\n  width: fit-content;\n  background-image: url('/visual-lab/legacy-title-fill.png');\n  background: linear-gradient(",
       'Visual Lab treatments must remain CSS-only without image-backed fills',
     ],
+    [
+      'src/styles/globals.css',
+      '  .settings-manga-sources-stack,\n  .settings-manga-library-stack {',
+      '  .settings-manga-library-stack {',
+      'Manga Sources table geometry, title links, and detail lists must resolve through shared global classes',
+    ],
+    [
+      'src/styles/globals.css',
+      '  .request-manga-source-link,\n  .settings-manga-sources-link,',
+      '  .settings-manga-sources-link,',
+      'the Choose Source text link must resolve through the shared indigo link class',
+    ],
   ];
   for (const [fileName, original, replacement, reason] of cases) {
     const source = readFileSync(

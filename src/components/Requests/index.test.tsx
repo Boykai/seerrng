@@ -27,10 +27,16 @@ vi.mock('next/link', () => ({
   default: ({
     href,
     children,
+    className,
   }: {
     href: string;
     children: React.ReactNode;
-  }) => <a href={href}>{children}</a>,
+    className?: string;
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock('next/dynamic', () => ({
   default:
@@ -280,6 +286,67 @@ it('shows request managers the waiting-for-a-source hint', async () => {
   expect(chip()?.getAttribute('aria-label')).toBe(
     'Waiting for a source: SeerrNG is looking for a source; an administrator may need to choose one.'
   );
+});
+
+const sourceButton = () =>
+  host.querySelector(
+    '.request-status-action-row a[href^="/settings/manga-sources"]'
+  );
+const waitingScope = scope({ awaitingBinding: true });
+
+it.each([0, 6])(
+  'puts Choose Source after the status for administrators on instance %i',
+  async (serverId) => {
+    state.granted = [Permission.ADMIN, Permission.MANAGE_REQUESTS];
+
+    await render(mangaItem({ serverId, mangaScope: waitingScope }), true);
+
+    expect(sourceButton()?.getAttribute('href')).toBe(
+      `/settings/manga-sources?anilistId=30013&instanceId=${serverId}`
+    );
+    expect(sourceButton()?.className).toBe(
+      'app-button app-button-manage button-sm'
+    );
+    expect(sourceButton()?.textContent).toBe('Choose Source');
+    expect(
+      sourceButton()?.querySelector('svg')?.getAttribute('aria-hidden')
+    ).toBe('true');
+    expect(sourceButton()?.previousElementSibling?.contains(chip())).toBe(true);
+  }
+);
+
+it.each<[string, number[], Partial<MangaScopedRequest>]>([
+  [
+    'request managers',
+    [Permission.MANAGE_REQUESTS],
+    { serverId: 0, mangaScope: waitingScope },
+  ],
+  [
+    'a request with no instance',
+    [Permission.ADMIN, Permission.MANAGE_REQUESTS],
+    { mangaScope: waitingScope },
+  ],
+  [
+    'a title with no AniList ID',
+    [Permission.ADMIN, Permission.MANAGE_REQUESTS],
+    {
+      serverId: 0,
+      mangaScope: waitingScope,
+      media: { identifiers: [] } as never,
+    },
+  ],
+  [
+    'a request with a source',
+    [Permission.ADMIN, Permission.MANAGE_REQUESTS],
+    { serverId: 0 },
+  ],
+])('leaves out Choose Source for %s', async (_case, granted, values) => {
+  state.granted = granted;
+
+  await render(mangaItem(values), true);
+
+  expect(chip()).toBeTruthy();
+  expect(sourceButton()).toBeNull();
 });
 
 it('opens the manga edit modal from a pending request', async () => {

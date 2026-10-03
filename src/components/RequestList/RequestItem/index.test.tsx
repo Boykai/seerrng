@@ -299,6 +299,43 @@ it('puts the waiting hint below the status field and lets its row grow', async (
   expect(row()?.classList.contains('xl:h-28')).toBe(false);
 });
 
+const sourceLink = () => host.querySelector('a.request-manga-source-link');
+const waitingRequest = (values: Partial<MangaScopedRequest> = {}) =>
+  mangaRequest({
+    status: MediaRequestStatus.APPROVED,
+    mangaScope: scope({ awaitingBinding: true }),
+    ...values,
+  });
+
+it('links administrators from the waiting hint to the source picker', async () => {
+  state.granted = [Permission.ADMIN, Permission.MANAGE_REQUESTS];
+
+  await render(waitingRequest());
+
+  expect(sourceLink()?.getAttribute('href')).toBe(
+    '/settings/manga-sources?anilistId=30013&instanceId=0'
+  );
+  expect(sourceLink()?.parentElement?.textContent).toBe(
+    `${waitingHint} Choose Source`
+  );
+});
+
+it.each([
+  ['request managers', [Permission.MANAGE_REQUESTS], 0],
+  [
+    'a request with no instance',
+    [Permission.ADMIN, Permission.MANAGE_REQUESTS],
+    undefined,
+  ],
+])('leaves out Choose Source for %s', async (_case, granted, serverId) => {
+  state.granted = granted;
+
+  await render(waitingRequest({ serverId }));
+
+  expect(host.textContent).toContain(waitingHint);
+  expect(sourceLink()).toBeNull();
+});
+
 it.each([
   [
     'a waiting request seen without the hint',

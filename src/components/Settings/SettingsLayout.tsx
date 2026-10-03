@@ -34,6 +34,7 @@ const messages = defineMessages('components.Settings', {
   menuServices: 'Services',
   menuLibraryMigration: 'Library Migration',
   menuMangaLibrary: 'Manga Library',
+  menuMangaSources: 'Manga Sources',
   menuNetwork: 'Network',
   menuNotifications: 'Notifications',
   menuLogs: 'Logs',
@@ -73,7 +74,7 @@ export const useSettingsPageAction = (action: SettingsPageAction | null) => {
 };
 
 const editableSettingsRoute = (path: string) =>
-  !/^\/settings\/(?:services|library-migration|manga-library|logs|jobs|about|discovery)(?:\/|$)/.test(
+  !/^\/settings\/(?:services|library-migration|manga-library|manga-sources|logs|jobs|about|discovery)(?:\/|$)/.test(
     path
   );
 
@@ -143,6 +144,11 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
                   text: intl.formatMessage(messages.menuMangaLibrary),
                   route: '/settings/manga-library',
                   regex: /^\/settings\/manga-library/,
+                },
+                {
+                  text: intl.formatMessage(messages.menuMangaSources),
+                  route: '/settings/manga-sources',
+                  regex: /^\/settings\/manga-sources/,
                 },
               ]
             : []),

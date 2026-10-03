@@ -45,9 +45,11 @@ them on their own. Each card's **Chapters** row shows the requested chapters,
 for example "All", "Latest 25", "10–20", or "10 onward". An
 approved manga request whose title has no current match on the Suwayomi server
 shows **Waiting for a source** instead of **Approved**; see
-[Manga Backend](./manga-backend.md#waiting-for-a-source). SeerrNG sends
-approved manga requests to Suwayomi; see
-[Dispatch](./manga-backend.md#dispatch).
+[Manga Backend](./manga-backend.md#waiting-for-a-source). Administrators
+choose its source on the
+[Manga Sources page](./manga-backend.md#resolve-sources-by-hand), which the
+**Choose Source** button beside the status opens. SeerrNG sends approved manga
+requests to Suwayomi; see [Dispatch](./manga-backend.md#dispatch).
 
 ## Download an available copy
 

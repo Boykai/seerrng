@@ -307,6 +307,8 @@ const RequestBlock = ({
                 (isAwaitingSource ? (
                   <MangaWaitingStatus
                     showHint={hasPermission(Permission.MANAGE_REQUESTS)}
+                    anilistId={getMangaAniListId(mangaRequest?.media)}
+                    instanceId={mangaRequest?.serverId}
                   />
                 ) : (
                   <Badge badgeType="success">

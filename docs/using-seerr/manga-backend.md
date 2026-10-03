@@ -161,7 +161,9 @@ shows **Approved** again once the title is matched: by a library scan, on the
 job; see [Source resolution](#source-resolution). The job matches a title by
 itself only when it finds an exact link; otherwise an administrator chooses a
 source, as in [Resolve sources by hand](#resolve-sources-by-hand). Request
-managers also see that an administrator may need to choose a source.
+managers also see that an administrator may need to choose a source. For
+administrators, **Choose Source** opens the title on the **Manga Sources**
+page.
 
 SeerrNG sends the request to Suwayomi once the title has a match it can use;
 see [Which match a request uses](#which-match-a-request-uses). While the
@@ -539,8 +541,41 @@ title that the **Manga Content** switches allow.
 
 ### Resolve sources by hand
 
-A picker on the settings pages arrives in a later release. Until then,
-administrators use the API under `/api/v1/manga/resolve`. The routes require
+Administrators match requested titles under **Settings → Manga Sources**.
+Like the [Manga Library page](#manga-library-page), it appears while the
+Manga category is on and a Suwayomi server is configured. The page lists the
+titles that wait for a source with their status from
+[Statuses and retries](#statuses-and-retries), a short reason, and their
+**Last Check** and **Next Check** times; filter the list by **Status**. A
+title whose details SeerrNG cannot show, for example because the **Manga
+Content** switches hide it, appears only as its AniList ID.
+
+- **Search Now** asks the job to search the title next and resets its wait.
+  The title shows **Search Queued** until the search has run. For a title
+  whose request is still pending, the page asks you to confirm first, because
+  the search sends the title to MangaDex and to the selected sources even
+  though the request is not approved.
+- **Open** shows the title's status with a link to its request, its matches
+  on the server under **Library Matches**, and its **Suggestions**, exact
+  links first. Each suggestion shows its title, the name and language of its
+  source as plain text, its ranking (**High Confidence**, **Medium
+  Confidence**, or **Weak Guess**) or **Matched with data from MangaDex** for
+  an exact link, and **In Suwayomi Library** when the manga is already there.
+  The page never shows a manga's address in Suwayomi.
+- **Match** matches the title to a suggestion after you confirm. When the
+  title already has a match, the confirmation says that this adds a second
+  one.
+- **Match by Hand** matches the title to a manga that Suwayomi already knows:
+  enter its **Suwayomi Manga ID**, or choose one of the sources selected for
+  the server and enter the manga's **Source-Relative URL**.
+
+After a match, the page closes the title's details and the title leaves the
+list. If an action fails, the page says why; when the title changed in the
+meantime, refresh it and try again. Administrators can also open a title that
+is [waiting for a source](#waiting-for-a-source) from its request with
+**Choose Source**.
+
+For automation, use the API under `/api/v1/manga/resolve`. The routes require
 administrator permission; while the Manga category is off, they return the
 normal not-found response.
 

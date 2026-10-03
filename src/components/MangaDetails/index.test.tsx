@@ -33,6 +33,21 @@ vi.mock('axios', () => ({ default: { post: state.post } }));
 vi.mock('next/router', () => ({
   useRouter: () => ({ query: { mangaId: '30013' } }),
 }));
+vi.mock('next/link', () => ({
+  default: ({
+    href,
+    children,
+    className,
+  }: {
+    href: string;
+    children: React.ReactNode;
+    className?: string;
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next/dynamic', () => ({
   default:
     () =>
@@ -66,6 +81,7 @@ vi.mock('@app/pages/_error', () => ({
   ),
 }));
 vi.mock('@app/components/Common/CachedImage', () => ({
+  // eslint-disable-next-line @next/next/no-img-element
   default: ({ src }: { src: string }) => <img alt="" src={src} />,
 }));
 vi.mock('@app/components/MediaDetails/MediaDetailArtwork', () => ({
@@ -647,6 +663,57 @@ it.each([
     ).toBe(hint);
   }
 );
+
+const parkedCopy = (serverId?: number) => ({
+  data: {
+    id: 41,
+    type: 'manga',
+    status: MediaRequestStatus.APPROVED,
+    serverId,
+    media: { identifiers: [{ provider: 'anilist', value: '30013' }] },
+    mangaScope: {
+      scope: 'ALL_AT_DISPATCH',
+      latestCount: null,
+      rangeStart: null,
+      rangeEnd: null,
+      awaitingBinding: true,
+    },
+  },
+});
+const sourceLink = () =>
+  host.querySelector('a[href^="/settings/manga-sources"]');
+
+it.each([0, 5])(
+  'links administrators from the waiting hint to instance %i',
+  async (serverId) => {
+    state.granted = [Permission.ADMIN, Permission.MANAGE_REQUESTS];
+    state.swr = { data: withRequest(MediaRequestStatus.APPROVED, 9) };
+    state.byKey['/api/v1/request/41'] = parkedCopy(serverId);
+    await render();
+
+    expect(sourceLink()?.getAttribute('href')).toBe(
+      `/settings/manga-sources?anilistId=30013&instanceId=${serverId}`
+    );
+    expect(requestRow()).toContain('choose one. Choose Source');
+  }
+);
+
+it.each([
+  ['request managers', [Permission.MANAGE_REQUESTS], 0],
+  [
+    'a request with no instance',
+    [Permission.ADMIN, Permission.MANAGE_REQUESTS],
+    undefined,
+  ],
+])('leaves out Choose Source for %s', async (_case, granted, serverId) => {
+  state.granted = granted;
+  state.swr = { data: withRequest(MediaRequestStatus.APPROVED, 9) };
+  state.byKey['/api/v1/request/41'] = parkedCopy(serverId);
+  await render();
+
+  expect(requestRow()).toContain('an administrator may need to choose one');
+  expect(sourceLink()).toBeNull();
+});
 
 it('shows an approved request that is not parked as approved', async () => {
   state.swr = { data: withRequest(MediaRequestStatus.APPROVED) };

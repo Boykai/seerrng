@@ -19,6 +19,7 @@ import {
   MANGA_MAX_CHAPTER_NUMBER,
   MANGA_MAX_LATEST_COUNT,
   draftFromMangaScope,
+  getMangaAniListId,
   isAwaitingMangaSource,
   mangaRequestBody,
   mangaRequestEditBody,
@@ -509,6 +510,8 @@ const MangaRequestModal = ({
               isAwaitingMangaSource(request) ? (
                 <MangaWaitingStatus
                   showHint={hasPermission(Permission.MANAGE_REQUESTS)}
+                  anilistId={getMangaAniListId(request?.media)}
+                  instanceId={request?.serverId}
                 />
               ) : statusLabel ? (
                 intl.formatMessage(statusLabel)
