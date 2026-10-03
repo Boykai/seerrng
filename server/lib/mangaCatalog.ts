@@ -3,6 +3,9 @@ import type { AnilistMangaContentPolicy } from '@server/api/anilist/manga';
 import { ANILIST_MAX_RETRY_AFTER_SECONDS } from '@server/api/anilist/rateLimiter';
 import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import MangaSourceBinding, {
+  MangaBindingState,
+} from '@server/entity/MangaSourceBinding';
 import type Media from '@server/entity/Media';
 import MediaIdentifier, {
   MediaIdentifierProvider,
@@ -63,6 +66,17 @@ export const getAnilistRetryAfterSeconds = (
     1,
     Math.min(ANILIST_MAX_RETRY_AFTER_SECONDS, error.retryAfterSeconds || 60)
   );
+
+/**
+ * Whether a library scan found this title in an administrator's Suwayomi
+ * library: an active binding the latest listing contained.
+ */
+export const isMangaInSuwayomiLibrary = (anilistId: number): Promise<boolean> =>
+  getRepository(MangaSourceBinding).existsBy({
+    anilistId,
+    state: MangaBindingState.ACTIVE,
+    inLibrary: true,
+  });
 
 // AniList rate limits surface as 429 with Retry-After; anything else means
 // the catalog is unavailable right now.

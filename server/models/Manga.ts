@@ -49,6 +49,8 @@ export interface MangaDetails extends MangaResult {
   siteUrl?: string;
   startDate?: string;
   endDate?: string;
+  /** Set by the details route: a library scan found it in Suwayomi. */
+  inSuwayomiLibrary?: boolean;
 }
 
 const STORY_ROLES = new Set([

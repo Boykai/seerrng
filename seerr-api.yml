@@ -3325,6 +3325,7 @@ components:
             - tags
             - story
             - art
+            - inSuwayomiLibrary
           properties:
             description:
               type: string
@@ -3361,6 +3362,20 @@ components:
             endDate:
               type: string
               description: Publication end as YYYY, YYYY-MM or YYYY-MM-DD.
+            inSuwayomiLibrary:
+              type: boolean
+              description: True when a library scan found this title in a Suwayomi library (an active binding that the latest listing contained). It carries no server, source or chapter details.
+    MangaSummariesResponse:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          description: The requested titles in request order. Unknown titles and titles excluded by the adult or light novel settings are left out.
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/MangaResult'
     MangaLibraryError:
       type: object
       properties:
@@ -12897,6 +12912,43 @@ paths:
           description: Magazine not found
         '503':
           description: LazyLibrarian is unavailable
+  /manga:
+    get:
+      summary: Get several manga at once
+      description: Returns AniList catalog cards for up to 50 AniList IDs with one AniList request, merged with local media state. Unknown titles and titles excluded by the adult or light novel settings are left out without notice. Returns 404 while the manga category is disabled.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: ids
+          description: Comma-separated AniList media IDs, 1 to 50 of them. Duplicates are ignored.
+          required: true
+          schema:
+            type: string
+            maxLength: 549
+            pattern: '^[1-9][0-9]{0,9}(,[1-9][0-9]{0,9}){0,49}$'
+            example: '30013,30002'
+      responses:
+        '200':
+          description: The titles that could be shown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaSummariesResponse'
+        '400':
+          description: The ID list is invalid
+        '404':
+          description: The manga category is disabled
+        '429':
+          description: AniList rate limit reached. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+        '503':
+          description: AniList is unavailable
   /manga/{mangaId}:
     get:
       summary: Get manga details
@@ -16463,6 +16515,7 @@ paths:
             default: added
         - in: query
           name: mediaType
+          description: Comma-separated media types. Manga is listed only when named here, and only while the manga category is enabled.
           schema:
             type: string
             nullable: true
@@ -16480,7 +16533,14 @@ paths:
                   results:
                     type: array
                     items:
-                      $ref: '#/components/schemas/MediaInfo'
+                      allOf:
+                        - $ref: '#/components/schemas/MediaInfo'
+                        - type: object
+                          properties:
+                            anilistId:
+                              type: integer
+                              minimum: 1
+                              description: Manga only. The canonical AniList ID.
   /media/{mediaId}:
     delete:
       summary: Delete media item

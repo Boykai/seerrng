@@ -186,10 +186,10 @@ MangaDex lookups for up to an hour. MangaDex answers are cached for a day.
 
 ### Review matches
 
-SeerrNG has no review page yet; administrators review matches through the
-API. The routes are under `/api/v1/manga/library` and require administrator
-permission. While the Manga category is off, they return the normal not-found
-response.
+Administrators review matches on the **Manga Library** settings page (see
+[Manga Library page](#manga-library-page)) or through the API. The routes are
+under `/api/v1/manga/library` and require administrator permission. While the
+Manga category is off, they return the normal not-found response.
 
 | Method and route | Purpose |
 | --- | --- |
@@ -255,3 +255,104 @@ as gone; the next run does.
 Each run logs how many matches and statuses it changed, and a code for each
 warning, under the **Manga Library Scan** label. These log entries contain
 counts, IDs, and codes only, never titles or addresses.
+
+## Manga Library page
+
+Administrators review library matches under **Settings → Manga Library**. The
+page appears while the Manga category is on and a Suwayomi server is
+configured. Its decisions follow the rules in
+[Review matches](#review-matches), and none of them changes anything in
+Suwayomi.
+
+Library titles come from your Suwayomi server and appear as plain text. The
+page never shows a manga's address in Suwayomi. An AniList title that the
+**Manga Content** switches hide appears only as its AniList ID.
+
+### Review queue
+
+The **Review Queue** lists the manga in your Suwayomi library that have no
+AniList match yet, with the title SeerrNG proposes for each:
+
+- **High Confidence**, **Medium Confidence**, and **Weak Guess** are the High,
+  Medium, and Low rankings described in [Matching](#matching). They rank a
+  proposal only: nothing is matched until an administrator confirms a proposal
+  or chooses a title. No proposal is preselected, and there is no way to
+  confirm proposals in bulk.
+- **No Proposal** means the manga has no proposal right now, for example
+  because no scan has searched its title yet or its last proposal was
+  rejected.
+
+For each manga, you can:
+
+- **Confirm** the proposal. SeerrNG first checks the manga in Suwayomi, so
+  this can take a moment.
+- **Choose Title** to search the AniList catalog and pick the matching title.
+  The title always comes from the search results; there is no field for typing
+  an AniList ID.
+- **Reject** the proposal, with a second click to make sure. SeerrNG never
+  proposes that title for the manga again.
+
+Filter the queue by **Confidence** to work through one ranking at a time. If a
+decision fails, the page says why and nothing changes; for example, when a
+scan replaced the proposal in the meantime, check the new proposal and try
+again.
+
+Proposals arrive with each library scan, so a large library gets them over
+several runs; see [Lookups on AniList and MangaDex](#lookups-on-anilist-and-mangadex).
+While the queue is empty or lists manga without a proposal, the page suggests
+running the **Manga Library Scan** job under **Settings → Jobs & Cache** to
+get proposals sooner.
+
+### Library matches
+
+**Library Matches** lists the matched manga. Filter it by **Status**:
+**Active** (the default), **Not in Library** for manga that left the Suwayomi
+library or whose server was removed, **Rejected**, or all. The **Match**
+column says how each match was made:
+
+- **AniList Tracker Link** or **MyAnimeList Tracker Link**: from the manga's
+  tracking records in Suwayomi.
+- **Matched with data from MangaDex**: from the AniList link that MangaDex
+  lists for the manga. SeerrNG credits [MangaDex](https://mangadex.org/) in
+  this text wherever it shows such a match.
+- **Confirmed by an Admin**: an administrator confirmed a proposal; the badge
+  shows how the proposal was ranked.
+- **Chosen by an Admin**: an administrator chose the title.
+
+The **Status** column shows **Available**, **Partially Available**, or **In
+Suwayomi Library** for a current match, depending on how many of its chapters
+are downloaded; **Not in Library** for a manga that left the Suwayomi library
+or whose server was removed; and **Rejected** for a match that an
+administrator rejected or replaced.
+
+- **Choose Title** matches the manga to the title you pick and replaces its
+  current match. On a rejected entry, picking the same title again restores
+  the match. Manga that are no longer in the library cannot be matched.
+- **Reject** rejects the match. A manga that is still in the library returns
+  to the review queue, and SeerrNG never proposes or matches that title for it
+  again unless you choose it.
+
+### Availability on manga pages
+
+Once SeerrNG has matched a title to a manga in your Suwayomi library, the
+title's details page shows an **Availability** row:
+
+- **Available** or **Partially Available** from the chapters Suwayomi has
+  downloaded; see [Availability](#availability).
+- **In Suwayomi Library** while no chapter is downloaded yet.
+
+The marker shows while a current match links the title to a manga in the
+Suwayomi library. Rejecting the match clears it right away, and the next
+library scan clears it once the manga has left the library or you removed the
+Suwayomi server. Everyone who can open the details page sees the row, which
+names no server, source, or address. Blocklisted titles show no availability
+row.
+
+### Recently Added
+
+While the Manga category is on, the **Recently Added** row on Discover also
+lists manga, newest first, from the moment they become Available or Partially
+Available. A title that stopped being available moves to the front again when
+it becomes available again. Titles that the **Manga Content** switches hide
+are left out. The row now also appears when Manga is the only one of the
+Movies, Series, and Manga categories that is on.

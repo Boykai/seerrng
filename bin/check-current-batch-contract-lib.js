@@ -4022,6 +4022,37 @@ const validateCurrentBatchContract = (files) => {
       'Jobs must use the compact standard table and action geometry'
     );
   }
+  for (const token of [
+    '.settings-manga-library-table .app-data-table-cell {',
+    '.settings-manga-library-candidate-actions-column {',
+    '.settings-manga-library-binding-actions-column {',
+    '.settings-manga-library-stack {',
+    '.settings-manga-library-link {',
+  ]) {
+    requireText(
+      globals,
+      token,
+      'Manga Library table geometry and title links must resolve through shared global classes'
+    );
+  }
+  for (const token of [
+    '<Table className="settings-manga-library-table">',
+    'className="settings-log-toolbar"',
+    'className="settings-table-action-row"',
+    'buttonSize="standard"',
+    '<PaginationFooter',
+  ]) {
+    requireText(
+      'src/components/Settings/MangaLibrary/index.tsx',
+      token,
+      'Manga Library must use the shared compact table, filter, action, and pagination layout'
+    );
+  }
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'Manga Library is an admin-only route that appears only while the Manga category is enabled and Suwayomi is configured',
+    'the style standard must govern the Manga Library review page'
+  );
   requireText(
     'src/components/Settings/SettingsNetwork/index.tsx',
     'className="settings-http-warning"',

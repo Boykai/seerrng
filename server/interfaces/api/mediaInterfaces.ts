@@ -6,7 +6,10 @@ export type MediaListItem = Pick<
   Media,
   'id' | 'mediaType' | 'status' | 'status4k' | 'tmdbId'
 > &
-  Partial<Pick<Media, 'imdbId' | 'mbId' | 'mediaAddedAt' | 'tvdbId'>>;
+  Partial<Pick<Media, 'imdbId' | 'mbId' | 'mediaAddedAt' | 'tvdbId'>> & {
+    /** Manga only: the canonical AniList ID. */
+    anilistId?: number;
+  };
 
 export interface MediaResultsResponse extends PaginatedResponse {
   results: MediaListItem[];
