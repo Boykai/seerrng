@@ -405,28 +405,38 @@ describe('manga library review: lists', () => {
       960,
     ]);
     const decisions = (agent: ReturnType<typeof request.agent>) => [
-      agent.get(`${BASE}/candidates`),
-      agent.get(`${BASE}/bindings`),
-      agent
-        .post(`${BASE}/candidates/${candidate.id}/confirm`)
-        .send({ anilistId: 201 }),
-      agent
-        .post(`${BASE}/bind`)
-        .send({ instanceId: 1, anilistId: 201, suwayomiMangaId: 1 }),
-      agent.post(`${BASE}/reject`).send({ ...itemKey(manga), anilistId: 201 }),
+      () => agent.get(`${BASE}/candidates`),
+      () => agent.get(`${BASE}/bindings`),
+      () =>
+        agent
+          .post(`${BASE}/candidates/${candidate.id}/confirm`)
+          .send({ anilistId: 201 }),
+      () =>
+        agent
+          .post(`${BASE}/bind`)
+          .send({ instanceId: 1, anilistId: 201, suwayomiMangaId: 1 }),
+      () =>
+        agent
+          .post(`${BASE}/reject`)
+          .send({ ...itemKey(manga), anilistId: 201 }),
     ];
+    // One request at a time: supertest closes an agent's server when the
+    // request that opened it ends, which can reset requests still in flight.
+    const statuses = async (agent: ReturnType<typeof request.agent>) => {
+      const sent: number[] = [];
+      for (const decide of decisions(agent)) {
+        sent.push((await decide()).status);
+      }
+      return sent;
+    };
 
     const friend = await loginAs('friend@seerr.dev');
-    for (const res of await Promise.all(decisions(friend))) {
-      assert.equal(res.status, 403);
-    }
+    assert.deepEqual(await statuses(friend), [403, 403, 403, 403, 403]);
     assert.equal((await request(app).get(`${BASE}/candidates`)).status, 403);
 
     const admin = await asAdmin();
     settings.main.enabledMediaCategories = { ...categories, manga: false };
-    for (const res of await Promise.all(decisions(admin))) {
-      assert.equal(res.status, 404);
-    }
+    assert.deepEqual(await statuses(admin), [404, 404, 404, 404, 404]);
     assert.deepEqual(await bindings(), []);
     assert.equal((await candidates())[0].proposedAnilistId, 201);
     assert.deepEqual(servers[0].requests, []);
