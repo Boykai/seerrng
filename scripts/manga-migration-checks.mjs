@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Builds the database from empty with migrations and creates a second, empty
 // database for the entity schema, then runs the migration round trip and the
-// entity/migration drift check (server/scripts/checkMigrationDrift.ts). Used
-// locally and by .github/workflows/manga-checks.yml.
+// entity/migration drift check (server/scripts/checkMigrationDrift.ts). On
+// PostgreSQL it then runs the tests in POSTGRES_MIGRATION_TESTS against the
+// container. Used locally and by .github/workflows/manga-checks.yml.
 //
 //   node scripts/manga-migration-checks.mjs sqlite [--write-allowlist]
 //   node scripts/manga-migration-checks.mjs postgres [--write-allowlist]
@@ -37,8 +38,12 @@ export const POSTGRES_DATABASE = 'seerr';
 // a file next to the SQLite database, or a database in the same container.
 export const POSTGRES_ENTITY_DATABASE = 'seerr_entities';
 export const SQLITE_ENTITY_DATABASE = 'entities.sqlite3';
+// Node test files that run against this PostgreSQL. Each one skips when
+// SEERR_TEST_POSTGRES_URL is unset, so the SQLite unit tests can glob it.
 export const POSTGRES_MIGRATION_TESTS = [
   'server/migration/postgres/mangaMigrations.test.ts',
+  'server/lib/requestStatus.postgres.test.ts',
+  'server/subscriber/transactionHooks.postgres.test.ts',
 ];
 
 const rootDirectory = path.resolve(
@@ -441,7 +446,7 @@ const runPostgresChecks = async (context, options, configDirectory) => {
   if (!options.writeAllowlist) {
     await runStep(
       context,
-      'postgres: manga migration tests',
+      'postgres: tests against the live database',
       process.execPath,
       ['server/test/index.mts', ...POSTGRES_MIGRATION_TESTS],
       {

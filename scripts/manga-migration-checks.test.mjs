@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   CLEANUP_TIMEOUT_MS,
@@ -129,6 +131,8 @@ const fakeDependencies = ({
 
 const scriptOf = (call) =>
   call.args.find((arg) => /\.(?:ts|mts|cjs)$/.test(String(arg)));
+
+const rootDirectory = fileURLToPath(new URL('..', import.meta.url));
 
 // Runs the harness with a fake docker in a child process whose stdout has no
 // reader, as after a closed terminal, so every write to it fails. A hangup
@@ -523,6 +527,23 @@ test('a command that runs past its time limit fails with the reason', () => {
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /ETIMEDOUT/);
+});
+
+test('every live PostgreSQL test file runs in the PostgreSQL step', () => {
+  const liveTests = readdirSync(path.join(rootDirectory, 'server'), {
+    recursive: true,
+  })
+    .map((file) => `server/${String(file).split(path.sep).join('/')}`)
+    .filter((file) => file.endsWith('.postgres.test.ts'))
+    .sort();
+
+  assert.ok(liveTests.length > 0);
+  for (const file of liveTests) {
+    assert.ok(POSTGRES_MIGRATION_TESTS.includes(file), `${file} is not run`);
+  }
+  for (const file of POSTGRES_MIGRATION_TESTS) {
+    assert.ok(existsSync(path.join(rootDirectory, file)), `${file} is missing`);
+  }
 });
 
 test('an interrupt still cleans up everything when the output is closed', async () => {
