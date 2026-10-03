@@ -13,6 +13,7 @@ import { startJobs, stopJobs } from '@server/job/schedule';
 import { resumeComicCatalogIndex } from '@server/lib/comicCatalogIndex';
 import { runWithConfigurationAdmission } from '@server/lib/configurationAdmission';
 import { loadExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
+import { loadMangaRequestPolicy } from '@server/lib/mangaRequests';
 import {
   METRICS_RATE_LIMIT,
   metricsAuthMiddleware,
@@ -162,11 +163,14 @@ if (
 // subscribers, migrations) and the settings migrator both resolve
 // `@server/*`-aliased files dynamically at runtime; once Next's hook is
 // layered on top of tsconfig-paths, that resolution can throw "Cannot
-// find module" for one of them. Everything here is idempotent, so the
-// equivalent calls further down (kept for production-path parity) are
-// safe no-ops once this has already run. Only reproduces in `pnpm dev`'s
-// ts-node invocation -- compiled production builds have no runtime path
-// aliases to resolve, and the test suite never imports `next` at all.
+// find module" for one of them. The manga request policy modules, which
+// load on first use, are loaded here for the same reason: Next removes
+// ts-node's `.ts` handler once it has loaded next.config.ts. Everything
+// here is idempotent, so the equivalent calls further down (kept for
+// production-path parity) are safe no-ops once this has already run. Only
+// reproduces in `pnpm dev`'s ts-node invocation -- compiled production
+// builds have no runtime path aliases to resolve, and the test suite never
+// imports `next` at all.
 Promise.resolve()
   .then(async () => {
     if (!dataSource.isInitialized) {
@@ -174,6 +178,7 @@ Promise.resolve()
     }
     enforceSqliteDatabasePermissions();
     await getSettings().load();
+    await loadMangaRequestPolicy();
   })
   .then(() => {
     // Loading next.config.ts during `app.prepare()` deletes the `.ts` require
