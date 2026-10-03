@@ -30,7 +30,12 @@ import {
   reconcileRequestedMusicAvailability,
 } from '@server/lib/musicAvailability';
 import logger from '@server/logger';
-import type { EntityManager, Repository } from 'typeorm';
+import type {
+  EntityManager,
+  InsertQueryBuilder,
+  ObjectLiteral,
+  Repository,
+} from 'typeorm';
 import { In, MoreThan } from 'typeorm';
 import { isIncompleteRequestStatus } from './requestStatusIncomplete';
 import {
@@ -1451,58 +1456,158 @@ const getAttempt = (
     ? 1
     : 0);
 
+// A request that returns to an observation recorded before its latest event
+// gets a row whose fingerprint names that latest event. The history keeps the
+// return, and writers that saw the same latest event still write one row.
+const makeReentryFingerprint = (
+  fingerprint: string,
+  latestEventId: number
+): string => {
+  const suffix = `:after:${latestEventId}`;
+  return `${fingerprint.slice(0, 255 - suffix.length)}${suffix}`;
+};
+
+const isLatestObservation = (
+  latestEvent: StatusEventLike,
+  event: Pick<MediaRequestStatusEvent, 'stage' | 'attempt' | 'fingerprint'>
+): boolean => {
+  if (
+    latestEvent.stage !== event.stage ||
+    latestEvent.attempt !== event.attempt
+  ) {
+    return false;
+  }
+  const followedEventId = /:after:(\d+)$/.exec(latestEvent.fingerprint)?.[1];
+  return (
+    latestEvent.fingerprint === event.fingerprint ||
+    (followedEventId !== undefined &&
+      latestEvent.fingerprint ===
+        makeReentryFingerprint(event.fingerprint, Number(followedEventId)))
+  );
+};
+
+// Skips only a row whose fingerprint the request already has. Any other
+// conflict, such as on the primary key, still fails the insert.
+export const withStatusEventConflictTarget = <Entity extends ObjectLiteral>(
+  query: InsertQueryBuilder<Entity>
+): InsertQueryBuilder<Entity> =>
+  query.orUpdate([], ['requestId', 'fingerprint']);
+
+const clampText = (
+  value: string | null | undefined,
+  length: number
+): string | null | undefined =>
+  typeof value === 'string'
+    ? Array.from(value).slice(0, length).join('')
+    : value;
+
+// Values are cut to their column lengths on every driver, so a long message
+// from a download client cannot fail the save that records it.
+const toStoredStatusEvent = (
+  event: MediaRequestStatusEvent,
+  fingerprint: string
+): MediaRequestStatusEvent =>
+  new MediaRequestStatusEvent({
+    ...event,
+    service: clampText(event.service, 128),
+    message: clampText(event.message, 512),
+    downloadId: clampText(event.downloadId, 512),
+    estimatedCompletionTime:
+      event.estimatedCompletionTime instanceof Date &&
+      Number.isNaN(event.estimatedCompletionTime.getTime())
+        ? null
+        : event.estimatedCompletionTime,
+    fingerprint,
+  });
+
+export const insertRequestStatusEvent = async (
+  event: MediaRequestStatusEvent,
+  options: {
+    latestEvent?: StatusEventLike;
+    manager?: EntityManager;
+    failureMessage?: string;
+  } = {}
+): Promise<void> => {
+  const { latestEvent, manager } = options;
+  if (latestEvent && isLatestObservation(latestEvent, event)) {
+    return;
+  }
+  const repository = getStatusEventRepository(manager);
+  try {
+    let fingerprint = event.fingerprint;
+    if (latestEvent) {
+      const earlier = await repository.findOne({
+        select: { id: true },
+        where: { requestId: event.requestId, fingerprint },
+      });
+      if (earlier && earlier.id < latestEvent.id) {
+        fingerprint = makeReentryFingerprint(fingerprint, latestEvent.id);
+      }
+    }
+    await withStatusEventConflictTarget(
+      repository
+        .createQueryBuilder()
+        .insert()
+        .into(MediaRequestStatusEvent)
+        .values(toStoredStatusEvent(event, fingerprint))
+    )
+      .updateEntity(false)
+      .execute();
+  } catch (error) {
+    // A failed statement aborts a PostgreSQL transaction, so a caller inside
+    // one fails with it instead of committing nothing.
+    if (manager?.queryRunner?.isTransactionActive) {
+      throw error;
+    }
+    logger.warn(
+      options.failureMessage ?? 'Unable to persist request status event',
+      {
+        label: 'Request Status',
+        requestId: event.requestId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      }
+    );
+  }
+};
+
 const persistStatusEvent = async (
   request: RequestLike,
   status: RequestStatusSnapshot,
   latestEvent: StatusEventLike | undefined,
   manager?: EntityManager
 ): Promise<void> => {
-  const repository = getStatusEventRepository(manager);
   const attempt = getAttempt(status.stage, latestEvent);
   status.attempt = attempt;
-  const fingerprint = makeFingerprint(status);
-  if (
-    latestEvent &&
-    latestEvent.stage === status.stage &&
-    latestEvent.attempt === attempt &&
-    latestEvent.fingerprint === fingerprint
-  ) {
+  if (!request.requestedBy || !request.media) {
+    logger.warn('Skipping request status event without request relations', {
+      label: 'Request Status',
+      requestId: request.id,
+      hasRequestedBy: !!request.requestedBy,
+      hasMedia: !!request.media,
+    });
     return;
   }
-
-  try {
-    await repository.insert(
-      new MediaRequestStatusEvent({
-        requestId: request.id,
-        requestedById: request.requestedBy.id,
-        mediaId: request.media.id,
-        mediaType: request.type,
-        stage: status.stage,
-        attempt,
-        format: request.bookFormat ?? null,
-        service: status.service,
-        message: status.message,
-        percent: status.percent,
-        size: status.size,
-        sizeLeft: status.sizeLeft,
-        estimatedCompletionTime: status.estimatedCompletionTime,
-        downloadCount: status.downloadCount,
-        downloadId: status.downloadId,
-        fingerprint,
-      })
-    );
-  } catch (error) {
-    // Two application instances can observe the same queue poll. The unique
-    // fingerprint makes that race harmless; surface other failures to logs.
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.toLocaleLowerCase().includes('unique')) {
-      logger.warn('Unable to persist request status event', {
-        label: 'Request Status',
-        requestId: request.id,
-        errorMessage: message,
-      });
-    }
-  }
+  await insertRequestStatusEvent(
+    new MediaRequestStatusEvent({
+      requestId: request.id,
+      requestedById: request.requestedBy.id,
+      mediaId: request.media.id,
+      mediaType: request.type,
+      stage: status.stage,
+      attempt,
+      format: request.bookFormat ?? null,
+      service: status.service,
+      message: status.message,
+      percent: status.percent,
+      size: status.size,
+      sizeLeft: status.sizeLeft,
+      estimatedCompletionTime: status.estimatedCompletionTime,
+      downloadCount: status.downloadCount,
+      downloadId: status.downloadId,
+      fingerprint: makeFingerprint(status),
+    }),
+    { latestEvent, manager }
+  );
 };
 
 const loadRequest = async (
@@ -1596,7 +1701,6 @@ export const recordRequestCancellation = async (
     );
     return;
   }
-  const repository = getStatusEventRepository(options.manager);
   const existing = await getLatestStatusEvent(request.id, options.manager);
   const status: RequestStatusSnapshot = {
     stage: RequestStatusStage.CANCELLED,
@@ -1614,34 +1718,24 @@ export const recordRequestCancellation = async (
     needsAttention: true,
     retryable: false,
   };
-  const fingerprint = makeFingerprint(status);
-  try {
-    await repository.insert(
-      new MediaRequestStatusEvent({
-        requestId: request.id,
-        requestedById: request.requestedBy.id,
-        mediaId: request.media.id,
-        mediaType: request.type,
-        stage: status.stage,
-        attempt: status.attempt,
-        format: request.bookFormat ?? null,
-        message: status.message,
-        downloadCount: 0,
-        fingerprint,
-      })
-    );
-  } catch (error) {
-    // A duplicate cancellation event is harmless; surface other persistence
-    // failures so operators can repair the history table or migration.
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.toLocaleLowerCase().includes('unique')) {
-      logger.warn('Unable to persist request cancellation event', {
-        label: 'Request Status',
-        requestId: request.id,
-        errorMessage: message,
-      });
+  await insertRequestStatusEvent(
+    new MediaRequestStatusEvent({
+      requestId: request.id,
+      requestedById: request.requestedBy.id,
+      mediaId: request.media.id,
+      mediaType: request.type,
+      stage: status.stage,
+      attempt: status.attempt,
+      format: request.bookFormat ?? null,
+      message: status.message,
+      downloadCount: 0,
+      fingerprint: makeFingerprint(status),
+    }),
+    {
+      manager: options.manager,
+      failureMessage: 'Unable to persist request cancellation event',
     }
-  }
+  );
 };
 
 export const getRequestStatusHistory = async (
