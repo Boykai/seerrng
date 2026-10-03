@@ -193,7 +193,12 @@ class WikidataVideoMetadataAPI extends ExternalAPI {
       if (!id || !/^Q\d+$/.test(id)) {
         return [];
       }
-      const plainSnippet = item.snippet?.replace(/<[^>]*>/g, '').trim();
+      const plainSnippet = item.snippet
+        ?.split('<span class="searchmatch">')
+        .join('')
+        .split('</span>')
+        .join('')
+        .trim();
       return [{ id, label: plainSnippet?.slice(0, 300) || id }];
     });
   }
