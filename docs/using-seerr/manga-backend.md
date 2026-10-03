@@ -125,6 +125,9 @@ to request:
   starting number onward. Chapter numbers go from 0 to 1,000,000 and may have
   decimals, such as 10.5.
 
+The form also offers **Follow New Chapters**, which is **Off** by default; see
+[Follow new chapters](#follow-new-chapters).
+
 SeerrNG chooses the chapters when it sends the request to Suwayomi, not when
 the request is made. Request cards, request lists, and the **Requests** page
 show the choice in a **Chapters** row, for example "All", "Latest 25", "10–20",
@@ -823,21 +826,29 @@ queues the others and logs how many it skipped as `MANGA_CHAPTERS_UNMAPPED`.
 
 A request gets the chapters chosen for it when SeerrNG sends it; see
 [Which chapters a request gets](#which-chapters-a-request-gets). When its
-requester sets **Follow New Chapters** to **On** on the request's card on the
-**Requests** page, SeerrNG also adds the chapters that the source lists later
-and that fit the request's scope, and queues them for download. Following is
-off for every request until its requester turns it on.
+requester sets **Follow New Chapters** to **On**, SeerrNG also adds the
+chapters that the source lists later and that fit the request's scope, and
+queues them for download. Following is off for every request until its
+requester turns it on.
 
 ### Turn following on or off
+
+**Follow New Chapters** appears in the request form, below the chapter choice,
+and is sent with the request. Later, it appears on the request's card on the
+**Requests** page and in the request's window, which **View Request** on the
+title's details page opens. There, a change applies at once, apart from
+saving a pending request's chapters.
 
 Only the requester can turn following on, while the request waits for
 approval, is approved, or is complete, and only while they may request manga.
 Nobody can turn it on for another user, neither when requesting for them nor
 when editing their request. The requester or a user with the **Manage
-Requests** permission can turn it off. Turning it off stops further additions;
-the chapters already added stay part of the request and download like the
-others. Through the [REST API](../../seerr-api.yml), a requester can also turn
-following on when creating a manga request.
+Requests** permission can turn it off. On another user's request, a request
+manager sees the choice only while following is on, with **Off** as its only
+option. Turning it off stops further additions; the chapters already added
+stay part of the request and download like the others. Through the
+[REST API](../../seerr-api.yml), a new manga request turns following on with
+`mangaFollow: true`.
 
 Turning following on makes the request due at once. A request that is not sent
 yet is checked once its chapters are queued.
@@ -924,9 +935,9 @@ do not count against request quotas.
 When following stops, SeerrNG turns it off; the requester can turn it on again
 where the request allows it. When it pauses, following stays on, SeerrNG checks
 again every day, and the pause ends at the first check that finds nothing
-wrong. The request's card shows the reason, and SeerrNG logs each stop and
-pause under the **Manga Follow** label with the request ID and one of these
-codes:
+wrong. The request's card and its window show the reason, and SeerrNG logs
+each stop and pause under the **Manga Follow** label with the request ID and
+one of these codes:
 
 | Code | Kind | When |
 | --- | --- | --- |

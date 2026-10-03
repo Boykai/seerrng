@@ -11,6 +11,8 @@ import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MangaFollowControl,
+  MangaFollowField,
+  MangaFollowRequestSettings,
   MangaFollowStatusLine,
   type MangaFollowRequest,
 } from './MangaFollow';
@@ -334,5 +336,105 @@ describe('MangaFollowStatusLine', () => {
       })
     );
     expect(host.querySelector('p')).toBeNull();
+  });
+});
+
+const INSET_CARD =
+  'app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3';
+
+describe('MangaFollowField', () => {
+  it('offers Off and On in a standard inset card and reports the choice', async () => {
+    const onChange = vi.fn();
+    await act(async () =>
+      root.render(
+        <IntlProvider locale="en" timeZone="UTC">
+          <MangaFollowField
+            enabled={false}
+            disabled={false}
+            onChange={onChange}
+          />
+        </IntlProvider>
+      )
+    );
+
+    expect(listbox()?.dataset.label).toBe('Follow New Chapters');
+    expect(listbox()?.dataset.value).toBe('off');
+    expect(offered()).toEqual(['off', 'on']);
+    expect(listbox()?.parentElement?.className).toBe(INSET_CARD);
+    const help = host.querySelector('p');
+    expect(help?.className).toBe('refreshed-detail-text-muted mt-2 text-xs');
+    expect(help?.textContent).toContain('Only the requester can turn it on');
+
+    await choose('on');
+    await choose('off');
+
+    expect(onChange.mock.calls).toEqual([[true], [false]]);
+    expect(state.put).not.toHaveBeenCalled();
+  });
+});
+
+const renderSettings = async (request: FollowRequest) => {
+  await act(async () =>
+    root.render(
+      <IntlProvider locale="en" timeZone="UTC">
+        <MangaFollowRequestSettings request={request} onUpdated={onUpdated} />
+      </IntlProvider>
+    )
+  );
+};
+
+describe('MangaFollowRequestSettings', () => {
+  it('gives the owner the control in a card, then the status line', async () => {
+    await renderSettings(
+      mangaRequest({
+        enabled: true,
+        stopReason: MangaFollowStopReason.BINDING_INACTIVE,
+      })
+    );
+
+    expect(listbox()?.id).toBe('manga-follow-request-41');
+    expect(offered()).toEqual(['off', 'on']);
+    const card = listbox()?.parentElement;
+    expect(card?.className).toBe(INSET_CARD);
+    const note = host.querySelector('p.request-status-note');
+    expect(note?.textContent).toBe(
+      STATUS_LINES[MangaFollowStopReason.BINDING_INACTIVE]
+    );
+    expect(card?.contains(note ?? null)).toBe(false);
+
+    await choose('off');
+
+    expect(state.put).toHaveBeenCalledExactlyOnceWith(
+      '/api/v1/request/41/follow',
+      { enabled: false }
+    );
+    expect(onUpdated).toHaveBeenCalledOnce();
+  });
+
+  it('shows a viewer without the control only the status line', async () => {
+    state.user = { id: MANAGER_ID, permissions: Permission.REQUEST };
+    await renderSettings(
+      mangaRequest({
+        status: MediaRequestStatus.DECLINED,
+        stopReason: MangaFollowStopReason.REQUEST_DECLINED,
+      })
+    );
+
+    expect(listbox()).toBeNull();
+    expect(host.querySelector('p.request-status-note')?.textContent).toBe(
+      STATUS_LINES[MangaFollowStopReason.REQUEST_DECLINED]
+    );
+  });
+
+  it('treats a request without its requester as another user’s', async () => {
+    await renderSettings({ ...mangaRequest(), requestedBy: undefined });
+    expect(listbox()).toBeNull();
+
+    state.user = { id: MANAGER_ID, permissions: Permission.MANAGE_REQUESTS };
+    await renderSettings({
+      ...mangaRequest({ enabled: true }),
+      requestedBy: undefined,
+    });
+    expect(offered()).toEqual(['off']);
   });
 });

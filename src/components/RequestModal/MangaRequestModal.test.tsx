@@ -1,4 +1,5 @@
 import type { MangaScopedRequest } from '@app/utils/mangaRequestScope';
+import { MangaFollowStopReason } from '@server/constants/mangaFollow';
 import { MangaRequestScope } from '@server/constants/mangaRequest';
 import {
   MediaRequestStatus,
@@ -135,6 +136,41 @@ vi.mock('@app/components/Common/Modal', () => ({
           {props.cancelText}
         </button>
       )}
+    </div>
+  ),
+}));
+// The shared listbox is a Headless UI control; this stand-in exposes the
+// follow choice's props and one button per offered option.
+vi.mock('@app/components/RequestModal/AdvancedRequester', () => ({
+  RequestListboxControl: ({
+    label,
+    value,
+    options,
+    onChange,
+    disabled,
+  }: {
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+    onChange: (value: string) => void;
+    disabled?: boolean;
+  }) => (
+    <div
+      data-testid="listbox"
+      data-label={label}
+      data-value={value}
+      data-disabled={String(Boolean(disabled))}
+    >
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          data-option={option.value}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   ),
 }));
@@ -700,4 +736,201 @@ it.each([
 
   expect(text()).toContain('an administrator may need to choose one.');
   expect(sourceLink()).toBeNull();
+});
+
+const followListbox = () =>
+  host.querySelector<HTMLElement>('[data-testid="listbox"]');
+const followOptions = () =>
+  [...host.querySelectorAll<HTMLButtonElement>('[data-option]')].map(
+    (option) => option.dataset.option
+  );
+const chooseFollow = (value: 'on' | 'off') =>
+  click(host.querySelector(`[data-option="${value}"]`));
+
+const followedRequest = (
+  enabled: boolean,
+  stopReason: MangaFollowStopReason | null = null,
+  values: Partial<MangaScopedRequest> = {}
+) =>
+  pendingRequest({
+    status: MediaRequestStatus.APPROVED,
+    mangaScope: {
+      scope: MangaRequestScope.LATEST_N,
+      latestCount: 25,
+      rangeStart: null,
+      rangeEnd: null,
+      awaitingBinding: false,
+      follow: { enabled, stopReason, lastCheckAt: null, nextCheckAt: null },
+    },
+    ...values,
+  });
+
+it('offers following new chapters Off by default and sends nothing for it', async () => {
+  state.post.mockResolvedValue({ data: {} });
+  await render();
+
+  expect(followListbox()?.dataset.label).toBe('Follow New Chapters');
+  expect(followListbox()?.dataset.value).toBe('off');
+  expect(followOptions()).toEqual(['off', 'on']);
+  expect(text()).toContain(
+    'This option is Off by default for every manga request.'
+  );
+  await submit();
+
+  expect(state.post).toHaveBeenCalledExactlyOnceWith('/api/v1/request', {
+    mediaType: 'manga',
+    mediaId: 30013,
+    mangaScope: { scope: MangaRequestScope.ALL_AT_DISPATCH },
+  });
+});
+
+it('sends the requester’s choice to follow new chapters with the request', async () => {
+  state.post.mockResolvedValue({ data: {} });
+  await render();
+
+  await chooseFollow('on');
+  expect(followListbox()?.dataset.value).toBe('on');
+  await click(radio('Latest chapters'));
+  await type('Number of chapters', '5');
+  await submit();
+
+  await chooseFollow('off');
+  await submit();
+
+  expect(state.post.mock.calls.map((call) => call[1])).toStrictEqual([
+    {
+      mediaType: 'manga',
+      mediaId: 30013,
+      mangaScope: { scope: MangaRequestScope.LATEST_N, latestCount: 5 },
+      mangaFollow: true,
+    },
+    {
+      mediaType: 'manga',
+      mediaId: 30013,
+      mangaScope: { scope: MangaRequestScope.LATEST_N, latestCount: 5 },
+    },
+  ]);
+  expect(state.put).not.toHaveBeenCalled();
+});
+
+it('lets the requester turn following on and off from the request window', async () => {
+  state.put.mockResolvedValue({ data: {} });
+  state.swr[REQUEST_KEY] = { data: followedRequest(false) };
+  await render(followedRequest(false));
+
+  expect(followListbox()?.dataset.value).toBe('off');
+  expect(followOptions()).toEqual(['off', 'on']);
+  expect(button('modal-ok-button')).toBeNull();
+  await chooseFollow('on');
+
+  expect(state.put).toHaveBeenCalledExactlyOnceWith(
+    '/api/v1/request/7/follow',
+    { enabled: true }
+  );
+  expect(state.mutate).toHaveBeenCalledOnce();
+  const reloads = state.mutate.mock.calls[0][0] as (key: unknown) => boolean;
+  expect(
+    [
+      REQUEST_KEY,
+      '/api/v1/request/status?take=10&skip=0',
+      '/api/v1/request/status/7',
+      '/api/v1/request?filter=all&take=10&sort=modified&skip=0',
+      '/api/v1/request/count',
+    ].map(reloads)
+  ).toEqual([true, true, true, true, true]);
+  expect(
+    [MANGA_KEY, QUOTA_KEY, '/api/v1/requests', [REQUEST_KEY]].map(reloads)
+  ).toEqual([false, false, false, false]);
+  expect(state.addToast).toHaveBeenCalledWith(
+    'Following new chapters updated.',
+    { appearance: 'success', autoDismiss: true }
+  );
+  expect(followListbox()?.dataset.value).toBe('on');
+  expect(state.onComplete).not.toHaveBeenCalled();
+
+  state.swr[REQUEST_KEY] = { data: followedRequest(true) };
+  await render(followedRequest(false));
+  await chooseFollow('off');
+
+  expect(state.put).toHaveBeenLastCalledWith('/api/v1/request/7/follow', {
+    enabled: false,
+  });
+  expect(followListbox()?.dataset.value).toBe('off');
+});
+
+it('keeps following apart from saving a pending request’s chapters', async () => {
+  state.granted = [Permission.REQUEST_MANGA, Permission.REQUEST_ADVANCED];
+  state.put.mockResolvedValue({ data: {} });
+  const pending = followedRequest(false, null, {
+    status: MediaRequestStatus.PENDING,
+  });
+  state.swr[REQUEST_KEY] = { data: pending };
+  await render(pending);
+
+  await chooseFollow('on');
+  await type('Number of chapters', '30');
+  await submit();
+
+  expect(state.put.mock.calls).toStrictEqual([
+    ['/api/v1/request/7/follow', { enabled: true }],
+    [
+      REQUEST_KEY,
+      {
+        mediaType: 'manga',
+        mangaScope: { scope: MangaRequestScope.LATEST_N, latestCount: 30 },
+      },
+    ],
+  ]);
+});
+
+it('explains a paused or stopped follow in the request window', async () => {
+  state.swr[REQUEST_KEY] = {
+    data: followedRequest(true, MangaFollowStopReason.BINDING_INACTIVE),
+  };
+  await render(followedRequest(true, MangaFollowStopReason.BINDING_INACTIVE));
+
+  expect(followListbox()?.dataset.value).toBe('on');
+  expect(host.querySelector('p.request-status-note')?.textContent).toBe(
+    'Following new chapters is paused because this title has no active match on the connected manga service. SeerrNG checks again every day; an administrator can review the match under Settings → Manga Library.'
+  );
+
+  state.swr[REQUEST_KEY] = {
+    data: followedRequest(false, MangaFollowStopReason.RANGE_COMPLETE),
+  };
+  await render(followedRequest(false, MangaFollowStopReason.RANGE_COMPLETE));
+  expect(host.querySelector('p.request-status-note')?.textContent).toBe(
+    'Following new chapters stopped because this request already includes the last chapter of its range.'
+  );
+});
+
+it('shows a request manager only the option to turn following off', async () => {
+  state.granted = [Permission.MANAGE_REQUESTS];
+  state.userId = 2;
+  state.put.mockResolvedValue({ data: {} });
+  state.swr[REQUEST_KEY] = { data: followedRequest(true) };
+  await render(followedRequest(true));
+
+  expect(followOptions()).toEqual(['off']);
+  await chooseFollow('off');
+  expect(state.put).toHaveBeenCalledExactlyOnceWith(
+    '/api/v1/request/7/follow',
+    { enabled: false }
+  );
+
+  state.swr[REQUEST_KEY] = { data: followedRequest(false) };
+  await render(followedRequest(false));
+  expect(followListbox()).toBeNull();
+});
+
+it('gives other users no follow control but explains a stop', async () => {
+  state.userId = 2;
+  const stopped = followedRequest(false, MangaFollowStopReason.REQUEST_FAILED, {
+    status: MediaRequestStatus.FAILED,
+  });
+  await render(stopped);
+
+  expect(followListbox()).toBeNull();
+  expect(host.querySelector('p.request-status-note')?.textContent).toBe(
+    'Following new chapters stopped because this request failed.'
+  );
 });

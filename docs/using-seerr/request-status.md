@@ -55,22 +55,23 @@ requests to Suwayomi; see [Dispatch](./manga-backend.md#dispatch).
 
 A manga request gets the matching chapters that its source lists when SeerrNG
 sends it. To also get matching chapters that the source adds later, the
-requester can set **Follow New Chapters** to **On** on the request's card. It
-is **Off** by default. SeerrNG then checks for new chapters from time to time
-and queues them for download. A completed request shows **Downloading** again
-while new chapters arrive, and SeerrNG sends the **Request Available**
-notification again once they are delivered. New chapters use the request's
-approval and do not count against your request quota.
+requester can set **Follow New Chapters** to **On** when requesting, on the
+request's card, or in the request's window, which **View Request** on the
+title's page opens. It is **Off** by default. SeerrNG then checks for new
+chapters from time to time and queues them for download. A completed request
+shows **Downloading** again while new chapters arrive, and SeerrNG sends the
+**Request Available** notification again once they are delivered. New chapters
+use the request's approval and do not count against your request quota.
 
 Only the requester can turn following on, while the request is pending,
 approved, or complete. The requester or a user with the **Manage Requests**
 permission can turn it off. Turning it off stops further additions; chapters
 already added still download.
 
-When following stops or pauses, the request card says why. It stops when the
-request is declined or fails, when the requester can no longer request manga,
-when the request has the last chapter of its range, or when it reaches 10,000
-chapters. A paused request keeps following: SeerrNG checks again every day,
+When following stops or pauses, the request card and the request's window say
+why. It stops when the request is declined or fails, when the requester can no
+longer request manga, when the request has the last chapter of its range, or
+when it reaches 10,000 chapters. A paused request keeps following: SeerrNG checks again every day,
 and an administrator can fix the cause, for example by reviewing the title's
 match under **Settings → Manga Library**. See
 [Follow new chapters](./manga-backend.md#follow-new-chapters) for how often

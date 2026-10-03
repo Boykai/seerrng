@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   buildMangaFollowBody,
+  buildMangaFollowCreateField,
   getMangaFollowControlState,
   getMangaFollowState,
   getMangaFollowUrl,
@@ -30,6 +31,11 @@ describe('manga follow request helpers', () => {
     assert.equal(getMangaFollowUrl(31), '/api/v1/request/31/follow');
     assert.deepEqual(buildMangaFollowBody(true), { enabled: true });
     assert.deepEqual(buildMangaFollowBody(false), { enabled: false });
+  });
+
+  it('sends the create field only when following is chosen', () => {
+    assert.deepEqual(buildMangaFollowCreateField(true), { mangaFollow: true });
+    assert.deepEqual(buildMangaFollowCreateField(false), {});
   });
 
   it('reads the follow summary from a manga request', () => {
@@ -167,6 +173,28 @@ describe('manga follow control state', () => {
     assert.equal(
       getMangaFollowControlState(input({ userId: undefined })),
       null
+    );
+  });
+
+  it('treats a request without its requester as another user’s', () => {
+    assert.equal(
+      getMangaFollowControlState(
+        input({
+          requestedById: undefined,
+          follow: { enabled: true, stopReason: null },
+        })
+      ),
+      null
+    );
+    assert.deepEqual(
+      getMangaFollowControlState(
+        input({
+          requestedById: undefined,
+          permissions: Permission.MANAGE_REQUESTS,
+          follow: { enabled: true, stopReason: null },
+        })
+      ),
+      { canTurnOn: false, canTurnOff: true }
     );
   });
 

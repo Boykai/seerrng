@@ -15,7 +15,8 @@ import {
 } from '@server/constants/mangaFollow';
 import type { MediaRequestStatus } from '@server/constants/media';
 import axios from 'axios';
-import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { MessageDescriptor } from 'react-intl';
 import { useIntl } from 'react-intl';
 
@@ -63,7 +64,7 @@ export interface MangaFollowRequest {
   id: number;
   type: string;
   status: MediaRequestStatus;
-  requestedBy: { id: number };
+  requestedBy?: { id: number };
 }
 
 type FollowValue = 'off' | 'on';
@@ -74,11 +75,12 @@ interface MangaFollowControlProps {
 }
 
 /**
- * The "Follow New Chapters" choice on a manga request card. The owner can
- * turn following on and off; a request manager sees it only while following
- * is on, and can only turn it off.
+ * The viewer's follow choice for a saved request. `update` saves a change
+ * with `PUT /request/{requestId}/follow` and then refreshes through
+ * `onUpdated`, like the watch-ahead choice. `control` is null when the viewer
+ * has no follow control for the request.
  */
-export const MangaFollowControl = ({
+const useMangaFollowChoice = ({
   request,
   onUpdated,
 }: MangaFollowControlProps) => {
@@ -95,14 +97,11 @@ export const MangaFollowControl = ({
   const control = getMangaFollowControlState({
     requestType: request.type,
     requestStatus: request.status,
-    requestedById: request.requestedBy.id,
+    requestedById: request.requestedBy?.id,
     follow: follow && { ...follow, enabled },
     userId: user?.id,
     permissions: user?.permissions ?? 0,
   });
-  if (!control) {
-    return null;
-  }
 
   const update = async (value: FollowValue) => {
     const nextEnabled = value === 'on';
@@ -131,26 +130,86 @@ export const MangaFollowControl = ({
     }
   };
 
+  return { control, enabled, isUpdating, update };
+};
+
+interface MangaFollowListboxProps {
+  id: string;
+  enabled: boolean;
+  canTurnOn: boolean;
+  disabled: boolean;
+  onChange: (value: FollowValue) => void;
+}
+
+/** The shared request listbox with Off, and On where the viewer may choose it. */
+const MangaFollowListbox = ({
+  id,
+  enabled,
+  canTurnOn,
+  disabled,
+  onChange,
+}: MangaFollowListboxProps) => {
+  const intl = useIntl();
   const options: { value: FollowValue; label: string }[] = [
     { value: 'off', label: intl.formatMessage(messages.off) },
-    ...(control.canTurnOn
+    ...(canTurnOn
       ? [{ value: 'on' as const, label: intl.formatMessage(messages.on) }]
       : []),
   ];
 
   return (
+    <RequestListboxControl<FollowValue>
+      id={id}
+      label={intl.formatMessage(messages.label)}
+      value={enabled ? 'on' : 'off'}
+      options={options}
+      disabled={disabled}
+      onChange={onChange}
+      loadingLabel={intl.formatMessage(enabled ? messages.on : messages.off)}
+    />
+  );
+};
+
+/** A standard inset card holding the follow choice and its explanation. */
+const MangaFollowCard = ({ children }: { children: ReactNode }) => {
+  const intl = useIntl();
+  return (
+    <div className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
+      {children}
+      <p className="refreshed-detail-text-muted mt-2 text-xs">
+        {intl.formatMessage(messages.description)}
+      </p>
+    </div>
+  );
+};
+
+/**
+ * The "Follow New Chapters" choice on a manga request card. The owner can
+ * turn following on and off; a request manager sees it only while following
+ * is on, and can only turn it off.
+ */
+export const MangaFollowControl = ({
+  request,
+  onUpdated,
+}: MangaFollowControlProps) => {
+  const intl = useIntl();
+  const { control, enabled, isUpdating, update } = useMangaFollowChoice({
+    request,
+    onUpdated,
+  });
+  if (!control) {
+    return null;
+  }
+
+  return (
     <Tooltip content={intl.formatMessage(messages.description)}>
       <span className="inline-flex">
-        <RequestListboxControl<FollowValue>
+        <MangaFollowListbox
           id={`manga-follow-${request.id}`}
-          label={intl.formatMessage(messages.label)}
-          value={enabled ? 'on' : 'off'}
-          options={options}
+          enabled={enabled}
+          canTurnOn={control.canTurnOn}
           disabled={isUpdating}
           onChange={(value) => void update(value)}
-          loadingLabel={intl.formatMessage(
-            enabled ? messages.on : messages.off
-          )}
         />
       </span>
     </Tooltip>
@@ -174,5 +233,66 @@ export const MangaFollowStatusLine = ({
         limit: intl.formatNumber(MANGA_FOLLOW_MANIFEST_LIMIT),
       })}
     </p>
+  );
+};
+
+/**
+ * The same choice in a manga request window: the control in an inset card
+ * for a viewer who has it, then the status line of a paused or stopped
+ * request. A change saves at once, apart from the window's own Save.
+ */
+export const MangaFollowRequestSettings = ({
+  request,
+  onUpdated,
+}: MangaFollowControlProps) => {
+  const { control, enabled, isUpdating, update } = useMangaFollowChoice({
+    request,
+    onUpdated,
+  });
+
+  return (
+    <>
+      {control && (
+        <MangaFollowCard>
+          <MangaFollowListbox
+            id={`manga-follow-request-${request.id}`}
+            enabled={enabled}
+            canTurnOn={control.canTurnOn}
+            disabled={isUpdating}
+            onChange={(value) => void update(value)}
+          />
+        </MangaFollowCard>
+      )}
+      <MangaFollowStatusLine request={request} />
+    </>
+  );
+};
+
+interface MangaFollowFieldProps {
+  enabled: boolean;
+  disabled: boolean;
+  onChange: (enabled: boolean) => void;
+}
+
+/**
+ * The choice in a new manga request: Off by default, and sent with the
+ * request only when the requester turns it on.
+ */
+export const MangaFollowField = ({
+  enabled,
+  disabled,
+  onChange,
+}: MangaFollowFieldProps) => {
+  const id = useId();
+  return (
+    <MangaFollowCard>
+      <MangaFollowListbox
+        id={`manga-follow-${id}`}
+        enabled={enabled}
+        canTurnOn
+        disabled={disabled}
+        onChange={(value) => onChange(value === 'on')}
+      />
+    </MangaFollowCard>
   );
 };

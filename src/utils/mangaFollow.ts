@@ -18,6 +18,15 @@ export const buildMangaFollowBody = (
   enabled: boolean
 ): MangaFollowRequestBody => ({ enabled });
 
+/**
+ * The `mangaFollow` field of `POST /api/v1/request`. It is sent only when the
+ * requester turns following on, so a request made with following off carries
+ * exactly the body it had before the field existed.
+ */
+export const buildMangaFollowCreateField = (
+  follow: boolean
+): { mangaFollow?: true } => (follow ? { mangaFollow: true } : {});
+
 /** The part of a manga request's follow summary that the UI shows. */
 export interface MangaFollowState {
   enabled: boolean;
@@ -52,7 +61,8 @@ export const getMangaFollowState = (
 export interface MangaFollowControlInput {
   requestType: string;
   requestStatus: MediaRequestStatus;
-  requestedById: number;
+  /** Absent when the request reaches the viewer without its requester. */
+  requestedById?: number;
   follow?: MangaFollowState;
   userId?: number;
   permissions: number;
