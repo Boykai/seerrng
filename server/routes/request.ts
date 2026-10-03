@@ -1386,7 +1386,12 @@ const sanitizeMediaRequestBody = (
         error: { status: 400, message: 'mangaFollow must be a boolean.' },
       };
     }
-    if (mediaType !== undefined && mediaType !== MediaType.MANGA) {
+    // Only consent is manga-only: declining to follow is harmless on any type.
+    if (
+      bodyObject.mangaFollow &&
+      mediaType !== undefined &&
+      mediaType !== MediaType.MANGA
+    ) {
       return {
         error: {
           status: 400,

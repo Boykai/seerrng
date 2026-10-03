@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
 import AnilistAPI from '@server/api/anilist';
@@ -53,6 +54,7 @@ import { checkUser } from '@server/middleware/auth';
 import { setupTestDb } from '@server/test/db';
 import type { Express } from 'express';
 import express from 'express';
+import * as OpenApiValidator from 'express-openapi-validator';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import request from 'supertest';
@@ -5370,6 +5372,81 @@ describe('POST /request', () => {
     assert.strictEqual(res.status, 403);
     assert.match(res.body.message, /book is blocklisted/i);
     assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+  });
+
+  it('creates a movie request through the production OpenAPI boundary', async () => {
+    const validatedApp = express();
+    validatedApp.use(express.json());
+    validatedApp.use(
+      session({
+        secret: 'test-secret',
+        cookie: { secure: 'auto' },
+        resave: false,
+        saveUninitialized: false,
+      })
+    );
+    validatedApp.use(rateLimit({ windowMs: 60_000, limit: 10_000 }), checkUser);
+    validatedApp.use('/api/v1/auth', authRoutes);
+    validatedApp.use(
+      OpenApiValidator.middleware({
+        apiSpec: path.join(process.cwd(), 'seerr-api.yml'),
+        validateRequests: true,
+        validateSecurity: false,
+      })
+    );
+    validatedApp.use('/api/v1/request', requestRoutes);
+    validatedApp.use(
+      (
+        err: { status?: number; message?: string },
+        _req: express.Request,
+        res: express.Response,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        _next: express.NextFunction
+      ) => {
+        res
+          .status(err.status ?? 500)
+          .json({ status: err.status ?? 500, message: err.message });
+      }
+    );
+    const settings = getSettings();
+    const priorLocalLogin = settings.main.localLogin;
+    settings.main.localLogin = true;
+
+    try {
+      const agent = request.agent(validatedApp);
+      const login = await agent
+        .post('/api/v1/auth/local')
+        .send({ email: 'friend@seerr.dev', password: 'test1234' });
+      assert.strictEqual(login.status, 200);
+
+      // The validator fills in schema defaults, so a default on a manga-only
+      // field would reach this handler as if the client had sent it.
+      const response = await agent
+        .post('/api/v1/request')
+        .send({ mediaType: MediaType.MOVIE, mediaId: 987_650 });
+      const declined = await agent.post('/api/v1/request').send({
+        mediaType: MediaType.MOVIE,
+        mediaId: 987_651,
+        mangaFollow: false,
+      });
+      const followed = await agent.post('/api/v1/request').send({
+        mediaType: MediaType.MOVIE,
+        mediaId: 987_652,
+        mangaFollow: true,
+      });
+
+      assert.strictEqual(response.status, 201, JSON.stringify(response.body));
+      assert.strictEqual(response.body.type, MediaType.MOVIE);
+      assert.strictEqual(declined.status, 201, JSON.stringify(declined.body));
+      assert.strictEqual(followed.status, 400);
+      assert.strictEqual(
+        followed.body.message,
+        'mangaFollow is only valid for manga requests.'
+      );
+      assert.strictEqual(await getRepository(MediaRequest).count(), 2);
+    } finally {
+      settings.main.localLogin = priorLocalLogin;
+    }
   });
 });
 

@@ -808,7 +808,7 @@ describe('manga follow consent', () => {
 
     const movie = await friend
       .post('/request')
-      .send({ mediaType: MediaType.MOVIE, mediaId: 12345, mangaFollow: false });
+      .send({ mediaType: MediaType.MOVIE, mediaId: 12345, mangaFollow: true });
 
     assert.strictEqual(movie.status, 400);
     assert.strictEqual(

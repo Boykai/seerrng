@@ -27,7 +27,7 @@ describe('request status routes behind the OpenAPI validator', () => {
     app.put('/api/v1/request/:requestId/follow', (_req, res) =>
       res.status(200).json({})
     );
-    app.post('/api/v1/request', (_req, res) => res.status(201).json({}));
+    app.post('/api/v1/request', (req, res) => res.status(201).json(req.body));
     app.get('/api/v1/request/status', (_req, res) =>
       res.status(200).json({
         pageInfo: {
@@ -103,6 +103,20 @@ describe('request status routes behind the OpenAPI validator', () => {
     assert.strictEqual(created.status, 201, JSON.stringify(created.body));
     assert.strictEqual(enabled.status, 200, JSON.stringify(enabled.body));
     assert.strictEqual(disabled.status, 200, JSON.stringify(disabled.body));
+  });
+
+  it('adds no manga follow choice to a create body that leaves it out', async () => {
+    for (const body of [
+      { mediaType: 'movie', mediaId: 123 },
+      { mediaType: 'manga', mediaId: 30013 },
+    ]) {
+      const response = await request(createValidatedApp())
+        .post('/api/v1/request')
+        .send(body);
+
+      assert.strictEqual(response.status, 201, JSON.stringify(response.body));
+      assert.strictEqual('mangaFollow' in response.body, false);
+    }
   });
 
   for (const body of [{}, { enabled: 'yes' }, { enabled: true, extra: 1 }]) {

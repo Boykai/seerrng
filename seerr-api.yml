@@ -15366,8 +15366,7 @@ paths:
                   $ref: '#/components/schemas/MangaRequestScopeInput'
                 mangaFollow:
                   type: boolean
-                  default: false
-                  description: Manga only. Follow new chapters, adding them to the request as its source lists them. Only the user the request is for can turn this on, so it is refused on a request made for someone else. Change it later with `PUT /request/{requestId}/follow`.
+                  description: Manga only. When true, the request follows new chapters, adding them as its source lists them; omitted or false leaves following off. Only the user the request is for can turn this on, so true is refused on a request made for someone else and on other media types. Change it later with `PUT /request/{requestId}/follow`.
               required:
                 - mediaType
                 - mediaId
