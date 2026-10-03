@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -13,6 +14,7 @@ import {
   createCleanups,
   databaseEnvironment,
   defaultRun,
+  ignoreOutputErrors,
   parseArguments,
   parsePublishedPort,
   postgresCreateDatabaseArguments,
@@ -127,6 +129,65 @@ const fakeDependencies = ({
 
 const scriptOf = (call) =>
   call.args.find((arg) => /\.(?:ts|mts|cjs)$/.test(String(arg)));
+
+// Runs the harness with a fake docker in a child process whose stdout has no
+// reader, as after a closed terminal, so every write to it fails. A hangup
+// arrives while the run waits for PostgreSQL. The child records each command
+// and removal on stderr.
+const CLOSED_OUTPUT_SCRIPT = [
+  "import { writeSync } from 'node:fs';",
+  `import { ignoreOutputErrors, runMigrationChecks } from ${JSON.stringify(
+    new URL('./manga-migration-checks.mjs', import.meta.url).href
+  )};`,
+  "const record = (entry) => writeSync(2, 'record ' + JSON.stringify(entry) + '\\n');",
+  "if (process.argv[1] === 'guarded') ignoreOutputErrors();",
+  "await runMigrationChecks({ driver: 'postgres', writeAllowlist: false }, {",
+  '  env: {},',
+  "  log: (message) => process.stdout.write(message + '\\n'),",
+  "  createPassword: () => 'fixture-password',",
+  `  createContainerName: () => ${JSON.stringify(CONTAINER)},`,
+  "  makeConfigDirectory: () => 'config-fixture',",
+  '  removeConfigDirectory: (directory) => record({ directory }),',
+  "  wait: () => new Promise(() => setImmediate(() => process.emit('SIGHUP', 'SIGHUP'))),",
+  '  onInterrupt: (listener) => {',
+  "    process.on('SIGHUP', listener);",
+  "    return () => process.off('SIGHUP', listener);",
+  '  },',
+  '  exit: (code) => process.exit(code),',
+  '  run: (command, args) => {',
+  '    record({ command, args });',
+  "    return { status: args.includes('pg_isready') ? 2 : 0, stdout: '', stderr: '' };",
+  '  },',
+  '});',
+].join('\n');
+
+const runWithClosedOutput = (mode) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ['--input-type=module', '-e', CLOSED_OUTPUT_SCRIPT, mode],
+      { stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000, windowsHide: true }
+    );
+    child.stdout.destroy();
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', reject);
+    child.on('close', (status) => {
+      const records = stderr
+        .split('\n')
+        .filter((line) => line.startsWith('record '))
+        .map((line) => JSON.parse(line.slice('record '.length)));
+      resolve({
+        status,
+        removed: records.filter(
+          (entry) => entry.directory !== undefined || entry.args?.[0] === 'rm'
+        ),
+      });
+    });
+  });
 
 test('parseArguments accepts a driver and the allowlist flag only', () => {
   assert.deepStrictEqual(parseArguments(['sqlite']), {
@@ -462,4 +523,31 @@ test('a command that runs past its time limit fails with the reason', () => {
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /ETIMEDOUT/);
+});
+
+test('an interrupt still cleans up everything when the output is closed', async () => {
+  // Without the guard, the first failed write ends the run before any removal.
+  const unguarded = await runWithClosedOutput('unguarded');
+  assert.equal(unguarded.status, 1);
+  assert.deepStrictEqual(unguarded.removed, []);
+
+  const guarded = await runWithClosedOutput('guarded');
+  assert.equal(guarded.status, signalExitCode('SIGHUP'));
+  assert.deepStrictEqual(guarded.removed, [
+    { command: 'docker', args: postgresRemoveArguments(CONTAINER) },
+    { directory: 'config-fixture' },
+  ]);
+});
+
+test('ignoreOutputErrors adds a listener to each stream', () => {
+  const listeners = [];
+  const stream = { on: (event, listener) => listeners.push([event, listener]) };
+
+  ignoreOutputErrors([stream, stream]);
+
+  assert.deepStrictEqual(
+    listeners.map(([event]) => event),
+    ['error', 'error']
+  );
+  assert.doesNotThrow(() => listeners[0][1](new Error('EPIPE')));
 });
