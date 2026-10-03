@@ -1144,18 +1144,42 @@ interface RequestDownloadAsset {
   size?: number;
 }
 
-const RequestDownloadAction = ({
+/**
+ * Whether a request in this stage offers download copies. A manga request
+ * offers each chapter once SeerrNG verifies it, while the rest still
+ * downloads or after it failed; other media wait until they are available.
+ */
+export const canDownloadRequestCopy = (
+  type: RequestStatusItem['request']['type'],
+  stage: StatusStage
+): boolean =>
+  stage === 'available' ||
+  (type === 'manga' && (stage === 'downloading' || stage === 'failed'));
+
+export const RequestDownloadAction = ({
   requestId,
   enabled,
+  revision,
 }: {
   requestId: number;
   enabled: boolean;
+  /** Changes whenever new copies may exist, such as a chapter verified mid-download. */
+  revision?: string;
 }) => {
   const intl = useIntl();
-  const { data } = useSWR<{ results: RequestDownloadAsset[] }>(
+  const { data, mutate } = useSWR<{ results: RequestDownloadAsset[] }>(
     enabled ? `/api/v1/request/status/${requestId}/downloads` : null,
     { revalidateOnFocus: false }
   );
+  const seen = useRef({ enabled, revision });
+  useEffect(() => {
+    const previous = seen.current;
+    seen.current = { enabled, revision };
+    // A list that has just been enabled loads by itself.
+    if (enabled && previous.enabled && previous.revision !== revision) {
+      void mutate();
+    }
+  }, [enabled, mutate, revision]);
   const assets = data?.results ?? [];
   if (assets.length === 0) return null;
 
@@ -2016,7 +2040,8 @@ export const RequestStatusCard = ({
           {actionControls}
           <RequestDownloadAction
             requestId={item.request.id}
-            enabled={currentStage === 'available'}
+            enabled={canDownloadRequestCopy(item.request.type, currentStage)}
+            revision={`${currentStage}:${current.percent ?? ''}`}
           />
           <Button
             type="button"

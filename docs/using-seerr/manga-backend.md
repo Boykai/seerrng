@@ -956,3 +956,60 @@ Users with the **Create Issues** or **Manage Issues** permission can report a
 problem with an **Available** or **Partially Available** manga with **Report an
 Issue** on its details page. Manga reports use the **Other** issue type. While
 the Manga category is on, the **Issues** page has a **Manga** filter.
+
+## Download copy
+
+A manga request offers each chapter that SeerrNG has verified as a **Download
+copy** on its [Request Status](./request-status.md#download-an-available-copy)
+card: while the rest of the request is still downloading, after the request
+failed, and once it is available. Each chapter downloads as one CBZ file named
+after the manga's AniList title, English first, then romaji, then native, for
+example `Title - Ch. 12.5.cbz`. When SeerrNG cannot show a title, the name
+uses `Manga` and the AniList ID instead. A chapter without a number is named
+`Ch. unknown`, and repeated names get ` (2)`, ` (3)`, and so on. The list shows
+up to 1,000 chapters, newest first. There is no **Download all**.
+
+The user who made the request can download its chapters, and so can users with
+the **Manage Requests** or **View Requests** permission. SeerrNG checks access
+and the request's stage again before every download.
+
+The list holds only the request's own chapters that SeerrNG verified in
+Suwayomi and has not since found missing. Listing never contacts Suwayomi. The
+list stays empty unless all of these hold:
+
+- the Manga category is on;
+- the request's title has a match on the request's Suwayomi server, and that
+  match is still active;
+- that server is still configured, with **Require CBZ Downloads** on. While it
+  is off, SeerrNG lists no chapters, because Suwayomi may have saved them as
+  folders of images.
+
+When a download starts, SeerrNG looks the manga up in Suwayomi by its source
+and address, checks that it is still the matched manga, finds the downloaded
+chapter, and passes Suwayomi's CBZ archive to the browser as it arrives.
+SeerrNG stores nothing on its own disk and never marks a chapter read.
+
+Limits:
+
+- **Concurrent downloads:** each user can run 2 chapter downloads at a time,
+  and each Suwayomi server 4. Beyond that, SeerrNG answers
+  `429 Too Many Requests` with `Retry-After: 30` before it contacts Suwayomi.
+- **Size:** SeerrNG sends at most 1 GiB per chapter, a fixed limit built into
+  its Suwayomi connection. A larger chapter is refused with a message saying
+  that it is larger than the download size limit or, when Suwayomi does not
+  give its size in advance, stopped at the limit.
+- **Time:** SeerrNG stops a download when the browser accepts no data for 2
+  minutes, when Suwayomi sends nothing for 45 seconds while the browser waits
+  for data, or when the download has run for 30 minutes.
+- **Whole files only:** SeerrNG ignores byte-range requests and sends the whole
+  archive, so an interrupted download starts again from the beginning.
+
+When Suwayomi no longer has the manga or the downloaded chapter, the download
+answers `404`. When Suwayomi cannot be reached or reports an error, the
+download answers `502` with a fixed message, and SeerrNG logs
+`Unable to open a manga download copy` under the **Request Downloads** label. A
+download that Suwayomi or one of these limits stops partway is logged as
+`Stopped a manga download copy`; a browser that leaves is not logged. When the
+chapters cannot be listed, the list is empty and SeerrNG logs
+`Unable to list manga download copies`. These log entries contain IDs and codes
+only, never titles or addresses.
