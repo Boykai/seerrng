@@ -25,6 +25,7 @@ const portableTests = [
   'scripts/replace-server-import-aliases.test.mjs',
   'scripts/verify-container-manifest.test.mjs',
   'packaging/unraid/unraid-template.test.mjs',
+  'scripts/suwayomi-contract-checks.test.mjs',
 ];
 
 const posixOnlyTests = [

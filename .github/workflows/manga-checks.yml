@@ -5,7 +5,10 @@ name: Manga Checks
 # database from empty with migrations and a second, empty one with
 # synchronize() from the entities. It runs the manga migration round trip and
 # fails on schema records that differ between the two outside the reviewed
-# allowlist. The repository guard keeps the job off upstream pull requests.
+# allowlist. The suwayomi-contract job checks the hand-written Suwayomi
+# GraphQL operations and the client against the pinned Suwayomi-Server
+# release, which runs offline. The repository guard keeps both jobs off
+# upstream pull requests.
 
 on:
   pull_request:
@@ -56,3 +59,40 @@ jobs:
       # volume when the run ends or fails, or on SIGHUP, SIGINT or SIGTERM.
       - name: PostgreSQL from empty, round trip and drift check
         run: node scripts/manga-migration-checks.mjs postgres
+
+  suwayomi-contract:
+    name: Suwayomi contract (pinned release, offline)
+    if: github.repository == 'Boykai/seerrng'
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+
+      - name: Pnpm Setup
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Install dependencies
+        env:
+          CI: true
+          CYPRESS_INSTALL_BINARY: '0'
+        run: pnpm install --frozen-lockfile
+
+      # The script starts one digest-pinned Suwayomi-Server container per
+      # authentication mode on an internal Docker network with no route out,
+      # each with a random password that it masks before first use. A
+      # digest-pinned forwarder publishes them on 127.0.0.1 only. The script
+      # removes the containers and networks when the run ends or fails, or on
+      # SIGHUP, SIGINT or SIGTERM.
+      - name: Suwayomi GraphQL contract
+        run: node scripts/suwayomi-contract-checks.mjs
