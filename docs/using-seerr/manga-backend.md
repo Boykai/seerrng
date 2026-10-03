@@ -634,11 +634,13 @@ downloaded; see [Availability](#availability).
 - **Server marker:** `seerrng.instance` in the global meta; see
   [Server marker](#server-marker).
 - **Chapter downloads:** SeerrNG adds chapters to Suwayomi's download queue and
-  records each chapter it queued.
+  records each chapter it queued. It takes them off the queue again once no
+  approved request needs them; see [When a request ends](#when-a-request-ends).
 
 SeerrNG never:
 
 - deletes downloaded chapters or any other file;
+- takes a chapter that it did not queue off the download queue;
 - removes a manga from the library or from a category;
 - changes Suwayomi's settings;
 - installs, updates, or removes extensions;
@@ -714,12 +716,31 @@ the manga and checks the marker again, but does not repeat finished steps such
 as adding the manga to the library. A new server without a marker gets the
 entry's marker.
 
-### Declined and deleted requests
+### When a request ends
 
-When a request is no longer approved, for example because it was declined or
-deleted, SeerrNG sends nothing more for it. Nothing is removed from Suwayomi:
-chapters that are already queued stay queued, and library entries and the
-**SeerrNG** category stay.
+When a request is no longer approved, because it was declined, deleted,
+completed, or marked Failed, SeerrNG sends nothing more for it. Each run of the
+**Manga Dispatch Sweep** then hands back on Suwayomi what such requests no
+longer need:
+
+- It takes off the download queue the chapters that SeerrNG queued for them
+  and that are still queued, unless another approved request on the same
+  server includes them. This also applies to a request that completes while
+  some of its chapters are still queued.
+- It deletes each such request's `seerrng.request.<request ID>` entry and
+  rewrites the manga's `seerrng.request` from SeerrNG's records.
+
+Downloaded chapters, library entries, and the **SeerrNG** category and its
+manga stay. Retrying a failed request queues its chapters again.
+
+While the server carries another marker or none, SeerrNG changes nothing on it
+and its chapters stay queued. When Suwayomi cannot be reached or reports an
+error, SeerrNG logs `Manga dispatch release will retry` under the **Manga
+Dispatch** label with the server entry's ID, and tries again at the next run.
+When you remove a server entry, SeerrNG forgets the chapters it queued there
+without contacting that server. It also forgets the chapters of a manga that
+Suwayomi no longer has, and those of a manga whose library record it lacks,
+which it logs as `MANGA_RELEASE_UNRESOLVED` with their count.
 
 ### Dispatch sweep and retries
 
@@ -727,9 +748,11 @@ SeerrNG sends a request as soon as it is approved, and as soon as a waiting
 request's title gets a match. The **Manga Dispatch Sweep** job runs every 5
 minutes and sends up to 50 due requests per run: requests whose wait is over,
 and approved requests that were never sent, such as those approved before
-SeerrNG could send manga requests. Change its schedule or run it now under
-**Settings → Jobs & Cache**. While the Manga category is off, SeerrNG sends
-nothing; the sweep picks the requests up again once you turn it back on.
+SeerrNG could send manga requests. Each run also hands back what ended requests
+no longer need; see [When a request ends](#when-a-request-ends). Change its
+schedule or run it now under **Settings → Jobs & Cache**. While the Manga
+category is off, SeerrNG sends and hands back nothing; the sweep picks the
+requests up again once you turn it back on.
 
 When a step fails, SeerrNG either retries with a growing delay, starting at a
 minute and doubling up to 6 hours, or waits a fixed time and lets the sweep try

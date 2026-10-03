@@ -56,6 +56,7 @@ import {
   MAX_MANGA_DISPATCH_SWEEP_LIMIT,
   dispatchMangaRequest,
   findDueMangaRequestIds,
+  releaseMangaDispatch,
 } from '@server/lib/mangaDispatch';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { runMediaEntityMutation } from '@server/lib/mediaMutation';
@@ -527,8 +528,9 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
   }
 
   /**
-   * Queues the approved manga requests whose dispatch is due. Does nothing
-   * while manga is disabled.
+   * Queues the approved manga requests whose dispatch is due, then hands
+   * back what requests no longer need on Suwayomi. Does nothing while manga
+   * is disabled.
    */
   public async retryApprovedMangaRequests(
     limit = MANGA_DISPATCH_SWEEP_LIMIT
@@ -540,8 +542,19 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       Number.isSafeInteger(limit) && limit > 0
         ? Math.min(limit, MAX_MANGA_DISPATCH_SWEEP_LIMIT)
         : MANGA_DISPATCH_SWEEP_LIMIT;
-    for (const requestId of await findDueMangaRequestIds(boundedLimit)) {
-      await requestDispatchManager.enqueue(requestId);
+    try {
+      for (const requestId of await findDueMangaRequestIds(boundedLimit)) {
+        await requestDispatchManager.enqueue(requestId);
+      }
+    } finally {
+      try {
+        await releaseMangaDispatch();
+      } catch (error) {
+        logger.warn('Manga dispatch release failed', {
+          label: 'Manga Dispatch',
+          errorName: error instanceof Error ? error.name : typeof error,
+        });
+      }
     }
   }
 

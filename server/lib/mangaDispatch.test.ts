@@ -980,6 +980,36 @@ describe('manga dispatch: bindings', () => {
       await frozenChapterUrls(requestId),
       chapterUrls(22, 1, 2, 3)
     );
+    assert.deepStrictEqual(fake.stamp(21), {
+      ...stampOf([]),
+      anilistId: null,
+    });
+    assert.deepStrictEqual(fake.stamp(22), stampOf([requestId]));
+  });
+
+  it('carries on when it cannot rewrite the stamp of the manga it left', async () => {
+    const first = fakeDispatchManga(21);
+    const second = fakeDispatchManga(22);
+    const { fake, requestId, binding } = await setup([first, second]);
+    fake.fault('FetchMangaAndChapters', 'applied-error');
+    await run(requestId, fake);
+    await rejectBinding(binding);
+    await seedDispatchBinding(second);
+    fake.fault('MangaDetails', 'error');
+
+    assert.deepStrictEqual(await run(requestId, fake), { delivered: true });
+
+    assert.strictEqual(
+      (await manifestOf(requestId)).checkpoint,
+      CHAPTERS_ENQUEUED
+    );
+    assert.deepStrictEqual(fake.stamp(21), stampOf([requestId]));
+    assert.deepStrictEqual(
+      logged('Manga dispatch left a stale request stamp').map(
+        ([level, meta]) => [level, meta.requestId, meta.operation]
+      ),
+      [['debug', requestId, 'MangaDetails']]
+    );
   });
 
   it('parks an unfrozen request whose only binding was rejected', async () => {

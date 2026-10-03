@@ -1,6 +1,7 @@
 import type SuwayomiAPI from '@server/api/suwayomi';
 import {
   SuwayomiError,
+  isRecord,
   type SuwayomiErrorCode,
 } from '@server/api/suwayomi/errors';
 import { META_VALUE_LIMIT } from '@server/api/suwayomi/mappers';
@@ -70,6 +71,11 @@ const MAX_STEPS_PER_RUN = 16;
 /** Chapter IDs per enqueue or dequeue call. */
 const QUEUE_BATCH_SIZE = 50;
 const INSERT_SLICE = 100;
+const ID_SLICE = 500;
+/** Chapter ownership rows the release looks at per sweep. */
+const RELEASE_SCAN_LIMIT = 500;
+/** Request-index entries the release drops per instance and sweep. */
+const MIRROR_RELEASE_LIMIT = 50;
 const MAX_SUWAYOMI_INT = 2_147_483_647;
 const MARKER_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -143,6 +149,8 @@ interface ResolvedBinding extends MangaKey {
   url: string;
   /** The Suwayomi manga ID, resolved by natural key on this run. */
   mangaId: string;
+  /** The manga an unfrozen request left on this run; its stamp still names it. */
+  previousMangaId?: string;
 }
 
 /** Rolls a transaction back when its manifest moved under it. */
@@ -417,21 +425,21 @@ const startOver = async (
 /**
  * Stores the resolved binding and manga ID. Another binding than the one
  * recorded restarts the steps; that is only allowed before the freeze.
- * Returns false when the manifest is no longer BOUND (or was frozen).
+ * Returns undefined when the manifest is no longer BOUND (or was frozen).
  */
 const recordBinding = async (
   context: DispatchContext,
   manifest: MangaRequestManifest,
   binding: ResolvedBinding
-): Promise<boolean> => {
+): Promise<ResolvedBinding | undefined> => {
   const suwayomiMangaId = toStoredMangaId(binding.mangaId);
   const rebound =
     manifest.bindingSourceId !== binding.sourceId ||
     manifest.bindingUrlHash !== binding.urlHash;
   if (!rebound && manifest.suwayomiMangaId === suwayomiMangaId) {
-    return true;
+    return binding;
   }
-  return dataSource.transaction(async (manager) => {
+  const recorded = await dataSource.transaction(async (manager) => {
     assertSameInstance(context.snapshot);
     const result = await manager
       .createQueryBuilder()
@@ -457,6 +465,12 @@ const recordBinding = async (
       .execute();
     return result.affected === 1;
   });
+  if (!recorded) {
+    return undefined;
+  }
+  return rebound && manifest.suwayomiMangaId !== null
+    ? { ...binding, previousMangaId: String(manifest.suwayomiMangaId) }
+    : binding;
 };
 
 /**
@@ -509,9 +523,7 @@ const resolveBinding = async (
       url: row.url,
       mangaId: found.id,
     };
-    return (await recordBinding(context, manifest, binding))
-      ? binding
-      : DELIVERED;
+    return (await recordBinding(context, manifest, binding)) ?? DELIVERED;
   }
   // Only a server that carries this instance's marker can say a manga is gone.
   const mismatch =
@@ -1146,6 +1158,25 @@ export const dispatchMangaRequest = async (
     if (mismatch) {
       return mismatch;
     }
+    if (binding.previousMangaId !== undefined) {
+      // Best effort: the manifest no longer names that manga, so a failed
+      // rewrite is not tried again.
+      await refreshRequestStamp(
+        context.client,
+        context.instanceId,
+        binding.previousMangaId,
+        context.call
+      ).catch((error: unknown) => {
+        if (isAbortError(error)) {
+          throw error;
+        }
+        logger.debug('Manga dispatch left a stale request stamp', {
+          label: LABEL,
+          requestId: request.id,
+          ...errorDetails(error),
+        });
+      });
+    }
     return await runWithMangaDispatchLock(
       binding.instanceId,
       binding.sourceId,
@@ -1200,4 +1231,415 @@ export const findDueMangaRequestIds = async (
     .limit(limit)
     .getRawMany<{ id: number | string }>();
   return rows.map(({ id }) => Number(id));
+};
+
+export interface MangaReleaseOptions {
+  signal?: AbortSignal;
+  /** Replaces the shared client factory; tests pass their own client. */
+  clientFor?: (instanceId: number) => SuwayomiAPI | undefined;
+}
+
+/**
+ * Chapter ownership rows that no approved request's frozen chapters still
+ * reference on the same instance and manga.
+ */
+const releasableChapters = (manager: EntityManager) =>
+  manager
+    .getRepository(MangaChapterOwnership)
+    .createQueryBuilder('owned')
+    .where((builder) => {
+      const referenced = builder
+        .subQuery()
+        .select('1')
+        .from(MangaRequestChapter, 'chapter')
+        .innerJoin(
+          MangaRequestManifest,
+          'manifest',
+          'manifest.id = chapter.manifestId'
+        )
+        .innerJoin(MediaRequest, 'request', 'request.id = manifest.requestId')
+        .where('request.status = :approved')
+        .andWhere('manifest.instanceId = owned.instanceId')
+        .andWhere('manifest.bindingSourceId = owned.sourceId')
+        .andWhere('manifest.bindingUrlHash = owned.mangaUrlHash')
+        .andWhere('chapter.urlHash = owned.chapterUrlHash')
+        .getQuery();
+      return `NOT EXISTS ${referenced}`;
+    })
+    .setParameter('approved', MediaRequestStatus.APPROVED);
+
+/** The first releasable rows of an instance, or of one manga on it. */
+const findReleasableChapters = (
+  manager: EntityManager,
+  {
+    instanceId,
+    sourceId,
+    urlHash,
+  }: { instanceId: number; sourceId?: string; urlHash?: string }
+): Promise<MangaChapterOwnership[]> => {
+  const query = releasableChapters(manager).andWhere(
+    'owned.instanceId = :instanceId',
+    { instanceId }
+  );
+  if (sourceId !== undefined && urlHash !== undefined) {
+    query
+      .andWhere('owned.sourceId = :sourceId', { sourceId })
+      .andWhere('owned.mangaUrlHash = :urlHash', { urlHash });
+  }
+  return query.orderBy('owned.id', 'ASC').limit(RELEASE_SCAN_LIMIT).getMany();
+};
+
+/**
+ * Instances with releasable rows. Each is scanned on its own, so rows that
+ * wait on one server never hold up another's.
+ */
+const findReleasableInstanceIds = async (): Promise<number[]> =>
+  (
+    await releasableChapters(dataSource.manager)
+      .select('owned.instanceId', 'instanceId')
+      .distinct(true)
+      .orderBy('owned.instanceId', 'ASC')
+      .getRawMany<{ instanceId: number | string }>()
+  ).map(({ instanceId }) => Number(instanceId));
+
+/** Deletes released rows that are still unreferenced. */
+const deleteReleasedChapters = (
+  key: MangaKey,
+  rows: readonly MangaChapterOwnership[],
+  snapshot?: SuwayomiSettings
+): Promise<void> =>
+  dataSource.transaction(async (manager) => {
+    const releasable = new Set(
+      (await findReleasableChapters(manager, key)).map(({ id }) => id)
+    );
+    const ids = rows.map(({ id }) => id).filter((id) => releasable.has(id));
+    if (snapshot) {
+      assertSameInstance(snapshot);
+    }
+    if (ids.length > 0) {
+      await manager.delete(MangaChapterOwnership, { id: In(ids) });
+    }
+  });
+
+const hasOwnMarker = async (
+  client: SuwayomiAPI,
+  instanceId: number,
+  call: SuwayomiCallOptions
+): Promise<boolean> => {
+  const own = await getRepository(MangaInstanceMarker).findOne({
+    where: { instanceId },
+  });
+  return own !== null && (await client.getInstanceMarker(call)) === own.marker;
+};
+
+/** A trusted instance's client, with the settings it was built from. */
+interface ReleaseTarget {
+  snapshot: SuwayomiSettings;
+  client: SuwayomiAPI;
+  call: SuwayomiCallOptions;
+}
+
+/**
+ * Dequeues one manga's released chapters that are still queued, then drops
+ * their ownership rows. Without a target the instance is gone, and the rows
+ * go without a call; they also go when Suwayomi no longer has the manga.
+ */
+const releaseMangaChapters = async (
+  key: MangaKey,
+  target: ReleaseTarget | undefined,
+  signal: AbortSignal | undefined
+): Promise<void> => {
+  const rows = await findReleasableChapters(dataSource.manager, key);
+  if (rows.length === 0) {
+    return;
+  }
+  if (!target) {
+    await deleteReleasedChapters(key, rows);
+    return;
+  }
+  const { snapshot, client, call } = target;
+  const library = await getRepository(MangaLibraryOwnership).findOne({
+    where: {
+      instanceId: key.instanceId,
+      sourceId: key.sourceId,
+      urlHash: key.urlHash,
+    },
+  });
+  if (!library) {
+    logger.warn('Released manga chapters had no library record', {
+      label: LABEL,
+      instanceId: key.instanceId,
+      code: 'MANGA_RELEASE_UNRESOLVED',
+      count: rows.length,
+    });
+    await deleteReleasedChapters(key, rows, snapshot);
+    return;
+  }
+  const manga = await client.findMangaByNaturalKey(
+    key.sourceId,
+    library.url,
+    call
+  );
+  if (manga) {
+    const waiting = new Map<string, string>();
+    for (const chapter of await client.getChaptersToDownload(manga.id, call)) {
+      const urlHash = hashMangaSourceUrl(chapter.url);
+      if (!waiting.has(urlHash)) {
+        waiting.set(urlHash, chapter.id);
+      }
+    }
+    const queued = new Set(
+      (await client.getQueue(call)).items.map(({ chapterId }) => chapterId)
+    );
+    const ids = [
+      ...new Set(
+        rows.flatMap(({ chapterUrlHash }) => {
+          const chapterId = waiting.get(chapterUrlHash);
+          return chapterId !== undefined && queued.has(chapterId)
+            ? [chapterId]
+            : [];
+        })
+      ),
+    ];
+    for (const batch of chunk(ids, QUEUE_BATCH_SIZE)) {
+      signal?.throwIfAborted();
+      await client.dequeueChapters(batch, call);
+    }
+  }
+  await deleteReleasedChapters(key, rows, snapshot);
+};
+
+/** Logs a failure that the next sweep retries; an abort propagates. */
+const logReleaseFailure = (
+  error: unknown,
+  instanceId: number,
+  signal: AbortSignal | undefined
+): void => {
+  signal?.throwIfAborted();
+  logger.warn('Manga dispatch release will retry', {
+    label: LABEL,
+    instanceId,
+    ...errorDetails(error),
+  });
+};
+
+/**
+ * Releases one instance's chapters, reading its marker once per run. While
+ * the server carries another marker or none, its rows wait.
+ */
+const releaseInstanceChapters = async (
+  instanceId: number,
+  options: MangaReleaseOptions
+): Promise<void> => {
+  const keys = new Map<string, MangaKey>();
+  for (const row of await findReleasableChapters(dataSource.manager, {
+    instanceId,
+  })) {
+    keys.set(`${row.sourceId}:${row.mangaUrlHash}`, {
+      instanceId,
+      sourceId: row.sourceId,
+      urlHash: row.mangaUrlHash,
+    });
+  }
+  if (keys.size === 0) {
+    return;
+  }
+  const snapshot = snapshotSuwayomiInstance(instanceId);
+  let target: ReleaseTarget | undefined;
+  if (snapshot) {
+    const client = (options.clientFor ?? getSuwayomiClient)(instanceId);
+    const call: SuwayomiCallOptions = { signal: options.signal };
+    if (!client || !(await hasOwnMarker(client, instanceId, call))) {
+      return;
+    }
+    target = { snapshot, client, call };
+  }
+  for (const key of keys.values()) {
+    options.signal?.throwIfAborted();
+    try {
+      await runWithMangaDispatchLock(
+        instanceId,
+        key.sourceId,
+        key.urlHash,
+        () => releaseMangaChapters(key, target, options.signal)
+      );
+    } catch (error) {
+      if (error instanceof SuwayomiInstanceChangedError) {
+        throw error;
+      }
+      logReleaseFailure(error, instanceId, options.signal);
+    }
+  }
+};
+
+const releaseChapters = async (options: MangaReleaseOptions): Promise<void> => {
+  for (const instanceId of await findReleasableInstanceIds()) {
+    options.signal?.throwIfAborted();
+    try {
+      await releaseInstanceChapters(instanceId, options);
+    } catch (error) {
+      logReleaseFailure(error, instanceId, options.signal);
+    }
+  }
+};
+
+/** A positive Suwayomi manga ID from an index value, else undefined. */
+const parseIndexedMangaId = (value: string): string | undefined => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+  const mangaId = isRecord(parsed) ? parsed.mangaId : undefined;
+  return typeof mangaId === 'number' &&
+    Number.isSafeInteger(mangaId) &&
+    mangaId > 0 &&
+    mangaId <= MAX_SUWAYOMI_INT
+    ? String(mangaId)
+    : undefined;
+};
+
+/** Index entries whose request is approved and targets this instance. */
+const findLiveIndexedRequestIds = async (
+  instanceId: number,
+  requestIds: readonly number[]
+): Promise<Set<number>> => {
+  const live = new Set<number>();
+  const candidates = [...new Set(requestIds)].filter(
+    (id) => Number.isSafeInteger(id) && id > 0 && id <= MAX_SUWAYOMI_INT
+  );
+  for (const slice of chunk(candidates, ID_SLICE)) {
+    const rows = await getRepository(MangaRequestManifest)
+      .createQueryBuilder('manifest')
+      .innerJoin(MediaRequest, 'request', 'request.id = manifest.requestId')
+      .select('manifest.requestId', 'requestId')
+      .where('manifest.requestId IN (:...requestIds)', { requestIds: slice })
+      .andWhere('manifest.instanceId = :instanceId', { instanceId })
+      .andWhere('request.type = :type', { type: MediaType.MANGA })
+      .andWhere('request.status = :status', {
+        status: MediaRequestStatus.APPROVED,
+      })
+      .getRawMany<{ requestId: number | string }>();
+    for (const { requestId } of rows) {
+      live.add(Number(requestId));
+    }
+  }
+  return live;
+};
+
+/**
+ * Rewrites one manga's stamp from the database, then runs `afterwards` under
+ * the same lock. The index value only chose the manga; the server's details
+ * decide which manga it is.
+ */
+const refreshRequestStamp = async (
+  client: SuwayomiAPI,
+  instanceId: number,
+  mangaId: string,
+  call: SuwayomiCallOptions,
+  afterwards: () => Promise<void> = async () => undefined
+): Promise<void> => {
+  let details: SuwayomiMangaDetails;
+  try {
+    details = await client.getMangaDetails(mangaId, call);
+  } catch (error) {
+    if (error instanceof SuwayomiError && error.code === 'NOT_FOUND') {
+      return afterwards();
+    }
+    throw error;
+  }
+  const key: MangaKey = {
+    instanceId,
+    sourceId: details.sourceId,
+    urlHash: hashMangaSourceUrl(details.url),
+  };
+  await runWithMangaDispatchLock(
+    key.instanceId,
+    key.sourceId,
+    key.urlHash,
+    async () => {
+      const current = await client.getMangaDetails(mangaId, call);
+      const written = current.meta[REQUEST_STAMP_KEY];
+      if (isSameManga(current, key) && written !== undefined) {
+        const stamp = await buildRequestStamp(key);
+        if (written !== stamp) {
+          await client.setRequestStamp(mangaId, stamp, call);
+        }
+      }
+      await afterwards();
+    }
+  );
+};
+
+/** Drops index entries whose request is no longer approved on the instance. */
+const releaseInstanceMirrors = async (
+  instanceId: number,
+  options: MangaReleaseOptions
+): Promise<void> => {
+  const client = (options.clientFor ?? getSuwayomiClient)(instanceId);
+  const call: SuwayomiCallOptions = { signal: options.signal };
+  if (!client || !(await hasOwnMarker(client, instanceId, call))) {
+    return;
+  }
+  const entries = await client.listRequestIndex(call);
+  const live = await findLiveIndexedRequestIds(
+    instanceId,
+    entries.map(({ requestId }) => Number(requestId))
+  );
+  const stale = entries
+    .filter(({ requestId }) => !live.has(Number(requestId)))
+    .slice(0, MIRROR_RELEASE_LIMIT);
+  for (const entry of stale) {
+    options.signal?.throwIfAborted();
+    const requestId = Number(entry.requestId);
+    // Checked again under the manga's lock, so a request approved again
+    // since the list was read keeps the entry its dispatch writes.
+    const drop = async () => {
+      const revived = await findLiveIndexedRequestIds(instanceId, [requestId]);
+      if (!revived.has(requestId)) {
+        await client.deleteRequestIndex(entry.requestId, call);
+      }
+    };
+    const mangaId = parseIndexedMangaId(entry.value);
+    await (mangaId === undefined
+      ? drop()
+      : refreshRequestStamp(client, instanceId, mangaId, call, drop));
+  }
+};
+
+const releaseMirrors = async (options: MangaReleaseOptions): Promise<void> => {
+  const marked = new Set(
+    (
+      await getRepository(MangaInstanceMarker).find({
+        select: { id: true, instanceId: true },
+      })
+    ).map(({ instanceId }) => instanceId)
+  );
+  for (const { id: instanceId } of getExternalRuntimeConfig().suwayomi) {
+    if (!marked.has(instanceId)) {
+      continue;
+    }
+    options.signal?.throwIfAborted();
+    try {
+      await releaseInstanceMirrors(instanceId, options);
+    } catch (error) {
+      logReleaseFailure(error, instanceId, options.signal);
+    }
+  }
+};
+
+/**
+ * Hands back what requests no longer need. Dequeues chapters SeerrNG queued
+ * that no approved request references any more, then drops request-index
+ * entries whose request is no longer approved and rewrites the stamp of
+ * their manga from the database. Never deletes files, library entries or
+ * the category. Failures are logged per manga or instance and retried by
+ * the next sweep.
+ */
+export const releaseMangaDispatch = async (
+  options: MangaReleaseOptions = {}
+): Promise<void> => {
+  await releaseChapters(options);
+  await releaseMirrors(options);
 };
