@@ -28,9 +28,14 @@ export enum MangaBindingState {
 }
 
 export const MANGA_BINDING_ORIGIN_LIBRARY_SCAN = 'library-scan';
+export const MANGA_BINDING_ORIGIN_ADMIN = 'admin';
 export const MANGA_MATCHED_BY_ANILIST_TRACKER = 'anilist-tracker';
 export const MANGA_MATCHED_BY_MAL_TRACKER = 'mal-tracker';
 export const MANGA_MATCHED_BY_MANGADEX_LINK = 'mangadex-link';
+/** An admin confirmed the title proposal. */
+export const MANGA_MATCHED_BY_TITLE = 'title';
+/** An admin chose the AniList title. */
+export const MANGA_MATCHED_BY_MANUAL = 'manual';
 
 /** The `urlHash` of bindings and candidates: SHA-256 of the URL, in hex. */
 export const hashMangaSourceUrl = (url: string): string =>

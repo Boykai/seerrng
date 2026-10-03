@@ -15,22 +15,15 @@ import MangaSourceBinding, {
   MangaBindingState,
   hashMangaSourceUrl,
 } from '@server/entity/MangaSourceBinding';
-import type Media from '@server/entity/Media';
-import { runWithRequestAdmission } from '@server/entity/MediaRequest';
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import type { MangaChapterState } from '@server/lib/mangaAvailability';
 import {
   computeMangaAvailability,
   needsMangaChapterStates,
 } from '@server/lib/mangaAvailability';
-import type { MangaBindingSummary } from '@server/lib/mangaMedia';
 import {
-  MANGA_IN_LIST_LIMIT,
-  createMangaMedia,
-  decideMangaStatus,
-  findMangaMedia,
-  findMediaWithActiveRequests,
-  getMangaAdmissionKey,
+  newMangaMediaTally,
+  reconcileMangaMedia,
 } from '@server/lib/mangaMedia';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import type {
@@ -865,134 +858,41 @@ class MangaLibraryScanner
     return !run.signal.aborted;
   }
 
-  /**
-   * Brings each title's media status in line with its bindings. Decisions are
-   * made in bulk; a mismatch takes the locks and is decided again inside
-   * them before anything is written.
-   */
+  /** Brings each title's media status in line with its bindings. */
   private async reconcileMedia(
     run: ScanRun,
     anilistIds: readonly number[],
     snapshot?: SuwayomiSettings
   ): Promise<void> {
-    const ids = [...new Set(anilistIds)]
-      .filter((id) => !run.unreadable.has(id))
-      .sort((a, b) => a - b);
-    let conflicts = 0;
-    let identityConflicts = 0;
+    const tally = newMangaMediaTally();
     try {
-      for (const slice of chunk(ids, MANGA_IN_LIST_LIMIT)) {
-        if (run.signal.aborted) return;
-        const decided = await this.decideMedia(
-          dataSource.manager,
-          slice,
-          run.completed
-        );
-        identityConflicts += decided.conflicts;
-        for (const anilistId of decided.changes.keys()) {
-          // Request admission, then the scan lock, then the instance's
-          // admission, then the transaction.
-          const write = () =>
-            dataSource.transaction((manager) => {
-              run.signal.throwIfAborted();
-              return this.applyMediaChange(manager, anilistId, run.completed);
-            });
-          try {
-            const counter = await runWithRequestAdmission(
-              [getMangaAdmissionKey(anilistId)],
-              () =>
-                this.asyncLock.dispatch(`manga:anilist:${anilistId}`, () =>
-                  snapshot
-                    ? runWithSuwayomiInstanceAdmission(snapshot, write)
-                    : write()
-                )
-            );
-            if (counter) run.counts[counter] += 1;
-          } catch (error) {
-            if (!isUniqueConstraintError(error)) throw error;
-            conflicts += 1;
-          }
+      await reconcileMangaMedia(
+        anilistIds.filter((id) => !run.unreadable.has(id)),
+        {
+          completedInstanceIds: run.completed,
+          tally,
+          signal: run.signal,
+          snapshot,
+          serialize: (anilistId, write) =>
+            this.asyncLock.dispatch(`manga:anilist:${anilistId}`, write),
         }
-      }
+      );
     } finally {
+      run.counts.mediaCreated += tally.mediaCreated;
+      run.counts.mediaUpdated += tally.mediaUpdated;
       const instanceId = snapshot?.id;
-      if (conflicts > 0) {
-        this.warn(run, 'UNIQUE_CONFLICT', instanceId, conflicts);
+      if (tally.uniqueConflicts > 0) {
+        this.warn(run, 'UNIQUE_CONFLICT', instanceId, tally.uniqueConflicts);
       }
-      if (identityConflicts > 0) {
-        this.warn(run, 'IDENTITY_CONFLICT', instanceId, identityConflicts);
-      }
-    }
-  }
-
-  private async applyMediaChange(
-    manager: EntityManager,
-    anilistId: number,
-    completed: ReadonlySet<number>
-  ): Promise<ChangeCounter | undefined> {
-    const { changes } = await this.decideMedia(manager, [anilistId], completed);
-    const change = changes.get(anilistId);
-    if (!change) return undefined;
-    if (!change.media) {
-      await createMangaMedia(manager, anilistId, change.status);
-      return 'mediaCreated';
-    }
-    change.media.status = change.status;
-    await manager.save(change.media);
-    return 'mediaUpdated';
-  }
-
-  /** The statuses to write, by AniList ID, for at most 500 IDs. */
-  private async decideMedia(
-    manager: EntityManager,
-    anilistIds: readonly number[],
-    completed: ReadonlySet<number>
-  ) {
-    const bindings = new Map<number, MangaBindingSummary[]>();
-    const rows = await manager.find(MangaSourceBinding, {
-      select: {
-        id: true,
-        anilistId: true,
-        instanceId: true,
-        state: true,
-        inLibrary: true,
-        availability: true,
-      },
-      where: { anilistId: In([...anilistIds]) },
-    });
-    for (const row of rows) {
-      bindings.set(row.anilistId, [
-        ...(bindings.get(row.anilistId) ?? []),
-        row,
-      ]);
-    }
-    const media = await findMangaMedia(manager, anilistIds);
-    const active = await findMediaWithActiveRequests(
-      manager,
-      [...media.values()].flatMap((found) => (found ? [found.id] : []))
-    );
-    const changes = new Map<
-      number,
-      { media: Media | undefined; status: MediaStatus }
-    >();
-    let conflicts = 0;
-    for (const anilistId of anilistIds) {
-      const found = media.get(anilistId);
-      if (found === null) {
-        conflicts += 1;
-        continue;
-      }
-      const status = decideMangaStatus({
-        current: found?.status,
-        bindings: bindings.get(anilistId) ?? [],
-        completedInstanceIds: completed,
-        activeRequest: found !== undefined && active.has(found.id),
-      });
-      if (status !== undefined) {
-        changes.set(anilistId, { media: found, status });
+      if (tally.identityConflicts > 0) {
+        this.warn(
+          run,
+          'IDENTITY_CONFLICT',
+          instanceId,
+          tally.identityConflicts
+        );
       }
     }
-    return { changes, conflicts };
   }
 }
 

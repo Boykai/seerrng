@@ -70,6 +70,7 @@ import issueRoutes from './issue';
 import issueCommentRoutes from './issueComment';
 import magazineRoutes from './magazine';
 import mangaRoutes, { mangaDiscoverRoutes } from './manga';
+import mangaLibraryRoutes from './mangaLibrary';
 import mediaRoutes from './media';
 import movieRoutes from './movie';
 import musicRoutes from './music';
@@ -517,6 +518,13 @@ router.use(
   categoryAvailabilityGuard(['magazine']),
   externalMetadataRateLimit,
   magazineRoutes
+);
+// Mounted ahead of /manga: admin-only, and it calls no metadata service.
+router.use(
+  '/manga/library',
+  isAuthenticated(Permission.ADMIN),
+  categoryAvailabilityGuard(['manga']),
+  mangaLibraryRoutes
 );
 router.use(
   '/manga',

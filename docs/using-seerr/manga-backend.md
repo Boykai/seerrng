@@ -138,10 +138,10 @@ The scan tries these steps in order and stops at the first that matches:
 - SeerrNG never matches or proposes a title that an administrator rejected for
   that manga.
 - A match stays in place on later scans, even if the manga's tracker records
-  change afterwards.
-- SeerrNG keeps unmatched manga and their proposals for review; reviewing them
-  arrives in a later release. An unmatched manga never makes a title
-  available.
+  change afterwards. Only an administrator's review changes it.
+- SeerrNG keeps unmatched manga and their proposals for an administrator to
+  review; see [Review matches](#review-matches). An unmatched manga never
+  makes a title available.
 
 A proposal is ranked by how closely the manga's title matches the result's
 romaji, English, native, or alternative titles:
@@ -183,6 +183,45 @@ finished lookup is repeated after 30 days. A lookup that fails or is rate
 limited is retried on a later run, and the manga waits for its later steps
 until then. When MangaDex rate limits or refuses requests, SeerrNG pauses
 MangaDex lookups for up to an hour. MangaDex answers are cached for a day.
+
+### Review matches
+
+SeerrNG has no review page yet; administrators review matches through the
+API. The routes are under `/api/v1/manga/library` and require administrator
+permission. While the Manga category is off, they return the normal not-found
+response.
+
+| Method and route | Purpose |
+| --- | --- |
+| `GET /candidates` | List unmatched manga and their proposals, 20 per page by default. Filter by Suwayomi instance or by proposal ranking: `HIGH`, `MEDIUM`, `LOW`, or `NONE` for manga without a proposal. |
+| `GET /bindings` | List matches, including rejected ones. Filter by Suwayomi instance, AniList ID, or state. |
+| `POST /candidates/{candidateId}/confirm` | Accept the proposal of an unmatched manga. |
+| `POST /bind` | Match a manga to an AniList title by hand. Name the manga by its Suwayomi ID, or by its source ID and its address in Suwayomi. |
+| `POST /reject` | Reject an AniList title for a manga. |
+
+- SeerrNG never confirms a proposal by itself, whatever its ranking.
+- A manual match replaces the manga's current match, and the replaced title
+  then counts as rejected for that manga.
+- A rejected title is never proposed or matched for that manga again; only a
+  manual match can restore it. Rejecting a manga's current match returns the
+  manga to the unmatched list. Rejecting its proposal lets the next scan
+  propose a different title.
+- Before a confirmation or a manual match, SeerrNG reads the manga from
+  Suwayomi to check that it is still in the library and how much of it is
+  downloaded. A rejection reads nothing from Suwayomi. No decision changes
+  anything in Suwayomi.
+- Each decision updates the title's status right away, the same way a scan
+  would.
+- When the Suwayomi read fails, the decision returns HTTP `502` and changes
+  nothing. When it conflicts with a change made meanwhile, for example by a
+  scan, it returns HTTP `409`; reload the manga and decide again.
+
+Each match records how it was made in `matchedBy`: `anilist-tracker`,
+`mal-tracker`, `mangadex-link`, `title` (a confirmed proposal), or `manual`. A
+`mangadex-link` match uses data from [MangaDex](https://mangadex.org/); credit
+MangaDex wherever you show it. Decisions are logged with IDs only, never
+titles or addresses. The request and response schemas and every error code
+are in the [REST API reference](../../seerr-api.yml).
 
 ### Availability
 
