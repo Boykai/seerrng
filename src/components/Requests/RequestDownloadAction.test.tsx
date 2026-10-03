@@ -56,6 +56,9 @@ const links = () =>
     label: link.getAttribute('aria-label'),
   }));
 
+const listToggle = () =>
+  host.querySelector<HTMLButtonElement>('button[aria-expanded]');
+
 const stages = [
   'requested',
   'approved',
@@ -106,11 +109,48 @@ it('shows a downloading manga request its verified chapters and picks up a newly
   await render({ enabled: true, revision: 'downloading:20' });
 
   expect(fetcher).toHaveBeenCalledTimes(2);
-  expect(host.querySelector('summary')?.textContent).toBe('Download copies');
+  expect(listToggle()?.textContent).toBe('Download copies');
+  expect(listToggle()?.getAttribute('aria-expanded')).toBe('false');
+  expect(links()).toEqual([]);
+
+  await act(async () => listToggle()?.click());
+
+  // The list opens inside the card, on its own line, never as a floating menu.
+  expect(listToggle()?.getAttribute('aria-expanded')).toBe('true');
+  const list = host.querySelector(
+    `#${listToggle()?.getAttribute('aria-controls')}`
+  );
+  expect(list?.className).toBe(
+    'request-download-copy-panel app-card-inset refreshed-inset-surface'
+  );
+  expect(list?.getAttribute('aria-labelledby')).toBe(
+    list?.querySelector('h4')?.id
+  );
+  expect(list?.querySelector('h4')?.textContent).toBe('Download copies');
+  expect(host.querySelector('details')).toBeNull();
   expect(links().map(({ label }) => label)).toEqual([
     'Download Sample Manga - Ch. 2.cbz',
     'Download Sample Manga - Ch. 1.cbz',
   ]);
+
+  // An open list stays open and gains the next verified chapter.
+  fetcher.mockResolvedValueOnce({
+    results: [chapter(3), chapter(2), chapter(1)],
+  });
+  await render({ enabled: true, revision: 'downloading:30' });
+
+  expect(listToggle()?.getAttribute('aria-expanded')).toBe('true');
+  expect(links().map(({ href }) => href)).toEqual([
+    '/api/v1/request/status/7/downloads/chapter-3',
+    '/api/v1/request/status/7/downloads/chapter-2',
+    '/api/v1/request/status/7/downloads/chapter-1',
+  ]);
+
+  await act(async () => listToggle()?.click());
+
+  expect(listToggle()?.getAttribute('aria-expanded')).toBe('false');
+  expect(listToggle()?.hasAttribute('aria-controls')).toBe(false);
+  expect(links()).toEqual([]);
 });
 
 it('asks for nothing before the request offers copies, then loads them once', async () => {

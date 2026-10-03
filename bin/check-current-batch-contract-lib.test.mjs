@@ -89,6 +89,18 @@ test('current shared owners pass their checks and functional mutations fail', ()
       '  .settings-manga-sources-link,',
       'the Choose Source text link must resolve through the shared indigo link class',
     ],
+    [
+      'src/styles/globals.css',
+      'anything that floats. */\n    order: 1;\n    flex-basis: 100%;',
+      'anything that floats. */\n    order: 1;\n    position: absolute;',
+      'request download copies must open on their own line at the end of the request action row',
+    ],
+    [
+      'src/components/Requests/index.tsx',
+      '<section\n          id={listId}',
+      '<details\n          id={listId}',
+      'request download copies must not open as a floating menu that the request card clips',
+    ],
   ];
   for (const [fileName, original, replacement, reason] of cases) {
     const source = readFileSync(

@@ -1167,6 +1167,7 @@ export const RequestDownloadAction = ({
   revision?: string;
 }) => {
   const intl = useIntl();
+  const [isListOpen, setIsListOpen] = useState(false);
   const { data, mutate } = useSWR<{ results: RequestDownloadAsset[] }>(
     enabled ? `/api/v1/request/status/${requestId}/downloads` : null,
     { revalidateOnFocus: false }
@@ -1206,34 +1207,51 @@ export const RequestDownloadAction = ({
     );
   }
 
+  // The list opens in the card's flow: the card clips anything that floats.
+  const listId = `request-${requestId}-download-copies`;
   return (
-    <details className="group relative">
-      <summary className={`${buttonClassName} list-none`}>
+    <>
+      <Button
+        type="button"
+        buttonType="primary"
+        buttonSize="sm"
+        aria-expanded={isListOpen}
+        aria-controls={isListOpen ? listId : undefined}
+        onClick={() => setIsListOpen((open) => !open)}
+      >
         <ArrowDownTrayIcon className="h-3.5 w-3.5" aria-hidden="true" />
         {intl.formatMessage(messages.downloadCopies)}
-        <ChevronDownIcon
-          className="h-3.5 w-3.5 transition-transform group-open:rotate-180 motion-reduce:transition-none"
-          aria-hidden="true"
-        />
-      </summary>
-      <ol className="absolute right-0 z-30 mt-1 max-h-64 max-w-[min(24rem,80vw)] min-w-64 overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-1 shadow-xl">
-        {assets.map((asset) => (
-          <li key={asset.id}>
-            <a
-              href={downloadHref(asset)}
-              download
-              className="block truncate rounded-md px-3 py-2 text-xs text-gray-100 hover:bg-gray-700 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-              title={asset.name}
-              aria-label={intl.formatMessage(messages.downloadCopyFor, {
-                name: asset.name,
-              })}
-            >
-              {asset.name}
-            </a>
-          </li>
-        ))}
-      </ol>
-    </details>
+        <ChevronDownIcon className="disclosure-chevron" aria-hidden="true" />
+      </Button>
+      {isListOpen && (
+        <section
+          id={listId}
+          aria-labelledby={`${listId}-heading`}
+          className="request-download-copy-panel app-card-inset refreshed-inset-surface"
+        >
+          <h4 id={`${listId}-heading`} className="media-inset-heading">
+            {intl.formatMessage(messages.downloadCopies)}
+          </h4>
+          <ol className="request-download-copy-list scrollable-card">
+            {assets.map((asset) => (
+              <li key={asset.id}>
+                <a
+                  href={downloadHref(asset)}
+                  download
+                  className="request-download-copy-link"
+                  title={asset.name}
+                  aria-label={intl.formatMessage(messages.downloadCopyFor, {
+                    name: asset.name,
+                  })}
+                >
+                  {asset.name}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+    </>
   );
 };
 
