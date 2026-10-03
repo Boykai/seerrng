@@ -508,6 +508,24 @@ export const startJobs = (): void => {
     cancelFn: () => mangaSourceResolver.cancel(),
   });
 
+  scheduledJobs.push({
+    id: 'manga-dispatch-sweep',
+    name: 'Manga Dispatch Sweep',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['manga-dispatch-sweep'].schedule,
+    job: schedule.scheduleJob(jobs['manga-dispatch-sweep'].schedule, () => {
+      logger.info('Starting scheduled job: Manga Dispatch Sweep', {
+        label: 'Jobs',
+      });
+      return runTrackedJob(
+        'Manga Dispatch Sweep',
+        () => new MediaRequestSubscriber().retryApprovedMangaRequests(),
+        { logCompletion: true }
+      );
+    }),
+  });
+
   // Checks if media is still available in plex/sonarr/radarr libs
   scheduledJobs.push({
     id: 'availability-sync',

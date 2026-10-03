@@ -19,6 +19,11 @@ import { MediaRequest } from './MediaRequest';
 /** What one manga request asks for, and how far its dispatch has got. */
 @Entity('manga_request_manifest')
 @Unique('UQ_manga_request_manifest_request', ['requestId'])
+@Index('IDX_manga_request_manifest_binding', [
+  'instanceId',
+  'bindingSourceId',
+  'bindingUrlHash',
+])
 export class MangaRequestManifest {
   @PrimaryGeneratedColumn()
   public id: number;
@@ -84,6 +89,22 @@ export class MangaRequestManifest {
   /** Set once the chapter rows are written; the scope is fixed from then on. */
   @DbAwareColumn({ type: 'datetime', nullable: true })
   public frozenAt: Date | null;
+
+  /** The bound source manga's source; fixed once the scope is frozen. */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  public bindingSourceId: string | null;
+
+  /** SHA-256 of the bound source manga's URL. */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  public bindingUrlHash: string | null;
+
+  /** The Suwayomi manga ID last resolved: a cache, resolved again each run. */
+  @Column({ type: 'integer', nullable: true })
+  public suwayomiMangaId: number | null;
+
+  /** The dispatch sweep leaves the request alone until then. */
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public retryNotBefore: Date | null;
 
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public createdAt: Date;

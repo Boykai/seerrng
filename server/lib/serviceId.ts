@@ -1,5 +1,8 @@
 import { MediaRequestStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import MangaChapterOwnership from '@server/entity/MangaChapterOwnership';
+import MangaInstanceMarker from '@server/entity/MangaInstanceMarker';
+import MangaLibraryOwnership from '@server/entity/MangaLibraryOwnership';
 import MangaMatchCandidate from '@server/entity/MangaMatchCandidate';
 import MangaSourceBinding from '@server/entity/MangaSourceBinding';
 import Media from '@server/entity/Media';
@@ -90,10 +93,17 @@ export const getHistoricalServarrServiceIdMaximum = async (
             .createQueryBuilder('rule')
             .select(`MAX(rule.${overrideColumn})`, 'maximum')
             .getRawOne<{ maximum: unknown }>(),
-      // Library-scan rows keep their instance's ID after it is removed.
+      // Library-scan and dispatch rows keep their instance's ID after it is
+      // removed.
       ...(serviceType !== 'suwayomi'
         ? []
-        : [MangaSourceBinding, MangaMatchCandidate].map((entity) =>
+        : [
+            MangaSourceBinding,
+            MangaMatchCandidate,
+            MangaLibraryOwnership,
+            MangaChapterOwnership,
+            MangaInstanceMarker,
+          ].map((entity) =>
             getRepository(entity)
               .createQueryBuilder('row')
               .select('MAX(row.instanceId)', 'maximum')

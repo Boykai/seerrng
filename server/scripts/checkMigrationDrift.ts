@@ -172,6 +172,46 @@ const MANGA_SCHEMA_OBJECTS: readonly SchemaObject[] = [
     table: 'manga_source_candidate',
     name: 'UQ_manga_source_candidate_item',
   },
+  // Manga dispatch: the bound source on the manifest, and ownership records.
+  ...[
+    'bindingSourceId',
+    'bindingUrlHash',
+    'suwayomiMangaId',
+    'retryNotBefore',
+  ].map((name): SchemaObject => ({
+    kind: 'column',
+    table: 'manga_request_manifest',
+    name,
+  })),
+  {
+    kind: 'index',
+    table: 'manga_request_manifest',
+    name: 'IDX_manga_request_manifest_binding',
+  },
+  ...['instanceId', 'sourceId', 'urlHash', 'url', 'addedBySeerrng'].map(
+    (name): SchemaObject => ({
+      kind: 'column',
+      table: 'manga_library_ownership',
+      name,
+    })
+  ),
+  ...[
+    'instanceId',
+    'sourceId',
+    'mangaUrlHash',
+    'chapterUrlHash',
+    'chapterUrl',
+    'enqueuedAt',
+  ].map((name): SchemaObject => ({
+    kind: 'column',
+    table: 'manga_chapter_ownership',
+    name,
+  })),
+  ...['instanceId', 'marker'].map((name): SchemaObject => ({
+    kind: 'column',
+    table: 'manga_instance_marker',
+    name,
+  })),
 ];
 
 const driver = isPgsql ? 'postgres' : 'sqlite';

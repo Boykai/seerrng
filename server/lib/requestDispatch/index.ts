@@ -10,6 +10,7 @@ import {
   BoundedTaskQueue,
   BoundedTaskQueueFullError,
 } from '@server/utils/concurrency';
+import { AsyncResource } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { QueryRunner } from 'typeorm';
 
@@ -20,6 +21,11 @@ export const MAX_REQUEST_DISPATCH_ATTEMPTS = 50;
 export const REQUEST_DISPATCH_CLAIM_LEASE_MS = 15 * 60 * 1000;
 export const REQUEST_DISPATCH_SCAN_INTERVAL_MS = 60_000;
 export const MAX_REQUEST_DISPATCH_RETRY_DELAY_MS = 6 * 60 * 60 * 1000;
+
+// Captured at module load, outside any request. A dispatch can be queued
+// inside a route's or a job's admission; it outlives that admission, so it
+// starts in this context instead of the caller's.
+const dispatchScope = new AsyncResource('RequestDispatch');
 
 export type RequestDispatchOutcome = {
   delivered: boolean;
@@ -340,7 +346,7 @@ export class RequestDispatchManager {
       return;
     }
     this.active.add(record.id);
-    trackBackgroundTask(`request dispatch outbox ${record.id}`, async () => {
+    const deliver = async (): Promise<void> => {
       try {
         await this.deliveryQueue.run(async () => {
           let claimToken: string | undefined;
@@ -409,7 +415,10 @@ export class RequestDispatchManager {
       } finally {
         this.active.delete(record.id);
       }
-    });
+    };
+    dispatchScope.runInAsyncScope(() =>
+      trackBackgroundTask(`request dispatch outbox ${record.id}`, deliver)
+    );
   }
 
   public async resume(respectBackoff = false): Promise<void> {

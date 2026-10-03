@@ -51,12 +51,19 @@ import {
   cleanMagazineTitle,
   normalizeMagazineTitle,
 } from '@server/lib/magazineIdentity';
+import {
+  MANGA_DISPATCH_SWEEP_LIMIT,
+  MAX_MANGA_DISPATCH_SWEEP_LIMIT,
+  dispatchMangaRequest,
+  findDueMangaRequestIds,
+  releaseMangaDispatch,
+} from '@server/lib/mangaDispatch';
+import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { runMediaEntityMutation } from '@server/lib/mediaMutation';
 import { getLidarrAlbumMediaStatus } from '@server/lib/musicAvailability';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import type { RequestServiceType } from '@server/lib/requestDestination';
 import requestDispatchManager, {
-  MAX_REQUEST_DISPATCH_RETRY_DELAY_MS,
   type RequestDispatchOutcome,
 } from '@server/lib/requestDispatch';
 import {
@@ -520,6 +527,37 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
   }
 
+  /**
+   * Queues the approved manga requests whose dispatch is due, then hands
+   * back what requests no longer need on Suwayomi. Does nothing while manga
+   * is disabled.
+   */
+  public async retryApprovedMangaRequests(
+    limit = MANGA_DISPATCH_SWEEP_LIMIT
+  ): Promise<void> {
+    if (!isMediaCategoryEnabled('manga')) {
+      return;
+    }
+    const boundedLimit =
+      Number.isSafeInteger(limit) && limit > 0
+        ? Math.min(limit, MAX_MANGA_DISPATCH_SWEEP_LIMIT)
+        : MANGA_DISPATCH_SWEEP_LIMIT;
+    try {
+      for (const requestId of await findDueMangaRequestIds(boundedLimit)) {
+        await requestDispatchManager.enqueue(requestId);
+      }
+    } finally {
+      try {
+        await releaseMangaDispatch();
+      } catch (error) {
+        logger.warn('Manga dispatch release failed', {
+          label: 'Manga Dispatch',
+          errorName: error instanceof Error ? error.name : typeof error,
+        });
+      }
+    }
+  }
+
   private getBookStatusFromLinks(media: Media): MediaStatus {
     const hasEbook =
       media.serviceId !== null &&
@@ -662,6 +700,13 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         ) {
           return { delivered: true };
         }
+        if (request.type === MediaType.MANGA && request.media) {
+          // The manga admission keys come from the identifiers, which the
+          // request's eager media relation does not load.
+          request.media.identifiers = await getRepository(MediaIdentifier).find(
+            { where: { media: { id: request.media.id } } }
+          );
+        }
 
         return runMediaEntityMutation(request.media, () =>
           this.dispatchWithServiceAuthority(request)
@@ -674,7 +719,8 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     request: MediaRequest
   ): Promise<RequestDispatchOutcome> {
     if (request.type === MediaType.MANGA) {
-      // Manga has no Servarr service, so it skips service admission entirely.
+      // Manga has no Servarr service: each dispatch write checks its Suwayomi
+      // instance instead.
       return this.dispatchApprovedRequest(request);
     }
 
@@ -773,12 +819,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         return { delivered: false, retryAfterMs };
       }
     } else if (request.type === MediaType.MANGA) {
-      // No manga backend exists yet: keep the request queued at the longest
-      // retry delay instead of handing it to a book service.
-      return {
-        delivered: false,
-        retryAfterMs: MAX_REQUEST_DISPATCH_RETRY_DELAY_MS,
-      };
+      return dispatchMangaRequest(request);
     } else {
       const unsupportedType: never = request.type;
       void unsupportedType;
@@ -798,15 +839,6 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     event: InsertEvent<MediaRequest> | UpdateEvent<MediaRequest>
   ): Promise<void> {
     if (entity.status === MediaRequestStatus.APPROVED) {
-      // Manga requests are held: none reaches dispatch until the manga
-      // dispatcher replaces the not-delivered stub.
-      const type =
-        entity.type ??
-        (event as UpdateEvent<MediaRequest>).databaseEntity?.type ??
-        entity.media?.mediaType;
-      if (type === MediaType.MANGA) {
-        return;
-      }
       if (Number.isSafeInteger(entity.id) && entity.media) {
         await requestDispatchManager.enqueue(entity.id, event.queryRunner);
       }

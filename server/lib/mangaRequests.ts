@@ -7,7 +7,10 @@ import {
 import type MangaRequestChapter from '@server/entity/MangaRequestChapter';
 import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import { hashMangaSourceUrl } from '@server/entity/MangaSourceBinding';
-import { syncMangaRequestBindings } from '@server/lib/mangaRequestBindings';
+import {
+  enqueueMangaRequestDispatch,
+  syncMangaRequestBindings,
+} from '@server/lib/mangaRequestBindings';
 import type { SuwayomiSettings } from '@server/lib/settings';
 import { chunk } from '@server/utils/chunk';
 import { parsePositiveRouteId } from '@server/utils/routeId';
@@ -420,7 +423,10 @@ export const updateMangaRequestManifest = async (
   if (result.affected !== 1) {
     return false;
   }
-  await syncMangaRequestBindings(manager, [manifest.anilistId]);
+  await enqueueMangaRequestDispatch(
+    await syncMangaRequestBindings(manager, [manifest.anilistId]),
+    manager
+  );
   return true;
 };
 
