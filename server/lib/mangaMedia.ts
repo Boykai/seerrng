@@ -15,6 +15,7 @@ import {
   MediaRequest,
   runWithRequestAdmission,
 } from '@server/entity/MediaRequest';
+import { syncMangaRequestBindings } from '@server/lib/mangaRequestBindings';
 import type { SuwayomiSettings } from '@server/lib/settings';
 import { runWithSuwayomiInstanceAdmission } from '@server/lib/suwayomi/instanceAdmission';
 import { chunk } from '@server/utils/chunk';
@@ -136,7 +137,7 @@ export const findMediaWithActiveRequests = async (
   return active;
 };
 
-/** Creates available manga media under its canonical AniList identity. */
+/** Creates manga media under its canonical AniList identity. */
 export const createMangaMedia = async (
   manager: EntityManager,
   anilistId: number,
@@ -314,5 +315,8 @@ export const reconcileMangaMedia = async (
         tally.uniqueConflicts += 1;
       }
     }
+    // Requests on these titles follow their bindings: parked ones whose
+    // binding appeared are released, and ones whose binding went are parked.
+    await syncMangaRequestBindings(dataSource.manager, slice);
   }
 };

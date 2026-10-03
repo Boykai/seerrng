@@ -13,6 +13,9 @@ import {
 } from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
 import MangaMatchCandidate from '@server/entity/MangaMatchCandidate';
+import MangaRequestManifest, {
+  MangaRequestBindingState,
+} from '@server/entity/MangaRequestManifest';
 import MangaSourceBinding, {
   MangaBindingConfidence,
   MangaBindingState,
@@ -23,6 +26,7 @@ import MediaIdentifier, {
   MediaIdentifierProvider,
 } from '@server/entity/MediaIdentifier';
 import { MediaRequest } from '@server/entity/MediaRequest';
+import { RequestDispatchOutbox } from '@server/entity/RequestDispatchOutbox';
 import { User } from '@server/entity/User';
 import { getMangaContentPolicy } from '@server/lib/mangaCatalog';
 import { createMangaMedia } from '@server/lib/mangaMedia';
@@ -2019,5 +2023,92 @@ describe('manga library scan: guards', () => {
     assert.deepEqual(await scan(), NO_CHANGES);
     assert.deepEqual(server.requests, []);
     assert.deepEqual(await bindings(), []);
+  });
+});
+
+describe('manga library scan: requests', () => {
+  /** A manga request as the request flow records it, before any dispatch. */
+  const recordRequest = async (
+    anilistId: number,
+    instanceId = 1,
+    bindingState = MangaRequestBindingState.AWAITING_BINDING
+  ) => {
+    const media = await createMangaMedia(
+      dataSource.manager,
+      anilistId,
+      MediaStatus.PENDING
+    );
+    const request = await getRepository(MediaRequest).save(
+      new MediaRequest({
+        type: MediaType.MANGA,
+        media,
+        requestedBy: await getRepository(User).findOneByOrFail({ id: 1 }),
+        status: MediaRequestStatus.APPROVED,
+        is4k: false,
+        serverId: instanceId,
+      })
+    );
+    await getRepository(MangaRequestManifest).insert({
+      requestId: request.id,
+      anilistId,
+      instanceId,
+      bindingState,
+    });
+  };
+
+  const manifests = async () =>
+    (
+      await getRepository(MangaRequestManifest).find({ order: { id: 'ASC' } })
+    ).map((manifest) => [
+      manifest.anilistId,
+      manifest.instanceId,
+      manifest.bindingState,
+      manifest.boundAt instanceof Date,
+    ]);
+
+  const { AWAITING_BINDING, BOUND } = MangaRequestBindingState;
+
+  it('releases parked requests once their title is bound and parks them when it goes', async () => {
+    const library = {
+      mangas: [tracked(1, 101, { chapterCount: 2, downloadCount: 1 })],
+    };
+    const server = await start(library);
+    configure(instanceFor(server));
+    await recordRequest(101);
+    await recordRequest(109);
+    // A stale BOUND row for a title no binding names: only the sweep sees it.
+    await recordRequest(555, 1, BOUND);
+
+    await scan();
+
+    assert.deepEqual(await manifests(), [
+      [101, 1, BOUND, true],
+      [109, 1, AWAITING_BINDING, false],
+      [555, 1, AWAITING_BINDING, false],
+    ]);
+
+    library.mangas = [];
+    await scan();
+
+    assert.deepEqual(await manifests(), [
+      [101, 1, AWAITING_BINDING, false],
+      [109, 1, AWAITING_BINDING, false],
+      [555, 1, AWAITING_BINDING, false],
+    ]);
+    assert.equal(await getRepository(RequestDispatchOutbox).count(), 0);
+  });
+
+  it('keeps a request parked while only another instance holds its title', async () => {
+    const first = await start({
+      mangas: [tracked(1, 101, { chapterCount: 1, downloadCount: 1 })],
+    });
+    const second = await start({ mangas: [] });
+    configure(instanceFor(first, 1), instanceFor(second, 2));
+    await recordRequest(101, 2);
+
+    await scan();
+
+    assert.deepEqual(await manifests(), [[101, 2, AWAITING_BINDING, false]]);
+    assert.equal(await getRepository(RequestDispatchOutbox).count(), 0);
   });
 });

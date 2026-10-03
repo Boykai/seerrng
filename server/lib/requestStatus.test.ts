@@ -705,7 +705,7 @@ test('manga requests never borrow book progress, service names or links', () => 
     });
 
     const approved = getRequestStatus(manga);
-    assert.equal(approved.stage, RequestStatusStage.SEARCHING);
+    assert.equal(approved.stage, RequestStatusStage.APPROVED);
     assert.equal(approved.downloadCount, 0);
     assert.equal(approved.percent, null);
     assert.equal(approved.service, null);

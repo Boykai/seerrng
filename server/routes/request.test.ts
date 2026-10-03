@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
+import AnilistAPI from '@server/api/anilist';
 import ListenBrainzAPI from '@server/api/listenbrainz';
 import MusicBrainz from '@server/api/musicbrainz';
 import OpenLibraryAPI from '@server/api/openlibrary';
@@ -26,7 +27,6 @@ import MediaIdentifier, {
   MediaIdentifierProvider,
 } from '@server/entity/MediaIdentifier';
 import {
-  MANGA_REQUESTS_UNAVAILABLE_MESSAGE,
   MAX_BOOK_REQUEST_IDENTIFIER_CANDIDATES,
   MediaRequest,
 } from '@server/entity/MediaRequest';
@@ -3294,13 +3294,46 @@ describe('POST /request', () => {
     }
   });
 
-  it('refuses manga requests with the category off, missing or on', async () => {
+  it('gates manga requests on their category and records them when it is on', async () => {
     const settings = getSettings();
     const originalCategories = { ...settings.main.enabledMediaCategories };
+    const originalSuwayomi = settings.suwayomi;
     const categoriesWithoutManga: Partial<typeof originalCategories> = {
       ...originalCategories,
     };
     delete categoriesWithoutManga.manga;
+    settings.suwayomi = [
+      {
+        id: 1,
+        name: 'Suwayomi',
+        hostname: 'localhost',
+        port: 4567,
+        useSsl: false,
+        baseUrl: '',
+        isDefault: true,
+        authMode: 'NONE',
+        username: '',
+        password: '',
+        sourceAllowlist: [],
+        preferredLanguages: [],
+        scanlatorPreference: [],
+        requireCbz: true,
+      },
+    ];
+    const getMangaDetails = mock.method(
+      AnilistAPI.prototype,
+      'getMangaDetails',
+      async (id: number) => ({
+        id,
+        titles: { english: 'Sample Manga' },
+        synonyms: [],
+        format: 'MANGA',
+        isAdult: false,
+        genres: [],
+        tags: [],
+        staff: [],
+      })
+    );
     const agent = await loginAs('friend@seerr.dev', 'test1234');
     const requestManga = () =>
       agent
@@ -3319,12 +3352,6 @@ describe('POST /request', () => {
         categoriesWithoutManga as typeof originalCategories;
       const missing = await requestManga();
 
-      settings.main.enabledMediaCategories = {
-        ...originalCategories,
-        manga: true,
-      };
-      const enabled = await requestManga();
-
       for (const response of [disabled, missing]) {
         assert.strictEqual(response.status, 403);
         assert.strictEqual(
@@ -3332,20 +3359,35 @@ describe('POST /request', () => {
           'Manga requests are disabled by the administrator.'
         );
       }
-      assert.strictEqual(enabled.status, 400);
-      assert.strictEqual(
-        enabled.body.message,
-        MANGA_REQUESTS_UNAVAILABLE_MESSAGE
-      );
+      assert.strictEqual(getMangaDetails.mock.callCount(), 0);
       assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+
+      settings.main.enabledMediaCategories = {
+        ...originalCategories,
+        manga: true,
+      };
+      const enabled = await requestManga();
+
+      assert.strictEqual(enabled.status, 201);
+      assert.strictEqual(enabled.body.type, MediaType.MANGA);
+      assert.strictEqual(enabled.body.status, MediaRequestStatus.PENDING);
+      assert.deepStrictEqual(enabled.body.mangaScope, {
+        scope: 'ALL_AT_DISPATCH',
+        latestCount: null,
+        rangeStart: null,
+        rangeEnd: null,
+        awaitingBinding: true,
+      });
+      assert.strictEqual(await getRepository(MediaRequest).count(), 1);
       assert.strictEqual(
         await getRepository(Media).count({
           where: { mediaType: MediaType.MANGA },
         }),
-        0
+        1
       );
     } finally {
       settings.main.enabledMediaCategories = originalCategories;
+      settings.suwayomi = originalSuwayomi;
     }
   });
 

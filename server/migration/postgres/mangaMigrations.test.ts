@@ -3,11 +3,13 @@ import test from 'node:test';
 
 import { AddMangaIdentityUniqueness1790986402000 as PortableMangaIdentityMigration } from '@server/migration/sqlite/1790986402000-AddMangaIdentityUniqueness';
 import { AddMangaLibraryBindings1790986404000 as PortableMangaLibraryMigration } from '@server/migration/sqlite/1790986404000-AddMangaLibraryBindings';
+import { AddMangaRequestManifests1790986406000 as PortableMangaRequestMigration } from '@server/migration/sqlite/1790986406000-AddMangaRequestManifests';
 import { DataSource, type QueryRunner } from 'typeorm';
 import { AddMangaIdentityUniqueness1790986402000 } from './1790986402000-AddMangaIdentityUniqueness';
 import { AddMangaQuota1790986403000 } from './1790986403000-AddMangaQuota';
 import { AddMangaLibraryBindings1790986404000 } from './1790986404000-AddMangaLibraryBindings';
 import { AddMangaMatchProposals1790986405000 } from './1790986405000-AddMangaMatchProposals';
+import { AddMangaRequestManifests1790986406000 } from './1790986406000-AddMangaRequestManifests';
 
 const postgresUrl = process.env.SEERR_TEST_POSTGRES_URL;
 const postgresTest = postgresUrl ? test : test.skip;
@@ -120,6 +122,33 @@ test('PostgreSQL manga match proposal migration adds and drops its columns', asy
       `ALTER TABLE "manga_match_candidate" DROP COLUMN "mangadexCheckedAt"`,
       `ALTER TABLE "manga_match_candidate" DROP COLUMN "malCheckedAt"`,
       `ALTER TABLE "manga_match_candidate" DROP COLUMN "malId"`,
+    ]
+  );
+});
+
+test('PostgreSQL manga request manifest migration creates the SQLite indexes and drops both tables', async () => {
+  const migration = new AddMangaRequestManifests1790986406000();
+  const indexes = (statements: string[]) =>
+    statements.filter((statement) => / INDEX /.test(statement));
+  const postgres = await recordStatements((queryRunner) =>
+    migration.up(queryRunner)
+  );
+
+  assert.equal(migration.name, 'AddMangaRequestManifests1790986406000');
+  assert.equal(indexes(postgres).length, 2);
+  assert.deepStrictEqual(
+    indexes(postgres),
+    indexes(
+      await recordStatements((queryRunner) =>
+        new PortableMangaRequestMigration().up(queryRunner)
+      )
+    )
+  );
+  assert.deepStrictEqual(
+    await recordStatements((queryRunner) => migration.down(queryRunner)),
+    [
+      `DROP TABLE IF EXISTS "manga_request_chapter"`,
+      `DROP TABLE IF EXISTS "manga_request_manifest"`,
     ]
   );
 });
@@ -422,6 +451,113 @@ postgresTest(
         );
       await insertCandidate();
       await rejectsDuplicate(insertCandidate);
+
+      await migration.down(queryRunner);
+      await migration.down(queryRunner);
+
+      assert.deepStrictEqual(await objects(), []);
+    });
+  }
+);
+
+postgresTest(
+  'PostgreSQL manga request manifest migration keys manifests and chapters reversibly',
+  async () => {
+    await withPostgresQueryRunner(async (queryRunner) => {
+      // A private schema keeps the migrated database's tables out of reach,
+      // and the rollback removes it again.
+      await queryRunner.query(`CREATE SCHEMA "manga_request_check"`);
+      await queryRunner.query(`SET LOCAL search_path TO "manga_request_check"`);
+      await queryRunner.query(
+        `CREATE TABLE "media_request" ("id" integer PRIMARY KEY)`
+      );
+      const objects = async () =>
+        (
+          (await queryRunner.query(
+            `SELECT c."relkind" AS "kind", c."relname" AS "name"
+             FROM pg_class c
+             JOIN pg_namespace n ON n."oid" = c."relnamespace"
+             WHERE n."nspname" = 'manga_request_check'
+               AND c."relkind" IN ('r', 'i')
+               AND c."relname" LIKE '%manga_request%'
+             ORDER BY c."relkind", c."relname"`
+          )) as { kind: string; name: string }[]
+        ).map(({ kind, name }) => `${kind} ${name}`);
+      const insertManifest = (requestId: number) =>
+        queryRunner.query(
+          `INSERT INTO "manga_request_manifest" ("requestId", "anilistId", "instanceId") VALUES ($1, 900001, 1)`,
+          [requestId]
+        );
+      const insertChapter = (manifestId: number, item: string) =>
+        queryRunner.query(
+          `INSERT INTO "manga_request_chapter" ("manifestId", "url", "urlHash", "chapterNumber") VALUES ($1, $2, $3, 1.5)`,
+          [manifestId, `/fake/chapter/${item}`, `hash-${item}`]
+        );
+      const rejects = async (
+        insert: () => Promise<unknown>,
+        pattern: RegExp
+      ) => {
+        await queryRunner.query('SAVEPOINT manga_request_check');
+        await assert.rejects(insert(), pattern);
+        await queryRunner.query('ROLLBACK TO SAVEPOINT manga_request_check');
+      };
+
+      const migration = new AddMangaRequestManifests1790986406000();
+      await migration.up(queryRunner);
+      await migration.up(queryRunner);
+
+      assert.deepStrictEqual(await objects(), [
+        'i IDX_manga_request_manifest_anilistId',
+        'i IDX_manga_request_manifest_instanceId',
+        'i PK_manga_request_chapter',
+        'i PK_manga_request_manifest',
+        'i UQ_manga_request_chapter_manifest_url',
+        'i UQ_manga_request_manifest_request',
+        'r manga_request_chapter',
+        'r manga_request_manifest',
+      ]);
+
+      await queryRunner.query(
+        `INSERT INTO "media_request" ("id") VALUES (1), (2)`
+      );
+      await insertManifest(1);
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "scope", "latestCount", "bindingState", "boundAt", "checkpoint", "attempts", "frozenAt", "createdAt" IS NOT NULL AS "stamped"
+           FROM "manga_request_manifest"`
+        ),
+        [
+          {
+            scope: 'ALL_AT_DISPATCH',
+            latestCount: null,
+            bindingState: 'AWAITING_BINDING',
+            boundAt: null,
+            checkpoint: null,
+            attempts: 0,
+            frozenAt: null,
+            stamped: true,
+          },
+        ]
+      );
+      await rejects(() => insertManifest(1), /unique/i);
+      await insertManifest(2);
+      const manifestIds = (
+        (await queryRunner.query(
+          `SELECT "id" FROM "manga_request_manifest" ORDER BY "requestId"`
+        )) as { id: number }[]
+      ).map(({ id }) => id);
+      await insertChapter(manifestIds[0], 'a');
+      await rejects(() => insertChapter(manifestIds[0], 'a'), /unique/i);
+      await insertChapter(manifestIds[1], 'a');
+
+      await queryRunner.query(`DELETE FROM "media_request" WHERE "id" = 1`);
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "manifestId" FROM "manga_request_chapter"`
+        ),
+        [{ manifestId: manifestIds[1] }]
+      );
+      await rejects(() => insertManifest(3), /foreign key/i);
 
       await migration.down(queryRunner);
       await migration.down(queryRunner);

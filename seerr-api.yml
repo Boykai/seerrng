@@ -4279,7 +4279,7 @@ components:
           type: integer
         mediaType:
           type: string
-          enum: [movie, tv, music, book, comic, magazine]
+          enum: [movie, tv, music, book, comic, magazine, manga]
         stage:
           type: string
         attempt:
@@ -4460,9 +4460,63 @@ components:
           type: boolean
           example: false
           description: If true, this request will not count against the user's quota. Requires MANAGE_REQUESTS permission.
+        mangaScope:
+          $ref: '#/components/schemas/MangaRequestScopeSummary'
       required:
         - id
         - status
+    MangaRequestScopeInput:
+      type: object
+      description: Which chapters a manga request asks for. Omit it to request every chapter the source lists when the request is dispatched.
+      additionalProperties: false
+      properties:
+        scope:
+          type: string
+          enum: [ALL_AT_DISPATCH, LATEST_N, RANGE]
+          description: ALL_AT_DISPATCH when omitted.
+        latestCount:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          nullable: true
+          description: LATEST_N only. How many of the highest-numbered chapters to request.
+        rangeStart:
+          type: number
+          minimum: 0
+          maximum: 1000000
+          nullable: true
+          description: RANGE only, and required there. The first chapter number, inclusive.
+        rangeEnd:
+          type: number
+          minimum: 0
+          maximum: 1000000
+          nullable: true
+          description: RANGE only. The last chapter number, inclusive. Every later chapter too when omitted.
+    MangaRequestScopeSummary:
+      type: object
+      description: A manga request's chapter scope. Present on manga requests only.
+      properties:
+        scope:
+          type: string
+          enum: [ALL_AT_DISPATCH, LATEST_N, RANGE]
+        latestCount:
+          type: integer
+          nullable: true
+        rangeStart:
+          type: number
+          nullable: true
+        rangeEnd:
+          type: number
+          nullable: true
+        awaitingBinding:
+          type: boolean
+          description: True while the title has no source on the request's Suwayomi server. A library scan or an administrator's match review provides one.
+      required:
+        - scope
+        - latestCount
+        - rangeStart
+        - rangeEnd
+        - awaitingBinding
     MediaInfo:
       type: object
       properties:
@@ -14502,7 +14556,7 @@ paths:
           name: mediaType
           schema:
             type: string
-            enum: [movie, tv, music, book, comic, magazine, all]
+            enum: [movie, tv, music, book, comic, magazine, manga, all]
             nullable: true
             default: all
       responses:
@@ -14536,7 +14590,7 @@ paths:
               properties:
                 mediaType:
                   type: string
-                  enum: [movie, tv, music, book, comic, magazine]
+                  enum: [movie, tv, music, book, comic, magazine, manga]
                   example: movie
                 mediaId:
                   oneOf:
@@ -14603,6 +14657,8 @@ paths:
                   type: boolean
                   example: false
                   description: If true, this request will not count against the user's quota. Requires MANAGE_REQUESTS permission.
+                mangaScope:
+                  $ref: '#/components/schemas/MangaRequestScopeInput'
               required:
                 - mediaType
                 - mediaId
@@ -14657,6 +14713,8 @@ paths:
                   music:
                     type: number
                   book:
+                    type: number
+                  manga:
                     type: number
                   pending:
                     type: number
@@ -15306,7 +15364,7 @@ paths:
           name: mediaType
           schema:
             type: string
-            enum: [movie, tv, music, book, comic, magazine, all]
+            enum: [movie, tv, music, book, comic, magazine, manga, all]
             default: all
         - in: query
           name: filter
@@ -15531,7 +15589,7 @@ paths:
               properties:
                 mediaType:
                   type: string
-                  enum: [movie, tv, music, book, comic, magazine]
+                  enum: [movie, tv, music, book, comic, magazine, manga]
                 seasons:
                   type: array
                   items:
@@ -15566,6 +15624,8 @@ paths:
                 userId:
                   type: number
                   nullable: true
+                mangaScope:
+                  $ref: '#/components/schemas/MangaRequestScopeInput'
               required:
                 - mediaType
       responses:

@@ -550,9 +550,12 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
   }
 
   private isRequestMediaAvailable(entity: MediaRequest): boolean {
+    // Manga requests never announce "Now Available": their availability is
+    // a library state, not the request's delivery.
     return (
+      (entity.type ?? entity.media.mediaType) !== MediaType.MANGA &&
       entity.media[entity.is4k ? 'status4k' : 'status'] ===
-      MediaStatus.AVAILABLE
+        MediaStatus.AVAILABLE
     );
   }
 
@@ -626,7 +629,10 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         entity,
         event
       );
-    } else if (entity.status === MediaRequestStatus.COMPLETED) {
+    } else if (
+      entity.status === MediaRequestStatus.COMPLETED &&
+      (entity.type ?? entity.media.mediaType) !== MediaType.MANGA
+    ) {
       await this.enqueueRequestNotification(
         Notification.MEDIA_AVAILABLE,
         entity,
@@ -792,6 +798,15 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     event: InsertEvent<MediaRequest> | UpdateEvent<MediaRequest>
   ): Promise<void> {
     if (entity.status === MediaRequestStatus.APPROVED) {
+      // Manga requests are held: none reaches dispatch until the manga
+      // dispatcher replaces the not-delivered stub.
+      const type =
+        entity.type ??
+        (event as UpdateEvent<MediaRequest>).databaseEntity?.type ??
+        entity.media?.mediaType;
+      if (type === MediaType.MANGA) {
+        return;
+      }
       if (Number.isSafeInteger(entity.id) && entity.media) {
         await requestDispatchManager.enqueue(entity.id, event.queryRunner);
       }
@@ -2746,7 +2761,12 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       media.mediaType !== MediaType.TV &&
       entity.status === MediaRequestStatus.DECLINED &&
       media[statusKey] !== MediaStatus.AVAILABLE &&
-      media[statusKey] !== MediaStatus.DELETED
+      media[statusKey] !== MediaStatus.DELETED &&
+      // A manga's partial availability comes from its library, not a request.
+      !(
+        media.mediaType === MediaType.MANGA &&
+        media[statusKey] === MediaStatus.PARTIALLY_AVAILABLE
+      )
     ) {
       const hasOtherActiveRequest = await requestRepository.exists({
         where: {

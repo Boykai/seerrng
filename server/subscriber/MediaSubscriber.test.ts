@@ -9,6 +9,7 @@ import {
 import dataSource, { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
+import { RequestDispatchOutbox } from '@server/entity/RequestDispatchOutbox';
 import Season from '@server/entity/Season';
 import { User } from '@server/entity/User';
 import {
@@ -284,6 +285,81 @@ describe('MediaSubscriber', () => {
       (await getRepository(MediaRequest).findOneByOrFail({ id: request.id }))
         .status,
       MediaRequestStatus.APPROVED
+    );
+  });
+
+  it('never approves a pending manga request when its media becomes available, 4K included', async () => {
+    const user = await getRepository(User).findOneByOrFail({ id: 1 });
+    const media = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.PENDING,
+        status4k: MediaStatus.PENDING,
+      })
+    );
+    const requests = await getRepository(MediaRequest).save(
+      [false, true].map(
+        (is4k) =>
+          new MediaRequest({
+            type: MediaType.MANGA,
+            media,
+            requestedBy: user,
+            status: MediaRequestStatus.PENDING,
+            is4k,
+          })
+      )
+    );
+
+    const savedMedia = await getRepository(Media).findOneByOrFail({
+      id: media.id,
+    });
+    savedMedia.status = MediaStatus.AVAILABLE;
+    savedMedia.status4k = MediaStatus.AVAILABLE;
+    await getRepository(Media).save(savedMedia);
+
+    for (const request of requests) {
+      assert.strictEqual(
+        (await getRepository(MediaRequest).findOneByOrFail({ id: request.id }))
+          .status,
+        MediaRequestStatus.PENDING
+      );
+    }
+    assert.strictEqual(await getRepository(RequestDispatchOutbox).count(), 0);
+  });
+
+  it('skips pending manga requests when the event omits the media type', async () => {
+    const user = await getRepository(User).findOneByOrFail({ id: 1 });
+    const media = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.PENDING,
+        status4k: MediaStatus.UNKNOWN,
+      })
+    );
+    const request = await getRepository(MediaRequest).save(
+      new MediaRequest({
+        type: MediaType.MANGA,
+        media,
+        requestedBy: user,
+        status: MediaRequestStatus.PENDING,
+        is4k: false,
+      })
+    );
+    const internals = new MediaSubscriber() as unknown as SubscriberInternals;
+    const partial = new Media({ id: media.id, status: MediaStatus.AVAILABLE });
+
+    await internals.updateChildRequestStatus(
+      dataSource.manager,
+      partial,
+      false
+    );
+
+    assert.strictEqual(
+      (await getRepository(MediaRequest).findOneByOrFail({ id: request.id }))
+        .status,
+      MediaRequestStatus.PENDING
     );
   });
 });
