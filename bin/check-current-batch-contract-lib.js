@@ -4053,6 +4053,51 @@ const validateCurrentBatchContract = (files) => {
     'Manga Library is an admin-only route that appears only while the Manga category is enabled and Suwayomi is configured',
     'the style standard must govern the Manga Library review page'
   );
+  for (const [selector, declarations] of [
+    [
+      '.settings-manga-sources-table .app-data-table-cell',
+      ['padding-right: 5px;', 'padding-left: 5px;'],
+    ],
+    ['.settings-manga-sources-stack', ['gap: 5px;']],
+    ['.settings-manga-sources-link', ['text-indigo-300']],
+    ['.settings-manga-sources-list', ['gap: 5px;']],
+    ['.settings-manga-sources-cover', ['width: 1.75rem;', 'height: 2.625rem;']],
+  ]) {
+    requireCssRule(
+      selector,
+      declarations,
+      'Manga Sources table geometry, title links, and detail lists must resolve through shared global classes'
+    );
+  }
+  for (const token of [
+    '<Table className="settings-manga-sources-table">',
+    'className="settings-log-toolbar"',
+    'className="settings-table-action-row"',
+    'buttonSize="standard"',
+    '<PaginationFooter',
+  ]) {
+    requireText(
+      'src/components/Settings/MangaSources/index.tsx',
+      token,
+      'Manga Sources must use the shared compact table, filter, action, and pagination layout'
+    );
+  }
+  for (const token of [
+    'className="settings-group-card"',
+    'className="settings-manga-sources-list"',
+    'className="settings-library-card settings-manga-sources-confirm"',
+  ]) {
+    requireText(
+      'src/components/Settings/MangaSources/TitleDetail.tsx',
+      token,
+      'the Manga Sources detail must use shared group cards, inset entries, and inline confirmations'
+    );
+  }
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'Manga Sources follows the same route gate.',
+    'the style standard must govern the Manga Sources page'
+  );
   requireText(
     'src/components/Settings/SettingsNetwork/index.tsx',
     'className="settings-http-warning"',
