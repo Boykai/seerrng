@@ -24,14 +24,22 @@ const UpcomingMovies = () => {
     error,
   } = useDiscover<MovieResult>('/api/v1/discover/movies/upcoming');
 
+  const title = intl.formatMessage(messages.upcomingmovies);
+
   if (error) {
-    return <ErrorPage statusCode={500} />;
+    return (
+      <>
+        <PageTitle title={title} />
+        <Header>{title}</Header>
+        <ErrorPage statusCode={500} />
+      </>
+    );
   }
 
   return (
     <>
       <PageTitle title={intl.formatMessage(messages.upcomingmovies)} />
-      <div className="mt-1 mb-5">
+      <div>
         <Header>{intl.formatMessage(messages.upcomingmovies)}</Header>
       </div>
       <ListView

@@ -10,6 +10,7 @@ import { Notification, hasNotificationType } from '@server/lib/notifications';
 import { NotificationAgentKey } from '@server/lib/settings';
 import { DbAwareColumn } from '@server/utils/DbColumnHelper';
 import type { AdvancedThemeOverrides } from '@server/utils/advancedThemeOverrides';
+import type { DetailDisclosureOrder } from '@server/utils/detailDisclosureOrder';
 import {
   Column,
   Entity,
@@ -226,6 +227,9 @@ export class UserSettings {
   public detailDisclosurePins?: UserSettingsDetailDisclosuresByMedia;
 
   @Column({ type: 'simple-json', nullable: true })
+  public detailDisclosureOrder?: DetailDisclosureOrder;
+
+  @Column({ type: 'simple-json', nullable: true })
   public mediaFilterPins?: UserMediaFilterPins;
 
   @Column({ type: 'simple-json', nullable: true })
@@ -283,6 +287,7 @@ export class UserSettings {
       detailDisclosureArtistsPinned: this.detailDisclosureArtistsPinned,
       detailDisclosureSubjectTagsPinned: this.detailDisclosureSubjectTagsPinned,
       detailDisclosurePins: this.detailDisclosurePins,
+      detailDisclosureOrder: this.detailDisclosureOrder,
       mediaFilterPins: this.mediaFilterPins,
       advancedThemeOverrides: this.advancedThemeOverrides,
     };

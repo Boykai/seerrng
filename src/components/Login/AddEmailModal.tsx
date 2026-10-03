@@ -45,17 +45,7 @@ const AddEmailModal: React.FC<AddEmailModalProps> = ({ onClose, onSave }) => {
   });
 
   return (
-    <Transition
-      as="div"
-      appear
-      show
-      enter="transition ease-in-out duration-300 transform opacity-0"
-      enterFrom="opacity-0"
-      enterTo="opacity-100"
-      leave="transition ease-in-out duration-300 transform opacity-100"
-      leaveFrom="opacity-100"
-      leaveTo="opacity-0"
-    >
+    <Transition as="div" appear show>
       <Formik
         initialValues={{ email: '' }}
         validationSchema={EmailSchema}

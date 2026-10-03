@@ -126,11 +126,11 @@ const DiscoverComics = ({ titleOverride }: DiscoverComicsProps = {}) => {
   return (
     <>
       <PageTitle title={title} />
-      <div className="mb-4">
+      <div className="app-filter-section-gap">
         <Header>{title}</Header>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="app-filter-row">
           <form
-            className="discover-filter-control w-72 max-w-full flex-none"
+            className="discover-filter-control app-filter-search-control"
             onSubmit={(e) => {
               e.preventDefault();
               const nextSearch = search.trim();
@@ -139,11 +139,11 @@ const DiscoverComics = ({ titleOverride }: DiscoverComicsProps = {}) => {
             }}
           >
             <span
-              className={`discover-filter-control-label gap-1.5 ${
+              className={`discover-filter-control-label ${
                 search.trim() ? 'discover-filter-control-label-active' : ''
               }`}
             >
-              <MagnifyingGlassIcon className="h-4 w-4" aria-hidden="true" />
+              <MagnifyingGlassIcon aria-hidden="true" />
               {intl.formatMessage(messages.search)}
             </span>
             <input
@@ -152,11 +152,11 @@ const DiscoverComics = ({ titleOverride }: DiscoverComicsProps = {}) => {
               onChange={(e) => setSearch(e.target.value)}
               placeholder={intl.formatMessage(messages.searchComics)}
               aria-label={intl.formatMessage(messages.searchComics)}
-              className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0 text-xs font-medium text-gray-200 placeholder:text-gray-500 focus:ring-0"
+              className="app-filter-search-input"
             />
           </form>
           <form
-            className="flex flex-wrap gap-2"
+            className="app-filter-row"
             onSubmit={(event) => {
               event.preventDefault();
               if (

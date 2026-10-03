@@ -12,6 +12,7 @@ import defineMessages from '@app/utils/defineMessages';
 import {
   ArrowDownTrayIcon,
   ChevronDownIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 import type {
   PcArchitecture,
@@ -23,21 +24,21 @@ import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 const messages = defineMessages('components.RequestStatus.SoftwareRequests', {
-  title: 'Software requests',
+  title: 'Software Requests',
   requestedBy: 'Requested by {user}',
-  pending: 'Pending approval',
+  pending: 'Pending Approval',
   approved: 'Approved',
   searching: 'Searching',
   downloading: 'Downloading',
-  importing: 'Verifying import',
+  importing: 'Verifying Import',
   available: 'Available',
   failed: 'Failed',
   declined: 'Declined',
   cancelled: 'Cancelled',
   retro: 'Retro',
   modern: 'Modern',
-  game: 'PC game',
-  operatingSystem: 'Operating system: {value}',
+  game: 'PC Game',
+  operatingSystem: 'Operating System: {value}',
   architecture: 'Architecture: {value}',
   windows: 'Windows',
   linux: 'Linux',
@@ -61,7 +62,7 @@ const messages = defineMessages('components.RequestStatus.SoftwareRequests', {
   confirmAfterCheck: 'I checked; continue',
   cancelRetry: 'Cancel',
   clearCancelled: 'Clear cancelled request',
-  clearCancelledTitle: 'Clear this cancelled request?',
+  clearCancelledTitle: 'Clear This Cancelled Request?',
   clearCancelledDescription:
     'This removes the cancelled request and its saved status history from Seerr. It does not delete installed software.',
   clearSuccess: 'Cancelled request cleared.',
@@ -69,8 +70,7 @@ const messages = defineMessages('components.RequestStatus.SoftwareRequests', {
   loadError: 'Software request status could not be loaded.',
   noRequests: 'No software requests yet.',
   quotaExceeded: 'Your software request limit has been reached.',
-  showHistory: 'Show status history',
-  hideHistory: 'Hide status history',
+  history: 'History',
   historyLoading: 'Loading status history…',
   historyError: 'Status history could not be loaded.',
   noHistory: 'No saved status updates are available.',
@@ -145,8 +145,7 @@ const DownloadCopies = ({
   if (assets.length === 0) return null;
   const endpoint = (id: string) =>
     `/api/v1/request/software/status/${requestId}/downloads/${encodeURIComponent(id)}`;
-  const buttonClassName =
-    'compact-control inline-flex items-center gap-1 rounded-md border border-indigo-500/80 bg-indigo-800/25 px-2 text-[11px] leading-none font-semibold whitespace-nowrap text-indigo-200 transition hover:border-indigo-400 hover:bg-indigo-800/45 hover:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none';
+  const buttonClassName = 'app-button app-button-primary button-sm';
   if (assets.length === 1) {
     const asset = assets[0];
     return (
@@ -159,28 +158,28 @@ const DownloadCopies = ({
         })}
         title={asset.name}
       >
-        <ArrowDownTrayIcon className="h-3.5 w-3.5" aria-hidden="true" />
+        <ArrowDownTrayIcon className="app-action-icon" aria-hidden="true" />
         {intl.formatMessage(messages.downloadCopy)}
       </a>
     );
   }
   return (
-    <details className="group relative">
-      <summary className={`${buttonClassName} list-none`}>
-        <ArrowDownTrayIcon className="h-3.5 w-3.5" aria-hidden="true" />
+    <details>
+      <summary className={buttonClassName}>
+        <ArrowDownTrayIcon className="app-action-icon" aria-hidden="true" />
         {intl.formatMessage(messages.downloadCopies)}
         <ChevronDownIcon
-          className="h-3.5 w-3.5 transition-transform group-open:rotate-180 motion-reduce:transition-none"
+          className="app-disclosure-chevron"
           aria-hidden="true"
         />
       </summary>
-      <ol className="absolute right-0 z-30 mt-1 max-h-64 max-w-[min(24rem,80vw)] min-w-64 overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-1 shadow-xl">
+      <ol className="app-dropdown-menu app-download-menu">
         {assets.map((asset) => (
           <li key={asset.id}>
             <a
               href={endpoint(asset.id)}
               download
-              className="block truncate rounded-md px-3 py-2 text-xs text-gray-100 hover:bg-gray-700 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+              className="app-dropdown-item app-download-item"
               title={asset.name}
               aria-label={intl.formatMessage(messages.downloadNamed, {
                 name: asset.name,
@@ -198,11 +197,13 @@ const DownloadCopies = ({
 const SoftwareRequests = ({
   enabled,
   filter,
+  category,
   requestedById,
   softwareRequestId,
 }: {
   enabled: boolean;
   filter: string;
+  category?: SoftwareRequestRow['category'];
   requestedById?: number;
   softwareRequestId?: number;
 }) => {
@@ -219,13 +220,14 @@ const SoftwareRequests = ({
       skip: String((page - 1) * 20),
     });
     if (filter !== 'all') params.set('filter', filter);
+    if (category !== undefined) params.set('category', category);
     if (requestedById !== undefined)
       params.set('requestedBy', String(requestedById));
     if (softwareRequestId !== undefined) {
       params.set('requestId', String(softwareRequestId));
     }
     return `/api/v1/request/software/status?${params.toString()}`;
-  }, [enabled, filter, page, requestedById, softwareRequestId]);
+  }, [category, enabled, filter, page, requestedById, softwareRequestId]);
   const { data, error, mutate } = useSWR<SoftwareRequestsResponse>(endpoint, {
     refreshInterval: 30_000,
     revalidateOnFocus: true,
@@ -248,7 +250,7 @@ const SoftwareRequests = ({
   useEffect(() => {
     setPage(1);
     setHistoryRequestId(null);
-  }, [enabled, filter, requestedById, softwareRequestId]);
+  }, [category, enabled, filter, requestedById, softwareRequestId]);
 
   useEffect(() => {
     if (data && data.pageInfo.pages > 0 && page > data.pageInfo.pages) {
@@ -342,13 +344,43 @@ const SoftwareRequests = ({
   }
   if (!data && !error) return <LoadingSpinner />;
   if (error) {
+    if (category === undefined) {
+      return (
+        <p className="app-inline-error">
+          {intl.formatMessage(messages.loadError)}
+        </p>
+      );
+    }
     return (
-      <p className="text-sm text-gray-400">
-        {intl.formatMessage(messages.loadError)}
-      </p>
+      <section
+        className="app-compact-request-section"
+        aria-label={intl.formatMessage(messages.title)}
+      >
+        <h2 className="app-section-heading">
+          {intl.formatMessage(messages.title)}
+        </h2>
+        <p className="app-inline-error">
+          {intl.formatMessage(messages.loadError)}
+        </p>
+      </section>
     );
   }
-  if (!data?.results.length) return null;
+  if (!data?.results.length) {
+    if (category === undefined) return null;
+    return (
+      <section
+        className="app-compact-request-section"
+        aria-label={intl.formatMessage(messages.title)}
+      >
+        <h2 className="app-section-heading">
+          {intl.formatMessage(messages.title)}
+        </h2>
+        <div className="app-card-main refreshed-card-surface app-empty-state">
+          {intl.formatMessage(messages.noRequests)}
+        </div>
+      </section>
+    );
+  }
 
   const statusLabel = (status: SoftwareStatus) =>
     intl.formatMessage(messages[status]);
@@ -396,7 +428,7 @@ const SoftwareRequests = ({
 
   return (
     <section
-      className="mb-6 space-y-3"
+      className="app-compact-request-section"
       aria-label={intl.formatMessage(messages.title)}
     >
       {clearSelection !== null && (
@@ -410,40 +442,40 @@ const SoftwareRequests = ({
           onCancel={() => setClearSelection(null)}
         />
       )}
-      <h2 className="text-lg font-semibold text-gray-100">
+      <h2 className="app-section-heading">
         {intl.formatMessage(messages.title)}
       </h2>
-      <div className="space-y-3">
+      <div className="app-compact-request-list">
         {data.results.map(({ request, status, message, assets }) => (
           <article
             key={request.id}
-            className="refreshed-card-surface rounded-xl border border-gray-700 p-3 sm:p-4"
+            className="refreshed-card-surface app-compact-request-card"
           >
-            <div className="flex gap-3">
-              <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-md bg-gray-900 sm:h-24 sm:w-16">
+            <div className="app-compact-request-summary">
+              <div className="app-compact-request-poster">
                 <CachedImage
                   type="tmdb"
                   src={request.coverUrl || '/images/seerr_poster_not_found.png'}
                   alt=""
-                  className="object-cover"
+                  className="media-detail-artwork-image"
                   fill
                 />
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-gray-600 bg-gray-800 px-2 py-0.5 text-[10px] font-semibold text-gray-200">
+              <div>
+                <div className="app-compact-request-header">
+                  <div>
+                    <div className="app-compact-request-badges">
+                      <span className="app-compact-request-category">
                         {groupLabel(request.category)}
                       </span>
-                      <span className="text-xs font-medium text-indigo-200">
+                      <span className="app-compact-request-status">
                         {statusLabel(status)}
                       </span>
                     </div>
-                    <h3 className="mt-1 truncate text-sm font-semibold text-white sm:text-base">
+                    <h3 className="app-compact-request-title">
                       {request.title}
                     </h3>
-                    <div className="refreshed-detail-text-muted mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                    <div className="refreshed-detail-text-muted app-compact-request-meta">
                       {request.platform?.name && (
                         <span>{request.platform.name}</span>
                       )}
@@ -481,16 +513,16 @@ const SoftwareRequests = ({
                       </span>
                     </div>
                     {message && status === 'failed' && (
-                      <p className="mt-2 text-xs text-amber-200">{message}</p>
+                      <p className="app-compact-request-warning">{message}</p>
                     )}
                     {request.actions?.cancel === false &&
                       request.actions.cancelReason && (
-                        <p className="mt-2 text-xs text-gray-300">
+                        <p className="app-compact-request-note">
                           {request.actions.cancelReason}
                         </p>
                       )}
                   </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="app-action-row">
                     {canManage && status === 'pending' && (
                       <>
                         <Button
@@ -562,13 +594,13 @@ const SoftwareRequests = ({
                 </div>
                 {handoffConfirmation?.requestId === request.id && (
                   <div
-                    className="mt-3 rounded-lg border border-amber-700 bg-amber-950/40 p-3"
+                    className="app-page-alert app-page-alert-warning app-compact-request-confirmation"
                     role="alert"
                   >
-                    <p className="text-xs text-amber-100">
+                    <p className="app-compact-request-confirmation-copy">
                       {intl.formatMessage(messages.retryCheckRequired)}
                     </p>
-                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                    <div className="app-action-row app-compact-request-confirmation-actions">
                       <Button
                         buttonType="default"
                         buttonSize="sm"
@@ -594,44 +626,49 @@ const SoftwareRequests = ({
                     </div>
                   </div>
                 )}
-                <div className="mt-3">
+                <div className="app-compact-request-history-trigger">
                   <Button
+                    type="button"
+                    buttonType="manage"
                     buttonSize="sm"
+                    aria-expanded={historyRequestId === request.id}
+                    aria-label={intl.formatMessage(messages.history)}
                     onClick={() =>
                       setHistoryRequestId((current) =>
                         current === request.id ? null : request.id
                       )
                     }
                   >
-                    {intl.formatMessage(
-                      historyRequestId === request.id
-                        ? messages.hideHistory
-                        : messages.showHistory
-                    )}
+                    <ClockIcon className="app-action-icon" aria-hidden="true" />
+                    {intl.formatMessage(messages.history)}
+                    <ChevronDownIcon
+                      className="app-disclosure-chevron"
+                      aria-hidden="true"
+                    />
                   </Button>
                 </div>
                 {historyRequestId === request.id && (
-                  <div className="refreshed-inset-surface mt-3 rounded-lg border border-gray-700 p-3">
+                  <div className="refreshed-inset-surface app-compact-request-history">
                     {historyError ? (
-                      <p className="text-xs text-red-200">
+                      <p className="app-compact-request-history-error">
                         {intl.formatMessage(messages.historyError)}
                       </p>
                     ) : !historyData ? (
-                      <p className="refreshed-detail-text-muted text-xs">
+                      <p className="refreshed-detail-text-muted app-compact-request-history-copy">
                         {intl.formatMessage(messages.historyLoading)}
                       </p>
                     ) : historyData.history.length === 0 ? (
-                      <p className="refreshed-detail-text-muted text-xs">
+                      <p className="refreshed-detail-text-muted app-compact-request-history-copy">
                         {intl.formatMessage(messages.noHistory)}
                       </p>
                     ) : (
-                      <ol className="space-y-2">
+                      <ol className="app-compact-request-history-list">
                         {historyData.history.map((event) => (
                           <li
                             key={event.id}
-                            className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs"
+                            className="app-compact-request-history-row"
                           >
-                            <span className="refreshed-detail-text font-medium">
+                            <span className="refreshed-detail-text app-compact-request-history-status">
                               {statusLabel(event.status)}
                               {event.percent !== null &&
                                 event.percent !== undefined &&
@@ -647,7 +684,7 @@ const SoftwareRequests = ({
                               })}
                             </time>
                             {event.message && (
-                              <p className="refreshed-detail-text-muted w-full">
+                              <p className="refreshed-detail-text-muted app-compact-request-history-message">
                                 {event.message}
                               </p>
                             )}

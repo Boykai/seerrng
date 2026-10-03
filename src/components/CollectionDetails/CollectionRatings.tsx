@@ -28,18 +28,27 @@ const CollectionRatings = ({
   ratings,
   total,
   loading = false,
+  unknownValue = '—',
+  loadingValue = '…',
+  reserveValueSpace = false,
+  tooltips,
 }: {
   ratings: CollectionRating[];
   total?: number;
   loading?: boolean;
+  unknownValue?: string;
+  loadingValue?: string;
+  reserveValueSpace?: boolean;
+  tooltips?: Partial<Record<CollectionRating['source'], string>>;
 }) => {
   const intl = useIntl();
   return (
     <>
       {ratings.map((rating) => {
         const source = intl.formatMessage(messages[rating.source]);
-        const value = loading ? undefined : rating.value;
-        const tooltip = loading
+        const value = loading && !reserveValueSpace ? undefined : rating.value;
+        const pending = loading && value === undefined;
+        const tooltip = pending
           ? intl.formatMessage(messages.loading, { source })
           : total !== undefined
             ? intl.formatMessage(messages.average, {
@@ -49,7 +58,7 @@ const CollectionRatings = ({
               })
             : value === undefined
               ? intl.formatMessage(messages.unavailable, { source })
-              : source;
+              : (tooltips?.[rating.source] ?? source);
         const Icon =
           rating.source === 'critics'
             ? value !== undefined && value < 60
@@ -88,10 +97,10 @@ const CollectionRatings = ({
               />
             ) : null}
             <span className="media-rating-value">
-              {loading
-                ? '…'
+              {pending
+                ? loadingValue
                 : value === undefined
-                  ? '—'
+                  ? unknownValue
                   : rating.source === 'imdb' || rating.source === 'trakt'
                     ? value.toFixed(1)
                     : `${Math.round(value)}%`}
@@ -107,6 +116,7 @@ const CollectionRatings = ({
             {href ? (
               <a
                 className="media-rating-link"
+                data-rating-layout={reserveValueSpace ? 'fixed' : undefined}
                 aria-label={tooltip}
                 href={href}
                 target="_blank"
@@ -115,7 +125,11 @@ const CollectionRatings = ({
                 {content}
               </a>
             ) : (
-              <span className="media-rating-link" aria-label={tooltip}>
+              <span
+                className="media-rating-link"
+                data-rating-layout={reserveValueSpace ? 'fixed' : undefined}
+                aria-label={tooltip}
+              >
                 {content}
               </span>
             )}

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import dns from 'node:dns/promises';
 import path from 'node:path';
 import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
@@ -29,6 +30,7 @@ import {
 } from '@server/lib/settings';
 import { runUserSecurityMutation } from '@server/lib/userSecurityMutation';
 import { setupTestDb } from '@server/test/db';
+import { isSafeHttpUrl } from '@server/utils/security';
 import type { Express } from 'express';
 import express from 'express';
 import * as OpenApiValidator from 'express-openapi-validator';
@@ -119,6 +121,14 @@ before(() => {
 });
 
 beforeEach(() => {
+  // Notification transports are mocked; their explicit public URLs need DNS too.
+  mock.method(dns, 'lookup', async (hostname: string, options: unknown) => {
+    assert.deepStrictEqual(options, { all: true });
+    if (hostname !== 'example.com') {
+      throw new Error(`Unconfigured fixture DNS hostname: ${hostname}`);
+    }
+    return [{ address: '93.184.216.34', family: 4 }];
+  });
   const settings = getSettings();
   settings.plex.libraries = [
     { id: '1', name: 'Movies', enabled: false, type: 'movie' },
@@ -135,6 +145,15 @@ afterEach(() => {
 });
 
 describe('Settings route input validation', () => {
+  it('isolates public fixture DNS without admitting unknown or private hosts', async () => {
+    assert.strictEqual(await isSafeHttpUrl('https://example.com/'), true);
+    assert.strictEqual(
+      await isSafeHttpUrl('https://unconfigured.example.com/'),
+      false
+    );
+    assert.strictEqual(await isSafeHttpUrl('https://127.0.0.1/'), false);
+  });
+
   it('revalidates administrator authority before applying settings', async () => {
     const settings = getSettings();
     const originalTitle = settings.main.applicationTitle;

@@ -176,21 +176,30 @@ describe('release asset construction', () => {
       '#!/bin/sh\nprintf \'%s\\n%s\\n%s\\n\' "$PWD" "$CONFIG_DIRECTORY" "$*" >"$NODE_INVOCATION"\n',
       { mode: 0o755 }
     );
-    const launch = await new Promise((resolve) => {
-      const child = spawn(path.join(root, 'seerrng'), ['--version'], {
-        cwd: fixture.root,
-        env: {
-          ...process.env,
-          NODE_INVOCATION: invocation,
-          PATH: `${fixture.executableDirectory}:${process.env.PATH}`,
-        },
+    const launch = async (configurationDirectory) =>
+      new Promise((resolve) => {
+        const child = spawn(path.join(root, 'seerrng'), ['--version'], {
+          cwd: fixture.root,
+          env: {
+            ...process.env,
+            // Default-path coverage must not inherit the gate's isolated config.
+            CONFIG_DIRECTORY: configurationDirectory,
+            NODE_INVOCATION: invocation,
+            PATH: `${fixture.executableDirectory}:${process.env.PATH}`,
+          },
+        });
+        child.on('close', resolve);
       });
-      child.on('close', resolve);
-    });
-    assert.equal(launch, 0);
+    assert.equal(await launch(''), 0);
     assert.deepEqual(
       (await fs.readFile(invocation, 'utf8')).trim().split('\n'),
       [root, path.join(root, 'config'), 'dist/index.js --version']
+    );
+    const configured = path.join(fixture.root, 'explicit-config');
+    assert.equal(await launch(configured), 0);
+    assert.deepEqual(
+      (await fs.readFile(invocation, 'utf8')).trim().split('\n'),
+      [root, configured, 'dist/index.js --version']
     );
   });
 

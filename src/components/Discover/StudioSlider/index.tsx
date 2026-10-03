@@ -91,12 +91,14 @@ const StudioSlider = () => {
   const intl = useIntl();
   return (
     <div>
-      <div className="slider-header">
-        <div className="slider-title">
-          <span>{intl.formatMessage(messages.studios)}</span>
-        </div>
-      </div>
       <Slider
+        heading={
+          <>
+            <div className="page-heading">
+              <span>{intl.formatMessage(messages.studios)}</span>
+            </div>
+          </>
+        }
         compact
         sliderKey="studios"
         isLoading={false}

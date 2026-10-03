@@ -1,6 +1,7 @@
 import type { FilterOptions } from '@app/components/Discover/constants';
 import FilterPanel from '@app/components/Discover/FilterPanel';
 import { getFilterToggleButtonClass } from '@app/components/Discover/FilterPanel/CompactFilterSelect';
+import { PinnedFilterSectionGroup } from '@app/components/Discover/PinnedFilterSection';
 import { useUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
 import defineMessages from '@app/utils/defineMessages';
 import { BarsArrowDownIcon, BarsArrowUpIcon } from '@heroicons/react/24/solid';
@@ -58,41 +59,48 @@ const MediaDiscoveryControls = ({
   const sorts = type === 'movie' ? movieSorts : seriesSorts;
 
   return (
-    <>
-      <div className="app-filter-section-heading">
-        {intl.formatMessage(messages.filters)}
-      </div>
-      <FilterPanel type={type} currentFilters={currentFilters} />
-      <div className="app-filter-section-heading">
-        {intl.formatMessage(messages.sortBy)}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {sorts.map((option) => {
-          const active =
-            currentSort === option.asc || currentSort === option.desc;
-          const ascending = currentSort === option.asc;
-          const Icon = ascending ? BarsArrowUpIcon : BarsArrowDownIcon;
+    <PinnedFilterSectionGroup
+      mediaType={type}
+      sections={[
+        {
+          section: 'filters',
+          label: intl.formatMessage(messages.filters),
+          children: <FilterPanel type={type} currentFilters={currentFilters} />,
+        },
+        {
+          section: 'sortBy',
+          label: intl.formatMessage(messages.sortBy),
+          children: (
+            <div className="app-filter-row">
+              {sorts.map((option) => {
+                const active =
+                  currentSort === option.asc || currentSort === option.desc;
+                const ascending = currentSort === option.asc;
+                const Icon = ascending ? BarsArrowUpIcon : BarsArrowDownIcon;
 
-          return (
-            <button
-              key={option.label}
-              type="button"
-              aria-pressed={active}
-              onClick={() =>
-                updateQueryParams(
-                  'sortBy',
-                  active && !ascending ? option.asc : option.desc
-                )
-              }
-              className={getFilterToggleButtonClass(active)}
-            >
-              {intl.formatMessage(messages[option.label])}
-              <Icon className="h-4 w-4" />
-            </button>
-          );
-        })}
-      </div>
-    </>
+                return (
+                  <button
+                    key={option.label}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() =>
+                      updateQueryParams(
+                        'sortBy',
+                        active && !ascending ? option.asc : option.desc
+                      )
+                    }
+                    className={getFilterToggleButtonClass(active)}
+                  >
+                    {intl.formatMessage(messages[option.label])}
+                    <Icon />
+                  </button>
+                );
+              })}
+            </div>
+          ),
+        },
+      ]}
+    />
   );
 };
 

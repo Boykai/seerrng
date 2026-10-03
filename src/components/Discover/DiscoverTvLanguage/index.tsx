@@ -40,23 +40,30 @@ const DiscoverTvLanguage = () => {
     enabled: !!language,
   });
 
-  if (error) {
-    return <ErrorPage statusCode={500} />;
-  }
+  const title =
+    isLoadingInitialData || error || !language
+      ? intl.formatMessage(globalMessages.tvshows)
+      : intl.formatMessage(messages.languageSeries, {
+          language: intl.formatDisplayName(language, {
+            type: 'language',
+            fallback: 'none',
+          }),
+        });
 
-  const title = isLoadingInitialData
-    ? intl.formatMessage(globalMessages.loading)
-    : intl.formatMessage(messages.languageSeries, {
-        language: intl.formatDisplayName(language, {
-          type: 'language',
-          fallback: 'none',
-        }),
-      });
+  if (error) {
+    return (
+      <>
+        <PageTitle title={title} />
+        <Header>{title}</Header>
+        <ErrorPage statusCode={500} />
+      </>
+    );
+  }
 
   return (
     <>
       <PageTitle title={title} />
-      <div className="mt-1 mb-5">
+      <div>
         <Header>{title}</Header>
       </div>
       <ListView

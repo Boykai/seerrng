@@ -1,6 +1,9 @@
 import MusicBrainz from '@server/api/musicbrainz';
 import OpenLibraryAPI from '@server/api/openlibrary';
-import PlexAPI, { type PlexLibraryItem } from '@server/api/plexapi';
+import PlexAPI, {
+  type PlexLibraryItem,
+  type PlexMetadata,
+} from '@server/api/plexapi';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import { getRepository } from '@server/datasource';
@@ -248,8 +251,18 @@ describe('Plex music and audiobook library scanning', () => {
       'getReleaseGroupDetails',
       async () => ({}) as never
     );
+    // Missing album codecs trigger a second Plex lookup. Mock that actual API
+    // boundary too; a swallowed network error must not supply this fixture.
+    const children = mock.method(
+      PlexAPI.prototype,
+      'getChildrenMetadata',
+      async () => []
+    );
 
     await new PlexScanner().run();
+
+    assert.strictEqual(children.mock.callCount(), 1);
+    assert.deepStrictEqual(children.mock.calls[0].arguments, ['60487']);
 
     const media = await getRepository(Media).findOne({
       where: {
@@ -261,6 +274,90 @@ describe('Plex music and audiobook library scanning', () => {
     assert.ok(media);
     assert.strictEqual(media?.ratingKey, '60487');
     assert.strictEqual(media?.status, MediaStatus.AVAILABLE);
+  });
+
+  it('classifies an album from child tracks when album codecs are absent', async () => {
+    const settings = getSettings();
+    settings.main = { ...settings.main, mediaServerType: MediaServerType.PLEX };
+    settings.radarr = [];
+    settings.sonarr = [];
+    settings.plex = {
+      ...settings.plex,
+      ip: 'plex.local',
+      port: 32400,
+      useSsl: false,
+      libraries: [{ id: 'music', name: 'Music', enabled: true, type: 'music' }],
+    };
+    mock.method(PlexAPI.prototype, 'getLibraries', async () => []);
+    mock.method(PlexAPI.prototype, 'getLibraryContents', async () => ({
+      totalSize: 1,
+      items: [
+        {
+          ratingKey: '60488',
+          title: 'Child Track Album',
+          guid: 'mbid://cf988074-7ee4-4eb3-8a39-42b1467b2de7',
+          addedAt: 1789059800,
+          updatedAt: 1789059802,
+          type: 'album',
+          Media: [],
+        } satisfies PlexLibraryItem,
+      ],
+    }));
+    mock.method(
+      MusicBrainz.prototype,
+      'getReleaseGroupDetails',
+      async () => ({}) as never
+    );
+    const track: PlexMetadata = {
+      ratingKey: '60489',
+      parentRatingKey: '60488',
+      guid: 'local://60489',
+      type: 'track',
+      title: 'Lossless Track',
+      Guid: [],
+      index: 1,
+      leafCount: 0,
+      viewedLeafCount: 0,
+      viewCount: 0,
+      addedAt: 1789059800,
+      updatedAt: 1789059802,
+      Media: [
+        {
+          id: 1,
+          duration: 1000,
+          bitrate: 1000,
+          width: 0,
+          height: 0,
+          aspectRatio: 0,
+          audioChannels: 2,
+          audioCodec: 'flac',
+          videoCodec: '',
+          videoResolution: '',
+          container: 'flac',
+          videoFrameRate: '',
+          videoProfile: '',
+        },
+      ],
+    };
+    const children = mock.method(
+      PlexAPI.prototype,
+      'getChildrenMetadata',
+      async () => [track]
+    );
+
+    await new PlexScanner().run();
+
+    assert.strictEqual(children.mock.callCount(), 1);
+    assert.deepStrictEqual(children.mock.calls[0].arguments, ['60488']);
+    const media = await getRepository(Media).findOneOrFail({
+      where: {
+        mbId: 'cf988074-7ee4-4eb3-8a39-42b1467b2de7',
+        mediaType: MediaType.MUSIC,
+      },
+    });
+    assert.strictEqual(media.status, MediaStatus.AVAILABLE);
+    assert.strictEqual(media.ratingKeyFlac, '60488');
+    assert.ok(!media.ratingKeyMp3);
   });
 
   it('retains separate MP3 and FLAC Plex album identifiers for the same release group', async () => {

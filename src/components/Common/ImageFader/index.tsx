@@ -95,7 +95,7 @@ const ImageFader: ForwardRefRenderFunction<HTMLDivElement, ImageFaderProps> = (
             />
             {backgroundTitles?.[i] && (
               <h1
-                className="auth-backdrop-title text-overseerr text-2xl leading-6 font-bold"
+                className="auth-backdrop-title page-title"
                 aria-hidden={i !== activeIndex}
               >
                 {backgroundTitles[i]}

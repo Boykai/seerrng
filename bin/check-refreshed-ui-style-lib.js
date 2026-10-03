@@ -63,7 +63,7 @@ const sharedStyleReferencePattern =
 
 const stylesheetDefines = (stylesheet, className) => {
   const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`\\.${escaped}(?=[\\s,{:.>])`).test(stylesheet);
+  return new RegExp(`\\.${escaped}(?=[\\s,{:.>]|\\[)`).test(stylesheet);
 };
 
 const validateGlobalStylesheet = (fileName, source) => {

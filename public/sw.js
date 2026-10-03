@@ -76,6 +76,17 @@ const getRuntimeCacheType = (request) => {
     return undefined;
   }
 
+  if (
+    /^\/api\/v1\/tv\/\d+\/media-server-(?:collections|saved-item)(?:\/|$)/.test(
+      url.pathname
+    )
+  ) {
+    // Membership and saved state can change directly in the media server and
+    // are re-read before every write. Never let a runtime entry become their
+    // authority.
+    return undefined;
+  }
+
   if (CACHEABLE_API_PATHS.some((pattern) => pattern.test(url.pathname))) {
     return 'user-data';
   }

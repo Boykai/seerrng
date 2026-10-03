@@ -661,10 +661,7 @@ const MusicRequestModal = ({
                 aria-expanded={advancedOptionsOpen}
                 onClick={() => setAdvancedOptionsOpen((open) => !open)}
               >
-                <AdjustmentsHorizontalIcon
-                  className="h-3.5 w-3.5"
-                  aria-hidden="true"
-                />
+                <AdjustmentsHorizontalIcon aria-hidden="true" />
                 {intl.formatMessage(messages.advancedOptions)}
                 <ChevronDownIcon
                   className={`h-3.5 w-3.5 transition-transform ${advancedOptionsOpen ? 'rotate-180' : ''}`}
@@ -683,7 +680,7 @@ const MusicRequestModal = ({
             data-testid="modal-cancel-button"
             className="app-button app-button-danger button-standard"
           >
-            <XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            <XMarkIcon aria-hidden="true" />
             {intl.formatMessage(globalMessages.cancel)}
           </button>
           <button
@@ -698,7 +695,7 @@ const MusicRequestModal = ({
             }
             className="app-button app-button-success button-standard"
           >
-            <ArrowDownTrayIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            <ArrowDownTrayIcon aria-hidden="true" />
             {requestButtonLabel}
           </button>
         </div>

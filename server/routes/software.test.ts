@@ -164,6 +164,7 @@ const createOpenApiValidatedSettingsApp = (): Express => {
 };
 
 const createSoftwareRequest = async (options: {
+  category?: 'retro' | 'modern' | 'game';
   provider?: SoftwareRequestProvider;
   status?: SoftwareRequestStatus;
   requestedById?: number;
@@ -173,7 +174,7 @@ const createSoftwareRequest = async (options: {
   return repository.save(
     repository.create({
       requestedById: options.requestedById ?? 2,
-      category: 'retro',
+      category: options.category ?? 'retro',
       provider: options.provider ?? 'romarr',
       status: options.status ?? 'failed',
       externalRequestId: options.externalRequestId ?? 'seerrng:software:test',
@@ -210,6 +211,42 @@ afterEach(() => {
 });
 
 describe('software request routes', () => {
+  it('filters software requests by category before pagination', async () => {
+    await createSoftwareRequest({
+      category: 'retro',
+      externalRequestId: 'seerrng:software:category-retro',
+    });
+    await createSoftwareRequest({
+      category: 'modern',
+      externalRequestId: 'seerrng:software:category-modern',
+    });
+    await createSoftwareRequest({
+      category: 'game',
+      externalRequestId: 'seerrng:software:category-game',
+    });
+
+    const response = await request(createApp())
+      .get('/request/software/status')
+      .query({ category: 'modern', take: 1, skip: 0 });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.results.length, 1);
+    assert.strictEqual(response.body.results[0].request.category, 'modern');
+    assert.strictEqual(response.body.pageInfo.pages, 1);
+    assert.strictEqual(response.body.pageInfo.results, 1);
+  });
+
+  it('rejects unknown software request categories', async () => {
+    const response = await request(createApp())
+      .get('/request/software/status')
+      .query({ category: 'arcade' });
+
+    assert.strictEqual(response.status, 400);
+    assert.deepStrictEqual(response.body, {
+      error: 'Invalid software category.',
+    });
+  });
+
   it('lets the requester clear a cancelled request and its status history', async () => {
     const saved = await createSoftwareRequest({
       status: 'cancelled',

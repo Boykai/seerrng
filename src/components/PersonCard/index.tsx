@@ -17,7 +17,6 @@ const PersonCard = ({
   name,
   subName,
   profilePath,
-  canExpand = false,
 }: PersonCardProps) => {
   const [isHovered, setHovered] = useState(false);
 
@@ -25,7 +24,8 @@ const PersonCard = ({
     <Link
       href={`/person/${personId}`}
       prefetch={false}
-      className={canExpand ? 'w-full' : 'w-36 sm:w-36 md:w-44'}
+      className="poster-layout"
+      data-media-type="person"
       onMouseEnter={() => {
         setHovered(true);
       }}
@@ -39,16 +39,13 @@ const PersonCard = ({
       tabIndex={0}
     >
       <div
-        className={`relative ${
-          canExpand ? 'w-full' : 'w-36 sm:w-36 md:w-44'
-        } transform-gpu cursor-pointer rounded-xl text-white shadow ring-1 transition duration-150 ease-in-out ${
-          isHovered
-            ? 'scale-105 bg-gray-700 ring-gray-500'
-            : 'scale-100 bg-gray-800 ring-gray-700'
+        data-poster-region="frame"
+        className={`app-card-poster app-card-poster-interactive ${
+          isHovered ? 'app-card-poster-active' : ''
         }`}
       >
-        <div style={{ paddingBottom: '150%' }}>
-          <div className="absolute inset-0 flex h-full w-full flex-col items-center p-2">
+        <div data-poster-region="content">
+          <div className="flex h-full w-full flex-col items-center p-2">
             <div className="relative mt-2 mb-4 flex h-1/2 w-full justify-center">
               {profilePath ? (
                 <div className="relative h-full w-3/4 overflow-hidden rounded-full ring-1 ring-gray-700">
@@ -71,7 +68,12 @@ const PersonCard = ({
                 <UserCircleIcon className="h-full" />
               )}
             </div>
-            <div className="w-full truncate text-center font-bold">{name}</div>
+            <div
+              className="card-title w-full truncate text-center"
+              data-title-weight="regular"
+            >
+              {name}
+            </div>
             {subName && (
               <div
                 className="overflow-hidden text-center text-sm whitespace-normal text-gray-300"

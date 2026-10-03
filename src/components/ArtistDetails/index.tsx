@@ -297,7 +297,7 @@ const ArtistDetails = () => {
             return (
               <section key={type}>
                 <div className="slider-header">
-                  <div className="slider-title">
+                  <div className="page-heading">
                     {intl.formatMessage(messages[albumTypeMessages[type]])}
                     <span className="ml-2 text-sm text-gray-400">
                       ({totalCount})

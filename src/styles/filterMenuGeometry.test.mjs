@@ -22,7 +22,7 @@ test('filter and rating menus scroll after eight uniform rows', () => {
     /--anchor-max-height: calc\(8 \* var\(--filter-option-height\) \+ 0\.5rem \+ 2px\)/
   );
   assert.match(menu, /max-height: var\(--anchor-max-height\)/);
-  assert.match(menu, /overflow-auto/);
+  assert.match(menu, /overflow: auto/);
   assert.match(option, /height: var\(--filter-option-height\)/);
   assert.doesNotMatch(
     css,

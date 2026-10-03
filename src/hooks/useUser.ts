@@ -11,6 +11,7 @@ import type { PermissionCheckOptions } from '@server/lib/permissions';
 import { Permission, hasPermission } from '@server/lib/permissions';
 import type { NotificationAgentKey } from '@server/lib/settings';
 import type { AdvancedThemeOverrides } from '@server/utils/advancedThemeOverrides';
+import type { DetailDisclosureOrder } from '@server/utils/detailDisclosureOrder';
 import { useRouter } from 'next/router';
 import type { MutatorCallback } from 'swr';
 import useSWR from 'swr';
@@ -61,6 +62,7 @@ export interface UserSettings {
   detailDisclosureArtistsPinned?: boolean;
   detailDisclosureSubjectTagsPinned?: boolean;
   detailDisclosurePins?: UserSettingsDetailDisclosuresByMedia;
+  detailDisclosureOrder?: DetailDisclosureOrder;
   mediaFilterPins?: UserMediaFilterPins;
   advancedThemeOverrides?: AdvancedThemeOverrides | null;
 }

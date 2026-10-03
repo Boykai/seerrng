@@ -44,8 +44,12 @@ import {
 } from '@server/utils/validation';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import tvCollectionsRoutes from './tvCollections';
+import tvSavedItemRoutes from './tvSavedItem';
 
 const tvRoutes = Router();
+tvRoutes.use(tvSavedItemRoutes);
+tvRoutes.use(tvCollectionsRoutes);
 const maxTmdbTvId = 1_000_000_000;
 const maxTvSeasonNumber = 10_000;
 const maxShuffleSeedLength = 128;

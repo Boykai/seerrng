@@ -80,8 +80,23 @@ describe('Narrow-window media audit', () => {
 
   it('keeps Request Status and its action controls within a phone viewport', () => {
     cy.visit('/requests');
-    cy.contains('button', 'Media Filters').click();
+    cy.get(
+      'section[aria-label="Task Filters"] button.detail-disclosure-button'
+    ).then(($button) => {
+      if ($button.attr('aria-expanded') === 'false') cy.wrap($button).click();
+    });
+    cy.get(
+      'section[aria-label="Task Filters"] button.detail-disclosure-button'
+    ).should('have.attr', 'aria-expanded', 'true');
     cy.contains('button', 'Clear Filters').should('be.visible');
+    cy.get(
+      'section[aria-label="Media Filters"] button.detail-disclosure-button'
+    ).then(($button) => {
+      if ($button.attr('aria-expanded') === 'false') cy.wrap($button).click();
+    });
+    cy.get(
+      'section[aria-label="Media Filters"] button.detail-disclosure-button'
+    ).should('have.attr', 'aria-expanded', 'true');
     assertNoHorizontalOverflow();
   });
 });

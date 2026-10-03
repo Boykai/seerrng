@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { before, describe, it, mock } from 'node:test';
+import dns from 'node:dns/promises';
+import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
 import JellyfinAPI from '@server/api/jellyfin';
 import PlexTvAPI from '@server/api/plextv';
@@ -18,6 +19,7 @@ import { getSettings } from '@server/lib/settings';
 import { runUserSecurityMutation } from '@server/lib/userSecurityMutation';
 import { checkUser } from '@server/middleware/auth';
 import { setupTestDb } from '@server/test/db';
+import { isSafeHttpUrl } from '@server/utils/security';
 import type { Express } from 'express';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
@@ -120,6 +122,35 @@ async function loginAs(email: string, password: string) {
 }
 
 describe('User route input validation', () => {
+  let restoreFixtureDns = () => {};
+
+  beforeEach(() => {
+    // Keep push URL admission real while resolving only the explicit fixture host.
+    const lookup = mock.method(
+      dns,
+      'lookup',
+      async (hostname: string, options: unknown) => {
+        assert.deepStrictEqual(options, { all: true });
+        if (hostname !== 'example.com') {
+          throw new Error(`Unconfigured fixture DNS hostname: ${hostname}`);
+        }
+        return [{ address: '93.184.216.34', family: 4 }];
+      }
+    );
+    restoreFixtureDns = () => lookup.mock.restore();
+  });
+
+  afterEach(() => restoreFixtureDns());
+
+  it('isolates public fixture DNS without admitting unknown or private hosts', async () => {
+    assert.strictEqual(await isSafeHttpUrl('https://example.com/'), true);
+    assert.strictEqual(
+      await isSafeHttpUrl('https://unconfigured.example.com/'),
+      false
+    );
+    assert.strictEqual(await isSafeHttpUrl('https://127.0.0.1/'), false);
+  });
+
   it('bounds authenticated password mutation attempts', () => {
     assert.deepStrictEqual(PASSWORD_MUTATION_RATE_LIMIT, {
       windowMs: 15 * 60 * 1000,
@@ -2520,6 +2551,8 @@ describe('User route input validation', () => {
     });
     assert.strictEqual(tvSave.status, 200);
     assert.deepStrictEqual(tvSave.body, {
+      mediaServer: false,
+      overview: false,
       cast: false,
       crew: true,
       artists: false,
@@ -2546,12 +2579,59 @@ describe('User route input validation', () => {
       details: false,
     });
     assert.deepStrictEqual(user.settings?.detailDisclosurePins?.tv, {
+      mediaServer: false,
+      overview: false,
       cast: false,
       crew: true,
       artists: false,
       subjectTags: false,
       details: false,
     });
+  });
+
+  it('persists the TV media server pin without changing other disclosure pins', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const initial = await agent.get('/user/1/settings/detail-disclosures/tv');
+    assert.strictEqual(initial.body.mediaServer, false);
+    await agent
+      .post('/user/1/settings/detail-disclosures/movie')
+      .send({ cast: true });
+    await agent
+      .post('/user/1/settings/detail-disclosures/tv')
+      .send({ crew: true });
+    const saved = await agent
+      .post('/user/1/settings/detail-disclosures/tv')
+      .send({ mediaServer: true });
+    assert.strictEqual(saved.status, 200);
+    assert.strictEqual(saved.body.mediaServer, true);
+    assert.strictEqual(saved.body.crew, true);
+    const fetched = await agent.get('/user/1/settings/detail-disclosures/tv');
+    assert.deepStrictEqual(fetched.body, saved.body);
+    const movie = await agent.get('/user/1/settings/detail-disclosures/movie');
+    assert.strictEqual(movie.body.cast, true);
+    assert.strictEqual(movie.body.mediaServer, undefined);
+    const invalid = await agent
+      .post('/user/1/settings/detail-disclosures/tv')
+      .send({ mediaServer: 'true' });
+    assert.strictEqual(invalid.status, 400);
+    const unpinned = await agent
+      .post('/user/1/settings/detail-disclosures/tv')
+      .send({ mediaServer: false });
+    assert.strictEqual(unpinned.body.mediaServer, false);
+    assert.strictEqual(unpinned.body.crew, true);
+    const user = await getRepository(User).findOneOrFail({ where: { id: 1 } });
+    assert.strictEqual(
+      user.settings?.detailDisclosurePins?.tv?.mediaServer,
+      false
+    );
+  });
+
+  it('does not allow another user to change the TV media server pin', async () => {
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const response = await agent
+      .post('/user/1/settings/detail-disclosures/tv')
+      .send({ mediaServer: true });
+    assert.strictEqual(response.status, 403);
   });
 
   it('persists the movie collection pin without changing cast or other media pins', async () => {

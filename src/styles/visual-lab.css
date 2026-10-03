@@ -70,7 +70,6 @@
     --filter-control-height: 1rem;
     --filter-control-content-height: calc(var(--filter-control-height) - 2px);
     --profile-menu-row-height: 1.25rem;
-    --card-spacing: 8px;
     --main-card-padding: 8px;
     --inset-card-padding: 8px;
     --detail-row-height: 1rem;
@@ -478,15 +477,7 @@
     height: calc(4rem + env(safe-area-inset-top));
   }
 
-  .global-search-progress-region {
-    @apply relative flow-root;
-  }
-
-  .global-search-progress-indicator {
-    @apply pointer-events-none absolute top-1 left-0 flex h-6 items-center gap-2 text-sm text-gray-200;
-  }
-
-  .app-modal-screen-backdrop {
+  .page-overlay {
     background-color: rgb(0 0 0 / 0.8);
   }
 
@@ -2124,20 +2115,8 @@
     grid-template-columns: repeat(auto-fill, minmax(3.5rem, 1fr));
   }
 
-  .slider-header {
-    @apply relative mt-6 mb-4 flex items-center gap-2;
-  }
-
   .service-error-banner {
     @apply mb-2 flex items-center gap-2 rounded-md border border-yellow-500 bg-yellow-500/20 px-3 py-2 text-sm text-yellow-200;
-  }
-
-  .slider-title {
-    @apply inline-flex items-center text-xl leading-7 font-bold text-gray-300 sm:truncate sm:text-2xl sm:leading-9;
-  }
-
-  a.slider-title {
-    @apply transition duration-300 hover:text-white;
   }
 
   .media-page {
@@ -2938,9 +2917,6 @@
   .app-button.app-button-icon-only {
     width: 1.5rem;
     min-width: 1.5rem;
-    height: 1.5rem;
-    min-height: 1.5rem;
-    max-height: 1.5rem;
     padding: 0 !important;
     flex-shrink: 0;
   }
@@ -4260,13 +4236,13 @@
 /*
  * VISUAL LAB MIGRATION NOTES
  * Experimental only. Apply approved changes to src/styles/globals.css later.
- * - page-title: Visual Lab name for the Report an Issue page title style.
- * - media-slider-title: proposed replacement for the production slider-title class.
+ * - page-title: shared production page-title role; do not redefine it here.
+ * - page-heading: shared production heading role; do not redefine it here.
  * - card-title: proposed replacement for the production movie-summary-title class.
  * - card-heading1: proposed replacement for the production media-inset-heading
  *   class used by card headings such as Overview.
  * - Layout rule: keep the right Visual Lab column unchanged as the baseline.
- *   Page and media-slider titles are shown directly on the page and duplicated
+ *   Page titles and headings are shown directly on the page and duplicated
  *   inside an app-card-main using the SeerrNG black translucent main surface.
  *   The card-title and card-heading1 examples sit in black translucent
  *   app-card-sub containers nested inside that main card.
@@ -4274,18 +4250,6 @@
  *   Legacy raster and inline-SVG fill experiments are intentionally excluded.
  */
 @layer components {
-  .page-title {
-    @apply truncate bg-gradient-to-br from-indigo-400 to-purple-400 bg-clip-text pb-0.5 text-2xl leading-6 font-bold text-transparent;
-  }
-
-  .media-slider-title {
-    @apply inline-flex items-center text-xl leading-7 font-bold text-gray-300 sm:truncate sm:text-2xl sm:leading-9;
-  }
-
-  a.media-slider-title {
-    @apply transition duration-300 hover:text-white;
-  }
-
   .card-title {
     @apply flex items-start text-lg leading-5 font-semibold text-white;
     gap: var(--card-spacing);
@@ -4334,10 +4298,6 @@
   .hide-scrollbar {
     -ms-overflow-style: none; /* IE and Edge */
     scrollbar-width: none; /* Firefox */
-  }
-
-  .text-overseerr {
-    @apply bg-gradient-to-br from-indigo-400 to-purple-400 bg-clip-text text-transparent;
   }
 
   @media all and (display-mode: browser) {

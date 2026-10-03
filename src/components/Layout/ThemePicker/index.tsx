@@ -37,14 +37,10 @@ const ThemePicker = () => {
             as="button"
             type="button"
             onClick={toggleMode}
-            className="app-button app-button-default mb-3 flex w-full justify-between px-3 py-2 text-sm"
+            className="app-button app-button-default button-standard mb-3 flex w-full justify-between px-3 py-2 text-sm"
           >
             <span className="flex items-center">
-              {mode === 'dark' ? (
-                <MoonIcon className="mr-2 h-5 w-5" />
-              ) : (
-                <SunIcon className="mr-2 h-5 w-5" />
-              )}
+              {mode === 'dark' ? <MoonIcon /> : <SunIcon />}
               {mode === 'dark'
                 ? intl.formatMessage(messages.darkMode)
                 : intl.formatMessage(messages.lightMode)}

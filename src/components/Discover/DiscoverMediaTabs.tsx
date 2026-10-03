@@ -104,7 +104,7 @@ const DiscoverMediaTabs = ({ selected, basePath }: DiscoverMediaTabsProps) => {
       section="mediaFilters"
       label={intl.formatMessage(messages.mediaFilters)}
     >
-      <nav className="flex flex-wrap gap-2" data-testid="discover-media-tabs">
+      <nav className="app-filter-row" data-testid="discover-media-tabs">
         {tabs
           .filter(
             (tab) =>
@@ -130,10 +130,10 @@ const DiscoverMediaTabs = ({ selected, basePath }: DiscoverMediaTabsProps) => {
                       : tab.href
                   }
                   aria-current={isSelected ? 'page' : undefined}
-                  className="app-filter-segment-focus flex h-full items-center gap-1.5 px-2"
+                  className="app-control-shadow-exempt app-filter-segment-focus"
                   data-testid={`discover-media-tab-${tab.type}`}
                 >
-                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  <Icon className="app-action-icon" aria-hidden="true" />
                   <span>{intl.formatMessage(tab.label)}</span>
                 </Link>
               </MediaFilterOption>

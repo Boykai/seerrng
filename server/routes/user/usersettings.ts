@@ -52,6 +52,11 @@ import { ApiError } from '@server/types/error';
 import { isAvailableLocale } from '@server/types/languages';
 import { validateAdvancedThemeOverrides } from '@server/utils/advancedThemeOverrides';
 import AsyncLock from '@server/utils/asyncLock';
+import {
+  normalizeSeriesDisclosureOrder,
+  parseSeriesDisclosureOrder,
+  type SeriesDisclosureRole,
+} from '@server/utils/detailDisclosureOrder';
 import { normalizeDiscordSnowflake } from '@server/utils/discord';
 import { getHostname } from '@server/utils/getHostname';
 import { normalizeJellyfinGuid } from '@server/utils/jellyfin';
@@ -80,6 +85,104 @@ import { IsNull, Not, Raw, type FindOptionsWhere } from 'typeorm';
 import { canMakePermissionsChange, isUniqueConstraintError } from '.';
 
 const userSettingsRoutes = Router({ mergeParams: true });
+
+userSettingsRoutes.get<
+  { id: string; mediaType: string },
+  SeriesDisclosureRole[]
+>(
+  '/detail-disclosure-order/:mediaType',
+  isOwnProfile(),
+  async (req, res, next) => {
+    if (req.params.mediaType !== 'tv')
+      return next({ status: 400, message: 'Invalid detail media type.' });
+    const userId = parsePositiveRouteId(req.params.id);
+    if (!userId) return next({ status: 404, message: 'User not found.' });
+    try {
+      return await runUserSecurityReadWithActor(
+        req.user!.id,
+        userId,
+        Permission.MANAGE_USERS,
+        async () => {
+          const user = await getRepository(User).findOne({
+            where: { id: userId },
+          });
+          if (!user) return next({ status: 404, message: 'User not found.' });
+          return res
+            .status(200)
+            .json(
+              normalizeSeriesDisclosureOrder(
+                user.settings?.detailDisclosureOrder?.tv
+              )
+            );
+        }
+      );
+    } catch (e) {
+      return next({
+        status: e instanceof UserMutationActorUnauthorizedError ? 403 : 500,
+        message:
+          e instanceof UserMutationActorUnauthorizedError
+            ? 'Access denied.'
+            : e.message,
+      });
+    }
+  }
+);
+userSettingsRoutes.post<
+  { id: string; mediaType: string },
+  SeriesDisclosureRole[],
+  { order?: unknown }
+>(
+  '/detail-disclosure-order/:mediaType',
+  isOwnProfile(),
+  async (req, res, next) => {
+    if (req.params.mediaType !== 'tv')
+      return next({ status: 400, message: 'Invalid detail media type.' });
+    const order =
+      req.body && Object.keys(req.body).length === 1
+        ? parseSeriesDisclosureOrder(req.body.order)
+        : null;
+    if (!order)
+      return next({ status: 400, message: 'Invalid disclosure order.' });
+    const userId = parsePositiveRouteId(req.params.id);
+    if (!userId) return next({ status: 404, message: 'User not found.' });
+    try {
+      return await runUserSecurityMutationWithActor(
+        req.user!.id,
+        userId,
+        Permission.MANAGE_USERS,
+        async (actor) => {
+          // Preferences are exclusively self-owned, including for administrators.
+          if (actor.id !== userId)
+            return next({ status: 403, message: 'Access denied.' });
+          const repo = getRepository(User);
+          const user = await repo.findOne({ where: { id: userId } });
+          if (!user) return next({ status: 404, message: 'User not found.' });
+          if (!user.settings) user.settings = new UserSettings({ user });
+          user.settings.detailDisclosureOrder = {
+            ...user.settings.detailDisclosureOrder,
+            tv: order,
+          };
+          const saved = await repo.save(user);
+          return res
+            .status(200)
+            .json(
+              normalizeSeriesDisclosureOrder(
+                saved.settings?.detailDisclosureOrder?.tv
+              )
+            );
+        }
+      );
+    } catch (e) {
+      return next({
+        status: e instanceof UserMutationActorUnauthorizedError ? 403 : 500,
+        message:
+          e instanceof UserMutationActorUnauthorizedError
+            ? 'Access denied.'
+            : e.message,
+      });
+    }
+  }
+);
 
 const updateMediaFilterPin = (
   current: Partial<Record<MediaFilterScope, MediaFilterValue>> | undefined,
@@ -379,6 +482,7 @@ const serializeScopedDetailDisclosurePins = (
   const legacyPins: UserSettingsDetailDisclosureResponse = {
     details: false,
     ...(mediaType === 'movie' ? { collection: false } : {}),
+    ...(mediaType === 'tv' ? { mediaServer: false, overview: false } : {}),
     cast:
       mediaType === 'movie' && settings?.detailDisclosureCastPinned === true,
     crew:
@@ -399,7 +503,9 @@ const serializeScopedDetailDisclosurePins = (
 const parseDetailDisclosurePinsBody = (
   body: unknown,
   includeCollection = false,
-  includeDetails = false
+  includeDetails = false,
+  includeMediaServer = false,
+  includeOverview = false
 ): { value: UserSettingsDetailDisclosureResponse } | { error: string } => {
   const parsedBody = parseUserSettingsBodyObject(body);
 
@@ -413,10 +519,13 @@ const parseDetailDisclosurePinsBody = (
     ...keys,
     ...(includeDetails ? (['details'] as const) : []),
     'advancedOptions',
+    'taskFilters',
     'filters',
     'mediaFilters',
     'sortBy',
     ...(includeCollection ? (['collection'] as const) : []),
+    ...(includeMediaServer ? (['mediaServer'] as const) : []),
+    ...(includeOverview ? (['overview'] as const) : []),
   ];
   for (const key of allowedKeys) {
     if (!hasOwn(parsedBody.value, key)) {
@@ -1366,7 +1475,9 @@ userSettingsRoutes.post<
     const parsedBody = parseDetailDisclosurePinsBody(
       req.body,
       mediaType === 'movie',
-      true
+      true,
+      mediaType === 'tv',
+      mediaType === 'tv'
     );
 
     if (!isDetailDisclosureMediaType(mediaType)) {

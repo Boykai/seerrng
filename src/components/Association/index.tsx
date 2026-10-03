@@ -22,6 +22,7 @@ const AssociationGraph = dynamic(() => import('./AssociationGraph'), {
 
 const messages = defineMessages('components.Association', {
   title: 'Associations for {title}',
+  associations: 'Associations',
   wallview: 'List',
   graphview: 'Map',
   loaderror: 'Could not load associations.',
@@ -80,32 +81,52 @@ const AssociationExplorer = () => {
     includeWeak: true,
   });
 
+  const pendingTitle = graph?.root.title
+    ? intl.formatMessage(messages.title, { title: graph.root.title })
+    : intl.formatMessage(messages.associations);
+  const pendingHeading = (
+    <>
+      <PageTitle title={pendingTitle} />
+      <div className="page-title-row">
+        <h1 className="page-title">{pendingTitle}</h1>
+      </div>
+    </>
+  );
+
   if (isLoading) {
-    return <LoadingSpinner />;
+    return (
+      <>
+        {pendingHeading}
+        <LoadingSpinner />
+      </>
+    );
   }
 
   if (isError || !graph) {
     return (
-      <div className="py-16 text-center text-gray-400">
-        {intl.formatMessage(messages.loaderror)}
-      </div>
+      <>
+        {pendingHeading}
+        <div className="py-16 text-center text-gray-400">
+          {intl.formatMessage(messages.loaderror)}
+        </div>
+      </>
     );
   }
 
   const effectiveView = isGraphAvailable ? view : 'wall';
 
   return (
-    <div className="discover-home">
+    <div>
       <PageTitle
         title={intl.formatMessage(messages.title, {
           title: graph.root.title,
         })}
       />
-      <div className="mt-2 mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="min-w-0 text-2xl font-bold break-words text-white">
+      <div className="page-title-row">
+        <h1 className="page-title">
           {intl.formatMessage(messages.title, { title: graph.root.title })}
         </h1>
-        <div className="flex flex-shrink-0 flex-wrap gap-2">
+        <div className="app-filter-row">
           <Button
             buttonType={effectiveView === 'wall' ? 'primary' : 'default'}
             buttonSize="sm"

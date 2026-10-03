@@ -1,3 +1,14 @@
+const openRequestFilterSection = (label: string) => {
+  cy.get(`section[aria-label="${label}"]`)
+    .find('button.detail-disclosure-button')
+    .then(($button) => {
+      if ($button.attr('aria-expanded') === 'false') cy.wrap($button).click();
+    });
+  cy.get(
+    `section[aria-label="${label}"] button.detail-disclosure-button`
+  ).should('have.attr', 'aria-expanded', 'true');
+};
+
 describe('Requests', () => {
   beforeEach(() => {
     cy.loginAsAdmin();
@@ -5,6 +16,7 @@ describe('Requests', () => {
 
   it('opens on all requests and lets users choose a history window', () => {
     cy.visit('/requests');
+    openRequestFilterSection('Filters');
 
     cy.get('button[aria-label="Time Period"]')
       .should('be.visible')
@@ -18,7 +30,7 @@ describe('Requests', () => {
     cy.contains('[role=option]', 'All time').click();
     cy.location('search').should('not.contain', 'timeFrame=');
 
-    cy.contains('button', 'Media Filters').click();
+    openRequestFilterSection('Media Filters');
     cy.contains('button', 'Books').should('be.visible');
     cy.contains('button', 'Audiobooks').click();
     cy.location('search').should('contain', 'mediaType=audiobook');
@@ -68,6 +80,7 @@ describe('Requests', () => {
     cy.wait('@softwareStatus')
       .its('request.url')
       .should('not.include', 'filter=');
+    openRequestFilterSection('Task Filters');
     cy.get('[aria-label="Task Filters"]')
       .contains('button', 'No Release Found')
       .click();
@@ -75,14 +88,14 @@ describe('Requests', () => {
     cy.wait('@softwareStatus')
       .its('request.url')
       .should('include', 'filter=unavailable');
-    cy.get('[aria-label="Software requests"]').should('not.exist');
+    cy.get('[aria-label="Software Requests"]').should('not.exist');
 
     cy.get('[aria-label="Task Filters"]').contains('button', 'Failed').click();
     cy.location('search').should('include', 'filter=failed');
     cy.wait('@softwareStatus')
       .its('request.url')
       .should('include', 'filter=failed');
-    cy.get('[aria-label="Software requests"]').should(
+    cy.get('[aria-label="Software Requests"]').should(
       'contain.text',
       'Failed software request'
     );
@@ -145,10 +158,10 @@ describe('Requests', () => {
 
     cy.visit('/requests');
     cy.wait('@softwareStatus');
-    cy.get('[aria-label="Software requests"]')
+    cy.get('[aria-label="Software Requests"]')
       .contains('Cancelled software request')
       .should('be.visible');
-    cy.get('[aria-label="Software requests"]')
+    cy.get('[aria-label="Software Requests"]')
       .contains('button', 'Clear cancelled request')
       .click();
     cy.get('body').then(($body) => {
@@ -159,9 +172,14 @@ describe('Requests', () => {
       }
     });
     cy.get('[role="dialog"]')
-      .should('contain.text', 'Clear this cancelled request?')
-      .contains('button', 'Clear cancelled request')
-      .click();
+      .should('be.visible')
+      .within(() => {
+        cy.get('[data-testid="modal-title"]').should(
+          'have.text',
+          'Clear This Cancelled Request?'
+        );
+        cy.contains('button', 'Clear cancelled request').click();
+      });
     cy.then(() => {
       expect(clientErrors.join('\n')).not.to.include(
         'Transition.Child is used but it is missing a parent'

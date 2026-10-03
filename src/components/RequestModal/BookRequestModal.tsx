@@ -1063,7 +1063,7 @@ const BookRequestModal = ({
             data-testid="modal-cancel-button"
             className="app-button app-button-danger button-standard"
           >
-            <XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            <XMarkIcon aria-hidden="true" />
             {intl.formatMessage(globalMessages.cancel)}
           </button>
           <button
@@ -1078,7 +1078,7 @@ const BookRequestModal = ({
             }
             className="app-button app-button-success button-standard"
           >
-            <ArrowDownTrayIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            <ArrowDownTrayIcon aria-hidden="true" />
             {requestButtonLabel}
           </button>
         </div>

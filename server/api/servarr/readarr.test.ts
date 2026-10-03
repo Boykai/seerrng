@@ -676,7 +676,12 @@ describe('ReadarrAPI.addBook', () => {
       'post',
       async () => existingBook({ id: 10 })
     );
-    const commandPostMock = mock.fn(async () => ({
+    const commandPostMock = mock.fn<
+      (
+        endpoint: string,
+        data?: Record<string, unknown>
+      ) => Promise<{ data: { id: number; name: string; status: string } }>
+    >(async () => ({
       data: { id: 101, name: 'BookSearch', status: 'started' },
     }));
     (

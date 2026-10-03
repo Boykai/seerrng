@@ -209,7 +209,7 @@ const solidTitlePaletteGrid = () =>
 
 const titleTextSections = () => `
   <section class="visual-lab-title-section" data-palette-family="solid">
-    <h2 class="media-slider-title">Solid Title</h2>
+    <h2 class="page-heading">Solid Title</h2>
     <div class="visual-lab-title-grid">
       ${borderColumnHeadings}
       ${solidTitle('solid-steel')}
@@ -220,7 +220,7 @@ const titleTextSections = () => `
   </section>
 
   <section class="visual-lab-title-section" data-palette-family="gradiant">
-    <h2 class="media-slider-title">Gradiant Title</h2>
+    <h2 class="page-heading">Gradiant Title</h2>
     <div class="visual-lab-title-grid">
       ${borderColumnHeadings}
       ${gradiantTitle('gradiant-steel')}
@@ -231,7 +231,7 @@ const titleTextSections = () => `
   </section>
 
   <section class="visual-lab-title-section" data-palette-family="metalic">
-    <h2 class="media-slider-title">Metalic Title</h2>
+    <h2 class="page-heading">Metalic Title</h2>
     <div class="visual-lab-title-grid">
       ${borderColumnHeadings}
       ${metalicTitle('metalic-steel')}
@@ -312,6 +312,10 @@ const visualLabIndexDocument = `<!doctype html>
           <a class="settings-main-card app-card-main block" href="/visual-lab/buttons" target="_top">
             <h2 class="card-title">Buttons</h2>
             <p>Compare button palettes, fills, borders, and interaction treatments.</p>
+          </a>
+          <a class="settings-main-card app-card-main" href="/visual-lab/testing" target="_top">
+            <h2 class="card-title">Series Testing Page</h2>
+            <p>Compare season and episode selection layouts inside the series details card.</p>
           </a>
         </div>
       </section>
@@ -606,7 +610,7 @@ const bordersDocument = `<!doctype html>
         <h1 class="page-title">Borders</h1>
         ${paletteFilterControls}
         <section class="visual-lab-border-section" data-palette-family="solid">
-          <h2 class="media-slider-title">Solid Border</h2>
+          <h2 class="page-heading">Solid Border</h2>
           <div class="visual-lab-border-grid">
             ${borderColumnHeadings}
             ${solidBorderCard('solid-steel')}
@@ -617,7 +621,7 @@ const bordersDocument = `<!doctype html>
         </section>
 
         <section class="visual-lab-border-section" data-palette-family="gradiant">
-          <h2 class="media-slider-title">Gradiant Border</h2>
+          <h2 class="page-heading">Gradiant Border</h2>
           <div class="visual-lab-border-grid">
             ${borderColumnHeadings}
             ${gradiantBorderCard(styleDisplayName('gradiant-steel'), 'gradiant-steel')}
@@ -628,7 +632,7 @@ const bordersDocument = `<!doctype html>
         </section>
 
         <section class="visual-lab-border-section" data-palette-family="metalic">
-          <h2 class="media-slider-title">Metalic Border</h2>
+          <h2 class="page-heading">Metalic Border</h2>
           <div class="visual-lab-border-grid">
             ${borderColumnHeadings}
             ${borderCard(styleDisplayName('metalic-steel'), 'metalic-steel')}
@@ -639,7 +643,7 @@ const bordersDocument = `<!doctype html>
         </section>
 
         <section class="visual-lab-border-section" data-palette-family="metalic">
-          <h2 class="media-slider-title">Metalic Border &amp; Background</h2>
+          <h2 class="page-heading">Metalic Border &amp; Background</h2>
           <div class="visual-lab-border-grid">
             ${borderColumnHeadings}
             ${borderCard(styleDisplayName('metalic-steel'), 'metalic-steel', false, true)}
