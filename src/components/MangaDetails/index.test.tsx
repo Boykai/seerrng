@@ -325,3 +325,57 @@ it('shows the not-found page when the manga is unknown or excluded', async () =>
     '404'
   );
 });
+
+const availabilityCell = () =>
+  [...host.querySelectorAll('dt')].find(
+    (term) => term.textContent === 'Availability:'
+  )?.nextElementSibling;
+
+it.each([
+  [MediaStatus.AVAILABLE, false, 'Available', 'available'],
+  [MediaStatus.AVAILABLE, true, 'Available', 'available'],
+  [MediaStatus.PARTIALLY_AVAILABLE, true, 'Partially Available', 'available'],
+  [MediaStatus.UNKNOWN, true, 'In Suwayomi Library', 'processing'],
+  [undefined, true, 'In Suwayomi Library', 'processing'],
+])(
+  'shows status %s with the library marker %s as %s',
+  async (status, inSuwayomiLibrary, text, tone) => {
+    state.swr = {
+      data: details({
+        inSuwayomiLibrary,
+        mediaInfo:
+          status === undefined
+            ? undefined
+            : ({ status } as MangaDetailsType['mediaInfo']),
+      }),
+    };
+    await render();
+
+    expect(availabilityCell()?.textContent).toBe(text);
+    expect(
+      availabilityCell()
+        ?.querySelector('[data-availability-tone]')
+        ?.getAttribute('data-availability-tone')
+    ).toBe(tone);
+  }
+);
+
+it.each([
+  ['no library match', undefined, undefined],
+  ['an unknown status without the marker', MediaStatus.UNKNOWN, false],
+  ['a blocklisted title in the library', MediaStatus.BLOCKLISTED, true],
+])('shows no availability row for %s', async (_case, status, marker) => {
+  state.swr = {
+    data: details({
+      inSuwayomiLibrary: marker,
+      mediaInfo:
+        status === undefined
+          ? undefined
+          : ({ status } as MangaDetailsType['mediaInfo']),
+    }),
+  };
+  await render();
+
+  expect(availabilityCell()).toBeUndefined();
+  expect(host.textContent).not.toContain('Suwayomi');
+});

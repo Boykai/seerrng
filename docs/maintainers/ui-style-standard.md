@@ -247,6 +247,7 @@ Use `CompactSelect`, `CompactRatingSelect`, `getFilterResetButtonClass`, and `ge
 - About renders Version, Data Directory, and Time Zone as ordinary detail text rather than code-style tags. Shared Settings Cancel navigation targets the real root Discover route; it must never target the nonexistent `/discover` route.
 - Plex Libraries is one standard group card. Its library entries use the shared inset-card surface, standard internal padding, five-pixel grid gap, and shared selection circle. Sync Libraries, Select All, and Select None are standard icon actions in one right-justified wrapping row.
 - Metadata Provider Status and Metadata Provider Selection are separate standard inset cards inside one Metadata Providers group card. Do not depend on sibling class combinations to synthesize their card boundaries.
+- Manga Library is an admin-only route that appears only while the Manga category is enabled and Suwayomi is configured. Its Review Queue and Library Matches groups each pair a heading and description with one inset subcard holding a right-justified compact filter, a shared data table with compact Match, Status, and action columns, and the shared pagination footer. Row actions are standard-size icon buttons in one right-justified wrapping row; AniList titles use the shared indigo text link, while library titles are plain text and source URLs are never shown.
 
 ## Pagination Footers
 

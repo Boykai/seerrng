@@ -4,6 +4,8 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
 import ExternalBlocklistModal from '@app/components/ExternalBlocklistModal';
+import { getMangaAvailability } from '@app/components/MangaDetails/mangaAvailability';
+import AvailabilityValue from '@app/components/MediaDetails/AvailabilityValue';
 import MediaDetailArtwork from '@app/components/MediaDetails/MediaDetailArtwork';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
@@ -30,6 +32,7 @@ const messages = defineMessages('components.MangaDetails', {
   status: 'Status',
   chapters: 'Chapters',
   volumes: 'Volumes',
+  availability: 'Availability',
   mangaDetails: 'Manga Details',
   startDate: 'Start Date',
   endDate: 'End Date',
@@ -142,6 +145,10 @@ const MangaDetails = () => {
   const canUseBlocklist = hasPermission(Permission.MANAGE_BLOCKLIST);
   const isBlocklistAvailable =
     data.mediaInfo?.status !== MediaStatus.BLOCKLISTED;
+  const availability = getMangaAvailability(
+    data.mediaInfo?.status,
+    data.inSuwayomiLibrary
+  );
   const summaryRows: DetailRow[] = [
     [
       'format',
@@ -259,6 +266,18 @@ const MangaDetails = () => {
                       <dd className="m-0 truncate">{value || notAvailable}</dd>
                     </Fragment>
                   ))}
+                  {availability && (
+                    <>
+                      <dt className="font-medium text-gray-100">
+                        {intl.formatMessage(messages.availability)}:
+                      </dt>
+                      <dd className="m-0 truncate">
+                        <AvailabilityValue tone={availability.tone}>
+                          {intl.formatMessage(availability.message)}
+                        </AvailabilityValue>
+                      </dd>
+                    </>
+                  )}
                 </dl>
               </div>
             </div>

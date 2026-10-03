@@ -4189,6 +4189,37 @@
     padding-left: 5px;
   }
 
+  .settings-manga-library-table .app-data-table-heading,
+  .settings-manga-library-table .app-data-table-cell {
+    padding-right: 5px;
+    padding-left: 5px;
+  }
+
+  .settings-manga-library-match-column {
+    width: 11rem;
+  }
+
+  .settings-manga-library-status-column {
+    width: 8rem;
+  }
+
+  .settings-manga-library-candidate-actions-column {
+    width: 20rem;
+  }
+
+  .settings-manga-library-binding-actions-column {
+    width: 14rem;
+  }
+
+  .settings-manga-library-stack {
+    @apply flex flex-col items-start;
+    gap: 5px;
+  }
+
+  .settings-manga-library-link {
+    @apply text-indigo-300 transition duration-300 hover:text-indigo-200 hover:underline;
+  }
+
   .app-data-table {
     @apply w-full min-w-[52rem] table-fixed text-xs;
   }

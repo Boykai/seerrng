@@ -9,6 +9,7 @@ import useSettings from '@app/hooks/useSettings';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import { isConfiguredMediaCategoryEnabled } from '@app/utils/serviceAvailability';
 import { Transition } from '@headlessui/react';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/solid';
 import { MediaServerType } from '@server/constants/server';
@@ -32,6 +33,7 @@ const messages = defineMessages('components.Settings', {
   menuJellyfinSettings: '{mediaServerName}',
   menuServices: 'Services',
   menuLibraryMigration: 'Library Migration',
+  menuMangaLibrary: 'Manga Library',
   menuNetwork: 'Network',
   menuNotifications: 'Notifications',
   menuLogs: 'Logs',
@@ -71,7 +73,7 @@ export const useSettingsPageAction = (action: SettingsPageAction | null) => {
 };
 
 const editableSettingsRoute = (path: string) =>
-  !/^\/settings\/(?:services|library-migration|logs|jobs|about|discovery)(?:\/|$)/.test(
+  !/^\/settings\/(?:services|library-migration|manga-library|logs|jobs|about|discovery)(?:\/|$)/.test(
     path
   );
 
@@ -132,6 +134,18 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
             route: '/settings/library-migration',
             regex: /^\/settings\/library-migration/,
           },
+          ...(isConfiguredMediaCategoryEnabled(
+            'manga',
+            settings.currentSettings
+          ) && settings.currentSettings.suwayomiEnabled
+            ? [
+                {
+                  text: intl.formatMessage(messages.menuMangaLibrary),
+                  route: '/settings/manga-library',
+                  regex: /^\/settings\/manga-library/,
+                },
+              ]
+            : []),
         ]
       : []),
     {
