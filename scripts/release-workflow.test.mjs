@@ -786,6 +786,7 @@ test('release notes flow into the draft release and Discord announcement', () =>
     'changelog',
     'publish',
     'publish-release',
+    'sync-yunohost-package',
     'dispatch-package-channels',
   ]);
   assert.equal(
