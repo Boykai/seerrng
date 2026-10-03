@@ -38,6 +38,12 @@ export interface ReadarrDevelopmentConfig {
 
 export type ReadarrMediaType = 'ebook' | 'audiobook';
 type ChaptarrDialect = 'hc' | 'gr';
+interface ChaptarrIntegrationCapabilities {
+  contract?: string;
+  contractVersion?: number;
+  providerIdDialect?: ChaptarrDialect;
+  features?: { formatScopedFacade?: boolean };
+}
 const CHAPTARR_REQUEST_TIMEOUT_MS = 60_000;
 const CHAPTARR_LIBRARY_PAGE_SIZE = 500;
 
@@ -526,6 +532,30 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
     try {
       const response = await super.request<unknown>(
         'GET',
+        '/system/capabilities',
+        undefined,
+        this.getRequestConfig()
+      );
+      const capabilities = response.data as
+        ChaptarrIntegrationCapabilities | undefined;
+
+      if (
+        (capabilities?.contract === 'chaptarrng-seerr-bookshelf' ||
+          capabilities?.contract === 'seerrng-bookshelf') &&
+        capabilities.contractVersion === 1 &&
+        capabilities.features?.formatScopedFacade === true &&
+        (capabilities.providerIdDialect === 'hc' ||
+          capabilities.providerIdDialect === 'gr')
+      ) {
+        return capabilities.providerIdDialect;
+      }
+    } catch {
+      // Older Chaptarr builds have no explicit integration capability endpoint.
+    }
+
+    try {
+      const response = await super.request<unknown>(
+        'GET',
         '/config/hardcover',
         undefined,
         this.getRequestConfig()
@@ -577,6 +607,36 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
           this.mediaType,
           this.chaptarrDialect
         );
+      } else if (this.mediaType) {
+        // BookshelfNG retains Readarr's appName for API compatibility, so
+        // identify its format facade from the explicit capability contract.
+        try {
+          const response = await super.request<unknown>(
+            'GET',
+            '/system/capabilities',
+            undefined,
+            this.getRequestConfig()
+          );
+          const capabilities = response.data as
+            ChaptarrIntegrationCapabilities | undefined;
+
+          if (
+            capabilities?.contract === 'seerrng-bookshelf' &&
+            capabilities.contractVersion === 1 &&
+            capabilities.features?.formatScopedFacade === true &&
+            (capabilities.providerIdDialect === 'hc' ||
+              capabilities.providerIdDialect === 'gr')
+          ) {
+            this.chaptarrDialect = capabilities.providerIdDialect;
+            this.requestBaseUrl = ReadarrAPI.buildChaptarrFacadeUrl(
+              this.nativeApiUrl,
+              this.mediaType,
+              capabilities.providerIdDialect
+            );
+          }
+        } catch {
+          // Older BookshelfNG releases continue to use the standard Readarr routes.
+        }
       }
     })();
 

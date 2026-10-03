@@ -691,10 +691,13 @@ describe('ReadarrAPI.addBook', () => {
     assert.strictEqual(getMock.mock.calls.length, 1);
     assert.strictEqual(postMock.mock.calls.length, 0);
     assert.strictEqual(commandPostMock.mock.calls.length, 1);
-    assert.deepStrictEqual(commandPostMock.mock.calls[0].arguments[1], {
-      name: 'BookSearch',
-      bookIds: [9],
-    });
+    assert.deepStrictEqual(
+      (commandPostMock.mock.calls[0].arguments as unknown[])[1],
+      {
+        name: 'BookSearch',
+        bookIds: [9],
+      }
+    );
   });
 
   it('matches existing books with normalized ISBNs', async () => {
@@ -904,6 +907,188 @@ describe('ReadarrAPI.addBook', () => {
 describe('ReadarrAPI Chaptarr compatibility', () => {
   afterEach(() => {
     mock.restoreAll();
+  });
+
+  it('uses the explicit Chaptarr integration capabilities before provider settings', async () => {
+    const requestedPaths: string[] = [];
+    const server = createServer((request, response) => {
+      void (async () => {
+        const parsedUrl = new URL(request.url ?? '/', 'http://localhost');
+        requestedPaths.push(parsedUrl.pathname);
+
+        if (parsedUrl.pathname === '/api/v1/system/status') {
+          writeJson(response, 200, {
+            appName: 'Chaptarr',
+            version: '0.9.940.0',
+            urlBase: '',
+          });
+          return;
+        }
+
+        if (parsedUrl.pathname === '/api/v1/system/capabilities') {
+          writeJson(response, 200, {
+            contract: 'chaptarrng-seerr-bookshelf',
+            contractVersion: 1,
+            providerIdDialect: 'gr',
+            mediaTypes: ['ebook', 'audiobook'],
+            features: { formatScopedFacade: true },
+          });
+          return;
+        }
+
+        writeJson(response, 404, { message: 'not found' });
+      })().catch(() => writeJson(response, 500, { message: 'handler failed' }));
+    });
+
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+
+    try {
+      const api = new ReadarrAPI({
+        url: `http://127.0.0.1:${address.port}/api/v1`,
+        apiKey: 'key',
+        mediaType: 'ebook',
+      });
+
+      await api.getSystemStatus();
+
+      const internalApi = api as unknown as {
+        requestBaseUrl?: string;
+      };
+      assert.equal(
+        internalApi.requestBaseUrl,
+        `http://127.0.0.1:${address.port}/readarr/gr/ebook/api/v1`
+      );
+      assert.ok(requestedPaths.includes('/api/v1/system/capabilities'));
+      assert.ok(!requestedPaths.includes('/api/v1/config/hardcover'));
+    } finally {
+      server.close();
+      await once(server, 'close');
+    }
+  });
+
+  it('falls back to the provider setting unless the format facade is advertised', async () => {
+    const requestedPaths: string[] = [];
+    const server = createServer((request, response) => {
+      void (async () => {
+        const parsedUrl = new URL(request.url ?? '/', 'http://localhost');
+        requestedPaths.push(parsedUrl.pathname);
+
+        if (parsedUrl.pathname === '/api/v1/system/status') {
+          writeJson(response, 200, {
+            appName: 'Chaptarr',
+            version: '0.9.940.0',
+            urlBase: '',
+          });
+          return;
+        }
+
+        if (parsedUrl.pathname === '/api/v1/system/capabilities') {
+          writeJson(response, 200, {
+            contract: 'chaptarrng-seerr-bookshelf',
+            contractVersion: 1,
+            providerIdDialect: 'gr',
+            features: { formatScopedFacade: false },
+          });
+          return;
+        }
+
+        if (parsedUrl.pathname === '/api/v1/config/hardcover') {
+          writeJson(response, 200, { enabled: true });
+          return;
+        }
+
+        writeJson(response, 404, { message: 'not found' });
+      })().catch(() => writeJson(response, 500, { message: 'handler failed' }));
+    });
+
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+
+    try {
+      const api = new ReadarrAPI({
+        url: `http://127.0.0.1:${address.port}/api/v1`,
+        apiKey: 'key',
+        mediaType: 'ebook',
+      });
+
+      await api.getSystemStatus();
+
+      const internalApi = api as unknown as {
+        requestBaseUrl?: string;
+      };
+      assert.equal(
+        internalApi.requestBaseUrl,
+        `http://127.0.0.1:${address.port}/readarr/hc/ebook/api/v1`
+      );
+      assert.ok(requestedPaths.includes('/api/v1/config/hardcover'));
+    } finally {
+      server.close();
+      await once(server, 'close');
+    }
+  });
+
+  it('uses BookshelfNG format routes only for its supported capability contract', async () => {
+    const requestedPaths: string[] = [];
+    const server = createServer((request, response) => {
+      void (async () => {
+        const parsedUrl = new URL(request.url ?? '/', 'http://localhost');
+        requestedPaths.push(parsedUrl.pathname);
+
+        if (parsedUrl.pathname === '/api/v1/system/status') {
+          writeJson(response, 200, {
+            appName: 'Readarr',
+            version: '0.9.940.0',
+            urlBase: '',
+          });
+          return;
+        }
+
+        if (parsedUrl.pathname === '/api/v1/system/capabilities') {
+          writeJson(response, 200, {
+            contract: 'seerrng-bookshelf',
+            contractVersion: 1,
+            providerIdDialect: 'gr',
+            mediaTypes: ['ebook', 'audiobook'],
+            features: { formatScopedFacade: true },
+          });
+          return;
+        }
+
+        writeJson(response, 404, { message: 'not found' });
+      })().catch(() => writeJson(response, 500, { message: 'handler failed' }));
+    });
+
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+
+    try {
+      const api = new ReadarrAPI({
+        url: `http://127.0.0.1:${address.port}/api/v1`,
+        apiKey: 'key',
+        mediaType: 'audiobook',
+      });
+
+      await api.getSystemStatus();
+
+      const internalApi = api as unknown as {
+        requestBaseUrl?: string;
+      };
+      assert.equal(
+        internalApi.requestBaseUrl,
+        `http://127.0.0.1:${address.port}/readarr/gr/audiobook/api/v1`
+      );
+      assert.ok(requestedPaths.includes('/api/v1/system/capabilities'));
+    } finally {
+      server.close();
+      await once(server, 'close');
+    }
   });
 
   it('returns pending Chaptarr book adds as durable pending results', async () => {

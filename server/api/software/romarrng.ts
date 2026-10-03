@@ -95,21 +95,23 @@ export class ROMarrNGAPI extends ExternalAPI {
 
   private async getIntegrationBase(): Promise<string> {
     const handshake = await this.getHandshake();
-    return handshake.requestContractVersion === 1
-      ? '/api/integration/seerrng/v1'
-      : '/api/v1/integration';
+    if (handshake.requestContractVersion === 1) {
+      return '/api/integration/seerrng/v1';
+    }
+    if (handshake.requestContractVersion === undefined) {
+      return '/api/v1/integration';
+    }
+    throw new Error(
+      `ROMarrNG request contract v${handshake.requestContractVersion} is not supported`
+    );
   }
 
   public searchCatalog(
     query: string,
     limit = 20
   ): Promise<SoftwareCatalogGame[]> {
-    return this.get(
-      '/api/integration/seerrng/v1/catalog/search',
-      {
-        params: { q: query, limit },
-      },
-      600
+    return this.getIntegrationBase().then((base) =>
+      this.get(`${base}/catalog/search`, { params: { q: query, limit } }, 600)
     );
   }
 
@@ -121,29 +123,29 @@ export class ROMarrNGAPI extends ExternalAPI {
     genre?: string,
     releaseYear?: number
   ): Promise<RomarrCatalogSearchPage> {
-    return this.get(
-      '/api/integration/seerrng/v1/catalog/search-page',
-      {
-        params: {
-          q: query,
-          limit,
-          ...(cursor ? { cursor } : {}),
-          ...(platformIds.length ? { platformIds: platformIds.join(',') } : {}),
-          ...(genre ? { genre } : {}),
-          ...(releaseYear ? { releaseYear } : {}),
+    return this.getIntegrationBase().then((base) =>
+      this.get(
+        `${base}/catalog/search-page`,
+        {
+          params: {
+            q: query,
+            limit,
+            ...(cursor ? { cursor } : {}),
+            ...(platformIds.length
+              ? { platformIds: platformIds.join(',') }
+              : {}),
+            ...(genre ? { genre } : {}),
+            ...(releaseYear ? { releaseYear } : {}),
+          },
         },
-      },
-      600
+        600
+      )
     );
   }
 
   public getPopularCatalog(limit = 20): Promise<SoftwareCatalogGame[]> {
-    return this.get(
-      '/api/integration/seerrng/v1/catalog/popular',
-      {
-        params: { limit },
-      },
-      600
+    return this.getIntegrationBase().then((base) =>
+      this.get(`${base}/catalog/popular`, { params: { limit } }, 600)
     );
   }
 
@@ -154,33 +156,41 @@ export class ROMarrNGAPI extends ExternalAPI {
     genre?: string,
     releaseYear?: number
   ): Promise<RomarrCatalogPopularPage> {
-    return this.get(
-      '/api/integration/seerrng/v1/catalog/popular-page',
-      {
-        params: {
-          limit,
-          offset,
-          ...(platformIds.length ? { platformIds: platformIds.join(',') } : {}),
-          ...(genre ? { genre } : {}),
-          ...(releaseYear ? { releaseYear } : {}),
+    return this.getIntegrationBase().then((base) =>
+      this.get(
+        `${base}/catalog/popular-page`,
+        {
+          params: {
+            limit,
+            offset,
+            ...(platformIds.length
+              ? { platformIds: platformIds.join(',') }
+              : {}),
+            ...(genre ? { genre } : {}),
+            ...(releaseYear ? { releaseYear } : {}),
+          },
         },
-      },
-      600
+        600
+      )
     );
   }
 
   public getCatalogPlatforms(): Promise<SoftwareCatalogPlatform[]> {
-    return this.get('/api/integration/seerrng/v1/catalog/platforms', {}, 600);
+    return this.getIntegrationBase().then((base) =>
+      this.get(`${base}/catalog/platforms`, {}, 600)
+    );
   }
 
   public getCatalogGame(
     igdbId: number,
     platformId?: number
   ): Promise<SoftwareCatalogGame> {
-    return this.get(
-      `/api/integration/seerrng/v1/catalog/games/${igdbId}`,
-      { params: platformId === undefined ? undefined : { platformId } },
-      600
+    return this.getIntegrationBase().then((base) =>
+      this.get(
+        `${base}/catalog/games/${igdbId}`,
+        { params: platformId === undefined ? undefined : { platformId } },
+        600
+      )
     );
   }
 

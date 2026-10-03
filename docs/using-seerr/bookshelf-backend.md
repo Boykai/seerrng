@@ -51,6 +51,24 @@ metadata profiles remain shared by both formats. Separate BookshelfNG instances 
 optional when you need isolated databases or different settings for the same
 author.
 
+### BookshelfNG interoperability
+
+Current BookshelfNG builds publish `/api/v1/system/capabilities` with the
+versioned `seerrng-bookshelf` contract. SeerrNG checks that response and, when
+available, routes ebook and audiobook service requests through the matching
+`/readarr/{gr|hc}/{format}/api/v1` path, where `gr` and `hc` identify the
+provider-ID dialect. Older BookshelfNG versions keep using the standard
+Readarr API path. Both routes reach the same BookshelfNG database and library;
+the facade carries the configured format context and does not create separate
+profile storage.
+
+Operators can set `BOOKSHELF_SEERRNG_API_KEY` in BookshelfNG from a container or
+Kubernetes secret and use it in both SeerrNG service entries. This credential
+is limited to BookshelfNG status, library/search/profile/root-folder reads,
+and author/book add or update operations. It cannot change system settings,
+run arbitrary commands, or delete authors or files. The global BookshelfNG API
+key remains supported for existing clients.
+
 [ChaptarrNG](https://github.com/snapetech/chaptarrng) is Snapetech's maintained
 fork of [Chaptarr](https://github.com/Chaptarr/chaptarr), supported as a
 Readarr-compatible alternative. We maintain the fork because SeerrNG needs
@@ -75,6 +93,26 @@ Readarr-compatible detection continues to work:
 4. Enable **Scan** after saving. Enable **Automatic Search** if approvals
    should start a ChaptarrNG search.
 
+When SeerrNG and ChaptarrNG run in separate containers, connect them through a
+shared Docker network and use the ChaptarrNG service name and container port,
+for example `http://chaptarrng:8789`. Do not use `localhost` from SeerrNG's
+container. ChaptarrNG's Compose example publishes its host port on loopback by
+default; container-to-container requests can use the shared network without a
+host port publication. For separate Compose projects, create the network once
+with `docker network create media-services`, then add the following network
+declaration and service attachment to both Compose files (adjust service names
+as needed):
+
+```yaml
+services:
+  chaptarrng:
+    networks: [media-services]
+
+networks:
+  media-services:
+    external: true
+```
+
 For a single ChaptarrNG instance that manages both formats, create two SeerrNG
 service entries with the same connection details and different **Book Format**
 values. Mark one entry of each format as the default. A **Both** request then
@@ -89,10 +127,12 @@ approved those other books.
 ### ChaptarrNG interoperability
 
 SeerrNG sends each ChaptarrNG Bookshelf service through the matching ebook or
-audiobook API facade. It reads ChaptarrNG's Hardcover setting to choose the
-provider-ID dialect; older versions without that setting use the Hardcover
-facade. Keep both SeerrNG service entries on the same ChaptarrNG instance when
-it manages both formats, and select the matching format in each entry.
+audiobook API facade. It reads ChaptarrNG's `/system/capabilities` contract to
+choose the provider-ID dialect. Older versions without a supported contract
+fall back to the existing Hardcover-setting check, then use the Hardcover
+facade when that setting is unavailable. Keep both SeerrNG service entries on
+the same ChaptarrNG instance when it manages both formats, and select the
+matching format in each entry.
 
 | Operation | SeerrNG behavior |
 | --- | --- |
@@ -115,22 +155,25 @@ request checks for active references across both format entries when they point
 to the same ChaptarrNG instance, and cancels the pending author import only
 when no other request depends on it.
 
-The last end-to-end Docker validation used Chaptarr `0.9.911.0`. ChaptarrNG's
-format-scoped add and pending-import contracts have been source-reviewed at
-fork commit [`fec5ea2`](https://github.com/snapetech/chaptarrng/tree/fec5ea2),
-including its
-[BookController](https://github.com/snapetech/chaptarrng/blob/fec5ea2/src/Chaptarr.Api.V1/Books/BookController.cs)
+The last end-to-end Docker validation used Chaptarr `0.9.911.0`. The fork's
+first stable release was `v0.9.936`; its current
+[ChaptarrNG v0.9.939 release](https://github.com/snapetech/chaptarrng/releases/tag/v0.9.939)
+includes the format-scoped request and pending-import contracts reviewed in
+the
+[BookController](https://github.com/snapetech/chaptarrng/blob/v0.9.939/src/Chaptarr.Api.V1/Books/BookController.cs)
 and
-[PendingAuthorImportController](https://github.com/snapetech/chaptarrng/blob/fec5ea2/src/Chaptarr.Api.V1/PendingImport/PendingAuthorImportController.cs).
-The fork's first stable release was `v0.9.936`; the current
-[ChaptarrNG v0.9.937 release](https://github.com/snapetech/chaptarrng/releases/tag/v0.9.937)
-adds format-scoped remote lookup fixes. Its public GHCR images
-`ghcr.io/snapetech/chaptarrng:0.9.937` and
+[PendingAuthorImportController](https://github.com/snapetech/chaptarrng/blob/v0.9.939/src/Chaptarr.Api.V1/PendingImport/PendingAuthorImportController.cs).
+The explicit `/system/capabilities` contract is scheduled for the next
+ChaptarrNG release; current images continue to use the settings fallback. The
+contract and fallback are covered by ChaptarrNG resource tests and SeerrNG
+adapter tests, but those checks do not replace end-to-end Docker validation.
+The public GHCR images
+`ghcr.io/snapetech/chaptarrng:0.9.939` and
 `ghcr.io/snapetech/chaptarrng:latest` are available for `linux/amd64`,
 `linux/arm64`, and `linux/arm/v7`. Its Unraid template is available from the
 [dedicated ChaptarrNG Unraid package repository](https://github.com/snapetech/chaptarrng-unraid).
-The source review and image publication are not end-to-end runtime validation
-of SeerrNG with ChaptarrNG. Pin `0.9.937` for reproducible deployments because
+Source review and image publication are not end-to-end runtime validation of
+SeerrNG with ChaptarrNG. Pin `0.9.939` for reproducible deployments because
 the Readarr-compatible surface can change between releases.
 
 If a ChaptarrNG lookup is empty, first verify that the selected **Book Format**
