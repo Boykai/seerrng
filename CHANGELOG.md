@@ -160,6 +160,40 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.47.0](https://github.com/snapetech/seerrng/compare/v3.46.1..v3.47.0) - 2026-10-03
+
+### User-facing changes
+
+#### Added
+
+- **Bookshelf:** SeerrNG now detects BookshelfNG's versioned capability response and uses its ebook or audiobook API route when available, while retaining standard Readarr routes for older BookshelfNG releases.
+
+#### Changed
+
+- **Bookshelf:** SeerrNG now reads ChaptarrNG's explicit capabilities contract to select its provider-ID dialect, while older Chaptarr builds keep using the existing settings fallback.
+- **Bookshelf:** SeerrNG's guide now documents the restricted BookshelfNG key's exact permissions for builds that support it, including allowed reads, author/book changes, one-book searches, and excluded system, key-management, command, and delete operations.
+
+#### Fixed
+
+- **Integration:** ROMarrNG providers using the legacy contract can now browse the catalog through the matching legacy routes. Unknown contract versions fail clearly instead of silently falling back to an incompatible API.
+
+#### Security
+
+- **Metadata:** External video summaries now decode encoded markup only once, and Wikidata search snippets preserve unrecognized markup as text instead of using broad tag removal.
+
+### 🚀 Features
+- *(integrations)* Negotiate provider capability contracts - ([e0dab7a](https://github.com/snapetech/seerrng/commit/e0dab7a8caf9ce64dd1f933fa704098bf175da44))
+
+### 🐛 Bug Fixes
+- *(metadata)* Avoid double-decoding external markup - ([73c6e58](https://github.com/snapetech/seerrng/commit/73c6e582d8f4a293da97951abb52d2d0cad9dcc3))
+
+### 📖 Documentation
+- *(bookshelf)* Note restricted key availability - ([2b1c7db](https://github.com/snapetech/seerrng/commit/2b1c7dba4fc59facd77bd6876fa43a5970601b25))
+- *(bookshelf)* Document restricted key access - ([744ce1b](https://github.com/snapetech/seerrng/commit/744ce1b0f0ae9d45982f792269e0a0eb5400c6e2))
+- *(release)* Document BookshelfNG API key scope - ([c295bfd](https://github.com/snapetech/seerrng/commit/c295bfdee3dec3cd1e43841774d1d8a7e3310ced))
+
 ## [3.46.1](https://github.com/snapetech/seerrng/compare/v3.46.0..v3.46.1) - 2026-10-02
 
 ### User-facing changes
