@@ -230,6 +230,10 @@ const decideMangaMedia = async (
   return { changes, conflicts };
 };
 
+const isRaisedStatus = (status: MediaStatus): boolean =>
+  status === MediaStatus.PARTIALLY_AVAILABLE ||
+  status === MediaStatus.AVAILABLE;
+
 const applyMangaMediaChange = async (
   manager: EntityManager,
   anilistId: number,
@@ -241,6 +245,14 @@ const applyMangaMediaChange = async (
   if (!change.media) {
     await createMangaMedia(manager, anilistId, change.status);
     return 'mediaCreated';
+  }
+  // Recently Added lists media by this date, so it marks each time a title
+  // becomes available rather than a move between partial and available.
+  if (
+    isRaisedStatus(change.status) &&
+    (!isRaisedStatus(change.media.status) || change.media.mediaAddedAt == null)
+  ) {
+    change.media.mediaAddedAt = new Date();
   }
   change.media.status = change.status;
   await manager.save(change.media);

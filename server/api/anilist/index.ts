@@ -42,13 +42,16 @@ import type {
   AnilistMangaSummary,
 } from './manga';
 import {
+  ANILIST_MANGA_BATCH_SIZE,
   ANILIST_MANGA_DETAILS_TTL_SECONDS,
   ANILIST_MANGA_PAGE_TTL_SECONDS,
+  MANGA_BY_IDS_QUERY,
   MANGA_DETAILS_QUERY,
   MANGA_IDS_BY_MAL_QUERY,
   MANGA_PAGE_QUERY,
   buildAnilistMangaPageVariables,
   sanitizeAnilistMalLinkPage,
+  sanitizeAnilistMangaBatch,
   sanitizeAnilistMangaDetails,
   sanitizeAnilistMangaPage,
   sanitizeAnilistMangaSearch,
@@ -449,6 +452,35 @@ class AnilistAPI extends ExternalAPI {
       ANILIST_MANGA_PAGE_TTL_SECONDS
     );
     return sanitizeAnilistMangaPage(data.Page, options);
+  }
+
+  /**
+   * Catalog cards for up to 50 AniList IDs in one cached request. Unknown
+   * IDs are simply missing; the caller applies the content policy.
+   */
+  async getMangaSummariesByIds(
+    ids: readonly number[]
+  ): Promise<AnilistMangaSummary[]> {
+    // Sorted, so the same set of IDs always shares one cache entry.
+    const unique = [...new Set(ids)].sort((a, b) => a - b);
+    if (unique.length > ANILIST_MANGA_BATCH_SIZE) {
+      throw new RangeError(
+        `At most ${ANILIST_MANGA_BATCH_SIZE} manga can be read at once.`
+      );
+    }
+    if (!unique.length) {
+      return [];
+    }
+    const data = await this.graphql<{ Page?: unknown }>(
+      MANGA_BY_IDS_QUERY,
+      { ids: unique },
+      ANILIST_MANGA_DETAILS_TTL_SECONDS
+    );
+    const media = sanitizeAnilistMangaBatch(data.Page, new Set(unique));
+    if (!media) {
+      throw new AnilistBadResponseError();
+    }
+    return media;
   }
 
   /**

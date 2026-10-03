@@ -1,6 +1,7 @@
 import AnilistAPI from '@server/api/anilist';
 import type { AnilistMangaSort } from '@server/api/anilist/manga';
 import {
+  ANILIST_MANGA_BATCH_SIZE,
   ANILIST_MANGA_COUNTRIES,
   ANILIST_MANGA_FORMATS,
   ANILIST_MANGA_STATUSES,
@@ -11,6 +12,7 @@ import { enqueueImageCacheWarm } from '@server/lib/imageCacheWarmer';
 import {
   findMangaMediaByAnilistIds,
   getMangaContentPolicy,
+  isMangaInSuwayomiLibrary,
   sendAnilistFailure,
 } from '@server/lib/mangaCatalog';
 import logger from '@server/logger';
@@ -60,6 +62,68 @@ const valueOf = <T>(result: ParsedQueryValue<T>): T | undefined =>
 
 const mangaRoutes = Router();
 
+const MAX_ANILIST_ID = 2_147_483_647;
+
+// `ids` is a comma-separated list of 1-50 AniList IDs; duplicates collapse.
+const parseMangaIdList = (value: unknown): number[] | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const parts = value.split(',');
+  if (parts.length > ANILIST_MANGA_BATCH_SIZE) {
+    return undefined;
+  }
+  const ids = new Set<number>();
+  for (const part of parts) {
+    const id = /^[1-9]\d{0,9}$/.test(part) ? Number(part) : 0;
+    if (id < 1 || id > MAX_ANILIST_ID) {
+      return undefined;
+    }
+    ids.add(id);
+  }
+  return [...ids];
+};
+
+// Catalog cards for known AniList IDs in request order, one AniList request
+// per call. Unknown and excluded titles are both left out, so the response
+// does not reveal that an excluded title exists.
+mangaRoutes.get('/', async (req, res) => {
+  const ids = parseMangaIdList(req.query.ids);
+  if (!ids) {
+    return res.status(400).json({
+      status: 400,
+      message: `ids must list 1 to ${ANILIST_MANGA_BATCH_SIZE} AniList IDs separated by commas.`,
+    });
+  }
+
+  const policy = getMangaContentPolicy();
+  try {
+    const visible = new Map(
+      (await new AnilistAPI().getMangaSummariesByIds(ids))
+        .filter((manga) => !isAnilistMangaExcluded(manga, policy))
+        .map((manga) => [manga.id, manga])
+    );
+    const mediaByAnilistId = await findMangaMediaByAnilistIds(
+      [...visible.keys()],
+      req.user
+    );
+    const results = ids.flatMap((id) => {
+      const manga = visible.get(id);
+      return manga ? [mapMangaResult(manga, mediaByAnilistId.get(id))] : [];
+    });
+    const body = { results };
+    enqueueImageCacheWarm(extractImageCacheUrls(body));
+    return res.status(200).json(filterEntityResponse(body, req.user));
+  } catch (e) {
+    logger.error('Failed to retrieve manga summaries', {
+      label: 'Manga',
+      ...getHttpErrorDetails(e),
+      count: ids.length,
+    });
+    return sendAnilistFailure(res, e, 'Unable to retrieve manga details.');
+  }
+});
+
 mangaRoutes.get('/:id', async (req, res) => {
   const anilistId = parsePositiveRouteId(req.params.id);
   if (anilistId === undefined) {
@@ -79,7 +143,10 @@ mangaRoutes.get('/:id', async (req, res) => {
     const media = (await findMangaMediaByAnilistIds([anilistId], req.user)).get(
       anilistId
     );
-    const details = mapMangaDetails(manga, policy, media);
+    const details = {
+      ...mapMangaDetails(manga, policy, media),
+      inSuwayomiLibrary: await isMangaInSuwayomiLibrary(anilistId),
+    };
     enqueueImageCacheWarm(extractImageCacheUrls(details));
     return res.status(200).json(filterEntityResponse(details, req.user));
   } catch (e) {

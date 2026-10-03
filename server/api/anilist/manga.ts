@@ -109,6 +109,20 @@ export const MANGA_IDS_BY_MAL_QUERY = `
   }
 `;
 
+export const ANILIST_MANGA_BATCH_SIZE = 50;
+
+// Catalog cards for known IDs, read in one request. Exclusions are applied by
+// the caller, so one cached reply serves every content policy.
+export const MANGA_BY_IDS_QUERY = `
+  query MangaByIds($ids: [Int]) {
+    Page(perPage: ${ANILIST_MANGA_BATCH_SIZE}) {
+      media(id_in: $ids, type: MANGA, sort: [ID]) {
+        ${MANGA_SUMMARY_FIELDS}
+      }
+    }
+  }
+`;
+
 export interface AnilistMangaContentPolicy {
   includeAdult: boolean;
   includeNovels: boolean;
@@ -502,6 +516,28 @@ export const sanitizeAnilistMalLinkPage = (
     }
   }
   return { hasNextPage: value.pageInfo.hasNextPage, links };
+};
+
+/**
+ * Undefined when the reply is not a page of media at all. Rows for IDs that
+ * were not requested, and rows that fail sanitizing, are dropped.
+ */
+export const sanitizeAnilistMangaBatch = (
+  value: unknown,
+  requested: ReadonlySet<number>
+): AnilistMangaSummary[] | undefined => {
+  if (!isRecord(value) || !Array.isArray(value.media)) {
+    return undefined;
+  }
+  const seen = new Set<number>();
+  return value.media.slice(0, ANILIST_MANGA_BATCH_SIZE).flatMap((item) => {
+    const manga = sanitizeAnilistMangaSummary(item);
+    if (!manga || !requested.has(manga.id) || seen.has(manga.id)) {
+      return [];
+    }
+    seen.add(manga.id);
+    return [manga];
+  });
 };
 
 /** Undefined when the reply is not a page of media at all. */

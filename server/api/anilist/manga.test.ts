@@ -619,6 +619,76 @@ describe('AniList library matching requests', () => {
   });
 });
 
+describe('AniList manga batch reads', () => {
+  it('reads several IDs in one cached request and keeps only requested IDs', async () => {
+    const api = new AnilistAPI();
+    const bodies = stubAnilist(api, () =>
+      mangaPage([
+        mangaFixture({ id: 3 }),
+        mangaFixture({ id: 1, isAdult: true }),
+        mangaFixture({ id: 99 }),
+        mangaFixture({ id: 3 }),
+        { id: 'broken' },
+      ])
+    );
+
+    const first = await api.getMangaSummariesByIds([3, 1, 3, 2]);
+    const second = await api.getMangaSummariesByIds([2, 1, 3]);
+
+    assert.equal(bodies.length, 1);
+    assert.match(bodies[0].query, /id_in: \$ids, type: MANGA/);
+    assert.match(bodies[0].query, /perPage: 50/);
+    assert.deepEqual(bodies[0].variables, { ids: [1, 2, 3] });
+    // The policy is the caller's, so an adult title still comes back.
+    assert.deepEqual(
+      first.map((manga) => manga.id),
+      [3, 1]
+    );
+    assert.deepEqual(second, first);
+    assert.deepEqual(sleeps, []);
+  });
+
+  it('spends nothing on an empty list and refuses more than 50 IDs', async () => {
+    const api = new AnilistAPI();
+    const bodies = stubAnilist(api, () => mangaPage([]));
+
+    assert.deepEqual(await api.getMangaSummariesByIds([]), []);
+    await assert.rejects(
+      api.getMangaSummariesByIds(Array.from({ length: 51 }, (_, i) => i + 1)),
+      RangeError
+    );
+    assert.equal(bodies.length, 0);
+  });
+
+  it('rejects malformed batch pages and reports rate limits', async () => {
+    // Replies are cached per ID set, so each case reads its own ID.
+    for (const [id, reply] of [
+      [1, { data: { data: { Page: null } } }],
+      [2, { data: { data: { Page: {} } } }],
+      [3, { data: { data: { Page: { media: 'none' } } } }],
+    ] as const) {
+      const api = new AnilistAPI();
+      stubAnilist(api, () => reply);
+      await assert.rejects(
+        api.getMangaSummariesByIds([id]),
+        (error: unknown) =>
+          error instanceof Error && error.name === 'AnilistBadResponseError'
+      );
+    }
+
+    const limited = new AnilistAPI();
+    stubAnilist(limited, () => ({
+      status: 429,
+      data: {},
+      headers: { 'retry-after': '30' },
+    }));
+    await assert.rejects(
+      limited.getMangaSummariesByIds([4]),
+      rateLimited(30, true)
+    );
+  });
+});
+
 describe('manga detail mapping', () => {
   const details = {
     id: 30013,
