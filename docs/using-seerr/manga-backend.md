@@ -863,7 +863,8 @@ Step 4 also queues a followed chapter again when it left the download queue
 without being downloaded. Chapters that following queued are handed back like
 the others when the request ends; see [When a request ends](#when-a-request-ends).
 Following never changes the library, the **SeerrNG** category, the request
-notes, the server marker, or Suwayomi's settings.
+notes, the server marker, or Suwayomi's settings, and it does not need
+Suwayomi's own automatic chapter downloads.
 
 Change the job's schedule or run it now under **Settings → Jobs & Cache**.
 While the Manga category is off, the job does nothing. When a server cannot be

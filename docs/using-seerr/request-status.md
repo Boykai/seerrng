@@ -53,12 +53,12 @@ requests to Suwayomi; see [Dispatch](./manga-backend.md#dispatch).
 
 ## Follow new chapters
 
-A manga request gets the chapters that its source lists when SeerrNG sends it.
-To also get the chapters that the source adds later, the requester can set
-**Follow New Chapters** to **On** on the request's card. It is **Off** by
-default. SeerrNG then checks for new chapters that fit the request from time to
-time and queues them for download. A completed request shows **Downloading**
-again while new chapters arrive, and SeerrNG sends the **Request Available**
+A manga request gets the matching chapters that its source lists when SeerrNG
+sends it. To also get matching chapters that the source adds later, the
+requester can set **Follow New Chapters** to **On** on the request's card. It
+is **Off** by default. SeerrNG then checks for new chapters from time to time
+and queues them for download. A completed request shows **Downloading** again
+while new chapters arrive, and SeerrNG sends the **Request Available**
 notification again once they are delivered. New chapters use the request's
 approval and do not count against your request quota.
 
