@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { describe, it } from 'node:test';
 
 import {
   ServarrServiceAuthorityChangedError,
   getServarrServiceAdmissionResource,
+  getServarrServiceCollectionAdmissionResource,
+  hasSameServarrServiceAuthority,
   runWithCurrentServarrService,
   runWithServarrServiceAdmission,
   runWithServarrServiceCollectionAdmission,
@@ -12,7 +15,7 @@ import {
   runWithServarrServiceSnapshot,
   runWithServarrServiceSnapshots,
 } from './serviceAdmission';
-import { getSettings } from './settings';
+import { getSettings, type SuwayomiSettings } from './settings';
 
 describe('Servarr service admission', () => {
   it('serializes matching service lifecycles and allows unrelated services', async () => {
@@ -362,6 +365,107 @@ describe('Servarr service admission', () => {
       );
     } finally {
       settings.radarr = previous;
+    }
+  });
+});
+
+describe('Suwayomi service admission', () => {
+  const suwayomi = (
+    overrides: Partial<SuwayomiSettings> = {}
+  ): SuwayomiSettings => ({
+    id: 0,
+    name: 'Suwayomi',
+    hostname: 'suwayomi.local',
+    port: 4567,
+    useSsl: false,
+    isDefault: true,
+    authMode: 'UI_LOGIN',
+    username: 'fake-user',
+    password: randomUUID(),
+    sourceAllowlist: [],
+    preferredLanguages: [],
+    scanlatorPreference: [],
+    requireCbz: true,
+    ...overrides,
+  });
+
+  it('uses the shared admission resource names', () => {
+    assert.equal(
+      getServarrServiceAdmissionResource('suwayomi', 3),
+      'service-config:suwayomi:3'
+    );
+    assert.equal(
+      getServarrServiceCollectionAdmissionResource('suwayomi'),
+      'service-config:suwayomi:collection'
+    );
+  });
+
+  it('treats the address and the stored login as the authority', () => {
+    const current = suwayomi();
+    assert.equal(hasSameServarrServiceAuthority(current, { ...current }), true);
+    const renamed: SuwayomiSettings = {
+      ...current,
+      name: 'Renamed',
+      sourceAllowlist: ['4000000000000000001'],
+      requireCbz: false,
+    };
+    assert.equal(hasSameServarrServiceAuthority(current, renamed), true);
+    const changes: Partial<SuwayomiSettings>[] = [
+      { id: 1 },
+      { hostname: 'elsewhere.local' },
+      { port: 4568 },
+      { useSsl: true },
+      { baseUrl: '/manga' },
+      { authMode: 'BASIC_AUTH' },
+      { username: 'other-user' },
+      { password: randomUUID() },
+    ];
+    for (const change of changes) {
+      assert.equal(
+        hasSameServarrServiceAuthority(current, { ...current, ...change }),
+        false,
+        Object.keys(change)[0]
+      );
+    }
+  });
+
+  it('never matches a keyed service with the same address', () => {
+    const current = suwayomi();
+    const keyed = {
+      id: current.id,
+      hostname: current.hostname,
+      port: current.port,
+      useSsl: current.useSsl,
+      baseUrl: current.baseUrl,
+      apiKey: 'test-key',
+      syncEnabled: true,
+    };
+    assert.equal(hasSameServarrServiceAuthority(current, keyed), false);
+    assert.equal(hasSameServarrServiceAuthority(keyed, current), false);
+  });
+
+  it('rejects a snapshot after the stored password changes', async () => {
+    const settings = getSettings();
+    const previous = settings.suwayomi;
+    const snapshot = suwayomi();
+    settings.suwayomi = [{ ...snapshot, password: randomUUID() }];
+
+    try {
+      await assert.rejects(
+        runWithServarrServiceSnapshot('suwayomi', snapshot, async () => true),
+        ServarrServiceAuthorityChangedError
+      );
+      settings.suwayomi = [snapshot];
+      assert.equal(
+        await runWithServarrServiceSnapshot(
+          'suwayomi',
+          snapshot,
+          async (service) => service.id
+        ),
+        0
+      );
+    } finally {
+      settings.suwayomi = previous;
     }
   });
 });

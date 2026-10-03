@@ -24,8 +24,8 @@ import { REDACTED_SECRET, isValidHttpUrl } from './security';
 const MAX_SERVICE_STRING_LENGTH = 512;
 const MAX_SERVICE_PATH_LENGTH = 4096;
 const MAX_SERVICE_TAGS = 100;
-const MAX_SERVICE_PORT = 65535;
-const MAX_SERVICE_ID = 1_000_000;
+export const MAX_SERVICE_PORT = 65535;
+export const MAX_SERVICE_ID = 1_000_000;
 export const MAX_SERVARR_INSTANCES_PER_TYPE = 50;
 
 export const assertServarrInstanceCapacity = (
@@ -113,7 +113,7 @@ const parseNumberArray = (
   return { value: [...parsedValues] };
 };
 
-const parseRequiredServiceString = (
+export const parseRequiredServiceString = (
   value: unknown,
   fieldName: string,
   maxLength = MAX_SERVICE_STRING_LENGTH
@@ -141,7 +141,7 @@ const parseOptionalExternalUrl = (
     : { error: 'externalUrl must be a valid HTTP URL.' };
 };
 
-const parseOptionalUrlBase = (
+export const parseOptionalUrlBase = (
   value: unknown
 ): { value: string | undefined } | { error: string } => {
   const parsed = parseOptionalServiceString(value, 'baseUrl');
@@ -157,7 +157,7 @@ const parseOptionalUrlBase = (
     : { error: 'baseUrl must be a relative path.' };
 };
 
-const parseServiceBoolean = (
+export const parseServiceBoolean = (
   value: unknown,
   fieldName: string
 ): { value: boolean } | { error: string } => {

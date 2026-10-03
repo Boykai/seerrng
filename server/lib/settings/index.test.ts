@@ -8,6 +8,7 @@ import Settings, {
   assertSettingsFileSize,
   MAX_SETTINGS_FILE_BYTES,
   type ReadarrSettings,
+  type SuwayomiSettings,
 } from '.';
 
 const temporaryDirectories: string[] = [];
@@ -46,9 +47,45 @@ describe('Settings reset', () => {
 
     assert.equal(settings.network.csrfProtection, false);
   });
+
+  it('starts and resets with no Suwayomi instances', () => {
+    const settings = new Settings();
+    assert.deepStrictEqual(settings.suwayomi, []);
+
+    settings.suwayomi = [{ id: 0 } as SuwayomiSettings];
+    settings.reset();
+
+    assert.deepStrictEqual(settings.suwayomi, []);
+  });
+
+  it('adds the Suwayomi section to settings files saved before it existed', async () => {
+    const directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'seerr-settings-state-')
+    );
+    temporaryDirectories.push(directory);
+    const settingsPath = path.join(directory, 'settings.json');
+    const settings = new Settings(undefined, settingsPath, true);
+    await settings.load(undefined, true);
+    const persisted = JSON.parse(await fs.readFile(settingsPath, 'utf8'));
+    delete persisted.suwayomi;
+    await fs.writeFile(settingsPath, JSON.stringify(persisted));
+    settings.suwayomi = [{ id: 0 } as SuwayomiSettings];
+
+    settings.refreshIfChangedSync();
+
+    assert.deepStrictEqual(settings.suwayomi, []);
+  });
 });
 
 describe('Public settings', () => {
+  it('reports whether a Suwayomi instance is configured', () => {
+    const settings = new Settings();
+    assert.strictEqual(settings.fullPublicSettings.suwayomiEnabled, false);
+
+    settings.suwayomi = [{ id: 0 } as SuwayomiSettings];
+
+    assert.strictEqual(settings.fullPublicSettings.suwayomiEnabled, true);
+  });
   it('reports ebook and audiobook service availability separately', () => {
     const settings = new Settings();
     settings.readarr = [{ serviceType: 'audiobook' } as ReadarrSettings];

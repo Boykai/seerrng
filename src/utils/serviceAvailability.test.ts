@@ -318,6 +318,25 @@ describe('isOptionalCatalogPathEnabled', () => {
         }),
         true
       );
+      // The catalog uses only AniList, so a Suwayomi server changes nothing.
+      for (const suwayomiEnabled of [false, true]) {
+        strictEqual(
+          isOptionalCatalogPathEnabled(path, {
+            ...availability,
+            suwayomiEnabled,
+            enabledMediaCategories: { manga: true },
+          }),
+          true
+        );
+        strictEqual(
+          isOptionalCatalogPathEnabled(path, {
+            ...availability,
+            suwayomiEnabled,
+            enabledMediaCategories: { manga: false },
+          }),
+          false
+        );
+      }
     }
     strictEqual(
       isOptionalCatalogPathEnabled('/discover/comics', {

@@ -46,6 +46,7 @@ export interface PublicSettingsResponse {
   magazinesEnabled: boolean;
   softwareEnabled: boolean;
   romarrEnabled?: boolean;
+  suwayomiEnabled: boolean;
   enabledMediaCategories?: EnabledMediaCategories;
   discoverRegion: string;
   streamingRegion: string;
