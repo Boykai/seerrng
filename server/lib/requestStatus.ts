@@ -1000,6 +1000,14 @@ const getStageFromRequest = (
       downloads,
     };
   }
+  if (request.type === MediaType.MANGA) {
+    // Approved manga requests wait for their dispatch; nothing searches yet.
+    return {
+      stage: RequestStatusStage.APPROVED,
+      queueFailure: false,
+      downloads,
+    };
+  }
 
   return {
     stage: RequestStatusStage.SEARCHING,

@@ -49,6 +49,15 @@ export type MediaRequestBody = {
   userId?: number;
   tags?: number[];
   ignoreQuota?: boolean;
+  /** Manga only: which chapters to fetch; every chapter when omitted. */
+  mangaScope?: MangaRequestScopeInput;
+};
+
+export type MangaRequestScopeInput = {
+  scope?: 'ALL_AT_DISPATCH' | 'LATEST_N' | 'RANGE';
+  latestCount?: number | null;
+  rangeStart?: number | null;
+  rangeEnd?: number | null;
 };
 
 export type BulkMediaRequestItem = {

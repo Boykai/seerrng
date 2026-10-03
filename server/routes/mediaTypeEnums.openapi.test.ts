@@ -57,26 +57,6 @@ const RELEASE_CALENDAR =
 // Keyed by the location printed in a failure. Remove an entry when its enum
 // gains manga; the audit fails on entries that no longer match.
 const MANGA_ENUM_EXCLUSIONS: Record<string, Exclusion> = {
-  'GET /request query mediaType': {
-    owner: 'L8',
-    reason: 'Request list filter; manga requests arrive with the requests API.',
-  },
-  'POST /request body mediaType': {
-    owner: 'L8',
-    reason: 'L1 rejects manga requests until the requests API lands.',
-  },
-  'PUT /request/{requestId} body mediaType': {
-    owner: 'L8',
-    reason: 'Request edits follow manga request creation.',
-  },
-  'GET /request/status query mediaType': {
-    owner: 'L8',
-    reason: 'Request lifecycle filter follows manga request creation.',
-  },
-  'schema RequestStatusHistoryItem mediaType': {
-    owner: 'L8',
-    reason: 'Request lifecycle history follows manga request creation.',
-  },
   'schema BulkMediaRequestBody mediaType': {
     owner: 'post-MVP',
     reason:

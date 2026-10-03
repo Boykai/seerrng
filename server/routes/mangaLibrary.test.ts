@@ -2,9 +2,14 @@ import AnilistAPI from '@server/api/anilist';
 import type { AnilistMangaSummary } from '@server/api/anilist/manga';
 import MangaDexAPI from '@server/api/mangadex';
 import { SUWAYOMI_TRACKER_IDS } from '@server/api/suwayomi';
-import { MediaStatus } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
 import MangaMatchCandidate from '@server/entity/MangaMatchCandidate';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import MangaSourceBinding, {
   MangaBindingConfidence,
   MangaBindingState,
@@ -13,6 +18,9 @@ import MangaSourceBinding, {
 import MediaIdentifier, {
   MediaIdentifierProvider,
 } from '@server/entity/MediaIdentifier';
+import { MediaRequest } from '@server/entity/MediaRequest';
+import { RequestDispatchOutbox } from '@server/entity/RequestDispatchOutbox';
+import { User } from '@server/entity/User';
 import type { MangaLibraryItemState } from '@server/interfaces/api/mangaLibraryInterfaces';
 import { createMangaMedia } from '@server/lib/mangaMedia';
 import { mangaLibraryScanner } from '@server/lib/scanners/manga/suwayomi';
@@ -789,5 +797,71 @@ describe('manga library review: reject', () => {
     assert.equal((await reject({ anilistId: 0 })).status, 400);
     assert.equal((await reject({ extra: true })).status, 400);
     assert.deepEqual(await bindings(), []);
+  });
+});
+
+describe('manga library review: requests', () => {
+  /** A pending manga request on instance 1, parked as the flow records it. */
+  const recordRequest = async (anilistId: number) => {
+    const media = await dataSource.transaction((manager) =>
+      createMangaMedia(manager, anilistId, MediaStatus.PENDING)
+    );
+    const saved = await getRepository(MediaRequest).save(
+      new MediaRequest({
+        type: MediaType.MANGA,
+        media,
+        requestedBy: await getRepository(User).findOneByOrFail({ id: 1 }),
+        status: MediaRequestStatus.PENDING,
+        is4k: false,
+        serverId: 1,
+      })
+    );
+    await getRepository(MangaRequestManifest).insert({
+      requestId: saved.id,
+      anilistId,
+      instanceId: 1,
+    });
+  };
+
+  const requestStates = async () =>
+    (
+      await getRepository(MangaRequestManifest).find({ order: { id: 'ASC' } })
+    ).map(({ anilistId, bindingState }) => [anilistId, bindingState]);
+
+  it('releases a parked request when its title is bound and parks it when the binding goes', async () => {
+    const manga = fakeLibraryManga(1, { chapterCount: 1, downloadCount: 1 });
+    await serve({ mangas: [manga] });
+    await recordRequest(201);
+    await recordRequest(202);
+    const agent = await asAdmin();
+
+    const bound = await agent
+      .post(`${BASE}/bind`)
+      .send({ instanceId: 1, anilistId: 201, suwayomiMangaId: 1 });
+    assert.equal(bound.status, 200);
+    assert.deepEqual(await requestStates(), [
+      [201, 'BOUND'],
+      [202, 'AWAITING_BINDING'],
+    ]);
+
+    // Rebinding demotes 201: its request is parked and 202's released.
+    const rebound = await agent
+      .post(`${BASE}/bind`)
+      .send({ instanceId: 1, anilistId: 202, suwayomiMangaId: 1 });
+    assert.equal(rebound.status, 200);
+    assert.deepEqual(await requestStates(), [
+      [201, 'AWAITING_BINDING'],
+      [202, 'BOUND'],
+    ]);
+
+    const rejected = await agent
+      .post(`${BASE}/reject`)
+      .send({ ...itemKey(manga), anilistId: 202 });
+    assert.equal(rejected.status, 200);
+    assert.deepEqual(await requestStates(), [
+      [201, 'AWAITING_BINDING'],
+      [202, 'AWAITING_BINDING'],
+    ]);
+    assert.equal(await getRepository(RequestDispatchOutbox).count(), 0);
   });
 });

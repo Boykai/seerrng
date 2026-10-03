@@ -87,6 +87,44 @@ const MANGA_SCHEMA_OBJECTS: readonly SchemaObject[] = [
     table: 'manga_match_candidate',
     name,
   })),
+  // Manga request manifests and their chapter rows.
+  ...[
+    'requestId',
+    'anilistId',
+    'instanceId',
+    'scope',
+    'latestCount',
+    'rangeStart',
+    'rangeEnd',
+    'bindingState',
+    'boundAt',
+    'checkpoint',
+    'checkpointAt',
+    'attempts',
+    'lastError',
+    'frozenAt',
+  ].map((name): SchemaObject => ({
+    kind: 'column',
+    table: 'manga_request_manifest',
+    name,
+  })),
+  {
+    kind: 'index',
+    table: 'manga_request_manifest',
+    name: 'IDX_manga_request_manifest_anilistId',
+  },
+  {
+    kind: 'index',
+    table: 'manga_request_manifest',
+    name: 'IDX_manga_request_manifest_instanceId',
+  },
+  ...['manifestId', 'url', 'urlHash', 'chapterNumber', 'scanlator'].map(
+    (name): SchemaObject => ({
+      kind: 'column',
+      table: 'manga_request_chapter',
+      name,
+    })
+  ),
 ];
 
 const driver = isPgsql ? 'postgres' : 'sqlite';

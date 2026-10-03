@@ -1,21 +1,21 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it, mock } from 'node:test';
 
+import AnilistAPI from '@server/api/anilist';
 import ExternalAPI from '@server/api/externalapi';
 import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import {
   DuplicateMediaRequestError,
-  MANGA_REQUESTS_UNAVAILABLE_MESSAGE,
   MediaRequest,
   QuotaRestrictedError,
-  ServiceConfigurationError,
   hasMediaRequestPermission,
 } from '@server/entity/MediaRequest';
 import SeasonRequest from '@server/entity/SeasonRequest';
 import { User } from '@server/entity/User';
 import { Permission } from '@server/lib/permissions';
+import { getSettings } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
 
 // get is a prototype method unlike getMovie, and replaces the cache lookup too
@@ -206,30 +206,59 @@ describe('MediaRequest.request', () => {
     );
   });
 
-  it('rejects manga requests before writing any media or request row', async () => {
+  it('records manga requests without a TMDB lookup or a 4K variant', async (t) => {
+    const settings = getSettings();
+    const savedSuwayomi = settings.suwayomi;
+    settings.suwayomi = [
+      {
+        id: 1,
+        name: 'Suwayomi',
+        hostname: 'localhost',
+        port: 4567,
+        useSsl: false,
+        baseUrl: '',
+        isDefault: true,
+        authMode: 'NONE',
+        username: '',
+        password: '',
+        sourceAllowlist: [],
+        preferredLanguages: [],
+        scanlatorPreference: [],
+        requireCbz: true,
+      },
+    ];
+    t.after(() => {
+      settings.suwayomi = savedSuwayomi;
+    });
+    const anilist = mock.method(
+      AnilistAPI.prototype,
+      'getMangaDetails',
+      async (id: number) => ({
+        id,
+        titles: { english: 'Sample Manga' },
+        synonyms: [],
+        format: 'MANGA',
+        isAdult: false,
+        genres: [],
+        tags: [],
+        staff: [],
+      })
+    );
+    t.after(() => anilist.mock.restore());
     const requester = await createRequester(
       'manga@seerr.dev',
       Permission.REQUEST + Permission.REQUEST_MANGA
     );
-    const admin = await getRepository(User).findOneOrFail({
-      where: { email: 'admin@seerr.dev' },
-    });
 
-    for (const user of [requester, admin]) {
-      await assert.rejects(
-        () =>
-          MediaRequest.request(
-            { mediaId: 12345, mediaType: MediaType.MANGA, is4k: false },
-            user
-          ),
-        (error: unknown) =>
-          error instanceof ServiceConfigurationError &&
-          error.message === MANGA_REQUESTS_UNAVAILABLE_MESSAGE
-      );
-    }
+    const request = await MediaRequest.request(
+      { mediaId: 12345, mediaType: MediaType.MANGA, is4k: true },
+      requester
+    );
 
-    assert.strictEqual(await getRepository(MediaRequest).count(), 0);
-    assert.strictEqual(await getRepository(Media).count(), 0);
+    assert.strictEqual(request.type, MediaType.MANGA);
+    assert.strictEqual(request.is4k, false);
+    assert.strictEqual(await getRepository(MediaRequest).count(), 1);
+    assert.strictEqual(anilist.mock.callCount(), 1);
     assert.strictEqual(externalApiGetMock.callCount(), 0);
   });
 });

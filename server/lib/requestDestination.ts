@@ -8,9 +8,17 @@ export type RequestServiceType =
   | 'mylar'
   | 'kapowarr'
   | 'backissue'
-  | 'lazylibrarian';
+  | 'lazylibrarian'
+  | 'suwayomi';
 export type RequestTargetFormat =
-  'standard' | '4k' | 'music' | 'ebook' | 'audiobook' | 'comic' | 'magazine';
+  | 'standard'
+  | '4k'
+  | 'music'
+  | 'ebook'
+  | 'audiobook'
+  | 'comic'
+  | 'magazine'
+  | 'manga';
 
 export interface RequestDestination {
   serviceType: RequestServiceType;

@@ -32,6 +32,7 @@ import {
   newMangaMediaTally,
   reconcileMangaMedia,
 } from '@server/lib/mangaMedia';
+import { syncMangaRequestBindings } from '@server/lib/mangaRequestBindings';
 import type { SuwayomiSettings } from '@server/lib/settings';
 import { getSuwayomiClient } from '@server/lib/suwayomi/clientFactory';
 import {
@@ -362,6 +363,21 @@ const reconcileAfter = async (instanceId: number, anilistIds: number[]) => {
   }
 };
 
+/**
+ * Requests on the decided titles follow the decision, including a link whose
+ * chapter counts were unreadable and so was not reconciled.
+ */
+const syncRequestsAfter = async (anilistIds: number[]) => {
+  try {
+    await syncMangaRequestBindings(dataSource.manager, anilistIds);
+  } catch (error) {
+    logger.warn('Manga request binding sync failed after a review', {
+      label: LABEL,
+      code: error instanceof Error ? error.name : 'UNKNOWN',
+    });
+  }
+};
+
 const translateWriteError = (error: unknown): never => {
   if (error instanceof SuwayomiInstanceChangedError) {
     throw new MangaLibraryError('MANGA_INSTANCE_CHANGED');
@@ -461,6 +477,9 @@ export const linkMangaLibraryItem = (
         ...(read.counts ? [anilistId] : []),
         ...(demoted === undefined ? [] : [demoted]),
       ]);
+      await syncRequestsAfter(
+        demoted === undefined ? [anilistId] : [anilistId, demoted]
+      );
       return loadItemState(read);
     })
   ).catch(translateWriteError);
@@ -543,6 +562,7 @@ export const rejectMangaLibraryPair = async (
         anilistId,
       });
       await reconcileAfter(instanceId, [anilistId]);
+      await syncRequestsAfter([anilistId]);
       return loadItemState(key);
     })
   ).catch(translateWriteError);

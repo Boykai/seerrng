@@ -25,6 +25,7 @@ import {
   newMangaMediaTally,
   reconcileMangaMedia,
 } from '@server/lib/mangaMedia';
+import { syncMangaRequestBindings } from '@server/lib/mangaRequestBindings';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import type {
   RunnableScanner,
@@ -321,6 +322,7 @@ class MangaLibraryScanner
         await this.scanInstance(run, instanceId);
         this.progress += 1;
       }
+      if (!run.signal.aborted) await this.syncRequestBindings();
       this.log(
         run.signal.aborted
           ? 'Manga library scan cancelled'
@@ -335,6 +337,21 @@ class MangaLibraryScanner
     } finally {
       if (this.controller === controller) this.controller = undefined;
       this.endRun(sessionId);
+    }
+  }
+
+  /**
+   * Every unfrozen manga request follows the bindings the run left, including
+   * titles no instance reconciled this time. Takes no admission and never
+   * enqueues dispatch.
+   */
+  private async syncRequestBindings(): Promise<void> {
+    try {
+      await syncMangaRequestBindings(dataSource.manager);
+    } catch (error) {
+      this.log('Manga request binding sync failed', 'warn', {
+        code: failureCode(error),
+      });
     }
   }
 

@@ -16,7 +16,6 @@ import MediaIdentifier, {
 import {
   BlocklistedMediaError,
   DuplicateMediaRequestError,
-  MANGA_REQUESTS_UNAVAILABLE_MESSAGE,
   MediaRequest,
   NoSeasonsAvailableError,
   QuotaRestrictedError,
@@ -51,6 +50,18 @@ import {
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import { normalizeValidIsbn } from '@server/lib/isbn';
 import { cleanMagazineTitle } from '@server/lib/magazineIdentity';
+import { sendAnilistFailure } from '@server/lib/mangaCatalog';
+import {
+  MangaCatalogUnavailableError,
+  MangaRequestNotFoundError,
+  MangaRequestScopeError,
+  loadMangaRequestScopeSummaries,
+  parseMangaRequestId,
+  parseMangaRequestScope,
+  selectMangaRequestInstance,
+  updateMangaRequestManifest,
+  type MangaRequestManifestEdit,
+} from '@server/lib/mangaRequests';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { hydrateMediaRequestRelations } from '@server/lib/mediaRequestHydration';
 import { aliasDownloadId } from '@server/lib/mediaResponse';
@@ -260,6 +271,7 @@ const requestMediaTypeFilters = [
   'book',
   'comic',
   'magazine',
+  'manga',
 ] as const;
 const requestStatusFilters = [
   'all',
@@ -460,6 +472,28 @@ const protectRequestStatusDownloadId = <
   status.downloadId
     ? { ...status, downloadId: aliasDownloadId(status.downloadId) }
     : status;
+
+/** Adds the read-only chapter scope summary to each manga request. */
+const attachMangaScopes = async (
+  requests: readonly MediaRequest[]
+): Promise<void> => {
+  const ids = requests
+    .filter(({ type }) => type === MediaType.MANGA)
+    .map(({ id }) => id);
+  if (ids.length === 0) {
+    return;
+  }
+  const summaries = await loadMangaRequestScopeSummaries(
+    dataSource.manager,
+    ids
+  );
+  for (const request of requests) {
+    const mangaScope = summaries.get(request.id);
+    if (mangaScope) {
+      Object.assign(request, { mangaScope });
+    }
+  }
+};
 
 const getBulkRequestLogBody = (
   body: Partial<BulkMediaRequestBody> | undefined
@@ -1148,6 +1182,44 @@ const sanitizeMediaRequestBody = (
     }
   }
 
+  if (mediaType === MediaType.MANGA) {
+    const mediaId = parseMangaRequestId(bodyObject.mediaId);
+    if (bodyObject.mediaId !== undefined && mediaId === undefined) {
+      return {
+        error: {
+          status: 400,
+          message: 'mediaId must be a positive integer AniList ID.',
+        },
+      };
+    }
+    if (options.requireCreateIdentity && mediaId === undefined) {
+      return {
+        error: {
+          status: 400,
+          message: 'mediaId is required for manga requests.',
+        },
+      };
+    }
+    if (mediaId !== undefined) {
+      bodyObject.mediaId = mediaId;
+    }
+  }
+  if (bodyObject.mangaScope !== undefined) {
+    if (mediaType !== undefined && mediaType !== MediaType.MANGA) {
+      return {
+        error: {
+          status: 400,
+          message: 'mangaScope is only valid for manga requests.',
+        },
+      };
+    }
+    const mangaScope = parseMangaRequestScope(bodyObject.mangaScope);
+    if ('error' in mangaScope) {
+      return { error: { status: 400, message: mangaScope.error } };
+    }
+    bodyObject.mangaScope = mangaScope.value;
+  }
+
   if (mediaType === MediaType.MAGAZINE) {
     const parsedTitle = parseOptionalRequestString(
       bodyObject.mediaId,
@@ -1662,7 +1734,20 @@ const validateExternalServiceConfiguration = (
   }
 
   if (requestType === MediaType.MANGA) {
-    throw new ServiceConfigurationError(MANGA_REQUESTS_UNAVAILABLE_MESSAGE);
+    if (settings.suwayomi.length === 0) {
+      throw new ServiceConfigurationError(
+        'No Suwayomi server is configured for manga requests.'
+      );
+    }
+    if (
+      serverId !== undefined &&
+      serverId !== null &&
+      !settings.suwayomi.some((service) => service.id === serverId)
+    ) {
+      throw new ServiceConfigurationError(
+        'The selected Suwayomi server no longer exists.'
+      );
+    }
   }
 };
 
@@ -2017,6 +2102,11 @@ requestRoutes.get<
           type: MediaType.MAGAZINE,
         });
         break;
+      case 'manga':
+        query = query.andWhere('request.type = :type', {
+          type: MediaType.MANGA,
+        });
+        break;
     }
 
     const [requestRows, requestCount] = await query
@@ -2027,6 +2117,7 @@ requestRoutes.get<
     const requests = await hydrateMediaRequestRelations(requestRows, {
       includeMediaIdentifiers: true,
     });
+    await attachMangaScopes(requests);
 
     const canHydrateServiceProfiles =
       requestReadLease?.actor.hasPermission(
@@ -2477,6 +2568,7 @@ requestRoutes.post<never, MediaRequest, MediaRequestBody>(
       const request = await MediaRequest.request(body.value, req.user, {
         expectedCredentialVersion: getExpectedCredentialVersion(req),
       });
+      await attachMangaScopes([request]);
 
       return res.status(201).json(filterEntityResponse(request, req.user));
     } catch (error) {
@@ -2498,7 +2590,16 @@ requestRoutes.post<never, MediaRequest, MediaRequestBody>(
         case DuplicateMediaRequestError:
           return next({ status: 409, message: error.message });
         case ServiceConfigurationError:
+        case MangaRequestScopeError:
           return next({ status: 400, message: error.message });
+        case MangaRequestNotFoundError:
+          return next({ status: 404, message: error.message });
+        case MangaCatalogUnavailableError:
+          return sendAnilistFailure(
+            res,
+            (error as MangaCatalogUnavailableError).failure,
+            error.message
+          );
         case NoSeasonsAvailableError:
           return next({ status: 202, message: error.message });
         case BlocklistedMediaError:
@@ -2851,6 +2952,10 @@ requestRoutes.get('/count', async (req, res, next) => {
           'magazine'
         )
         .addSelect(
+          'SUM(CASE WHEN request.type = :manga THEN 1 ELSE 0 END)',
+          'manga'
+        )
+        .addSelect(
           'SUM(CASE WHEN request.status = :pending THEN 1 ELSE 0 END)',
           'pending'
         )
@@ -2895,6 +3000,7 @@ requestRoutes.get('/count', async (req, res, next) => {
           book: MediaType.BOOK,
           comic: MediaType.COMIC,
           magazine: MediaType.MAGAZINE,
+          manga: MediaType.MANGA,
           pending: MediaRequestStatus.PENDING,
           approved: MediaRequestStatus.APPROVED,
           declined: MediaRequestStatus.DECLINED,
@@ -2931,6 +3037,7 @@ requestRoutes.get('/count', async (req, res, next) => {
         book: count('book'),
         comic: count('comic'),
         magazine: count('magazine'),
+        manga: count('manga'),
         pending: count('pending'),
         approved: count('approved'),
         declined: count('declined'),
@@ -3073,6 +3180,7 @@ requestRoutes.get<
           sort,
           sortDirection,
         });
+        await attachMangaScopes(page.results.map(({ request }) => request));
 
         return res.status(200).json({
           ...page,
@@ -3218,6 +3326,7 @@ requestRoutes.get<
           return next({ status: 404, message: 'Request not found.' });
         }
         const history = await getRequestStatusHistory(request.id);
+        await attachMangaScopes([request]);
         return res.status(200).json({
           request: filterEntityResponse(request, actor),
           current: protectRequestStatusDownloadId(current),
@@ -3419,6 +3528,7 @@ requestRoutes.get('/:requestId', async (req, res, next) => {
         });
       }
 
+      await attachMangaScopes([request]);
       return res.status(200).json(filterEntityResponse(request, req.user));
     });
   } catch (e) {
@@ -3725,6 +3835,15 @@ requestRoutes.put<{ requestId: string }>(
                   message: 'Request media type cannot be changed.',
                 });
               }
+              if (
+                body.mangaScope !== undefined &&
+                request.type !== MediaType.MANGA
+              ) {
+                return next({
+                  status: 400,
+                  message: 'mangaScope is only valid for manga requests.',
+                });
+              }
 
               if (
                 (request.requestedBy.id !== actor.id ||
@@ -3768,6 +3887,7 @@ requestRoutes.put<{ requestId: string }>(
               return await runWithRequestAdmission(
                 [`request-user:${requestUser.id}`],
                 async () => {
+                  let mangaEdit: MangaRequestManifestEdit | undefined;
                   if (
                     (changesRequestUser || request.type === MediaType.TV) &&
                     !hasMediaRequestPermission(
@@ -4090,6 +4210,45 @@ requestRoutes.put<{ requestId: string }>(
                           })
                       )
                     );
+                  } else if (request.type === MediaType.MANGA) {
+                    const nextServerId =
+                      body.serverId === undefined
+                        ? request.serverId
+                        : body.serverId;
+                    validateExternalServiceConfiguration(
+                      request.type,
+                      nextServerId
+                    );
+                    const instance = selectMangaRequestInstance(
+                      getExternalRuntimeConfig().suwayomi,
+                      nextServerId
+                    );
+                    const scope =
+                      body.mangaScope === undefined
+                        ? undefined
+                        : parseMangaRequestScope(body.mangaScope);
+                    if (!instance) {
+                      throw new ServiceConfigurationError(
+                        'No Suwayomi server is configured for manga requests.'
+                      );
+                    }
+                    if (scope && 'error' in scope) {
+                      return next({ status: 400, message: scope.error });
+                    }
+                    request.serverId = instance.id;
+                    request.serviceTargets = [
+                      {
+                        serviceType: 'suwayomi',
+                        format: 'manga',
+                        serverId: instance.id,
+                        rootFolder: null,
+                        status: MediaStatus.PENDING,
+                      },
+                    ];
+                    mangaEdit = {
+                      instanceId: instance.id,
+                      scope: scope?.value,
+                    };
                   }
 
                   if (changesRequestUser) {
@@ -4101,7 +4260,9 @@ requestRoutes.put<{ requestId: string }>(
                           ? quotas.music
                           : request.type === MediaType.BOOK
                             ? quotas.book
-                            : undefined;
+                            : request.type === MediaType.MANGA
+                              ? quotas.manga
+                              : undefined;
                     if (quota?.restricted) {
                       return next({
                         status: 403,
@@ -4117,7 +4278,34 @@ requestRoutes.put<{ requestId: string }>(
                     request.watchAheadLastReconciledAt = null;
                   }
                   request.requestedBy = requestUser;
-                  await requestRepository.save(request);
+                  if (mangaEdit) {
+                    const edit = mangaEdit;
+                    const saved = await dataSource.transaction(
+                      async (manager) => {
+                        if (
+                          !(await updateMangaRequestManifest(
+                            manager,
+                            request.id,
+                            edit
+                          ))
+                        ) {
+                          return false;
+                        }
+                        await manager.getRepository(MediaRequest).save(request);
+                        return true;
+                      }
+                    );
+                    if (!saved) {
+                      return next({
+                        status: 409,
+                        message:
+                          'The chapter scope of this request can no longer change.',
+                      });
+                    }
+                  } else {
+                    await requestRepository.save(request);
+                  }
+                  await attachMangaScopes([request]);
                   return res
                     .status(200)
                     .json(filterEntityResponse(request, req.user));
@@ -4330,6 +4518,14 @@ requestRoutes.post<{
               return next({
                 status: 403,
                 message: 'You do not have permission to retry this request.',
+              });
+            }
+            // Retry enqueues dispatch directly; manga requests are held until
+            // their dispatcher exists.
+            if (request.type === MediaType.MANGA) {
+              return next({
+                status: 409,
+                message: 'Manga requests are not dispatched yet.',
               });
             }
 
@@ -4557,6 +4753,7 @@ requestRoutes.post<{
               request.status = newStatus;
               request.modifiedBy = actor;
               await requestRepository.save(request);
+              await attachMangaScopes([request]);
 
               return res
                 .status(200)
