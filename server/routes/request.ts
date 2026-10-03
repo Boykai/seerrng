@@ -95,6 +95,7 @@ import {
   RequestStatusStage,
   getRequestStatusHistory,
   getRequestStatusPage,
+  insertRequestStatusEvent,
   isMangaChapterRetryable,
   recordRequestStatus,
 } from '@server/lib/requestStatus';
@@ -3886,7 +3887,7 @@ requestRoutes.put<{ requestId: string }>(
                       previousEpisodeCount
                     )} to ${formatEpisodeQueueSetting(parsedEpisodeCount)}.`;
 
-                    await statusEventRepository.insert(
+                    await insertRequestStatusEvent(
                       new MediaRequestStatusEvent({
                         requestId: current.id,
                         requestedById: current.requestedBy.id,
@@ -3913,7 +3914,11 @@ requestRoutes.put<{ requestId: string }>(
                         ]
                           .join(':')
                           .slice(0, 255),
-                      })
+                      }),
+                      {
+                        latestEvent: latestStatusEvent ?? undefined,
+                        manager,
+                      }
                     );
                   }
 

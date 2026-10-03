@@ -6,6 +6,12 @@ import {
 } from '@server/lib/databaseConfig';
 import { secureSqliteDatabaseFiles } from '@server/lib/sqliteFileSecurity';
 import { isPgsql } from '@server/utils/dbType';
+import {
+  TEST_POSTGRES_DATABASE_VARIABLE,
+  TEST_POSTGRES_URL_VARIABLE,
+  isTestPostgresDatabaseName,
+  parseTestPostgresUrl,
+} from '@server/utils/testPostgresDatabase';
 import fs from 'fs';
 import 'reflect-metadata';
 import type { TlsOptions } from 'tls';
@@ -107,6 +113,47 @@ const testConfig: DataSourceOptions = {
   subscribers: getRuntimeFiles('server/subscriber', 'ts'),
 };
 
+// Live PostgreSQL tests run under Node's test runner against the database the
+// run created; every condition must hold, or tests use in-memory SQLite.
+export const selectTestDataSourceOptions = (
+  env: NodeJS.ProcessEnv
+): DataSourceOptions => {
+  const url = env[TEST_POSTGRES_URL_VARIABLE];
+  const database = env[TEST_POSTGRES_DATABASE_VARIABLE];
+  if (
+    env.NODE_ENV !== 'test' ||
+    env.DB_TYPE !== 'postgres' ||
+    !url ||
+    env.VITEST ||
+    !database
+  ) {
+    return testConfig;
+  }
+  const server = parseTestPostgresUrl(url);
+  if (!isTestPostgresDatabaseName(database)) {
+    throw new Error(
+      `${TEST_POSTGRES_DATABASE_VARIABLE} does not name a test-run database.`
+    );
+  }
+  return {
+    type: 'postgres',
+    host: server.host,
+    port: server.port,
+    username: server.username,
+    password: server.password,
+    database,
+    ssl: false,
+    poolSize: POSTGRES_POOL_SIZE,
+    synchronize: false,
+    dropSchema: false,
+    migrationsRun: false,
+    logging: false,
+    entities: getRuntimeFiles('server/entity', 'ts'),
+    migrations: getMigrationFiles('server/migration/postgres', 'ts'),
+    subscribers: getRuntimeFiles('server/subscriber', 'ts'),
+  };
+};
+
 const devConfig: DataSourceOptions = {
   type: 'better-sqlite3',
   database: SQLITE_DATABASE_PATH,
@@ -177,7 +224,7 @@ const postgresProdConfig: DataSourceOptions = {
 
 function getDataSource(): DataSourceOptions {
   if (process.env.NODE_ENV === 'test') {
-    return testConfig;
+    return selectTestDataSourceOptions(process.env);
   } else if (process.env.NODE_ENV === 'production') {
     return isPgsql ? postgresProdConfig : prodConfig;
   } else {

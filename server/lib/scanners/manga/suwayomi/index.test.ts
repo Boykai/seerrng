@@ -350,13 +350,37 @@ describe('manga library scan: Suwayomi traffic', () => {
 
     await scan();
 
-    const targets = connect.mock.calls.map(({ arguments: [first] }) => {
+    // Sockets come from the HTTP agent (an options object, or the array Node
+    // normalizes it to) and from the database driver (port, then host). The
+    // database's own connections are not Suwayomi traffic.
+    const target = (args: unknown[]) => {
+      const [first, second] = args;
+      if (
+        typeof first === 'number' ||
+        (typeof first === 'string' && /^\d+$/.test(first))
+      ) {
+        return `${typeof second === 'string' ? second : 'localhost'}:${first}`;
+      }
       const options = (Array.isArray(first) ? first[0] : first) as {
         host?: string;
         port?: number | string;
       };
       return `${options.host}:${options.port}`;
-    });
+    };
+    const databaseOptions = dataSource.options;
+    const databaseUrl =
+      databaseOptions.type === 'postgres' && databaseOptions.url
+        ? new URL(databaseOptions.url)
+        : undefined;
+    const database =
+      databaseOptions.type !== 'postgres'
+        ? undefined
+        : databaseUrl
+          ? `${databaseUrl.hostname}:${databaseUrl.port || 5432}`
+          : `${databaseOptions.host ?? 'localhost'}:${databaseOptions.port ?? 5432}`;
+    const targets = connect.mock.calls
+      .map(({ arguments: args }) => target(args))
+      .filter((address) => address !== database);
     assert.ok(targets.length > 0);
     assert.deepEqual(new Set(targets), new Set([new URL(server.url).host]));
     assert.deepEqual(

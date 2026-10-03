@@ -57,7 +57,10 @@ import {
   type MangaRequestScopeValue,
 } from '@server/lib/mangaRequests';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
-import { RequestStatusStage } from '@server/lib/requestStatus';
+import {
+  RequestStatusStage,
+  insertRequestStatusEvent,
+} from '@server/lib/requestStatus';
 import type { SuwayomiSettings } from '@server/lib/settings';
 import { getSuwayomiClient } from '@server/lib/suwayomi/clientFactory';
 import {
@@ -686,11 +689,8 @@ const insertReopenEvent = async (
   latest: MediaRequestStatusEvent | null
 ): Promise<void> => {
   const attempt = (latest?.attempt ?? 0) + 1;
-  await manager
-    .createQueryBuilder()
-    .insert()
-    .into(MediaRequestStatusEvent)
-    .values({
+  await insertRequestStatusEvent(
+    new MediaRequestStatusEvent({
       requestId: request.id,
       requestedById: request.requestedBy.id,
       mediaId: request.media.id,
@@ -707,9 +707,9 @@ const insertReopenEvent = async (
       downloadCount: 0,
       downloadId: null,
       fingerprint: `manga-follow:${attempt}:${Date.now()}`,
-    })
-    .orIgnore()
-    .execute();
+    }),
+    { manager }
+  );
 };
 
 /**
