@@ -45,6 +45,26 @@ export class MangaRequestChapter {
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public createdAt: Date;
 
+  /** When a HEAD request found the chapter's file non-empty: delivered. */
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public deliverableAt: Date | null;
+
+  /** A `MangaChapterQueueState`, as the last progress poll saw it. */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  public lastQueueState: string | null;
+
+  /** Since when no current chapter matches the row. */
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public missingSince: Date | null;
+
+  /** A `MangaChapterFileState`: the last HEAD finding that blocks delivery. */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  public fileState: string | null;
+
+  /** The last HEAD request; the poll checks the oldest first. */
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public headCheckedAt: Date | null;
+
   constructor(init?: Partial<MangaRequestChapter>) {
     Object.assign(this, init);
   }

@@ -212,6 +212,34 @@ const MANGA_SCHEMA_OBJECTS: readonly SchemaObject[] = [
     table: 'manga_instance_marker',
     name,
   })),
+  // Manga progress: poll state on the manifest and on each frozen chapter.
+  ...[
+    'attentionCode',
+    'attentionAt',
+    'progressAt',
+    'progressSignature',
+    'chaptersTotal',
+    'chaptersVerified',
+    'chaptersQueued',
+    'chaptersDownloading',
+    'chaptersErrored',
+    'chaptersMissing',
+  ].map((name): SchemaObject => ({
+    kind: 'column',
+    table: 'manga_request_manifest',
+    name,
+  })),
+  ...[
+    'deliverableAt',
+    'lastQueueState',
+    'missingSince',
+    'fileState',
+    'headCheckedAt',
+  ].map((name): SchemaObject => ({
+    kind: 'column',
+    table: 'manga_request_chapter',
+    name,
+  })),
 ];
 
 const driver = isPgsql ? 'postgres' : 'sqlite';

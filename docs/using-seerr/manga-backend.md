@@ -817,3 +817,92 @@ entries contain IDs, counts, and codes only, never titles or addresses.
 
 When Suwayomi no longer lists some of the chosen chapters in step 7, SeerrNG
 queues the others and logs how many it skipped as `MANGA_CHAPTERS_UNMAPPED`.
+
+## Progress and availability
+
+Once a request's chapters are queued, SeerrNG follows their downloads until
+every chapter chosen for the request is delivered. It then marks the request
+**Available** and sends the **Request Available** notification once.
+
+### Manga Progress job
+
+The **Manga Progress** job runs every 2 minutes. Each run looks at up to 200
+approved requests whose chapters are queued, least recently checked first, so
+every request gets its turn. For each Suwayomi server, it:
+
+- reads the download state and the download queue of those requests' manga in
+  batches;
+- reads a manga's chapter lists only when its downloads, its queue entries, or
+  its chapter list changed since the last run, or when a chapter waits for a
+  file check;
+- checks at most 50 chapter files, least recently checked first, and leaves
+  the rest for the next run;
+- updates the title's **Available** or **Partially Available** status the same
+  way the library scan does; see [Availability](#availability).
+
+Change the job's schedule or run it now under **Settings → Jobs & Cache**.
+While the Manga category is off, the job does nothing. When a server cannot be
+reached, does not accept SeerrNG's login, or changes while the job reads it,
+the run stops on that server and the next run tries again.
+
+The job only reads from Suwayomi. It never asks a source for chapters, and it
+never queues, takes off the queue, downloads again, or deletes anything. Once
+a request's chapters are queued, nothing in SeerrNG queues them again on its
+own.
+
+### Delivered chapters
+
+A chapter counts as delivered once Suwayomi lists it as downloaded and SeerrNG
+has checked its file. SeerrNG asks Suwayomi for the chapter's CBZ file with an
+HTTP `HEAD` request, which transfers no file, and the answer must report a size
+above zero. A chapter whose file is empty or missing, or whose size Suwayomi
+does not report, is not delivered, whatever Suwayomi's download records say.
+SeerrNG does not use Suwayomi's per-user download state; the file check alone
+decides.
+
+A delivered chapter stays delivered unless its file goes away. SeerrNG checks
+the file again when Suwayomi stops listing the chapter as downloaded, at most
+every 30 minutes, and counts the chapter as not delivered once the file is
+gone. After a request is complete, SeerrNG no longer checks its chapters.
+
+When a source changes a chapter's address, SeerrNG follows the change if
+exactly one chapter that the source lists now has the same number and
+scanlator; the chapter at its new address needs its own file check. Otherwise
+the chapter counts as missing and is no longer delivered.
+
+### Request and title status
+
+A request's progress and the title's status answer different questions:
+
+- The title's **Available** or **Partially Available** status covers every
+  chapter that Suwayomi lists for the matched manga, from Suwayomi's download
+  records; see [Availability](#availability).
+- A request is complete once every chapter chosen for it is delivered.
+
+So a request can be complete while the title shows **Partially Available**:
+a request for the latest chapters or for a range of chapter numbers covers
+only part of what Suwayomi lists. The reverse also happens. The title can show
+**Available** while a request is still downloading, for example when another
+scanlator's version of a chapter is downloaded, or when Suwayomi lists a
+chapter as downloaded but its file is gone. Completing a request never changes
+the title's status.
+
+### Requests that need attention
+
+The Manga Progress job records at most one of these codes per request; when
+several apply, it records the first in the table. A code clears by itself once
+its cause is gone, and it never fails, completes, or sends a request again.
+While a request has a code, it does not complete. SeerrNG logs each code when
+it is raised and when it clears, under the **Manga Progress** label. These log
+entries contain IDs, counts, and codes only, never titles or addresses.
+
+| Code | What happened | What to do |
+| --- | --- | --- |
+| `MANGA_INSTANCE_REMOVED` | The request's Suwayomi server was removed from SeerrNG. SeerrNG stops checking the request. | Delete the request so the title can be requested again. |
+| `MANGA_BINDING_ORPHANED` | Suwayomi no longer has the manga the request was sent to, or the title's match on that manga was rejected or is no longer current. When the only change is that the manga left the library, the request shows `MANGA_NOT_IN_LIBRARY` instead, even after the library scan marks the match as no longer current. | Review the match under **Settings → Manga Library**. |
+| `MANGA_NOT_IN_LIBRARY` | The manga left the Suwayomi library. | Add the manga to the library again in Suwayomi. |
+| `MANGA_CHAPTER_ERROR` | Suwayomi could not download some of the chapters. They stay in its download queue with an error. | Check Suwayomi's download queue and logs, fix the cause, then retry the download in Suwayomi. |
+| `MANGA_CHAPTER_FILE_MISSING` | Suwayomi lists some chapters as downloaded, but their files were empty or missing in two checks. | Delete those chapters' downloads in Suwayomi, then queue them again there. |
+| `MANGA_CHAPTER_LENGTH_UNKNOWN` | Suwayomi sent no file size for some downloaded chapters, so SeerrNG cannot confirm them. | Check whether a proxy in front of Suwayomi removes the `Content-Length` header. |
+| `MANGA_CHAPTER_MISSING` | For a day, the source has not listed some of the chapters, and no other chapter replaces them; see [Delivered chapters](#delivered-chapters). | Check the manga's source in Suwayomi. If the chapters do not come back, delete the request and request the title again. |
+| `MANGA_CHAPTER_NOT_QUEUED` | Some chapters were neither downloaded nor queued in two checks in a row, for example because they were taken off the queue, or because their address changed before SeerrNG queued them. | Queue the chapters again in Suwayomi. |

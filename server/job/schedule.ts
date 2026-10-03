@@ -7,6 +7,7 @@ import downloadRecovery from '@server/lib/downloadRecovery';
 import downloadTracker from '@server/lib/downloadtracker';
 import episodeWatchAhead from '@server/lib/episodeWatchAhead';
 import ImageProxy from '@server/lib/imageproxy';
+import { mangaProgressPoller } from '@server/lib/mangaProgress';
 import { mangaSourceResolver } from '@server/lib/mangaResolver';
 import refreshToken from '@server/lib/refreshToken';
 import { captureReleaseCalendarHistory } from '@server/lib/releaseCalendar/history';
@@ -524,6 +525,22 @@ export const startJobs = (): void => {
         { logCompletion: true }
       );
     }),
+  });
+
+  scheduledJobs.push({
+    id: 'manga-progress',
+    name: 'Manga Progress',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['manga-progress'].schedule,
+    job: schedule.scheduleJob(jobs['manga-progress'].schedule, () => {
+      logger.debug('Starting scheduled job: Manga Progress', {
+        label: 'Jobs',
+      });
+      return runTrackedJob('Manga Progress', () => mangaProgressPoller.run());
+    }),
+    running: () => mangaProgressPoller.status().running,
+    cancelFn: () => mangaProgressPoller.cancel(),
   });
 
   // Checks if media is still available in plex/sonarr/radarr libs

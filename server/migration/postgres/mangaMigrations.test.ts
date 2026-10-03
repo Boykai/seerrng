@@ -6,6 +6,7 @@ import { AddMangaLibraryBindings1790986404000 as PortableMangaLibraryMigration }
 import { AddMangaRequestManifests1790986406000 as PortableMangaRequestMigration } from '@server/migration/sqlite/1790986406000-AddMangaRequestManifests';
 import { AddMangaSourceResolution1790986408000 as PortableMangaSourceResolutionMigration } from '@server/migration/sqlite/1790986408000-AddMangaSourceResolution';
 import { AddMangaDispatch1790986411000 as PortableMangaDispatchMigration } from '@server/migration/sqlite/1790986411000-AddMangaDispatch';
+import { AddMangaProgress1790986412000 as PortableMangaProgressMigration } from '@server/migration/sqlite/1790986412000-AddMangaProgress';
 import { DataSource, type QueryRunner } from 'typeorm';
 import { AddMangaIdentityUniqueness1790986402000 } from './1790986402000-AddMangaIdentityUniqueness';
 import { AddMangaQuota1790986403000 } from './1790986403000-AddMangaQuota';
@@ -14,6 +15,7 @@ import { AddMangaMatchProposals1790986405000 } from './1790986405000-AddMangaMat
 import { AddMangaRequestManifests1790986406000 } from './1790986406000-AddMangaRequestManifests';
 import { AddMangaSourceResolution1790986408000 } from './1790986408000-AddMangaSourceResolution';
 import { AddMangaDispatch1790986411000 } from './1790986411000-AddMangaDispatch';
+import { AddMangaProgress1790986412000 } from './1790986412000-AddMangaProgress';
 
 const postgresUrl = process.env.SEERR_TEST_POSTGRES_URL;
 const postgresTest = postgresUrl ? test : test.skip;
@@ -196,6 +198,48 @@ test('PostgreSQL manga dispatch migration creates the SQLite index and keys, and
       `ALTER TABLE "manga_request_manifest" DROP COLUMN IF EXISTS "bindingSourceId"`,
     ]
   );
+});
+
+test('PostgreSQL manga progress migration adds and drops the SQLite columns', async () => {
+  const migration = new AddMangaProgress1790986412000();
+  const columnsOf = (statements: string[]) =>
+    statements.map((statement) => {
+      const [, table, verb, column] =
+        /^ALTER TABLE "([^"]+)" (ADD|DROP)(?: COLUMN)?(?: IF(?: NOT)? EXISTS)? "([^"]+)"/.exec(
+          statement
+        ) ?? [];
+      return `${verb} ${table}.${column}`;
+    });
+  const postgres = await recordStatements(async (queryRunner) => {
+    await migration.up(queryRunner);
+    await migration.down(queryRunner);
+  });
+  // The SQLite migration asks before it adds or drops each column.
+  const portable: string[] = [];
+  let present = false;
+  const sqlite = {
+    query: async (statement: string) => {
+      portable.push(statement);
+    },
+    hasColumn: async () => present,
+  } as unknown as QueryRunner;
+  await new PortableMangaProgressMigration().up(sqlite);
+  present = true;
+  await new PortableMangaProgressMigration().down(sqlite);
+
+  assert.equal(migration.name, 'AddMangaProgress1790986412000');
+  assert.equal(postgres.length, 30);
+  assert.ok(
+    postgres
+      .slice(0, 15)
+      .every((statement) => statement.includes(' ADD COLUMN IF NOT EXISTS '))
+  );
+  assert.ok(
+    postgres
+      .slice(15)
+      .every((statement) => statement.includes(' DROP COLUMN IF EXISTS '))
+  );
+  assert.deepStrictEqual(columnsOf(postgres), columnsOf(portable));
 });
 
 // Temporary tables shadow any real tables for this session only, and the
@@ -866,6 +910,143 @@ postgresTest(
           `SELECT "requestId", "anilistId" FROM "manga_request_manifest"`
         ),
         [{ requestId: 1, anilistId: 900001 }]
+      );
+    });
+  }
+);
+
+postgresTest(
+  'PostgreSQL manga progress migration fills existing rows and reverses',
+  async () => {
+    await withPostgresQueryRunner(async (queryRunner) => {
+      // A private schema keeps the migrated database's tables out of reach,
+      // and the rollback removes it again.
+      await queryRunner.query(`CREATE SCHEMA "manga_progress_check"`);
+      await queryRunner.query(
+        `SET LOCAL search_path TO "manga_progress_check"`
+      );
+      await queryRunner.query(
+        `CREATE TABLE "media_request" ("id" integer PRIMARY KEY)`
+      );
+      const columns = async (table: string) =>
+        (
+          (await queryRunner.query(
+            `SELECT "column_name" AS "name", "data_type" AS "type",
+                    "character_maximum_length" AS "length",
+                    "is_nullable" AS "nullable", "column_default" AS "default"
+             FROM information_schema.columns
+             WHERE "table_schema" = 'manga_progress_check'
+               AND "table_name" = $1
+               AND "column_name" IN (
+                 'attentionCode', 'attentionAt', 'progressAt',
+                 'progressSignature', 'chaptersTotal', 'chaptersVerified',
+                 'chaptersQueued', 'chaptersDownloading', 'chaptersErrored',
+                 'chaptersMissing', 'deliverableAt', 'lastQueueState',
+                 'missingSince', 'fileState', 'headCheckedAt'
+               )
+             ORDER BY "ordinal_position"`,
+            [table]
+          )) as {
+            name: string;
+            type: string;
+            length: number | null;
+            nullable: string;
+            default: string | null;
+          }[]
+        ).map(({ name, type, length, nullable, default: value }) =>
+          [
+            name,
+            length === null ? type : `${type}(${length})`,
+            nullable === 'YES' ? 'null' : 'not null',
+            ...(value === null ? [] : [value]),
+          ].join(' ')
+        );
+
+      await new AddMangaRequestManifests1790986406000().up(queryRunner);
+      await queryRunner.query(`INSERT INTO "media_request" ("id") VALUES (1)`);
+      await queryRunner.query(
+        `INSERT INTO "manga_request_manifest" ("requestId", "anilistId", "instanceId") VALUES (1, 900001, 1)`
+      );
+      await queryRunner.query(
+        `INSERT INTO "manga_request_chapter" ("manifestId", "url", "urlHash", "chapterNumber")
+         SELECT "id", '/fake/chapter/a', 'hash-a', 1.5 FROM "manga_request_manifest"`
+      );
+      const migration = new AddMangaProgress1790986412000();
+      await migration.up(queryRunner);
+      await migration.up(queryRunner);
+
+      assert.deepStrictEqual(await columns('manga_request_manifest'), [
+        'attentionCode character varying(64) null',
+        'attentionAt timestamp with time zone null',
+        'progressAt timestamp with time zone null',
+        'progressSignature character varying(64) null',
+        'chaptersTotal integer not null 0',
+        'chaptersVerified integer not null 0',
+        'chaptersQueued integer not null 0',
+        'chaptersDownloading integer not null 0',
+        'chaptersErrored integer not null 0',
+        'chaptersMissing integer not null 0',
+      ]);
+      assert.deepStrictEqual(await columns('manga_request_chapter'), [
+        'deliverableAt timestamp with time zone null',
+        'lastQueueState character varying(16) null',
+        'missingSince timestamp with time zone null',
+        'fileState character varying(16) null',
+        'headCheckedAt timestamp with time zone null',
+      ]);
+
+      // Existing manifests start unpolled and their rows unverified.
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "attentionCode", "progressAt", "chaptersTotal", "chaptersVerified",
+                  "chaptersQueued", "chaptersDownloading", "chaptersErrored", "chaptersMissing"
+           FROM "manga_request_manifest"`
+        ),
+        [
+          {
+            attentionCode: null,
+            progressAt: null,
+            chaptersTotal: 0,
+            chaptersVerified: 0,
+            chaptersQueued: 0,
+            chaptersDownloading: 0,
+            chaptersErrored: 0,
+            chaptersMissing: 0,
+          },
+        ]
+      );
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "deliverableAt", "lastQueueState", "missingSince", "fileState", "headCheckedAt"
+           FROM "manga_request_chapter"`
+        ),
+        [
+          {
+            deliverableAt: null,
+            lastQueueState: null,
+            missingSince: null,
+            fileState: null,
+            headCheckedAt: null,
+          },
+        ]
+      );
+
+      await migration.down(queryRunner);
+      await migration.down(queryRunner);
+
+      assert.deepStrictEqual(await columns('manga_request_manifest'), []);
+      assert.deepStrictEqual(await columns('manga_request_chapter'), []);
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "requestId", "anilistId" FROM "manga_request_manifest"`
+        ),
+        [{ requestId: 1, anilistId: 900001 }]
+      );
+      assert.deepStrictEqual(
+        await queryRunner.query(
+          `SELECT "urlHash" FROM "manga_request_chapter"`
+        ),
+        [{ urlHash: 'hash-a' }]
       );
     });
   }

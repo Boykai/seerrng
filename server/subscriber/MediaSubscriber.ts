@@ -125,8 +125,9 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
     is4k: boolean
   ) {
     if (event.mediaType === MediaType.MANGA) {
-      // Manga has no availability-driven completion yet; its requests stay as
-      // they are when the media status changes.
+      // A manga request completes when its own chapters are delivered
+      // (`completeMangaRequest` in mangaProgress), never from the title's
+      // library status.
       return;
     }
 
