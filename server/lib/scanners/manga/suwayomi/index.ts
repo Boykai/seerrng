@@ -49,13 +49,31 @@ import {
 import { chunk } from '@server/utils/chunk';
 import { isUniqueConstraintError } from '@server/utils/databaseError';
 import { In, type EntityManager } from 'typeorm';
+import type {
+  LookupBudget,
+  MatchInput,
+  MatchLink,
+  MatchTarget,
+  MatchingWarning,
+  TrackerEvidence,
+} from './matching';
+import {
+  hasTrackerConflict,
+  lookupShare,
+  newLookupBudget,
+  resolveLibraryMatches,
+} from './matching';
 
 /** The client's limit on manga IDs per read. */
 const IDS_PER_READ = 100;
 /** Chapter rows per chapter-state read; a larger manga is read alone. */
 const CHAPTER_ROWS_PER_READ = 5_000;
 const KEYS_PER_WRITE = 100;
-const MAX_ANILIST_ID = 2_147_483_647;
+const MAX_TRACKER_ID = 2_147_483_647;
+const NO_EVIDENCE: TrackerEvidence = {
+  anilistIds: new Set(),
+  malIds: new Set(),
+};
 
 export type MangaLibraryScanWarning =
   | 'UNSUPPORTED_SERVER'
@@ -71,7 +89,8 @@ export type MangaLibraryScanWarning =
   | 'CHAPTER_STATES_FAILED'
   | 'ROW_CHANGED'
   | 'UNIQUE_CONFLICT'
-  | 'IDENTITY_CONFLICT';
+  | 'IDENTITY_CONFLICT'
+  | MatchingWarning;
 
 export interface MangaLibraryScanCounts {
   bindingsCreated: number;
@@ -99,6 +118,10 @@ interface ScanRun {
   completed: Set<number>;
   /** AniList IDs with a failed chapter-state read: no reconcile this run. */
   unreadable: Set<number>;
+  /** Lookup calls left in this run, shared by every instance. */
+  lookups: LookupBudget;
+  /** Instances still to scan in this run, the current one included. */
+  instancesLeft: number;
 }
 
 interface StoredRows {
@@ -108,8 +131,7 @@ interface StoredRows {
 
 type Target =
   | { kind: 'live'; binding: MangaSourceBinding }
-  | { kind: 'link'; anilistId: number }
-  | { kind: 'candidate' }
+  | MatchTarget
   /** The tracker read failed, so nothing about the item changes this run. */
   | { kind: 'unresolved' };
 
@@ -174,10 +196,18 @@ const changedValues = <Row extends object>(
   return changed;
 };
 
-const toAniListId = (remoteId: string): number | undefined =>
-  /^[1-9]\d{0,9}$/.test(remoteId) && Number(remoteId) <= MAX_ANILIST_ID
+const toTrackerId = (remoteId: string): number | undefined =>
+  /^[1-9]\d{0,9}$/.test(remoteId) && Number(remoteId) <= MAX_TRACKER_ID
     ? Number(remoteId)
     : undefined;
+
+/** Step 2: the item's own AniList tracker record. */
+const trackerLink = (anilistId: number): MatchLink => ({
+  kind: 'link',
+  anilistId,
+  confidence: MangaBindingConfidence.TRACKER_LINK,
+  matchedBy: MANGA_MATCHED_BY_ANILIST_TRACKER,
+});
 
 /** Errors that fail one read batch; any other error stops the instance. */
 const isBatchFailure = (error: unknown) =>
@@ -238,7 +268,7 @@ const chapterBatches = (items: readonly SuwayomiLibraryItem[]) => {
 /**
  * Reads every configured Suwayomi library and records which AniList title
  * each source manga is and how much of it is downloaded. It sends Suwayomi
- * reads only, and calls no other service.
+ * reads only, and calls AniList and MangaDex for matching only.
  */
 class MangaLibraryScanner
   extends BaseScanner<never>
@@ -280,6 +310,8 @@ class MangaLibraryScanner
       counts: emptyCounts(),
       completed: new Set(),
       unreadable: new Set(),
+      lookups: newLookupBudget(),
+      instancesLeft: 0,
     };
     this.controller = controller;
     this.counts = run.counts;
@@ -290,8 +322,9 @@ class MangaLibraryScanner
       this.progress = 0;
       this.instanceCount = instanceIds.length;
       await this.orphanRemovedInstances(run, new Set(instanceIds));
-      for (const instanceId of instanceIds) {
+      for (const [index, instanceId] of instanceIds.entries()) {
         if (run.signal.aborted) break;
+        run.instancesLeft = instanceIds.length - index;
         await this.scanInstance(run, instanceId);
         this.progress += 1;
       }
@@ -461,7 +494,7 @@ class MangaLibraryScanner
     const stored = await loadRows(dataSource.manager, instanceId);
     const rowsOf = (item: SuwayomiLibraryItem) =>
       stored.bindings.get(naturalKey(item.sourceId, item.url)) ?? [];
-    let links = new Map<string, number | 'unresolved'>();
+    let links = new Map<string, TrackerEvidence | 'unresolved'>();
     if (capabilities.trackRecords) {
       const unbound = listing.items.filter(
         (item) => !liveBinding(rowsOf(item))
@@ -472,20 +505,56 @@ class MangaLibraryScanner
     }
 
     const targets = new Map<string, Target>();
+    const unmatched: MatchInput[] = [];
+    let conflicts = 0;
     for (const item of listing.items) {
       const rows = rowsOf(item);
       const live = liveBinding(rows);
-      const link = links.get(item.id);
-      let target: Target = { kind: 'candidate' };
-      if (live) target = { kind: 'live', binding: live };
-      else if (link === 'unresolved') target = { kind: 'unresolved' };
-      // Without a live binding, a stored row is a rejection of that pair,
-      // and a rejected pair is never bound again automatically.
-      else if (link && !rows.some((row) => row.anilistId === link)) {
-        target = { kind: 'link', anilistId: link };
+      const evidence = links.get(item.id) ?? NO_EVIDENCE;
+      if (live) {
+        targets.set(item.id, { kind: 'live', binding: live });
+      } else if (evidence === 'unresolved') {
+        targets.set(item.id, { kind: 'unresolved' });
+      } else {
+        // Without a live binding, a stored row is a rejection of that pair,
+        // and a rejected pair is never bound again automatically.
+        const rejected = new Set(rows.map(({ anilistId }) => anilistId));
+        const [anilistId] = evidence.anilistIds;
+        if (evidence.anilistIds.size === 1 && !rejected.has(anilistId)) {
+          targets.set(item.id, trackerLink(anilistId));
+          continue;
+        }
+        if (hasTrackerConflict(evidence)) conflicts += 1;
+        const candidate = stored.candidates.get(
+          naturalKey(item.sourceId, item.url)
+        );
+        unmatched.push({ item, evidence, rejected, candidate });
       }
-      targets.set(item.id, target);
     }
+    if (conflicts > 0) {
+      this.warn(run, 'AMBIGUOUS_TRACKER_LINK', instanceId, conflicts);
+    }
+    const deferred: Partial<LookupBudget> = {};
+    const matches = await resolveLibraryMatches(
+      {
+        signal: run.signal,
+        lookups: run.lookups,
+        share: lookupShare(run.lookups, run.instancesLeft),
+        warn: (code, count, cause) =>
+          this.warn(run, code, instanceId, count, cause),
+        defer: (step, count) => {
+          deferred[step] = (deferred[step] ?? 0) + count;
+        },
+      },
+      unmatched
+    );
+    if (Object.keys(deferred).length > 0) {
+      this.log('Manga library lookups left for a later run', 'info', {
+        instanceId,
+        ...deferred,
+      });
+    }
+    for (const [id, target] of matches) targets.set(id, target);
     const needStates = listing.items.filter((item) => {
       const kind = targets.get(item.id)?.kind;
       return (
@@ -496,16 +565,15 @@ class MangaLibraryScanner
     return { listing, stored, targets, chapterStates };
   }
 
-  /** AniList IDs from AniList tracker records; two distinct IDs match none. */
+  /** The valid AniList and MyAnimeList IDs in each item's tracker records. */
   private async readTrackerLinks(
     run: ScanRun,
     client: SuwayomiAPI,
     instanceId: number,
     items: readonly SuwayomiLibraryItem[]
-  ): Promise<Map<string, number | 'unresolved'>> {
-    const links = new Map<string, number | 'unresolved'>();
+  ): Promise<Map<string, TrackerEvidence | 'unresolved'>> {
+    const links = new Map<string, TrackerEvidence | 'unresolved'>();
     let failed = 0;
-    let ambiguous = 0;
     for (const batch of chunk(items, IDS_PER_READ)) {
       try {
         const results = await client.getTrackRecords(
@@ -513,17 +581,20 @@ class MangaLibraryScanner
           { signal: run.signal }
         );
         for (const { mangaId, records } of results) {
-          const ids = new Set(
-            records.flatMap(({ trackerId, remoteId }) => {
-              const id =
-                trackerId === SUWAYOMI_TRACKER_IDS.aniList
-                  ? toAniListId(remoteId)
-                  : undefined;
-              return id === undefined ? [] : [id];
-            })
-          );
-          if (ids.size > 1) ambiguous += 1;
-          else if (ids.size === 1) links.set(mangaId, [...ids][0]);
+          const ids = (trackerId: number) =>
+            new Set(
+              records.flatMap((record) => {
+                const id =
+                  record.trackerId === trackerId
+                    ? toTrackerId(record.remoteId)
+                    : undefined;
+                return id === undefined ? [] : [id];
+              })
+            );
+          links.set(mangaId, {
+            anilistIds: ids(SUWAYOMI_TRACKER_IDS.aniList),
+            malIds: ids(SUWAYOMI_TRACKER_IDS.myAnimeList),
+          });
         }
       } catch (error) {
         if (!isBatchFailure(error)) throw error;
@@ -532,9 +603,6 @@ class MangaLibraryScanner
       }
     }
     if (failed > 0) this.warn(run, 'TRACK_RECORDS_FAILED', instanceId, failed);
-    if (ambiguous > 0) {
-      this.warn(run, 'AMBIGUOUS_TRACKER_LINK', instanceId, ambiguous);
-    }
     return links;
   }
 
@@ -583,7 +651,11 @@ class MangaLibraryScanner
       const ops: WriteOp[] = [];
       listed.add(key);
       if (target.kind === 'candidate') {
-        const values = { suwayomiMangaId: Number(item.id), title: item.title };
+        const values = {
+          suwayomiMangaId: Number(item.id),
+          title: item.title,
+          ...target.progress,
+        };
         if (!candidate) {
           ops.push({
             counter: 'candidatesCreated',
@@ -645,6 +717,7 @@ class MangaLibraryScanner
           }
         } else {
           anilistIds.add(anilistId);
+          const { confidence, matchedBy } = target;
           ops.push({
             counter: 'bindingsCreated',
             apply: (manager) =>
@@ -654,8 +727,8 @@ class MangaLibraryScanner
                 url,
                 urlHash,
                 anilistId,
-                confidence: MangaBindingConfidence.TRACKER_LINK,
-                matchedBy: MANGA_MATCHED_BY_ANILIST_TRACKER,
+                confidence,
+                matchedBy,
                 origin: MANGA_BINDING_ORIGIN_LIBRARY_SCAN,
                 chapterCount: null,
                 downloadCount: null,

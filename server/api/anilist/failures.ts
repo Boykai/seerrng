@@ -41,6 +41,14 @@ export class AnilistOutageError extends Error {
   }
 }
 
+/** A reply that answered the request with data in an unexpected shape. */
+export class AnilistBadResponseError extends Error {
+  constructor(message = 'AniList returned a malformed response') {
+    super(message);
+    this.name = 'AnilistBadResponseError';
+  }
+}
+
 const OUTAGE_MESSAGE =
   /temporarily disabled|stability issues|service unavailable|under maintenance/i;
 

@@ -28,6 +28,7 @@ export type AvailableCacheIds =
   | 'associations'
   | 'trakt'
   | 'anilist'
+  | 'mangadex'
   | 'simkl'
   | 'personallibrary'
   | 'mdblist';
@@ -159,6 +160,11 @@ class CacheManager {
     anilist: new Cache('anilist', 'AniList API', {
       maxKeys: 500,
       maxBytes: 8 * 1024 * 1024,
+    }),
+    mangadex: new Cache('mangadex', 'MangaDex API', {
+      stdTtl: 86400,
+      maxKeys: 5000,
+      maxBytes: 4 * 1024 * 1024,
     }),
     simkl: new Cache('simkl', 'Simkl API', {
       maxKeys: 500,

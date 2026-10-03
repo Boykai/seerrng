@@ -109,21 +109,80 @@ much of it Suwayomi has downloaded. The job runs every day at 05:45; change its
 schedule or run it now under **Settings → Jobs & Cache**. It does nothing
 while the Manga category is off.
 
-The scan only reads from Suwayomi and never changes anything there. It calls
-no service other than Suwayomi. It covers every manga in the Suwayomi library,
-whichever sources you selected for searching.
+The scan only reads from Suwayomi and never changes anything there. It covers
+every manga in the Suwayomi library, whichever sources you selected for
+searching. To match manga that Suwayomi has no AniList link for, it also sends
+lookups to AniList and MangaDex; see
+[Lookups on AniList and MangaDex](#lookups-on-anilist-and-mangadex).
 
 ### Matching
 
-The scan matches a manga through the AniList link that Suwayomi stores when
-the manga is tracked with AniList in Suwayomi.
+The scan tries these steps in order and stops at the first that matches:
 
-- Only AniList links are used for now. A manga without one, or with links to
-  two different AniList titles, stays unmatched.
-- A match stays in place on later scans, even if the manga's tracker link
-  changes afterwards.
-- SeerrNG keeps unmatched manga for review; matching them by hand arrives in a
-  later release. An unmatched manga never makes a title available.
+1. **AniList tracking:** the AniList link that Suwayomi stores when the manga
+   is tracked with AniList in Suwayomi.
+2. **MyAnimeList tracking:** for a manga tracked with MyAnimeList, the AniList
+   title that AniList lists for that MyAnimeList ID.
+3. **MangaDex link:** for a manga whose address in Suwayomi has the form
+   `/manga/<UUID>`, the AniList link that MangaDex lists for that UUID.
+4. **Title proposal:** SeerrNG searches AniList for the manga's title and keeps
+   the closest result as a proposal for an administrator. A proposal never
+   matches a manga by itself.
+
+- When step 1 finds no match and the manga's tracker records disagree, naming
+  two different AniList titles or two different MyAnimeList IDs, steps 2 and 3
+  are skipped and the manga only gets a proposal.
+- When AniList lists two or more titles for one MyAnimeList ID, step 2 matches
+  nothing, even when an administrator rejected all but one of them, and steps
+  3 and 4 still run.
+- SeerrNG never matches or proposes a title that an administrator rejected for
+  that manga.
+- A match stays in place on later scans, even if the manga's tracker records
+  change afterwards.
+- SeerrNG keeps unmatched manga and their proposals for review; reviewing them
+  arrives in a later release. An unmatched manga never makes a title
+  available.
+
+A proposal is ranked by how closely the manga's title matches the result's
+romaji, English, native, or alternative titles:
+
+- **High:** at least 92% similar and at least 5 percentage points ahead of the
+  next result.
+- **Medium:** at least 75% similar, but not High.
+- **Low:** less than 75% similar; SeerrNG keeps the best of these as a weak
+  guess.
+
+Title searches follow the **Manga Content** switches, so the scan never
+proposes a title that manga discovery hides. Steps 1 to 3 match any title.
+
+### Lookups on AniList and MangaDex
+
+To match manga, the scan sends:
+
+- to AniList, the MyAnimeList IDs of unmatched manga that are tracked with
+  MyAnimeList, and the titles of manga that steps 1 to 3 did not match. These
+  requests share SeerrNG's AniList request budget;
+- to the public API of [MangaDex](https://mangadex.org/), the UUIDs of
+  unmatched library manga whose address in Suwayomi has the form
+  `/manga/<UUID>`. SeerrNG sends only the UUID, never the address or the
+  source. Matches made this way use data from MangaDex.
+
+These lookups cannot be turned off yet, other than by turning off the Manga
+category.
+
+Each run sends at most 10 requests of each kind: MyAnimeList lookups (up to 50
+IDs each), MangaDex lookups (up to 100 UUIDs each), and title searches (one
+title each). With several Suwayomi servers, each server gets an equal part of
+the requests left in the run, and a server that needs fewer leaves the rest to
+the servers scanned after it; a MyAnimeList lookup that a server has started
+can still read its last pages. The scan logs how many manga each server left
+for a later run. A large library is therefore matched over several runs: with
+the daily schedule, up to 10 manga get a title proposal each day. Run the job
+by hand to speed this up. Manga that were never looked up go first, and a
+finished lookup is repeated after 30 days. A lookup that fails or is rate
+limited is retried on a later run, and the manga waits for its later steps
+until then. When MangaDex rate limits or refuses requests, SeerrNG pauses
+MangaDex lookups for up to an hour. MangaDex answers are cached for a day.
 
 ### Availability
 

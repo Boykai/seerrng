@@ -74,6 +74,19 @@ const MANGA_SCHEMA_OBJECTS: readonly SchemaObject[] = [
     table: 'manga_match_candidate',
     name: 'UQ_manga_match_candidate_item',
   },
+  ...[
+    'malId',
+    'malCheckedAt',
+    'mangadexCheckedAt',
+    'titleCheckedAt',
+    'proposedAnilistId',
+    'proposalConfidence',
+    'proposalScore',
+  ].map((name): SchemaObject => ({
+    kind: 'column',
+    table: 'manga_match_candidate',
+    name,
+  })),
 ];
 
 const driver = isPgsql ? 'postgres' : 'sqlite';
