@@ -1970,12 +1970,12 @@ const getRequestStatusCounts = async (options: {
     .leftJoin(
       `(${latestEventQuery.getQuery()})`,
       'latestStatusCountId',
-      'latestStatusCountId.requestId = requestCount.id'
+      '"latestStatusCountId"."requestId" = requestCount.id'
     )
     .leftJoin(
       MediaRequestStatusEvent,
       'latestStatusCount',
-      'latestStatusCount.id = latestStatusCountId.eventId'
+      'latestStatusCount.id = "latestStatusCountId"."eventId"'
     )
     .select('requestCount.status', 'requestStatus')
     .addSelect('latestStatusCount.stage', 'stage')
