@@ -240,18 +240,18 @@ const requestButton = () =>
   );
 
 it.each([
-  ['a manga request permission', true, [Permission.REQUEST_MANGA], true],
-  ['the general request permission', true, [Permission.REQUEST], true],
-  ['only another media permission', true, [Permission.REQUEST_COMIC], false],
+  ['a manga request permission', true, true, [Permission.REQUEST_MANGA]],
+  ['the general request permission', true, true, [Permission.REQUEST]],
+  ['only another media permission', false, true, [Permission.REQUEST_COMIC]],
   [
     'no configured Suwayomi server',
     false,
-    [Permission.REQUEST, Permission.REQUEST_MANGA],
     false,
+    [Permission.REQUEST, Permission.REQUEST_MANGA],
   ],
 ])(
   'shows the manga Request button with %s: %s',
-  async (_case, suwayomiEnabled, granted, shown) => {
+  async (_case, shown, suwayomiEnabled, granted) => {
     state.settings = { suwayomiEnabled };
     state.granted = granted;
     await renderManga();

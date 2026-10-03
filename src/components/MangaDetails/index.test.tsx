@@ -457,13 +457,13 @@ const withRequest = (
   });
 
 it.each([
-  ['REQUEST', [Permission.REQUEST], true, true],
-  ['REQUEST_MANGA', [Permission.REQUEST_MANGA], true, true],
-  ['no request permission', [Permission.MANAGE_BLOCKLIST], true, false],
-  ['REQUEST without a Suwayomi server', [Permission.REQUEST], false, false],
+  ['REQUEST', true, [Permission.REQUEST], true],
+  ['REQUEST_MANGA', true, [Permission.REQUEST_MANGA], true],
+  ['no request permission', false, [Permission.MANAGE_BLOCKLIST], true],
+  ['REQUEST without a Suwayomi server', false, [Permission.REQUEST], false],
 ])(
-  'shows the Request action for %s only when Suwayomi is enabled',
-  async (_case, granted, suwayomiEnabled, shown) => {
+  'shows the Request action for %s: %s',
+  async (_case, shown, granted, suwayomiEnabled) => {
     state.granted = granted;
     state.settings = { suwayomiEnabled };
     await render();

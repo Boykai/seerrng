@@ -224,14 +224,14 @@ it('loads a manga title from the manga API and links to its page', async () => {
 });
 
 it.each([
-  [scope(), 'All'],
-  [scope({ scope: MangaRequestScope.LATEST_N, latestCount: 25 }), 'Latest 25'],
+  ['All', scope()],
+  ['Latest 25', scope({ scope: MangaRequestScope.LATEST_N, latestCount: 25 })],
   [
-    scope({ scope: MangaRequestScope.RANGE, rangeStart: 10, rangeEnd: 20 }),
     '10–20',
+    scope({ scope: MangaRequestScope.RANGE, rangeStart: 10, rangeEnd: 20 }),
   ],
-  [scope({ scope: MangaRequestScope.RANGE, rangeStart: 10 }), '10 onward'],
-])('summarizes the requested chapters in one line', async (value, text) => {
+  ['10 onward', scope({ scope: MangaRequestScope.RANGE, rangeStart: 10 })],
+])('summarizes the requested chapters as %s', async (text, value) => {
   await render(mangaRequest({ mangaScope: value }));
 
   expect(host.textContent).toContain(`Chapters${text}`);
