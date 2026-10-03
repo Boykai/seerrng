@@ -1335,9 +1335,10 @@ class SuwayomiAPI extends ExternalAPI {
     const signal = options.signal
       ? AbortSignal.any([options.signal, controller.signal])
       : controller.signal;
+    let response: AxiosResponse<unknown> | undefined;
     let body: Readable | undefined;
     try {
-      const response = await this.sendBytes('GET', path, limit, signal);
+      response = await this.sendBytes('GET', path, limit, signal);
       body = response.data instanceof Readable ? response.data : undefined;
       // Axios reports an abort as an 'error' event on the response stream,
       // which would crash the process without a listener.
@@ -1360,7 +1361,8 @@ class SuwayomiAPI extends ExternalAPI {
         ),
       };
     } catch (error) {
-      body?.destroy();
+      // Releasing the socket must not depend on axios honouring the abort.
+      if (response) discard(response);
       controller.abort();
       throw reportSuwayomiError(toSuwayomiError(error, route));
     }
