@@ -12,11 +12,11 @@ layout is compatible with YunoHost's package tools:
 sudo yunohost app install https://github.com/YunoHost-Apps/seerrng_ynh --debug
 ```
 
-The package tracks stable SeerrNG GitHub releases with YunoHost's
-`latest_github_release` source updater and architecture-specific asset patterns.
-YunoHost's infrastructure periodically proposes manifest URL and checksum
-updates; administrators apply them through the normal YunoHost app upgrade
-flow.
+Stable SeerrNG releases update the package manifest with the matching release
+version, Linux archive URLs, and verified checksums for both supported
+architectures. YunoHost's `latest_github_release` source updater remains enabled
+as a fallback; administrators install package updates through the normal
+YunoHost app upgrade flow.
 
 The app requires a dedicated domain root because SeerrNG does not support URL
 subpaths. The package does not integrate with YunoHost LDAP or portal SSO.
