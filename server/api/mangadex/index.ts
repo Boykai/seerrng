@@ -8,6 +8,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 export const MANGADEX_API_URL = 'https://api.mangadex.org';
 export const MANGADEX_MAX_IDS_PER_REQUEST = 100;
+export const MANGADEX_TITLE_SEARCH_LIMIT = 10;
+export const MANGADEX_MAX_TITLE_LENGTH = 200;
 
 // MangaDex allows about five requests a second per IP and bans a client that
 // keeps sending through 429s, so requests stay a second apart and a refusal
@@ -135,9 +137,43 @@ const parseLinks = (
   return links;
 };
 
+/** A MangaDex title search result and the AniList ID it links to. */
+export interface MangaDexTitleMatch {
+  uuid: string;
+  anilistId: number | null;
+}
+
+/** The results in order, or undefined for a malformed reply. */
+const parseTitleMatches = (
+  value: unknown
+): MangaDexTitleMatch[] | undefined => {
+  if (!isRecord(value) || value.result !== 'ok' || !Array.isArray(value.data)) {
+    return undefined;
+  }
+  const entries: unknown[] = value.data.slice(0, MANGADEX_TITLE_SEARCH_LIMIT);
+  const matches = new Map<string, number | null>();
+  for (const entry of entries) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.id !== 'string' ||
+      !UUID.test(entry.id.toLowerCase()) ||
+      !isRecord(entry.attributes)
+    ) {
+      return undefined;
+    }
+    const uuid = entry.id.toLowerCase();
+    // MangaDex sends an empty array, not an object, when a title has no links.
+    const { links } = entry.attributes;
+    if (!matches.has(uuid)) {
+      matches.set(uuid, isRecord(links) ? parseAniListId(links.al) : null);
+    }
+  }
+  return [...matches].map(([uuid, anilistId]) => ({ uuid, anilistId }));
+};
+
 /**
- * Read-only MangaDex client for library matching. Requests carry only
- * MangaDex manga UUIDs.
+ * Read-only MangaDex client for matching. Requests carry only MangaDex manga
+ * UUIDs or title text, never a source or an address.
  */
 class MangaDexAPI extends ExternalAPI {
   constructor() {
@@ -146,6 +182,32 @@ class MangaDexAPI extends ExternalAPI {
       {},
       { headers: { 'User-Agent': `SeerrNG/${getAppVersion()}` } }
     );
+  }
+
+  /** One `GET /manga` through the shared limiter; refusals start a cooldown. */
+  private async getManga(
+    query: URLSearchParams,
+    signal?: AbortSignal
+  ): Promise<unknown> {
+    await limiter.acquire(signal);
+    recordExternalApiCall('GET');
+    try {
+      // Straight to axios: ExternalAPI's GET retry would resend after a 429.
+      const { data } = await this.axios.get<unknown>(
+        `${MANGADEX_API_URL}/manga?${query.toString()}`,
+        { signal }
+      );
+      return data;
+    } catch (error) {
+      const response = axios.isAxiosError(error) ? error.response : undefined;
+      if (response?.status === 429 || response?.status === 403) {
+        throw new MangaDexRateLimitedError(
+          limiter.refuse(response.status, response.headers?.['retry-after']),
+          true
+        );
+      }
+      throw error;
+    }
   }
 
   /**
@@ -186,27 +248,10 @@ class MangaDexAPI extends ExternalAPI {
     CONTENT_RATINGS.forEach((rating) =>
       query.append('contentRating[]', rating)
     );
-    await limiter.acquire(options.signal);
-    recordExternalApiCall('GET');
-    let data: unknown;
-    try {
-      // Straight to axios: ExternalAPI's GET retry would resend after a 429.
-      ({ data } = await this.axios.get<unknown>(
-        `${MANGADEX_API_URL}/manga?${query.toString()}`,
-        { signal: options.signal }
-      ));
-    } catch (error) {
-      const response = axios.isAxiosError(error) ? error.response : undefined;
-      if (response?.status === 429 || response?.status === 403) {
-        throw new MangaDexRateLimitedError(
-          limiter.refuse(response.status, response.headers?.['retry-after']),
-          true
-        );
-      }
-      throw error;
-    }
-
-    const links = parseLinks(data, missing);
+    const links = parseLinks(
+      await this.getManga(query, options.signal),
+      missing
+    );
     if (!links) {
       throw new MangaDexBadResponseError();
     }
@@ -215,6 +260,44 @@ class MangaDexAPI extends ExternalAPI {
       result.set(uuid, anilistId);
     }
     return result;
+  }
+
+  /**
+   * The MangaDex titles that match `title`, most relevant first, each with
+   * the AniList ID it links to. Sends only the title text; every content
+   * rating, since an exact link ignores the content policy.
+   */
+  async searchMangaByTitle(
+    title: string,
+    options: { signal?: AbortSignal } = {}
+  ): Promise<MangaDexTitleMatch[]> {
+    const text = title.trim();
+    if (!text || text.length > MANGADEX_MAX_TITLE_LENGTH) {
+      throw new TypeError('Expected a title of 1 to 200 characters');
+    }
+    const cache = cacheManager.getCache('mangadex').data;
+    // Prefixed so it never collides with the bare-UUID link entries.
+    const key = `title:${text}`;
+    const cached = cache.get<MangaDexTitleMatch[]>(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const query = new URLSearchParams();
+    query.set('title', text);
+    query.set('limit', String(MANGADEX_TITLE_SEARCH_LIMIT));
+    query.set('offset', '0');
+    CONTENT_RATINGS.forEach((rating) =>
+      query.append('contentRating[]', rating)
+    );
+    query.set('order[relevance]', 'desc');
+    const matches = parseTitleMatches(
+      await this.getManga(query, options.signal)
+    );
+    if (!matches) {
+      throw new MangaDexBadResponseError();
+    }
+    cache.set(key, matches, LINK_CACHE_TTL_SECONDS);
+    return matches;
   }
 }
 

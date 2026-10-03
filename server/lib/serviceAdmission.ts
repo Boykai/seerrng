@@ -119,6 +119,11 @@ export const getServarrServiceAdmissionResource = (
   return `service-config:${serviceType}:${serviceId}`;
 };
 
+// Same order as runMediaMutation: coordinator slot, then PostgreSQL advisory
+// locks, then in-process locks. A service lock taken before the slot could
+// wait forever on a request writer that holds that slot and is entering the
+// service. Nested calls reuse the caller's slot. With the coordinator disabled
+// (SQLite) only the in-process locks run, as before.
 const runWithServarrAdmissionResources = <Result>(
   resources: string[],
   callback: () => Promise<Result>
@@ -130,11 +135,11 @@ const runWithServarrAdmissionResources = <Result>(
 
   const dispatch = (index: number): Promise<Result> =>
     index === orderedResources.length
-      ? requestAdmissionCoordinator.run(orderedResources, callback)
+      ? callback()
       : serviceAdmissionLock.dispatch(orderedResources[index], () =>
           dispatch(index + 1)
         );
-  return dispatch(0);
+  return requestAdmissionCoordinator.run(orderedResources, () => dispatch(0));
 };
 
 export const runWithServarrServiceAdmission = <Result>(

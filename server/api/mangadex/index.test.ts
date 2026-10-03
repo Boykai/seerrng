@@ -371,3 +371,138 @@ describe('MangaDex AniList links', () => {
     assert.equal(cacheManager.getCache('mangadex').data.keys().length, 0);
   });
 });
+
+describe('MangaDex title search', () => {
+  beforeEach(() => {
+    now = 0;
+    sleeps = [];
+    resetMangaDexLimiterForTests({
+      now: () => now,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+        now += ms;
+      },
+    });
+  });
+
+  afterEach(() => {
+    cacheManager.getCache('mangadex').flush();
+    resetMangaDexLimiterForTests();
+  });
+
+  it('sends only the title, every content rating and relevance order', async () => {
+    const api = new MangaDexAPI();
+    const requests = stubMangaDex(api, () => ({
+      data: page([
+        manga(UUID_1, { al: '101' }),
+        manga(UUID_2.toUpperCase(), []),
+        manga(UUID_3, null),
+        manga(UUID_1, { al: '999' }),
+      ]),
+    }));
+
+    const matches = await api.searchMangaByTitle('  Invented Title  ');
+
+    assert.deepEqual(matches, [
+      { uuid: UUID_1, anilistId: 101 },
+      { uuid: UUID_2, anilistId: null },
+      { uuid: UUID_3, anilistId: null },
+    ]);
+    assert.equal(requests.length, 1);
+    const url = new URL(String(requests[0].url));
+    assert.equal(url.origin + url.pathname, `${MANGADEX_API_URL}/manga`);
+    assert.deepEqual(
+      [...url.searchParams],
+      [
+        ['title', 'Invented Title'],
+        ['limit', '10'],
+        ['offset', '0'],
+        ['contentRating[]', 'safe'],
+        ['contentRating[]', 'suggestive'],
+        ['contentRating[]', 'erotica'],
+        ['contentRating[]', 'pornographic'],
+        ['order[relevance]', 'desc'],
+      ]
+    );
+    assert.equal(
+      requests[0].headers.get('User-Agent'),
+      `SeerrNG/${getAppVersion()}`
+    );
+  });
+
+  it('caches under a title key that never meets a UUID key', async () => {
+    const api = new MangaDexAPI();
+    const requests = stubMangaDex(api, (url) =>
+      url.searchParams.has('title')
+        ? { data: page([manga(UUID_1, { al: '101' })]) }
+        : { data: page([manga(UUID_1, { al: '202' })]) }
+    );
+
+    await api.searchMangaByTitle(UUID_1);
+    assert.deepEqual(await api.searchMangaByTitle(UUID_1), [
+      { uuid: UUID_1, anilistId: 101 },
+    ]);
+    assert.equal(requests.length, 1);
+    assert.deepEqual(cacheManager.getCache('mangadex').data.keys(), [
+      `title:${UUID_1}`,
+    ]);
+
+    assert.deepEqual(
+      await api.getAniListLinks([UUID_1]),
+      new Map([[UUID_1, 202]])
+    );
+    assert.equal(requests.length, 2);
+  });
+
+  it('rejects a malformed reply and caches nothing', async () => {
+    const replies: unknown[] = [
+      { ...page([]), result: 'error' },
+      { ...page([]), data: {} },
+      page([{ id: 'not-a-uuid', attributes: {} }]),
+      page([{ id: UUID_1 }]),
+      page(['entry']),
+      'ok',
+    ];
+    for (const reply of replies) {
+      const api = new MangaDexAPI();
+      stubMangaDex(api, () => ({ data: reply }));
+      await assert.rejects(
+        api.searchMangaByTitle('Invented Title'),
+        MangaDexBadResponseError
+      );
+    }
+    assert.equal(cacheManager.getCache('mangadex').data.keys().length, 0);
+  });
+
+  it('shares the cooldown with the link lookup', async () => {
+    const api = new MangaDexAPI();
+    const requests = stubMangaDex(api, () => ({
+      status: 429,
+      headers: { 'retry-after': '30' },
+    }));
+
+    await assert.rejects(
+      api.searchMangaByTitle('Invented Title'),
+      (error: unknown) =>
+        error instanceof MangaDexRateLimitedError &&
+        error.retryAfterSeconds === 30 &&
+        error.requestSent
+    );
+    await assert.rejects(
+      api.getAniListLinks([UUID_1]),
+      (error: unknown) =>
+        error instanceof MangaDexRateLimitedError && !error.requestSent
+    );
+    assert.equal(requests.length, 1);
+  });
+
+  it('sends nothing for a blank or overlong title', async () => {
+    const api = new MangaDexAPI();
+    const requests = stubMangaDex(api, () => ({ data: page([]) }));
+
+    for (const title of ['', '   ', 'x'.repeat(201)]) {
+      await assert.rejects(api.searchMangaByTitle(title), TypeError);
+    }
+    assert.equal(requests.length, 0);
+  });
+});

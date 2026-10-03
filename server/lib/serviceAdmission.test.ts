@@ -1,6 +1,11 @@
+import { runWithRequestAdmission } from '@server/entity/MediaRequest';
+import requestAdmissionCoordinator, {
+  RequestAdmissionCoordinator,
+} from '@server/lib/requestAdmission';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { describe, it } from 'node:test';
+import { describe, it, type TestContext } from 'node:test';
+import type { DataSource, QueryRunner } from 'typeorm';
 
 import {
   ServarrServiceAuthorityChangedError,
@@ -467,5 +472,131 @@ describe('Suwayomi service admission', () => {
     } finally {
       settings.suwayomi = previous;
     }
+  });
+});
+
+describe('Service admission order', () => {
+  const deferred = () => {
+    let resolve: () => void = () => undefined;
+    const promise = new Promise<void>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  };
+
+  const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+  const settleWithin = async <T>(
+    work: Promise<T>,
+    milliseconds: number
+  ): Promise<T> => {
+    let timer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(`Admissions still waiting after ${milliseconds} ms`)
+          ),
+        milliseconds
+      );
+    });
+    try {
+      return await Promise.race([work, deadline]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  // An enabled coordinator with one connection slot, so every outermost
+  // admission shares a slot. Advisory locks never block here; the order of
+  // the slot and the in-process locks alone decides whether both finish.
+  const useSingleSlotCoordinator = (t: TestContext) => {
+    const advisoryKeys: string[] = [];
+    let connections = 0;
+    const source: Pick<DataSource, 'createQueryRunner'> = {
+      createQueryRunner: () => {
+        const runner = {
+          isTransactionActive: false,
+          connect: async () => {
+            connections += 1;
+          },
+          startTransaction: async () => {
+            runner.isTransactionActive = true;
+          },
+          commitTransaction: async () => {
+            runner.isTransactionActive = false;
+          },
+          rollbackTransaction: async () => {
+            runner.isTransactionActive = false;
+          },
+          release: async () => undefined,
+          query: async (_sql: string, parameters?: unknown[]) => {
+            advisoryKeys.push(String(parameters?.[0]));
+            return [];
+          },
+        };
+        return runner as unknown as QueryRunner;
+      },
+    };
+    const coordinator = new RequestAdmissionCoordinator(source, true, 1);
+    const run: typeof requestAdmissionCoordinator.run = (keys, callback) =>
+      coordinator.run(keys, callback);
+    t.mock.method(requestAdmissionCoordinator, 'run', run);
+    return { advisoryKeys, connections: () => connections };
+  };
+
+  it('lets a request writer enter a service that waits for the same connection slot', async (t) => {
+    const database = useSingleSlotCoordinator(t);
+    // Keys unique per test: a hung admission would keep its locks forever.
+    const titleKey = 'request-canonical:manga:anilist:900001';
+    const service = {
+      serviceType: 'suwayomi' as const,
+      serviceId: 900_000_001,
+    };
+    const writerAdmitted = deferred();
+    const continueWriter = deferred();
+    const finished: string[] = [];
+
+    const writer = runWithRequestAdmission([titleKey], async () => {
+      writerAdmitted.resolve();
+      await continueWriter.promise;
+      await runWithServarrServiceAdmission([service], async () => {
+        finished.push('writer');
+      });
+    });
+    await writerAdmitted.promise;
+    const job = runWithServarrServiceAdmission([service], async () => {
+      finished.push('job');
+    });
+    await nextTurn();
+    await nextTurn();
+    continueWriter.resolve();
+
+    await settleWithin(Promise.all([writer, job]), 2_000);
+    assert.deepEqual(finished, ['writer', 'job']);
+    assert.equal(database.connections(), 2);
+  });
+
+  it('admits a nested service on the connection of the request admission', async (t) => {
+    const database = useSingleSlotCoordinator(t);
+    const titleKey = 'request-canonical:manga:anilist:900002';
+    const service = {
+      serviceType: 'suwayomi' as const,
+      serviceId: 900_000_002,
+    };
+
+    const result = await settleWithin(
+      runWithRequestAdmission([titleKey], () =>
+        runWithServarrServiceAdmission([service], async () => 'done')
+      ),
+      2_000
+    );
+
+    assert.equal(result, 'done');
+    assert.equal(database.connections(), 1);
+    assert.deepEqual(database.advisoryKeys, [
+      titleKey,
+      getServarrServiceAdmissionResource('suwayomi', service.serviceId),
+    ]);
   });
 });
