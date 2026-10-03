@@ -164,6 +164,23 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.48.1](https://github.com/snapetech/seerrng/compare/v3.48.0..v3.48.1) - 2026-10-03
+
+### User-facing changes
+
+#### Changed
+
+- **Packaging:** YunoHost packages now follow stable SeerrNG releases with matching archive checksums, so new installs use the same build and version as GitHub releases.
+
+### 🐛 Bug Fixes
+- *(ci)* Tighten YunoHost sync workflow - ([8ed171b](https://github.com/snapetech/seerrng/commit/8ed171b8bdee1ea7cff37e67970eadc274df3827))
+- *(yunohost)* Sync package releases automatically - ([780c77b](https://github.com/snapetech/seerrng/commit/780c77b5269ce1c5a47580b9fa3f23215ddf2c49))
+
+### 🧪 Testing
+- *(release)* Include YunoHost sync in final release gate - ([fbca81d](https://github.com/snapetech/seerrng/commit/fbca81da7999491d332de8822f37e4df07a78c88))
+
 ## [3.48.0](https://github.com/snapetech/seerrng/compare/v3.47.0..v3.48.0) - 2026-10-03
 
 ### User-facing changes
