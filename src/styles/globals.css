@@ -7348,6 +7348,7 @@
   }
 
   .pagination-footer {
+    container: pagination-footer / inline-size;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
@@ -7372,6 +7373,39 @@
     display: flex;
     justify-self: end;
     gap: 5px;
+  }
+
+  /* Narrow footers move the page counter to its own row, then every part. */
+  @container pagination-footer (max-width: 28rem) {
+    .pagination-footer-page-size {
+      grid-row: 1;
+      grid-column: 1 / 3;
+    }
+
+    .pagination-footer-page {
+      grid-row: 2;
+      grid-column: 1 / -1;
+    }
+
+    .pagination-footer-actions {
+      grid-row: 1;
+      grid-column: 3;
+    }
+  }
+
+  @container pagination-footer (max-width: 20rem) {
+    .pagination-footer-page-size,
+    .pagination-footer-actions {
+      grid-column: 1 / -1;
+    }
+
+    .pagination-footer-actions {
+      grid-row: 2;
+    }
+
+    .pagination-footer-page {
+      grid-row: 3;
+    }
   }
 
   .app-download-menu {
@@ -8038,6 +8072,8 @@
 
   .settings-manga-sources-table .app-data-table-heading,
   .settings-manga-sources-table .app-data-table-cell,
+  .media-chapter-table .app-data-table-heading,
+  .media-chapter-table .app-data-table-cell,
   .settings-manga-library-table .app-data-table-heading,
   .settings-manga-library-table .app-data-table-cell {
     padding-right: 5px;
@@ -8058,6 +8094,31 @@
 
   .settings-manga-library-binding-actions-column {
     width: 14rem;
+  }
+
+  /* Chapter rows wrap long names inside the scroller instead of widening it. */
+  .app-data-table.media-chapter-table {
+    min-width: 28rem;
+  }
+
+  .media-chapter-table .app-data-table-cell {
+    overflow-wrap: anywhere;
+  }
+
+  .media-chapter-number-column {
+    width: 4.5rem;
+  }
+
+  .media-chapter-date-column {
+    width: 6.5rem;
+  }
+
+  .media-chapter-status-column {
+    width: 6.5rem;
+  }
+
+  .media-chapter-actions-column {
+    width: 2.5rem;
   }
 
   .settings-manga-sources-stack,

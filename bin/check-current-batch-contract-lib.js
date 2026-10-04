@@ -5017,6 +5017,51 @@ const validateCurrentBatchContract = (files) => {
     ],
     'shared pagination must use stable left, center, and right zones'
   );
+  requireCssRule(
+    '.pagination-footer',
+    ['container: pagination-footer / inline-size;'],
+    'shared pagination must choose its narrow layout from its own width'
+  );
+  try {
+    const placements = new Map();
+    require('postcss')
+      .parse(requireFile('src/styles/globals.css'))
+      .walkAtRules('container', (atRule) => {
+        atRule.walkRules((rule) => {
+          for (const selector of rule.selectors)
+            rule.walkDecls((decl) =>
+              placements.set(
+                `${atRule.params.replace(/\s+/g, ' ')} ${selector} ${decl.prop}`,
+                decl.value.replace(/\s+/g, ' ')
+              )
+            );
+        });
+      });
+    const narrowPagination = {
+      'pagination-footer (max-width: 28rem) .pagination-footer-page grid-row':
+        '2',
+      'pagination-footer (max-width: 28rem) .pagination-footer-page grid-column':
+        '1 / -1',
+      'pagination-footer (max-width: 20rem) .pagination-footer-page-size grid-column':
+        '1 / -1',
+      'pagination-footer (max-width: 20rem) .pagination-footer-actions grid-column':
+        '1 / -1',
+      'pagination-footer (max-width: 20rem) .pagination-footer-actions grid-row':
+        '2',
+      'pagination-footer (max-width: 20rem) .pagination-footer-page grid-row':
+        '3',
+    };
+    if (
+      !Object.entries(narrowPagination).every(
+        ([key, value]) => placements.get(key) === value
+      )
+    )
+      throw new Error('Lost narrow pagination layout');
+  } catch {
+    errors.push(
+      'src/styles/globals.css: narrow shared pagination must move the page count to its own row, then give every part its own row'
+    );
+  }
   requireOrder(
     paginationFooter,
     [
@@ -5620,6 +5665,44 @@ const validateCurrentBatchContract = (files) => {
     'docs/maintainers/ui-style-standard.md',
     'administrators reach a title waiting for a source through Choose Source',
     'the style standard must govern the Choose Source link'
+  );
+  for (const [selector, declarations] of [
+    [
+      '.media-chapter-table .app-data-table-cell',
+      ['padding-right: 5px;', 'padding-left: 5px;', 'overflow-wrap: anywhere;'],
+    ],
+    ['.app-data-table.media-chapter-table', ['min-width: 28rem;']],
+    ['.media-chapter-number-column', ['width: 4.5rem;']],
+    ['.media-chapter-date-column', ['width: 6.5rem;']],
+    ['.media-chapter-status-column', ['width: 6.5rem;']],
+    ['.media-chapter-actions-column', ['width: 2.5rem;']],
+  ]) {
+    requireCssRule(
+      selector,
+      declarations,
+      'the manga chapter table geometry must resolve through shared global classes'
+    );
+  }
+  for (const token of [
+    'className="app-card-inset refreshed-inset-surface card-spacing-before"',
+    'className="media-inset-heading detail-card-heading-after"',
+    '<Table className="media-chapter-table">',
+    '<AvailabilityValue tone={status.tone}>',
+    'buttonSize="standard"',
+    'iconOnly',
+    '<PageErrorMessage',
+    '<PaginationFooter',
+  ]) {
+    requireText(
+      'src/components/MangaDetails/MangaChapterList.tsx',
+      token,
+      'the manga chapter list must use the shared inset card, data table, availability, message, action, and pagination roles'
+    );
+  }
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'The manga details page shows a Chapters inset card after Manga Details',
+    'the style standard must govern the manga chapter list'
   );
   requireText(
     'src/components/Settings/SettingsNetwork/index.tsx',

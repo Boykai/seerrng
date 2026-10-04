@@ -30,6 +30,7 @@ export type AvailableCacheIds =
   | 'trakt'
   | 'anilist'
   | 'mangadex'
+  | 'suwayomichapters'
   | 'simkl'
   | 'personallibrary'
   | 'mdblist';
@@ -166,6 +167,11 @@ class CacheManager {
       stdTtl: 86400,
       maxKeys: 5000,
       maxBytes: 4 * 1024 * 1024,
+    }),
+    suwayomichapters: new Cache('suwayomichapters', 'Suwayomi Chapter Lists', {
+      stdTtl: 60,
+      maxKeys: 100,
+      maxBytes: 16 * 1024 * 1024,
     }),
     simkl: new Cache('simkl', 'Simkl API', {
       maxKeys: 500,

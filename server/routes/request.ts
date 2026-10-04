@@ -97,6 +97,7 @@ import {
   getRequestStatusPage,
   insertRequestStatusEvent,
   isMangaChapterRetryable,
+  offersRequestDownloads,
   recordRequestRetry,
   recordRequestStatus,
 } from '@server/lib/requestStatus';
@@ -769,27 +770,6 @@ const getDownloadContentDisposition = (fileName: string): string => {
   );
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 };
-
-/** Stages in which a manga request offers its verified chapters. */
-const MANGA_DOWNLOAD_STAGES: ReadonlySet<RequestStatusStage> = new Set([
-  RequestStatusStage.DOWNLOADING,
-  RequestStatusStage.FAILED,
-  RequestStatusStage.AVAILABLE,
-]);
-
-/**
- * Whether a request in this stage offers download copies. A manga chapter
- * is offered once it is verified, while the rest of the request may still be
- * downloading or may have failed; other media wait for AVAILABLE.
- */
-const offersRequestDownloads = (
-  request: MediaRequest,
-  stage: RequestStatusStage | undefined
-): boolean =>
-  stage === RequestStatusStage.AVAILABLE ||
-  (request.type === MediaType.MANGA &&
-    stage !== undefined &&
-    MANGA_DOWNLOAD_STAGES.has(stage));
 
 const isMissingChapterError = (error: unknown): boolean =>
   error instanceof SuwayomiError &&

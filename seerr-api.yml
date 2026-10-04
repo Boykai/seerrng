@@ -3388,6 +3388,66 @@ components:
           maxItems: 50
           items:
             $ref: '#/components/schemas/MangaResult'
+    MangaChapter:
+      type: object
+      required:
+        - number
+        - name
+        - uploadedAt
+        - status
+      properties:
+        number:
+          type: number
+          nullable: true
+          description: Chapter number, or null when it is unknown.
+          example: 12.5
+        name:
+          type: string
+          description: Chapter name as the library stores it. Empty when the library has no name or the title is not in a library.
+        uploadedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the chapter was published, if the library knows.
+        status:
+          type: string
+          enum: [available, requested, notRequested]
+          description: >-
+            `available` when Suwayomi reports the chapter downloaded;
+            `requested` when one of the requests the user may see includes
+            it; otherwise `notRequested`.
+        download:
+          type: object
+          description: >-
+            Present only on an available chapter whose verified copy the user
+            may download through
+            `/request/status/{requestId}/downloads/{assetId}`.
+          required:
+            - requestId
+            - assetId
+          properties:
+            requestId:
+              type: integer
+              minimum: 1
+            assetId:
+              type: string
+    MangaChapterPage:
+      type: object
+      required:
+        - pageInfo
+        - inLibrary
+        - results
+      properties:
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+        inLibrary:
+          type: boolean
+          description: True when the chapters come from a Suwayomi library entry.
+        results:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/MangaChapter'
     MangaLibraryError:
       type: object
       properties:
@@ -13550,6 +13610,67 @@ paths:
                 maximum: 3600
         '503':
           description: AniList is unavailable
+  /manga/{mangaId}/chapters:
+    get:
+      summary: List a manga's chapters
+      description: >-
+        Returns a page of the title's chapters as SeerrNG and Suwayomi already
+        store them, highest chapter number first, with the signed-in user's
+        state of each. A title in a Suwayomi library lists that library entry's
+        chapters; viewing them never makes Suwayomi contact a source. Any
+        other title lists the chapters of the user's own requests (every
+        request for users with the `MANAGE_REQUESTS` or `REQUEST_VIEW`
+        permission), or none. Returns 404 while the manga category is
+        disabled, and for unknown titles and titles excluded by the adult or
+        light novel settings.
+      tags:
+        - search
+      parameters:
+        - in: path
+          name: mangaId
+          description: AniList media ID.
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            example: 30013
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: A page of chapters. A page past the end has no results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaChapterPage'
+        '400':
+          description: The manga ID or the paging is invalid
+        '403':
+          description: The user's sign-in changed; sign in again
+        '404':
+          description: Manga not found, excluded, or the manga category is disabled
+        '429':
+          description: AniList rate limit reached. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+        '503':
+          description: AniList or Suwayomi is unavailable
   /manga/library/candidates:
     get:
       summary: List manga library match candidates

@@ -111,6 +111,11 @@ vi.mock('@app/components/Common/CachedImage', () => ({
 vi.mock('@app/components/MediaDetails/MediaDetailArtwork', () => ({
   default: ({ src }: { src: string }) => <div data-artwork={src} />,
 }));
+vi.mock('@app/components/MangaDetails/MangaChapterList', () => ({
+  default: ({ mangaId }: { mangaId: number }) => (
+    <div data-testid="chapter-list" data-manga-id={mangaId} />
+  ),
+}));
 vi.mock('@app/components/Common/Tooltip', () => ({
   default: ({
     children,
@@ -568,6 +573,40 @@ it.each([
 
   expect(availabilityCell()).toBeUndefined();
   expect(host.textContent).not.toContain('Suwayomi');
+});
+
+const chapterList = () => host.querySelector('[data-testid="chapter-list"]');
+
+it.each([
+  ['with a Suwayomi server', true, { suwayomiEnabled: true }, undefined],
+  [
+    'for a library title with a Suwayomi server',
+    true,
+    { suwayomiEnabled: true },
+    MediaStatus.PARTIALLY_AVAILABLE,
+  ],
+  ['without a Suwayomi server', false, {}, undefined],
+  [
+    'for a blocklisted title',
+    false,
+    { suwayomiEnabled: true },
+    MediaStatus.BLOCKLISTED,
+  ],
+])('shows the chapter list %s: %s', async (_case, shown, settings, status) => {
+  state.settings = settings;
+  state.swr = {
+    data: details({
+      mediaInfo:
+        status === undefined
+          ? undefined
+          : ({ status } as MangaDetailsType['mediaInfo']),
+    }),
+  };
+  await render();
+
+  expect(chapterList()?.getAttribute('data-manga-id') ?? null).toBe(
+    shown ? '30013' : null
+  );
 });
 
 const buttonLabels = () =>
