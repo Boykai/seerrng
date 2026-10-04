@@ -25,6 +25,65 @@ test('catalog browsing and filter controls use shared semantic presentation owne
   }
 });
 
+test('software catalog ownership and play-time use shared visual roles', () => {
+  const source = component('SoftwareCatalog/index.tsx');
+  assert.match(
+    source,
+    /className="software-catalog-library-badge media-type-badge media-type-badge-compact"/
+  );
+  assert.match(source, /data-presentation="poster"/);
+  assert.match(source, /data-presentation="inline"/);
+  assert.match(source, /game\.steamOwned &&/);
+  assert.match(source, /selectedGame\.steamOwned &&/);
+  assert.match(source, /className="app-card-inset refreshed-inset-surface"/);
+  assert.match(source, /className="card-table detail-paired-columns"/);
+  assert.match(
+    source,
+    /className="software-catalog-playtime-value card-table-value card-spacing-before"/
+  );
+  assert.match(source, /messages\.quickFinish/);
+  assert.match(source, /messages\.mainStoryLabel/);
+  assert.match(source, /messages\.completionist/);
+
+  const css = postcss.parse(
+    readFileSync(new URL('./globals.css', import.meta.url), 'utf8')
+  );
+  let badge;
+  let posterBadge;
+  let playtimeValue;
+  css.walkRules((rule) => {
+    if (rule.selector === '.software-catalog-library-badge') badge = rule;
+    if (
+      rule.selector ===
+      ".software-catalog-library-badge[data-presentation='poster']"
+    ) {
+      posterBadge = rule;
+    }
+    if (rule.selector === '.software-catalog-playtime-value')
+      playtimeValue = rule;
+  });
+  assert.ok(badge, 'the catalog ownership badge has a shared CSS owner');
+  assert.deepEqual(
+    badge.nodes.filter((node) => node.type === 'decl').map((node) => node.prop),
+    ['border-color', 'background-color', 'color']
+  );
+  assert.match(badge.toString(), /var\(--palette-blue(?:-dark|-light)?\)/);
+  assert.ok(posterBadge, 'poster placement is owned by the CSS role');
+  assert.deepEqual(
+    posterBadge.nodes
+      .filter((node) => node.type === 'decl')
+      .map((node) => node.prop),
+    ['position', 'z-index', 'inset-inline-end', 'inset-block-end']
+  );
+  assert.match(posterBadge.toString(), /var\(--card-spacing\)/);
+  assert.ok(playtimeValue, 'play-time contrast is owned by the CSS role');
+  assert.equal(
+    playtimeValue.nodes.find((node) => node.type === 'decl')?.prop,
+    'color'
+  );
+  assert.match(playtimeValue.toString(), /var\(--color-gray-300\)/);
+});
+
 test('compact region controls contain no utilities without certifying other form variants', () => {
   const path = 'RegionSelector/index.tsx';
   const source = ts.createSourceFile(

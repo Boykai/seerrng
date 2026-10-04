@@ -35,6 +35,7 @@ import {
   SoftwareRequestConfirmationRequiredError,
   SoftwareRequestStateError,
   streamSoftwareRequestAsset,
+  streamSoftwareRequestBundle,
   withdrawPendingSoftwareRequest,
   type PcGameVariant,
 } from '@server/lib/softwareRequests';
@@ -293,6 +294,12 @@ const sanitizeGame = (game: SoftwareCatalogGame): SoftwareCatalogGame => ({
   coverUrl: isSafeCatalogCoverUrl(game.coverUrl) ? game.coverUrl : '',
   releaseDate:
     typeof game.releaseDate === 'string' ? game.releaseDate.slice(0, 32) : '',
+  steamAppId:
+    typeof game.steamAppId === 'number' &&
+    Number.isSafeInteger(game.steamAppId) &&
+    game.steamAppId > 0
+      ? game.steamAppId
+      : null,
   platforms: Array.isArray(game.platforms)
     ? game.platforms
         .filter((platform): platform is string => typeof platform === 'string')
@@ -342,6 +349,14 @@ const sanitizeGame = (game: SoftwareCatalogGame): SoftwareCatalogGame => ({
           videoId: video.videoId,
         }))
     : [],
+  timeToBeat:
+    game.timeToBeat && typeof game.timeToBeat === 'object'
+      ? {
+          hastily: game.timeToBeat.hastily,
+          normally: game.timeToBeat.normally,
+          completely: game.timeToBeat.completely,
+        }
+      : null,
 });
 
 const isPcPlatformName = (value: string): boolean => {
@@ -501,7 +516,7 @@ const mapCategoryGames = (
 };
 
 type CatalogAvailability =
-  'available' | 'tracked' | 'downloading' | 'missing' | 'unknown';
+  'available' | 'owned' | 'tracked' | 'downloading' | 'missing' | 'unknown';
 
 const addCatalogAvailability = async (
   results: CatalogGameResult[],
@@ -509,6 +524,7 @@ const addCatalogAvailability = async (
 ): Promise<
   (CatalogGameResult & {
     availability: CatalogAvailability;
+    steamOwned?: boolean;
     availableSystems?: string[];
   })[]
 > => {
@@ -516,17 +532,44 @@ const addCatalogAvailability = async (
   try {
     if (category === 'game') {
       const ids = [...new Set(results.map((game) => game.igdbId))];
-      const response = await getQuestarrApi().lookupLibrary(ids);
+      const steamAppIds = [
+        ...new Set(
+          results
+            .map((game) => game.steamAppId)
+            .filter(
+              (appId): appId is number =>
+                typeof appId === 'number' &&
+                Number.isSafeInteger(appId) &&
+                appId > 0
+            )
+        ),
+      ];
+      const response = steamAppIds.length
+        ? await getQuestarrApi().lookupLibrary(ids, steamAppIds)
+        : await getQuestarrApi().lookupLibrary(ids);
       const statuses = new Map(
         response.games
           .filter((game) => Number.isSafeInteger(game.igdbId))
           .map((game) => [game.igdbId, game.status])
       );
+      const deliverability = new Map(
+        response.games
+          .filter((game) => Number.isSafeInteger(game.igdbId))
+          .map((game) => [game.igdbId, game.deliverable])
+      );
+      const steamOwnership = new Map(
+        (response.steamGames ?? [])
+          .filter((game) => Number.isSafeInteger(game.steamAppId))
+          .map((game) => [game.steamAppId, game.owned])
+      );
       return results.map((game) => {
         const status = statuses.get(game.igdbId);
+        const deliverable = deliverability.get(game.igdbId);
         const availability: CatalogAvailability =
-          status === 'owned' || status === 'completed'
-            ? 'available'
+          status === 'owned' || status === 'playing' || status === 'completed'
+            ? deliverable === false
+              ? 'owned'
+              : 'available'
             : status === 'downloading'
               ? 'downloading'
               : status === 'wanted'
@@ -534,7 +577,14 @@ const addCatalogAvailability = async (
                 : status === undefined
                   ? 'missing'
                   : 'unknown';
-        return { ...game, availability };
+        const steamOwned = game.steamAppId
+          ? steamOwnership.get(game.steamAppId) === true
+          : false;
+        return {
+          ...game,
+          availability,
+          ...(steamOwned ? { steamOwned: true } : {}),
+        };
       });
     }
 
@@ -1312,17 +1362,25 @@ softwareRoutes.get('/status', async (req, res) => {
     ? refreshedViews.filter(({ status }) => statuses.includes(status))
     : refreshedViews;
   return res.status(200).json({
-    results: views.map(({ request, status, message, assets, actions }) => ({
-      request: serializeRequest(request, actions),
-      status,
-      message,
-      assets: assets.map((asset) => ({
-        id: asset.id,
-        name: asset.name,
-        size: asset.size,
-        url: `/api/v1/request/software/status/${request.id}/downloads/${encodeURIComponent(asset.id)}`,
-      })),
-    })),
+    results: views.map(
+      ({ request, status, message, assets, actions, bundleName }) => ({
+        request: serializeRequest(request, actions),
+        status,
+        message,
+        assets: assets.map((asset) => ({
+          id: asset.id,
+          name: asset.name,
+          size: asset.size,
+          url: `/api/v1/request/software/status/${request.id}/downloads/${encodeURIComponent(asset.id)}`,
+        })),
+        bundle: bundleName
+          ? {
+              name: bundleName,
+              url: `/api/v1/request/software/status/${request.id}/bundle`,
+            }
+          : null,
+      })
+    ),
     pageInfo: {
       pages: Math.ceil(total / pageSize),
       pageSize,
@@ -1355,6 +1413,12 @@ softwareRoutes.get('/status/:id', async (req, res) => {
       size: asset.size,
       url: `/api/v1/request/software/status/${request.id}/downloads/${encodeURIComponent(asset.id)}`,
     })),
+    bundle: view.bundleName
+      ? {
+          name: view.bundleName,
+          url: `/api/v1/request/software/status/${request.id}/bundle`,
+        }
+      : null,
   });
 });
 
@@ -1608,7 +1672,62 @@ softwareRoutes.get('/status/:id/downloads', async (req, res) => {
       size: asset.size,
       url: `/api/v1/request/software/status/${request.id}/downloads/${encodeURIComponent(asset.id)}`,
     })),
+    bundle: view.bundleName
+      ? {
+          name: view.bundleName,
+          url: `/api/v1/request/software/status/${request.id}/bundle`,
+        }
+      : null,
   });
+});
+
+softwareRoutes.get('/status/:id/bundle', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0)
+    return res.status(400).json({ error: 'Invalid software request id.' });
+  const request = await getRequestForViewer(id, req.user!.id);
+  if (!request)
+    return res.status(404).json({ error: 'Software request not found.' });
+  const view = await refreshSoftwareRequest(request);
+  if (!view.bundleName)
+    return res
+      .status(404)
+      .json({ error: 'A download bundle is not available.' });
+
+  try {
+    const result = await streamSoftwareRequestBundle(view.request);
+    const filename = (result.filename ?? view.bundleName)
+      .replace(/[\\/\r\n\0"<>:|?*]/g, '_')
+      .slice(0, 180);
+    const headers: Record<string, string> = {
+      'Content-Type': result.contentType ?? 'application/gzip',
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename || view.bundleName)}`,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    };
+    if (result.contentLength !== undefined)
+      headers['Content-Length'] = String(result.contentLength);
+    if (result.rangeSupported) headers['Accept-Ranges'] = 'bytes';
+    if (result.contentRange) headers['Content-Range'] = result.contentRange;
+    res.status(result.statusCode).set(headers);
+    result.stream.on('error', (error) => {
+      logger.warn('Software bundle stream ended with an error', {
+        requestId: request.id,
+        provider: request.provider,
+        error: error.message,
+      });
+      if (!res.headersSent) res.status(502);
+      else res.destroy(error);
+    });
+    res.on('close', () => {
+      if (!res.writableEnded) result.stream.destroy();
+    });
+    return result.stream.pipe(res);
+  } catch {
+    return res
+      .status(502)
+      .json({ error: 'Download bundle could not be streamed.' });
+  }
 });
 
 softwareRoutes.get('/status/:id/downloads/:assetId', async (req, res) => {

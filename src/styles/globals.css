@@ -5446,6 +5446,27 @@
     font-size: 0.75rem;
   }
 
+  .software-catalog-library-badge {
+    border-color: color-mix(in srgb, var(--palette-blue) 70%, transparent);
+    background-color: color-mix(
+      in srgb,
+      var(--palette-blue-dark) 35%,
+      transparent
+    );
+    color: var(--palette-blue-light);
+  }
+
+  .software-catalog-library-badge[data-presentation='poster'] {
+    position: absolute;
+    z-index: 10;
+    inset-inline-end: var(--card-spacing);
+    inset-block-end: var(--card-spacing);
+  }
+
+  .software-catalog-playtime-value {
+    color: rgb(var(--color-gray-300));
+  }
+
   .media-type-badge-tone-movie {
     border-color: color-mix(in srgb, var(--palette-blue) 70%, transparent);
     background-color: color-mix(

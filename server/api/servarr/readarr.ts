@@ -314,6 +314,8 @@ export interface ReadarrBook extends ReadarrBookLookupResult {
   added?: string;
   statistics?: {
     bookFileCount?: number;
+    ebookFileCount?: number;
+    audiobookFileCount?: number;
     totalBookCount?: number;
   };
 }

@@ -84,6 +84,10 @@ const messages = defineMessages('components.SoftwareCatalog', {
   noCategories: 'No software categories are currently available.',
   titleUnavailable: 'This catalog title could not be loaded.',
   available: 'In library',
+  owned: 'Owned in QuestarrNG',
+  steamOwned: 'Steam Library',
+  steamOwnedDescription:
+    'QuestarrNG found this game in its linked public Steam library. It may not be installed or available as a local QuestarrNG file.',
   tracked: 'Tracked',
   downloading: 'Downloading',
   availabilityUnknown: 'Availability unknown',
@@ -91,6 +95,12 @@ const messages = defineMessages('components.SoftwareCatalog', {
   watchVideo: 'Watch {name}',
   gameVideo: 'Game video',
   rating: 'Rating: {rating}/10',
+  estimatedPlayTime: 'Estimated Play Time',
+  quickFinish: 'Quick Finish',
+  mainStoryLabel: 'Main Story',
+  mainStoryEstimate: 'Main Story: {hours} h',
+  completionist: 'Completionist',
+  hoursValue: '{hours} h',
 });
 
 type Category = 'retro' | 'modern' | 'game';
@@ -122,15 +132,22 @@ interface CatalogGame {
   platforms: string[];
   platformOptions: { id: number; name: string }[];
   genres: string[];
+  steamAppId?: number | null;
+  steamOwned?: boolean;
   emulationSystems?: EmulationSystemOption[];
   availability?:
-    'available' | 'tracked' | 'downloading' | 'missing' | 'unknown';
+    'available' | 'owned' | 'tracked' | 'downloading' | 'missing' | 'unknown';
   availableSystems?: string[];
   rating?: number | null;
   publishers?: string[];
   developers?: string[];
   screenshots?: string[];
   videos?: { name: string; videoId: string }[];
+  timeToBeat?: {
+    hastily?: number;
+    normally?: number;
+    completely?: number;
+  } | null;
 }
 
 interface CatalogResponse {
@@ -443,13 +460,15 @@ const SoftwareCatalog = ({
   const availabilityLabel = (game: CatalogGame) =>
     game.availability === 'available'
       ? intl.formatMessage(messages.available)
-      : game.availability === 'tracked'
-        ? intl.formatMessage(messages.tracked)
-        : game.availability === 'downloading'
-          ? intl.formatMessage(messages.downloading)
-          : game.availability === 'unknown'
-            ? intl.formatMessage(messages.availabilityUnknown)
-            : '';
+      : game.availability === 'owned'
+        ? intl.formatMessage(messages.owned)
+        : game.availability === 'tracked'
+          ? intl.formatMessage(messages.tracked)
+          : game.availability === 'downloading'
+            ? intl.formatMessage(messages.downloading)
+            : game.availability === 'unknown'
+              ? intl.formatMessage(messages.availabilityUnknown)
+              : '';
 
   return (
     <>
@@ -651,6 +670,20 @@ const SoftwareCatalog = ({
                           {availabilityLabel(game)}
                         </span>
                       )}
+                      {game.steamOwned && (
+                        <span
+                          className="software-catalog-library-badge media-type-badge media-type-badge-compact"
+                          data-presentation="poster"
+                          aria-label={intl.formatMessage(
+                            messages.steamOwnedDescription
+                          )}
+                          title={intl.formatMessage(
+                            messages.steamOwnedDescription
+                          )}
+                        >
+                          {intl.formatMessage(messages.steamOwned)}
+                        </span>
+                      )}
                       <button
                         type="button"
                         className="relative block h-full w-full"
@@ -679,6 +712,19 @@ const SoftwareCatalog = ({
                         {game.releaseDate ||
                           game.genres.slice(0, 2).join(' · ')}
                       </p>
+                      {selectedCategory === 'game' &&
+                        game.timeToBeat?.normally != null && (
+                          <p className="software-catalog-playtime-value card-table-value card-spacing-before">
+                            {intl.formatMessage(messages.mainStoryEstimate, {
+                              hours: intl.formatNumber(
+                                game.timeToBeat.normally,
+                                {
+                                  maximumFractionDigits: 1,
+                                }
+                              ),
+                            })}
+                          </p>
+                        )}
                       <p className="mt-2 line-clamp-2 min-h-8 text-xs text-gray-300">
                         {selectedCategory === 'game'
                           ? game.platforms
@@ -780,6 +826,18 @@ const SoftwareCatalog = ({
                       {availabilityLabel(selectedGame)}
                     </p>
                   )}
+                  {selectedGame.steamOwned && (
+                    <p
+                      className="software-catalog-library-badge media-type-badge media-type-badge-compact"
+                      data-presentation="inline"
+                      aria-label={intl.formatMessage(
+                        messages.steamOwnedDescription
+                      )}
+                      title={intl.formatMessage(messages.steamOwnedDescription)}
+                    >
+                      {intl.formatMessage(messages.steamOwned)}
+                    </p>
+                  )}
                   {selectedGame.summary && <p>{selectedGame.summary}</p>}
                   {selectedGame.releaseDate && (
                     <p className="mt-2 text-gray-400">
@@ -805,6 +863,67 @@ const SoftwareCatalog = ({
                   ) : null}
                 </div>
               </div>
+              {selectedCategory === 'game' &&
+                selectedGame.timeToBeat &&
+                (selectedGame.timeToBeat.hastily != null ||
+                  selectedGame.timeToBeat.normally != null ||
+                  selectedGame.timeToBeat.completely != null) && (
+                  <section
+                    aria-label={intl.formatMessage(messages.estimatedPlayTime)}
+                    className="app-card-inset refreshed-inset-surface"
+                  >
+                    <h3 className="media-inset-heading card-spacing-after">
+                      {intl.formatMessage(messages.estimatedPlayTime)}
+                    </h3>
+                    <dl className="card-table detail-paired-columns">
+                      {selectedGame.timeToBeat.hastily != null && (
+                        <>
+                          <dt className="card-table-heading">
+                            {intl.formatMessage(messages.quickFinish)}
+                          </dt>
+                          <dd className="card-table-value">
+                            {intl.formatMessage(messages.hoursValue, {
+                              hours: intl.formatNumber(
+                                selectedGame.timeToBeat.hastily,
+                                { maximumFractionDigits: 1 }
+                              ),
+                            })}
+                          </dd>
+                        </>
+                      )}
+                      {selectedGame.timeToBeat.normally != null && (
+                        <>
+                          <dt className="card-table-heading">
+                            {intl.formatMessage(messages.mainStoryLabel)}
+                          </dt>
+                          <dd className="card-table-value">
+                            {intl.formatMessage(messages.hoursValue, {
+                              hours: intl.formatNumber(
+                                selectedGame.timeToBeat.normally,
+                                { maximumFractionDigits: 1 }
+                              ),
+                            })}
+                          </dd>
+                        </>
+                      )}
+                      {selectedGame.timeToBeat.completely != null && (
+                        <>
+                          <dt className="card-table-heading">
+                            {intl.formatMessage(messages.completionist)}
+                          </dt>
+                          <dd className="card-table-value">
+                            {intl.formatMessage(messages.hoursValue, {
+                              hours: intl.formatNumber(
+                                selectedGame.timeToBeat.completely,
+                                { maximumFractionDigits: 1 }
+                              ),
+                            })}
+                          </dd>
+                        </>
+                      )}
+                    </dl>
+                  </section>
+                )}
               {(selectedGame.screenshots?.length ?? 0) > 0 && (
                 <div>
                   <h3 className="mb-2 font-semibold text-white">

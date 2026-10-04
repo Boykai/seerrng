@@ -170,6 +170,22 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.49.0](https://github.com/snapetech/seerrng/compare/v3.48.3..v3.49.0) - 2026-10-04
+
+### User-facing changes
+
+#### Fixed
+
+- **Bookshelf:** SeerrNG now uses BookshelfNG's ebook and audiobook file counts independently when syncing service status, while older Readarr-compatible services keep using aggregate counts.
+
+### 🚀 Features
+- *(bookshelf)* Consume format-specific availability - ([4ebf46b](https://github.com/snapetech/seerrng/commit/4ebf46b932637c87c2077274af4df94d744470ae))
+
+### ⚙️ Miscellaneous Tasks
+- *(yunohost)* Align package with v3.48.3 - ([a96fafa](https://github.com/snapetech/seerrng/commit/a96fafa07c77a2d6d95badeb9f60c32a6b4a47c9))
+
 ## [3.48.3](https://github.com/snapetech/seerrng/compare/v3.48.2..v3.48.3) - 2026-10-04
 
 ### User-facing changes
