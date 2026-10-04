@@ -583,7 +583,11 @@ const getBackIssueAssets = async (
   }
 };
 
-const mangaAssetId = (requestId: number, copy: MangaDownloadCopy): string =>
+/** The asset ID a request's download listing gives a verified chapter. */
+export const getMangaDownloadAssetId = (
+  requestId: number,
+  copy: Pick<MangaDownloadCopy, 'instanceId' | 'urlHash'>
+): string =>
   createAssetId(
     requestId,
     'suwayomi',
@@ -610,7 +614,7 @@ const getMangaAssets = async (
   }
   for (const copy of copies.slice(0, maxAssetsPerRequest - assets.length)) {
     assets.push({
-      id: mangaAssetId(request.id, copy),
+      id: getMangaDownloadAssetId(request.id, copy),
       name: sanitizeAssetName(copy.name),
       source: {
         type: 'suwayomi',
@@ -632,7 +636,7 @@ export const findMangaDownloadAsset = async (
 ): Promise<MangaDownloadCopy | undefined> => {
   if (!assetIdPattern.test(assetId)) return undefined;
   const copy = (await loadMangaDownloadCopies(request)).find((candidate) =>
-    matchesAssetId(mangaAssetId(request.id, candidate), assetId)
+    matchesAssetId(getMangaDownloadAssetId(request.id, candidate), assetId)
   );
   return copy && { ...copy, name: sanitizeAssetName(copy.name) };
 };

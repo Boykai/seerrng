@@ -18,7 +18,17 @@ import {
   isMangaInSuwayomiLibrary,
   sendAnilistFailure,
 } from '@server/lib/mangaCatalog';
+import {
+  getMangaChapterErrorFields,
+  getMangaChapterPage,
+  parseMangaChapterPaging,
+} from '@server/lib/mangaChapterBrowser';
 import { parseMangaDiscoverFilters } from '@server/lib/mangaDiscoverFilters';
+import { Permission } from '@server/lib/permissions';
+import {
+  UserMutationActorUnauthorizedError,
+  runUserSecurityReadWithActor,
+} from '@server/lib/userSecurityMutation';
 import logger from '@server/logger';
 import { mapMangaDetails, mapMangaResult } from '@server/models/Manga';
 import { filterEntityResponse } from '@server/utils/entityResponse';
@@ -174,6 +184,71 @@ mangaRoutes.get('/:id', async (req, res) => {
       anilistId,
     });
     return sendAnilistFailure(res, e, 'Unable to retrieve manga details.');
+  }
+});
+
+// A page of a title's chapters as SeerrNG and Suwayomi already store them; a
+// view never makes Suwayomi contact a source. Unknown and excluded titles
+// answer the same 404 before anything else is read.
+mangaRoutes.get('/:id/chapters', async (req, res) => {
+  const anilistId = parsePositiveRouteId(req.params.id);
+  if (anilistId === undefined) {
+    return res
+      .status(400)
+      .json({ status: 400, message: 'Manga id must be a positive integer.' });
+  }
+  const paging = parseMangaChapterPaging(req.query);
+  if ('error' in paging) {
+    return res.status(400).json({ status: 400, message: paging.error });
+  }
+
+  try {
+    const manga = await new AnilistAPI().getMangaDetails(anilistId);
+    if (!manga || isAnilistMangaExcluded(manga, getMangaContentPolicy())) {
+      return res.status(404).json({ status: 404, message: 'Manga not found.' });
+    }
+  } catch (e) {
+    logger.error('Failed to retrieve manga details for chapters', {
+      label: 'Manga',
+      anilistId,
+      ...getMangaChapterErrorFields(e),
+    });
+    return sendAnilistFailure(res, e, 'Unable to retrieve manga details.');
+  }
+
+  try {
+    const user = req.user!;
+    const permissions = [Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW];
+    const canViewAll = await runUserSecurityReadWithActor(
+      user.id,
+      user.id,
+      permissions,
+      async (actor) => actor.hasPermission(permissions, { type: 'or' }),
+      {
+        expectedCredentialVersion:
+          req.session?.userId === user.id
+            ? (req.session.credentialVersion ?? 0)
+            : undefined,
+      }
+    );
+    const body = await getMangaChapterPage(
+      anilistId,
+      { id: user.id, canViewAll },
+      paging
+    );
+    return res.status(200).json(body);
+  } catch (e) {
+    if (e instanceof UserMutationActorUnauthorizedError) {
+      return res.status(403).json({ status: 403, message: 'Access denied.' });
+    }
+    logger.error('Failed to list manga chapters', {
+      label: 'Manga',
+      anilistId,
+      ...getMangaChapterErrorFields(e),
+    });
+    return res
+      .status(503)
+      .json({ status: 503, message: 'Chapters are unavailable right now.' });
   }
 });
 
