@@ -104,6 +104,22 @@ runbook. Provider IDs are not portable; the runbook rebuilds records and can
 preserve strict matches, recover metadata, and create local records for books
 the target provider cannot import.
 
+### Audiobookshelf availability
+
+Under **Settings → Services → Audiobookshelf Availability**, you can connect
+one Audiobookshelf book library to recognize audiobooks already in your
+collection. Use an Audiobookshelf user token that can view the selected
+library. SeerrNG matches items to its book catalogue by ISBN; items without an
+ISBN are skipped. A match counts as an available audiobook only and does not
+block an ebook request.
+
+This is an inventory connection, not an acquisition service. SeerrNG does not
+add, remove, monitor, or edit Audiobookshelf items. The selected library is
+scanned with the Bookshelf availability job, and you can add an external URL to
+make matched items clickable from book details. See the
+[Bookshelf Backend](../bookshelf-backend.md#audiobookshelf-availability)
+guide for the connection behavior and limitations.
+
 ## Override Rules
 
 Override rules can assign a root folder, quality profile, or tags when a movie

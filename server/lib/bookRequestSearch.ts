@@ -352,13 +352,27 @@ class BookRequestSearchManager {
         pendingImport,
         operation.format
       );
+      const nextAttemptAt = pendingImport?.nextAttemptAt
+        ? new Date(pendingImport.nextAttemptAt)
+        : undefined;
+      const validNextAttemptAt =
+        nextAttemptAt && Number.isFinite(nextAttemptAt.getTime())
+          ? nextAttemptAt
+          : undefined;
+      await getRepository(BookRequestSearch).update(operation.id, {
+        pendingAttemptCount: pendingImport?.attemptCount ?? null,
+        pendingMaxAttempts: pendingImport?.maxAttempts ?? null,
+        pendingNextAttemptAt: validNextAttemptAt ?? null,
+      });
+      operation.pendingAttemptCount = pendingImport?.attemptCount ?? null;
+      operation.pendingMaxAttempts = pendingImport?.maxAttempts ?? null;
+      operation.pendingNextAttemptAt = validNextAttemptAt ?? null;
       if (formatStatus === 'failed') {
         await this.finishWithoutRelease(
           operation,
           readarr,
           RequestStatusStage.FAILED,
-          pendingImport?.lastError ||
-            'Chaptarr could not prepare the requested book.'
+          'ChaptarrNG could not prepare this author. Check ChaptarrNG’s logs and metadata-source settings, then retry the request.'
         );
         return;
       }
@@ -403,6 +417,9 @@ class BookRequestSearchManager {
         bookId: null,
         commandId: null,
         pendingId: result.pendingId ?? null,
+        pendingAttemptCount: null,
+        pendingMaxAttempts: null,
+        pendingNextAttemptAt: null,
         providerBookId: result.foreignBookId || providerBookId,
         providerEditionId,
         createdBook: false,
@@ -414,6 +431,9 @@ class BookRequestSearchManager {
       operation.bookId = null;
       operation.commandId = null;
       operation.pendingId = result.pendingId ?? null;
+      operation.pendingAttemptCount = null;
+      operation.pendingMaxAttempts = null;
+      operation.pendingNextAttemptAt = null;
       operation.providerBookId = result.foreignBookId || providerBookId;
       operation.providerEditionId = providerEditionId;
       operation.createdBook = false;
@@ -435,6 +455,9 @@ class BookRequestSearchManager {
       bookId,
       commandId: null,
       pendingId: null,
+      pendingAttemptCount: null,
+      pendingMaxAttempts: null,
+      pendingNextAttemptAt: null,
       providerBookId: result.foreignBookId || providerBookId,
       providerEditionId,
       authorId: result.authorId ?? result.author?.id ?? null,
@@ -447,6 +470,9 @@ class BookRequestSearchManager {
     operation.bookId = bookId;
     operation.commandId = null;
     operation.pendingId = null;
+    operation.pendingAttemptCount = null;
+    operation.pendingMaxAttempts = null;
+    operation.pendingNextAttemptAt = null;
     operation.providerBookId = result.foreignBookId || providerBookId;
     operation.providerEditionId = providerEditionId;
     operation.authorId = result.authorId ?? result.author?.id ?? null;

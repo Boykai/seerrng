@@ -1,5 +1,9 @@
 import { parseDownloadPathMappings } from '@server/lib/downloadPathMappings';
-import type { AllSettings, NotificationAgentKey } from '@server/lib/settings';
+import type {
+  AllSettings,
+  AudiobookshelfSettings,
+  NotificationAgentKey,
+} from '@server/lib/settings';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -23,6 +27,7 @@ export type ExternalRuntimeConfig = Pick<
   | 'sonarr'
   | 'lidarr'
   | 'readarr'
+  | 'audiobookshelf'
   | 'mylar'
   | 'kapowarr'
   | 'backissue'
@@ -81,6 +86,32 @@ const normalizeServarrServices = (
   });
 };
 
+const normalizeAudiobookshelf = (
+  value: unknown
+): AudiobookshelfSettings | null => {
+  if (value === undefined || value === null) return null;
+  const settings = assertRecord(value, 'audiobookshelf');
+  if (
+    typeof settings.id !== 'number' ||
+    !Number.isSafeInteger(settings.id) ||
+    typeof settings.name !== 'string' ||
+    typeof settings.hostname !== 'string' ||
+    typeof settings.port !== 'number' ||
+    !Number.isSafeInteger(settings.port) ||
+    typeof settings.apiKey !== 'string' ||
+    typeof settings.useSsl !== 'boolean' ||
+    typeof settings.libraryId !== 'string' ||
+    typeof settings.libraryName !== 'string' ||
+    typeof settings.syncEnabled !== 'boolean' ||
+    (settings.baseUrl !== undefined && typeof settings.baseUrl !== 'string') ||
+    (settings.externalUrl !== undefined &&
+      typeof settings.externalUrl !== 'string')
+  ) {
+    throw new Error('SEERR_EXTERNAL_CONFIG.audiobookshelf is invalid');
+  }
+  return settings as unknown as AudiobookshelfSettings;
+};
+
 const validate = (value: unknown): ExternalRuntimeConfig => {
   const root = assertRecord(value, 'root');
   if (typeof root.clientId !== 'string' || root.clientId.length === 0) {
@@ -114,6 +145,7 @@ const validate = (value: unknown): ExternalRuntimeConfig => {
     sonarr: normalizeServarrServices(root.sonarr, 'sonarr'),
     lidarr: normalizeServarrServices(root.lidarr, 'lidarr'),
     readarr: normalizeServarrServices(root.readarr, 'readarr'),
+    audiobookshelf: normalizeAudiobookshelf(root.audiobookshelf),
     // Lenient for optional comics and magazine services: SEERR_EXTERNAL_CONFIG
     // is hand-maintained or may predate an integration, so missing keys mean
     // no configured instances.
@@ -164,6 +196,7 @@ const loadFromSettingsFile = (): ExternalRuntimeConfig | undefined => {
       sonarr: settings.sonarr ?? [],
       lidarr: settings.lidarr ?? [],
       readarr: settings.readarr ?? [],
+      audiobookshelf: settings.audiobookshelf ?? null,
       mylar: settings.mylar ?? [],
       kapowarr: settings.kapowarr ?? [],
       backissue: settings.backissue ?? [],

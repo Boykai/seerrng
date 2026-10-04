@@ -20,10 +20,13 @@ export const canRequestMissingBookFormat = (title: BookMediaInfo) => {
     title.mediaInfo.externalServiceId !== null &&
     title.mediaInfo.externalServiceId !== undefined;
   const hasAudiobookServiceLink =
-    title.mediaInfo.audiobookServiceId !== null &&
-    title.mediaInfo.audiobookServiceId !== undefined &&
-    title.mediaInfo.audiobookExternalServiceId !== null &&
-    title.mediaInfo.audiobookExternalServiceId !== undefined;
+    (title.mediaInfo.audiobookServiceId !== null &&
+      title.mediaInfo.audiobookServiceId !== undefined &&
+      title.mediaInfo.audiobookExternalServiceId !== null &&
+      title.mediaInfo.audiobookExternalServiceId !== undefined) ||
+    (title.mediaInfo.audiobookLibraryServiceId !== null &&
+      title.mediaInfo.audiobookLibraryServiceId !== undefined &&
+      !!title.mediaInfo.audiobookLibraryItemId);
   const activeBookRequests =
     title.mediaInfo.requests?.filter(
       (request) =>

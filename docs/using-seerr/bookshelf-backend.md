@@ -138,18 +138,29 @@ approved those other books.
 
 SeerrNG sends each ChaptarrNG Bookshelf service through the matching ebook or
 audiobook API facade. It reads ChaptarrNG's `/system/capabilities` contract to
-choose the provider-ID dialect. Older versions without a supported contract
-fall back to the existing Hardcover-setting check, then use the Hardcover
-facade when that setting is unavailable. Keep both SeerrNG service entries on
-the same ChaptarrNG instance when it manages both formats, and select the
-matching format in each entry.
+choose the provider-ID dialect, format facade, paged library contract,
+provider-scoped edition identity, and pending-import support. Older versions
+without a supported contract fall back to the existing Hardcover-setting
+check and legacy route assumptions. Keep both SeerrNG service entries on the
+same ChaptarrNG instance when it manages both formats, and select the matching
+format in each entry.
+
+For ChaptarrNG `0.9.941` and later, configure a dedicated SeerrNG service key
+with `CHAPTARR__AUTH__SEERRAPIKEY` in the ChaptarrNG container or secret
+manager. Enter that value in the Bookshelf service's **API Key** field. The
+scoped key supports SeerrNG's book lookup, library, request, search, and
+pending-author-import operations, and its artwork requests. It does not grant
+global settings, book or author deletion, file deletion, or media-move access.
+Keep the normal ChaptarrNG API key separate for administrators and older
+integrations.
 
 | Operation | SeerrNG behavior |
 | --- | --- |
 | Search and edition selection | Uses format-scoped lookups, retains the provider's work and edition IDs, and falls back to native lookup results when a format facade has no addressable result. |
-| Library scan | Reads paged, format-scoped results including unmonitored catalogue rows. It follows ChaptarrNG's reported total even when a page is short, and refuses to return a scan known to be incomplete. |
+| Library scan | Reads paged, format-scoped results when advertised, including unmonitored catalogue rows. It follows ChaptarrNG's reported total even when a page is short, and refuses to return a scan known to be incomplete. |
 | Add and search | Sends the selected format and monitoring intent. When ChaptarrNG queues author metadata preparation, SeerrNG stores the pending import and resumes the requested book add and search when it is ready. |
 | Request cancellation | Cancels the pending author import only when no other active request on the same ChaptarrNG instance references it. The check includes both SeerrNG ebook and audiobook service entries. For completed adds, normal book and queue cleanup applies. |
+| Request status | Shows when ChaptarrNG is preparing the author, including retry count and the next scheduled retry when available. |
 | Settings diagnostic | A normal diagnostic checks the connection, profiles, folders, and lookup. The optional `testAdd` API flag performs a real add and removes the local book afterward. If ChaptarrNG returns a pending import, the diagnostic displays its ID and leaves it queued because that import may also serve an active request. Check the import in ChaptarrNG and cancel it only if no request needs it. |
 
 The `testAdd` diagnostic is an API option; the Settings modal's **Run
@@ -165,26 +176,32 @@ request checks for active references across both format entries when they point
 to the same ChaptarrNG instance, and cancels the pending author import only
 when no other request depends on it.
 
-The last end-to-end Docker validation used Chaptarr `0.9.911.0`. The fork's
-first stable release was `v0.9.936`; its current
-[ChaptarrNG v0.9.939 release](https://github.com/snapetech/chaptarrng/releases/tag/v0.9.939)
-includes the format-scoped request and pending-import contracts reviewed in
-the
-[BookController](https://github.com/snapetech/chaptarrng/blob/v0.9.939/src/Chaptarr.Api.V1/Books/BookController.cs)
-and
-[PendingAuthorImportController](https://github.com/snapetech/chaptarrng/blob/v0.9.939/src/Chaptarr.Api.V1/PendingImport/PendingAuthorImportController.cs).
-The explicit `/system/capabilities` contract is scheduled for the next
-ChaptarrNG release; current images continue to use the settings fallback. The
-contract and fallback are covered by ChaptarrNG resource tests and SeerrNG
-adapter tests, but those checks do not replace end-to-end Docker validation.
-The public GHCR images
-`ghcr.io/snapetech/chaptarrng:0.9.939` and
-`ghcr.io/snapetech/chaptarrng:latest` are available for `linux/amd64`,
-`linux/arm64`, and `linux/arm/v7`. Its Unraid template is available from the
-[dedicated ChaptarrNG Unraid package repository](https://github.com/snapetech/chaptarrng-unraid).
-Source review and image publication are not end-to-end runtime validation of
-SeerrNG with ChaptarrNG. Pin `0.9.939` for reproducible deployments because
-the Readarr-compatible surface can change between releases.
+The ChaptarrNG integration contract and restricted service key are covered by
+tests in both repositories. The ChaptarrNG repository also includes a
+cross-container Compose smoke test that runs SeerrNG's compiled API adapter
+against a locally built ChaptarrNG image, checks the format-scoped paged
+library, and verifies that administrative and unrelated command routes reject
+the SeerrNG credential. Run it with the instructions in
+[ChaptarrNG's SeerrNG integration guide](https://github.com/snapetech/chaptarrng/blob/main/docs/SEERRNG_INTEGRATION.md).
+Pin the ChaptarrNG image version in reproducible deployments because its
+Readarr-compatible surface can change between releases.
+
+## Audiobookshelf availability
+
+SeerrNG can scan one Audiobookshelf book library as a separate,
+inventory-only audiobook source. Connect it under **Settings → Services →
+Audiobookshelf Availability**, test the connection, and select a book library.
+Use an Audiobookshelf user token with permission to view that library. The scan
+matches items to SeerrNG's book catalogue by ISBN; entries without an ISBN
+cannot be linked automatically. Matching items count as available audiobooks
+only, so an audiobook in Audiobookshelf does not block an ebook request.
+
+This connection is read-only: SeerrNG does not add, remove, monitor, or modify
+Audiobookshelf items. It does not dispatch acquisition requests to
+Audiobookshelf. The Bookshelf scan reads the selected library and removes stale
+availability links only after a complete scan, so transient API or pagination
+failures do not mark a library as empty. An optional external URL makes the
+matching Audiobookshelf item clickable from book details.
 
 If a ChaptarrNG lookup is empty, first verify that the selected **Book Format**
 has a writable root folder and matching quality/metadata profiles. If the

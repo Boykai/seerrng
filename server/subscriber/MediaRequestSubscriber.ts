@@ -41,6 +41,7 @@ import MediaRequestStatusEvent from '@server/entity/MediaRequestStatusEvent';
 import { RequestDispatchOutbox } from '@server/entity/RequestDispatchOutbox';
 import Season from '@server/entity/Season';
 import SeasonRequest from '@server/entity/SeasonRequest';
+import { hasAvailableBookFormat } from '@server/lib/bookAvailability';
 import {
   normalizeMusicBrainzId,
   normalizeOpenLibraryWorkId,
@@ -518,10 +519,13 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       media.externalServiceId !== null &&
       media.externalServiceId !== undefined;
     const hasAudiobook =
-      media.audiobookServiceId !== null &&
-      media.audiobookServiceId !== undefined &&
-      media.audiobookExternalServiceId !== null &&
-      media.audiobookExternalServiceId !== undefined;
+      (media.audiobookServiceId !== null &&
+        media.audiobookServiceId !== undefined &&
+        media.audiobookExternalServiceId !== null &&
+        media.audiobookExternalServiceId !== undefined) ||
+      (media.audiobookLibraryServiceId !== null &&
+        media.audiobookLibraryServiceId !== undefined &&
+        !!media.audiobookLibraryItemId);
 
     return hasEbook || hasAudiobook
       ? MediaStatus.AVAILABLE
@@ -1665,11 +1669,8 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
 
       const requestedBookFormat = entity.bookFormat ?? 'ebook';
       const bookFormatAlreadyAvailable =
-        media.status === MediaStatus.AVAILABLE &&
-        (requestedBookFormat === 'audiobook'
-          ? media.audiobookServiceId !== null &&
-            media.audiobookExternalServiceId !== null
-          : media.serviceId !== null && media.externalServiceId !== null);
+        requestedBookFormat !== 'both' &&
+        hasAvailableBookFormat(media, requestedBookFormat);
 
       if (requestedBookFormat !== 'both' && bookFormatAlreadyAvailable) {
         logger.warn('Book already exists, marking request as COMPLETED', {

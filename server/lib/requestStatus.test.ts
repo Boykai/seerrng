@@ -376,6 +376,39 @@ test('tracked Bookshelf operations report observed lifecycle stages', () => {
   });
   assert.equal(monitoring.stage, RequestStatusStage.SEARCHING);
   assert.match(monitoring.message ?? '', /preparing a Bookshelf search/);
+  const pending = getRequestStatus(bookRequest, {
+    bookSearchState: 'pending',
+    bookImportProgresses: [
+      {
+        format: 'audiobook',
+        attemptCount: 2,
+        maxAttempts: 8,
+        nextAttemptAt: date,
+      },
+    ],
+  });
+  assert.equal(pending.stage, RequestStatusStage.SEARCHING);
+  assert.match(
+    pending.message,
+    /ChaptarrNG is preparing the requested audiobook/
+  );
+  assert.deepEqual(pending.bookImportProgresses, [
+    {
+      format: 'audiobook',
+      attemptCount: 2,
+      maxAttempts: 8,
+      nextAttemptAt: date,
+    },
+  ]);
+  const searchingWithPendingImport = getRequestStatus(bookRequest, {
+    bookSearchState: 'searching',
+    bookImportProgresses: [
+      { format: 'ebook', attemptCount: 1, maxAttempts: 5 },
+    ],
+  });
+  assert.deepEqual(searchingWithPendingImport.bookImportProgresses, [
+    { format: 'ebook', attemptCount: 1, maxAttempts: 5 },
+  ]);
   assert.equal(
     getRequestStatus(bookRequest, { bookSearchState: 'grabbed' }).stage,
     RequestStatusStage.DOWNLOADING

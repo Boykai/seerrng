@@ -172,6 +172,30 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.50.0](https://github.com/snapetech/seerrng/compare/v3.49.0..v3.50.0) - 2026-10-04
+
+### User-facing changes
+
+#### Added
+
+- **Books:** Connect a read-only Audiobookshelf book library to show ISBN-matched audiobooks as available in SeerrNG. The integration scans inventory only and never changes Audiobookshelf items.
+
+#### Changed
+
+- **Bookshelf:** Requests waiting for ChaptarrNG author preparation now show the book format, retry count, and next scheduled retry when the server provides that information. ChaptarrNG operators can also use a dedicated SeerrNG service key.
+
+#### Fixed
+
+- **Bookshelf:** SeerrNG now uses BookshelfNG's ebook and audiobook file counts independently when syncing service status, while older Readarr-compatible services keep using aggregate counts.
+
+### 🚀 Features
+- Integrate ChaptarrNG and Audiobookshelf - ([e9d2e50](https://github.com/snapetech/seerrng/commit/e9d2e50f2b446a70e01f5b16af8bc8265ed99b3e))
+
+### 🐛 Bug Fixes
+- *(release)* Pin AppImage builder version - ([b439984](https://github.com/snapetech/seerrng/commit/b439984ea5035854722ee331cc2c4c81cf3b5ce1))
+
 ## [3.49.0](https://github.com/snapetech/seerrng/compare/v3.48.3..v3.49.0) - 2026-10-04
 
 ### User-facing changes

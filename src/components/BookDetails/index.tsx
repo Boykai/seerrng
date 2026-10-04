@@ -266,10 +266,13 @@ const BookDetails = () => {
     data.mediaInfo.externalServiceId !== null &&
     data.mediaInfo.externalServiceId !== undefined;
   const hasAudiobookServiceLink =
-    data.mediaInfo?.audiobookServiceId !== null &&
-    data.mediaInfo?.audiobookServiceId !== undefined &&
-    data.mediaInfo.audiobookExternalServiceId !== null &&
-    data.mediaInfo.audiobookExternalServiceId !== undefined;
+    (data.mediaInfo?.audiobookServiceId !== null &&
+      data.mediaInfo?.audiobookServiceId !== undefined &&
+      data.mediaInfo.audiobookExternalServiceId !== null &&
+      data.mediaInfo.audiobookExternalServiceId !== undefined) ||
+    (data.mediaInfo?.audiobookLibraryServiceId !== null &&
+      data.mediaInfo?.audiobookLibraryServiceId !== undefined &&
+      !!data.mediaInfo?.audiobookLibraryItemId);
   const activeBookRequests =
     data.mediaInfo?.requests?.filter(
       (request) =>
@@ -322,6 +325,14 @@ const BookDetails = () => {
     format: 'ebook' | 'audiobook',
     destination: typeof ebookDestination
   ) => {
+    if (
+      format === 'audiobook' &&
+      data.mediaInfo?.status === MediaStatus.AVAILABLE &&
+      data.mediaInfo.audiobookLibraryItemId
+    ) {
+      return true;
+    }
+
     const externalServiceId =
       format === 'ebook'
         ? data.mediaInfo?.externalServiceId
