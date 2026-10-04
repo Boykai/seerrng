@@ -51,6 +51,8 @@ export interface MangaDetails extends MangaResult {
   endDate?: string;
   /** Set by the details route: a library scan found it in Suwayomi. */
   inSuwayomiLibrary?: boolean;
+  /** Set by the details route: the title is on the user's watchlist. */
+  onUserWatchlist?: boolean;
 }
 
 const STORY_ROLES = new Set([

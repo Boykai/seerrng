@@ -174,6 +174,8 @@ mangaRoutes.get('/:id', async (req, res) => {
     const details = {
       ...mapMangaDetails(manga, policy, media),
       inSuwayomiLibrary: await isMangaInSuwayomiLibrary(anilistId),
+      // The media's watchlists are hydrated for the requesting user only.
+      onUserWatchlist: (media?.watchlists?.length ?? 0) > 0,
     };
     enqueueImageCacheWarm(extractImageCacheUrls(details));
     return res.status(200).json(filterEntityResponse(details, req.user));

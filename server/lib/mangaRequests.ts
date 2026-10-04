@@ -1,4 +1,5 @@
 import type AnilistAPI from '@server/api/anilist';
+import type { AnilistMangaDetails } from '@server/api/anilist/manga';
 import {
   MangaRequestBindingState,
   MangaRequestCheckpoint,
@@ -411,12 +412,13 @@ export const loadMangaRequestPolicy = (): ReturnType<
 
 /**
  * Refuses an AniList ID that is unknown or excluded by the content policy
- * (adult titles, novels) with one indistinguishable error. Runs before any
- * row is written; uses the shared AniList client, limiter and cache.
+ * (adult titles, novels) with one indistinguishable error, and returns the
+ * title's details otherwise. Runs before any row is written; uses the shared
+ * AniList client, limiter and cache.
  */
 export const assertMangaRequestable = async (
   anilistId: number
-): Promise<void> => {
+): Promise<AnilistMangaDetails> => {
   const [
     { default: AnilistClient },
     { isAnilistMangaExcluded },
@@ -431,6 +433,7 @@ export const assertMangaRequestable = async (
   if (!details || isAnilistMangaExcluded(details, getMangaContentPolicy())) {
     throw new MangaRequestNotFoundError();
   }
+  return details;
 };
 
 /** A PENDING manga request edit: its target instance and, optionally, scope. */

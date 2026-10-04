@@ -140,6 +140,7 @@ export interface UserSettingsGeneralResponse {
   watchlistSyncBooks?: boolean;
   watchlistSyncComics?: boolean;
   watchlistSyncMagazines?: boolean;
+  watchlistSyncManga?: boolean;
   cardTextVisibility?: UserSettingsCardTextResponse;
   requestRootFolders?: UserRequestRootFolders;
 }

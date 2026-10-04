@@ -816,6 +816,7 @@ const parseGeneralSettingsBody = (
     'watchlistSyncBooks',
     'watchlistSyncComics',
     'watchlistSyncMagazines',
+    'watchlistSyncManga',
   ] as const) {
     if (!hasOwn(bodyObject, fieldName)) {
       continue;
@@ -1218,6 +1219,7 @@ userSettingsRoutes.get<{ id: string }, UserSettingsGeneralResponse>(
             watchlistSyncBooks: user.settings?.watchlistSyncBooks,
             watchlistSyncComics: user.settings?.watchlistSyncComics,
             watchlistSyncMagazines: user.settings?.watchlistSyncMagazines,
+            watchlistSyncManga: user.settings?.watchlistSyncManga,
             cardTextVisibility: serializeCardTextVisibility(user.settings),
             requestRootFolders: user.settings?.requestRootFolders ?? {},
           });
@@ -1350,6 +1352,7 @@ userSettingsRoutes.post<
             'watchlistSyncBooks',
             'watchlistSyncComics',
             'watchlistSyncMagazines',
+            'watchlistSyncManga',
           ] as const) {
             if (hasOwn(body, fieldName)) {
               Object.assign(user.settings, {
@@ -1395,6 +1398,7 @@ userSettingsRoutes.post<
             watchlistSyncBooks: savedUser.settings?.watchlistSyncBooks,
             watchlistSyncComics: savedUser.settings?.watchlistSyncComics,
             watchlistSyncMagazines: savedUser.settings?.watchlistSyncMagazines,
+            watchlistSyncManga: savedUser.settings?.watchlistSyncManga,
             cardTextVisibility: serializeCardTextVisibility(savedUser.settings),
             requestRootFolders: savedUser.settings?.requestRootFolders ?? {},
             email: savedUser.email,

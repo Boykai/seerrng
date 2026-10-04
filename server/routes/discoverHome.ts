@@ -254,6 +254,15 @@ discoverHomeRoutes.post('/state', async (req, res) => {
           },
         ]
       : []),
+    ...(mangaIds.length
+      ? [
+          {
+            requestedBy: { id: req.user!.id },
+            mediaType: MediaType.MANGA,
+            externalId: In(mangaIds),
+          },
+        ]
+      : []),
   ];
 
   const mediaRepository = getRepository(Media);
@@ -342,7 +351,9 @@ discoverHomeRoutes.post('/state', async (req, res) => {
         ? `${item.mediaType}:${normalizeMusicBrainzId(item.mbId ?? '')}`
         : item.mediaType === MediaType.BOOK
           ? `${item.mediaType}:${normalizeOpenLibraryWorkId(item.externalId ?? '')}`
-          : `${item.mediaType}:${item.tmdbId}`
+          : item.mediaType === MediaType.MANGA
+            ? `${item.mediaType}:${normalizeAnilistMangaId(item.externalId ?? '')}`
+            : `${item.mediaType}:${item.tmdbId}`
     )
   );
 
