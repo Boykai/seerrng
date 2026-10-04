@@ -37,7 +37,6 @@ import {
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
-import { UserType } from '@server/constants/user';
 import type { MangaDetails as MangaDetailsType } from '@server/models/Manga';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
@@ -212,10 +211,10 @@ const MangaDetails = () => {
   const canUseBlocklist = hasPermission(Permission.MANAGE_BLOCKLIST);
   const isBlocklistAvailable =
     data.mediaInfo?.status !== MediaStatus.BLOCKLISTED;
+  // Every user type keeps manga on the SeerrNG watchlist.
   const canWatchlist =
     aniListId !== undefined &&
-    data.mediaInfo?.status !== MediaStatus.BLOCKLISTED &&
-    user?.userType !== UserType.PLEX;
+    data.mediaInfo?.status !== MediaStatus.BLOCKLISTED;
   const mediaStatus = data.mediaInfo?.status;
   const canShowRequestButton =
     !!settings.currentSettings.suwayomiEnabled &&

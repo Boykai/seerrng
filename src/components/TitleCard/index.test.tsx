@@ -1,4 +1,5 @@
 import { MediaStatus } from '@server/constants/media';
+import { UserType } from '@server/constants/user';
 import { Permission } from '@server/lib/permissions';
 import { JSDOM } from 'jsdom';
 import React, { act } from 'react';
@@ -12,6 +13,7 @@ const state = vi.hoisted(() => ({
   remove: vi.fn(),
   granted: [] as number[],
   settings: {} as { suwayomiEnabled?: boolean },
+  userType: undefined as UserType | undefined,
 }));
 vi.mock('axios', () => ({
   default: { post: state.post, delete: state.remove },
@@ -114,7 +116,7 @@ vi.mock('@app/hooks/useUser', async () => {
     Permission: permissions.Permission,
     UserType: user.UserType,
     useUser: () => ({
-      user: { id: 7 },
+      user: { id: 7, userType: state.userType },
       hasPermission: (required: number | number[]) =>
         (Array.isArray(required) ? required : [required]).some((permission) =>
           state.granted.includes(permission)
@@ -140,6 +142,7 @@ beforeEach(() => {
   state.post.mockReset();
   state.remove.mockReset();
   state.settings = {};
+  state.userType = undefined;
   state.granted = [
     Permission.REQUEST,
     Permission.REQUEST_MANGA,
@@ -153,7 +156,10 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const renderManga = async (status?: MediaStatus) => {
+const renderManga = async (
+  status?: MediaStatus,
+  isAddedToWatchlist = false
+) => {
   await act(async () =>
     root.render(
       <IntlProvider locale="en">
@@ -164,6 +170,7 @@ const renderManga = async (status?: MediaStatus) => {
           year="1994"
           status={status}
           mediaType="manga"
+          isAddedToWatchlist={isAddedToWatchlist}
         />
       </IntlProvider>
     )
@@ -303,25 +310,70 @@ it('opens the manga request modal with the AniList id', async () => {
 const watchlistButton = () =>
   host.querySelector('[data-poster-region="hover-actions"] button');
 
-it('adds a manga card to the watchlist by its AniList id and removes it again', async () => {
-  state.post.mockResolvedValue({ status: 201, data: { id: 1 } });
-  state.remove.mockResolvedValue({ status: 204 });
-  await renderManga();
-  await openDetails();
-  await click(watchlistButton());
+const userTypes = [
+  ['a local user', UserType.LOCAL],
+  ['a Plex user', UserType.PLEX],
+] as const;
 
-  expect(state.post).toHaveBeenCalledWith('/api/v1/watchlist', {
-    externalId: '30013',
-    mediaType: 'manga',
-    title: 'Sample Manga',
-  });
+it.each(userTypes)(
+  'lets %s add a manga card to the watchlist by its AniList id and remove it again',
+  async (_case, userType) => {
+    state.userType = userType;
+    state.post.mockResolvedValue({ status: 201, data: { id: 1 } });
+    state.remove.mockResolvedValue({ status: 204 });
+    await renderManga();
+    await openDetails();
+    await click(watchlistButton());
 
-  await click(watchlistButton());
+    expect(state.post).toHaveBeenCalledWith('/api/v1/watchlist', {
+      externalId: '30013',
+      mediaType: 'manga',
+      title: 'Sample Manga',
+    });
 
-  expect(state.remove).toHaveBeenCalledWith(
-    '/api/v1/watchlist/30013?mediaType=manga'
-  );
-});
+    await click(watchlistButton());
+
+    expect(state.remove).toHaveBeenCalledWith(
+      '/api/v1/watchlist/30013?mediaType=manga'
+    );
+  }
+);
+
+it.each(userTypes)(
+  'lets %s remove a watchlisted manga card',
+  async (_case, userType) => {
+    state.userType = userType;
+    state.remove.mockResolvedValue({ status: 204 });
+    await renderManga(undefined, true);
+    await openDetails();
+    await click(watchlistButton());
+
+    expect(state.remove).toHaveBeenCalledWith(
+      '/api/v1/watchlist/30013?mediaType=manga'
+    );
+    expect(state.post).not.toHaveBeenCalled();
+  }
+);
+
+it.each([
+  ['a local user', true, UserType.LOCAL],
+  ['a Plex user', false, UserType.PLEX],
+])(
+  'shows %s a watchlist action on a comic card: %s',
+  async (_case, shown, userType) => {
+    state.userType = userType;
+    await act(async () =>
+      root.render(
+        <IntlProvider locale="en">
+          <TitleCard id="4050-1" title="Sample Comic" mediaType="comic" />
+        </IntlProvider>
+      )
+    );
+    await openDetails();
+
+    expect(!!watchlistButton()).toBe(shown);
+  }
+);
 
 it('offers no watchlist action on a blocklisted manga card', async () => {
   await renderManga(MediaStatus.BLOCKLISTED);

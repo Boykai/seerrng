@@ -208,9 +208,11 @@ request waits for a source, the API shows `awaitingBinding: true` in its
 
 ## Watchlist
 
-Users who do not sign in through Plex can add a manga title to their SeerrNG
-watchlist from its card or details page, and remove it there again. Manga
-watchlist entries are shown while the Manga category is on.
+Every user, including users who sign in through Plex, can add a manga title to
+their SeerrNG watchlist from its card or details page and remove it there
+again, including titles that the
+[AniList Planning import](#anilist-planning-import) added. Manga watchlist
+entries are shown while the Manga category is on.
 
 A user with **Auto-Request Manga** or **Auto-Request** permission, and
 permission to request manga, can turn on **Auto-Request Manga** under

@@ -1100,7 +1100,8 @@ const TitleCard = ({
                 <div>
                   {canUseWatchlistActions &&
                     !watchlistPreview &&
-                    user?.userType !== UserType.PLEX &&
+                    // Every user type keeps manga on the SeerrNG watchlist.
+                    (isManga || user?.userType !== UserType.PLEX) &&
                     (toggleWatchlist ? (
                       <Button
                         buttonType={'ghost'}
