@@ -5046,6 +5046,8 @@ const validateCurrentBatchContract = (files) => {
         '1 / -1',
       'pagination-footer (max-width: 20rem) .pagination-footer-actions grid-column':
         '1 / -1',
+      'pagination-footer (max-width: 20rem) .pagination-footer-actions grid-row':
+        '2',
       'pagination-footer (max-width: 20rem) .pagination-footer-page grid-row':
         '3',
     };
