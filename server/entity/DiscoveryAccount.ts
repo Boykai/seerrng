@@ -50,6 +50,15 @@ export default class DiscoveryAccount {
   @Column({ type: 'boolean', default: false })
   public allowWrites: boolean;
 
+  // AniList only: copy Planning manga into the SeerrNG watchlist.
+  @Column({ type: 'boolean', default: false })
+  public importMangaPlanning: boolean;
+
+  // The newest Planning entry change (AniList updatedAt, in seconds) that the
+  // import has fully handled.
+  @Column({ type: 'int', nullable: true })
+  public mangaPlanningCursor: number | null;
+
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public linkedAt: Date;
 }

@@ -761,3 +761,74 @@ export const sanitizeAnilistMangaFilterOptions = (
     ),
   };
 };
+
+export const ANILIST_PLANNING_PAGE_SIZE = 50;
+
+// A read-only page of one user's Planning manga, most recently changed first.
+// It carries only what the content policy needs before any details lookup.
+export const MANGA_PLANNING_PAGE_QUERY = `
+  query MangaPlanningPage($userId: Int, $page: Int) {
+    Page(page: $page, perPage: ${ANILIST_PLANNING_PAGE_SIZE}) {
+      pageInfo { hasNextPage }
+      mediaList(
+        userId: $userId
+        type: MANGA
+        status: PLANNING
+        sort: [UPDATED_TIME_DESC, MEDIA_ID_DESC]
+      ) {
+        updatedAt
+        media { id format isAdult }
+      }
+    }
+  }
+`;
+
+export interface AnilistMangaPlanningEntry {
+  anilistId: number;
+  // When the list entry last changed, in seconds since the epoch.
+  updatedAt: number;
+  format?: AnilistMangaFormat;
+  isAdult: boolean;
+}
+
+export interface AnilistMangaPlanningPage {
+  hasNextPage: boolean;
+  entries: AnilistMangaPlanningEntry[];
+}
+
+/**
+ * Undefined when the reply is not a page of list entries. An entry without a
+ * usable media ID is dropped, and one without a change time counts as the
+ * oldest.
+ */
+export const sanitizeAnilistMangaPlanningPage = (
+  value: unknown
+): AnilistMangaPlanningPage | undefined => {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.pageInfo) ||
+    typeof value.pageInfo.hasNextPage !== 'boolean' ||
+    !Array.isArray(value.mediaList) ||
+    value.mediaList.length > ANILIST_PLANNING_PAGE_SIZE
+  ) {
+    return undefined;
+  }
+  const entries = value.mediaList.flatMap(
+    (item): AnilistMangaPlanningEntry[] => {
+      const media = isRecord(item) && isRecord(item.media) ? item.media : {};
+      const anilistId = boundedInteger(media.id, 1, MAX_INT32);
+      if (!isRecord(item) || anilistId === undefined) {
+        return [];
+      }
+      return [
+        {
+          anilistId,
+          updatedAt: boundedInteger(item.updatedAt, 0, MAX_INT32) ?? 0,
+          format: normalizeAnilistMangaFormat(media.format),
+          isAdult: media.isAdult === true,
+        },
+      ];
+    }
+  );
+  return { hasNextPage: value.pageInfo.hasNextPage, entries };
+};

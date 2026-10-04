@@ -330,6 +330,9 @@ components:
           type: string
         allowWrites:
           type: boolean
+        importMangaPlanning:
+          type: boolean
+          description: AniList only. Whether Planning manga are imported into the watchlist.
         linkedAt:
           type: string
           format: date-time
@@ -19836,7 +19839,8 @@ paths:
             - anilist
             - simkl
     put:
-      summary: Set personal tracking write consent
+      summary: Set personal account preferences
+      description: Sets tracking write consent and, for AniList, whether Planning manga are imported into the watchlist. The import only reads from AniList.
       tags:
         - user
       requestBody:
@@ -19846,11 +19850,13 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required:
-                - allowWrites
+              minProperties: 1
               properties:
                 allowWrites:
                   type: boolean
+                importMangaPlanning:
+                  type: boolean
+                  description: AniList only.
       responses:
         '204':
           description: Operation completed

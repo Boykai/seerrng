@@ -543,6 +543,7 @@ export type JobId =
   | 'manga-dispatch-sweep'
   | 'manga-progress'
   | 'manga-follow'
+  | 'anilist-planning-import'
   | 'download-sync'
   | 'software-request-reconciliation'
   | 'download-recovery'
@@ -900,6 +901,9 @@ class Settings {
         },
         'manga-follow': {
           schedule: '0 7,37 * * * *',
+        },
+        'anilist-planning-import': {
+          schedule: '0 23 * * * *',
         },
         'availability-sync': {
           schedule: '0 0 5 * * *',
@@ -1800,6 +1804,9 @@ class Settings {
         },
         'manga-follow': {
           schedule: '0 7,37 * * * *',
+        },
+        'anilist-planning-import': {
+          schedule: '0 23 * * * *',
         },
         'availability-sync': {
           schedule: '0 0 5 * * *',

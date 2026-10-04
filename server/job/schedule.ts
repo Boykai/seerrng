@@ -8,6 +8,7 @@ import downloadTracker from '@server/lib/downloadtracker';
 import episodeWatchAhead from '@server/lib/episodeWatchAhead';
 import ImageProxy from '@server/lib/imageproxy';
 import { mangaFollowPoller } from '@server/lib/mangaFollow';
+import { mangaPlanningImporter } from '@server/lib/mangaPlanningImport';
 import { mangaProgressPoller } from '@server/lib/mangaProgress';
 import { mangaSourceResolver } from '@server/lib/mangaResolver';
 import refreshToken from '@server/lib/refreshToken';
@@ -558,6 +559,25 @@ export const startJobs = (): void => {
     }),
     running: () => mangaFollowPoller.status().running,
     cancelFn: () => mangaFollowPoller.cancel(),
+  });
+
+  // Copies opted-in users' AniList Planning manga into their watchlists.
+  scheduledJobs.push({
+    id: 'anilist-planning-import',
+    name: 'AniList Planning Import',
+    type: 'process',
+    interval: 'hours',
+    cronSchedule: jobs['anilist-planning-import'].schedule,
+    job: schedule.scheduleJob(jobs['anilist-planning-import'].schedule, () => {
+      logger.debug('Starting scheduled job: AniList Planning Import', {
+        label: 'Jobs',
+      });
+      return runTrackedJob('AniList Planning Import', () =>
+        mangaPlanningImporter.run()
+      );
+    }),
+    running: () => mangaPlanningImporter.status().running,
+    cancelFn: () => mangaPlanningImporter.cancel(),
   });
 
   // Checks if media is still available in plex/sonarr/radarr libs
