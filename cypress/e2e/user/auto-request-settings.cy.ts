@@ -1,4 +1,4 @@
-import { Permission } from '@server/lib/permissions';
+const BASIC_REQUEST_PERMISSION = 32;
 
 const visitUserEditPage = (email: string): void => {
   cy.visit('/users');
@@ -46,7 +46,7 @@ describe('Auto Request Settings', () => {
           return cy.request(
             'POST',
             `/api/v1/user/${user.id}/settings/permissions`,
-            { permissions: Permission.REQUEST }
+            { permissions: BASIC_REQUEST_PERMISSION }
           );
         })
         .its('status')
