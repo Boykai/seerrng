@@ -36,6 +36,7 @@ export const DISCOVER_WATCHLIST_TYPES = [
   'book',
   'comic',
   'magazine',
+  'manga',
 ] as const;
 
 export type DiscoverWatchlistType = (typeof DISCOVER_WATCHLIST_TYPES)[number];
@@ -108,6 +109,8 @@ export const isDiscoverWatchlistTypeEnabled = (
       return isConfiguredMediaCategoryEnabled('comic', availability);
     case 'magazine':
       return isConfiguredMediaCategoryEnabled('magazine', availability);
+    case 'manga':
+      return isConfiguredMediaCategoryEnabled('manga', availability);
   }
 };
 

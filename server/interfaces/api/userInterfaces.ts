@@ -42,6 +42,7 @@ export interface UserBulkUpdateSettings {
   watchlistSyncBooks?: boolean;
   watchlistSyncComics?: boolean;
   watchlistSyncMagazines?: boolean;
+  watchlistSyncManga?: boolean;
 }
 
 export interface UserBulkUpdateRequest {

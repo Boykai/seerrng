@@ -330,6 +330,9 @@ components:
           type: string
         allowWrites:
           type: boolean
+        importMangaPlanning:
+          type: boolean
+          description: AniList only. Whether Planning manga are imported into the watchlist.
         linkedAt:
           type: string
           format: date-time
@@ -963,10 +966,10 @@ components:
           description: MusicBrainz release group ID.
         externalId:
           type: string
-          description: Open Library work ID, ComicVine volume ID, or magazine title.
+          description: Open Library work ID, ComicVine volume ID, magazine title, or AniList manga ID.
         mediaType:
           type: string
-          enum: [movie, tv, music, book, comic, magazine]
+          enum: [movie, tv, music, book, comic, magazine, manga]
         ratingKey:
           type: string
         type:
@@ -1179,6 +1182,11 @@ components:
           type: boolean
           nullable: true
           description: 'Enable watchlist sync for magazines'
+          example: false
+        watchlistSyncManga:
+          type: boolean
+          nullable: true
+          description: 'Enable watchlist sync for manga'
           example: false
         cardTextVisibility:
           $ref: '#/components/schemas/CardTextVisibilitySettings'
@@ -3377,6 +3385,9 @@ components:
             inSuwayomiLibrary:
               type: boolean
               description: True when a library scan found this title in a Suwayomi library (an active binding that the latest listing contained). It carries no server, source or chapter details.
+            onUserWatchlist:
+              type: boolean
+              description: True when the title is on the requesting user's watchlist.
     MangaSummariesResponse:
       type: object
       required:
@@ -9807,6 +9818,8 @@ paths:
                       type: boolean
                     watchlistSyncMagazines:
                       type: boolean
+                    watchlistSyncManga:
+                      type: boolean
       responses:
         '200':
           description: Successfully updated user details
@@ -10573,7 +10586,7 @@ paths:
       parameters:
         - in: path
           name: mediaId
-          description: TMDB ID, external media ID, or magazine title
+          description: TMDB ID, external media ID, magazine title, or AniList manga ID
           required: true
           example: '1'
           schema:
@@ -10590,6 +10603,7 @@ paths:
               - book
               - comic
               - magazine
+              - manga
       responses:
         '204':
           description: Succesfully removed watchlist item
@@ -19825,7 +19839,8 @@ paths:
             - anilist
             - simkl
     put:
-      summary: Set personal tracking write consent
+      summary: Set personal account preferences
+      description: Sets tracking write consent and, for AniList, whether Planning manga are imported into the watchlist. The import only reads from AniList.
       tags:
         - user
       requestBody:
@@ -19835,11 +19850,13 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required:
-                - allowWrites
+              minProperties: 1
               properties:
                 allowWrites:
                   type: boolean
+                importMangaPlanning:
+                  type: boolean
+                  description: AniList only.
       responses:
         '204':
           description: Operation completed

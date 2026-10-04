@@ -318,4 +318,19 @@ describe('discovery integration OpenAPI contracts', () => {
       400
     );
   });
+  it('accepts only known account preferences', async () => {
+    const app = createApp();
+    const put = (body: object) =>
+      request(app)
+        .put('/api/v1/integrations/discovery/accounts/anilist/preferences')
+        .send(body);
+    assert.equal((await put({ importMangaPlanning: true })).status, 200);
+    assert.equal(
+      (await put({ allowWrites: false, importMangaPlanning: false })).status,
+      200
+    );
+    assert.equal((await put({})).status, 400);
+    assert.equal((await put({ importMangaPlanning: 'yes' })).status, 400);
+    assert.equal((await put({ mangaPlanningCursor: 1 })).status, 400);
+  });
 });

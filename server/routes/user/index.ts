@@ -302,6 +302,7 @@ const BULK_USER_SETTINGS_FIELDS = [
   'watchlistSyncBooks',
   'watchlistSyncComics',
   'watchlistSyncMagazines',
+  'watchlistSyncManga',
 ] as const satisfies readonly (keyof UserBulkUpdateSettings)[];
 
 const parseBulkUserSettings = (

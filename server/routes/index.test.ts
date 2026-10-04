@@ -459,6 +459,57 @@ describe('Discover homepage synchronization API', () => {
     assert.strictEqual(numericId.status, 400);
   });
 
+  it('marks manga on the requesting user watchlist by canonical AniList id', async () => {
+    const [admin, friend] = await Promise.all([
+      getRepository(User).findOneOrFail({
+        where: { email: 'admin@seerr.dev' },
+      }),
+      getRepository(User).findOneOrFail({
+        where: { email: 'friend@seerr.dev' },
+      }),
+    ]);
+    const media = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.UNKNOWN,
+        status4k: MediaStatus.UNKNOWN,
+        identifiers: [
+          new MediaIdentifier({
+            provider: MediaIdentifierProvider.ANILIST,
+            value: '30013',
+            canonical: true,
+          }),
+        ],
+      })
+    );
+    await getRepository(Watchlist).save(
+      new Watchlist({
+        media,
+        requestedBy: admin,
+        mediaType: MediaType.MANGA,
+        externalId: '30013',
+        title: 'Sample Manga',
+      })
+    );
+
+    const [adminAgent, friendAgent] = await Promise.all([
+      loginAs(admin.email),
+      loginAs(friend.email),
+    ]);
+    const body = { items: [{ mediaType: MediaType.MANGA, id: ' 030013 ' }] };
+    const [adminState, friendState] = await Promise.all([
+      adminAgent.post('/api/v1/discover/home/state').send(body),
+      friendAgent.post('/api/v1/discover/home/state').send(body),
+    ]);
+
+    assert.strictEqual(adminState.status, 200);
+    assert.strictEqual(adminState.body.items[0].key, 'manga:30013');
+    assert.strictEqual(adminState.body.items[0].watchlisted, true);
+    assert.strictEqual(friendState.status, 200);
+    assert.strictEqual(friendState.body.items[0].watchlisted, false);
+  });
+
   it('isolates request and watchlist overlays by authenticated user', async () => {
     const [admin, friend] = await Promise.all([
       getRepository(User).findOneOrFail({

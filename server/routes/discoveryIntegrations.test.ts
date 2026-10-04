@@ -11,12 +11,14 @@ import { getRepository } from '@server/datasource';
 import DiscoveryAccount from '@server/entity/DiscoveryAccount';
 import DiscoveryIdentityMapping from '@server/entity/DiscoveryIdentityMapping';
 import { User } from '@server/entity/User';
+import { saveDiscoveryAccount } from '@server/lib/discoveryIntegrations/accounts';
 import { getSettings } from '@server/lib/settings';
 import { checkUser } from '@server/middleware/auth';
 import { setupTestDb } from '@server/test/db';
 import express from 'express';
 import session from 'express-session';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { afterEach, before, describe, it, mock } from 'node:test';
 import request from 'supertest';
 import authRoutes from './auth';
@@ -377,6 +379,109 @@ describe('personal discovery account boundaries', () => {
       ).status,
       400
     );
+  });
+  it('lets an AniList account opt in to the Planning import until it is relinked', async () => {
+    const agent = await login();
+    const admin = await getRepository(User).findOneByOrFail({
+      email: 'admin@seerr.dev',
+    });
+    const accessToken = randomUUID();
+    Object.assign(getSettings().discoveryIntegrations, {
+      anilist: {
+        ...getSettings().discoveryIntegrations.anilist,
+        clientId: 'test-anilist-app',
+      },
+      trakt: {
+        ...getSettings().discoveryIntegrations.trakt,
+        clientId: 'test-trakt-app',
+      },
+    });
+    const repository = getRepository(DiscoveryAccount);
+    await repository.save([
+      {
+        userId: admin.id,
+        provider: 'anilist',
+        clientId: 'test-anilist-app',
+        accessToken,
+        username: 'reader',
+        providerUserId: '5001',
+        allowWrites: false,
+      },
+      {
+        userId: admin.id,
+        provider: 'trakt',
+        clientId: 'test-trakt-app',
+        accessToken: randomUUID(),
+        username: 'viewer',
+        providerUserId: '123',
+        allowWrites: false,
+      },
+    ]);
+    const setPreferences = (provider: string, body: object) =>
+      agent
+        .put(`/integrations/discovery/accounts/${provider}/preferences`)
+        .send(body);
+    const listAccounts = async () => {
+      const listed = await agent.get('/integrations/discovery/accounts');
+      assert.equal(listed.status, 200);
+      assert.equal(JSON.stringify(listed.body).includes(accessToken), false);
+      return Object.fromEntries(
+        (listed.body.accounts as Record<string, unknown>[]).map((account) => [
+          account.provider,
+          account,
+        ])
+      );
+    };
+
+    assert.equal(
+      (await setPreferences('anilist', { importMangaPlanning: true })).status,
+      204
+    );
+    for (const [provider, body] of [
+      ['trakt', { importMangaPlanning: true }],
+      ['anilist', { importMangaPlanning: 'yes' }],
+      ['anilist', {}],
+    ] as const) {
+      assert.equal(
+        (await setPreferences(provider, body)).status,
+        400,
+        JSON.stringify(body)
+      );
+    }
+    let accounts = await listAccounts();
+    assert.equal(accounts.anilist.importMangaPlanning, true);
+    assert.equal(accounts.anilist.allowWrites, false);
+    assert.equal('mangaPlanningCursor' in accounts.anilist, false);
+    assert.equal('mangaPlanningCursorId' in accounts.anilist, false);
+    assert.equal('importMangaPlanning' in accounts.trakt, false);
+
+    // Each preference changes on its own.
+    assert.equal(
+      (await setPreferences('anilist', { allowWrites: true })).status,
+      204
+    );
+    accounts = await listAccounts();
+    assert.equal(accounts.anilist.importMangaPlanning, true);
+    assert.equal(accounts.anilist.allowWrites, true);
+
+    await repository.update(
+      { userId: admin.id, provider: 'anilist' },
+      { mangaPlanningCursor: 1234, mangaPlanningCursorId: 5678 }
+    );
+    await saveDiscoveryAccount(
+      admin.id,
+      'anilist',
+      { accessToken: randomUUID() },
+      { username: 'reader', providerUserId: '5001' }
+    );
+    const relinked = await repository.findOneByOrFail({
+      userId: admin.id,
+      provider: 'anilist',
+    });
+    assert.equal(relinked.importMangaPlanning, false);
+    assert.equal(relinked.mangaPlanningCursor, null);
+    assert.equal(relinked.mangaPlanningCursorId, null);
+    assert.equal(relinked.allowWrites, false);
   });
   it('rejects repeated MDBList list query parameters', async () => {
     const agent = await login();

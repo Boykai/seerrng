@@ -409,7 +409,33 @@ router.put(
   '/accounts/:provider/preferences',
   handle(async (req, res) => {
     const provider = parseDiscoveryProvider(req.params.provider);
-    if (typeof req.body?.allowWrites !== 'boolean')
+    const body: Record<string, unknown> =
+      req.body && typeof req.body === 'object' ? req.body : {};
+    const changes: Partial<
+      Pick<DiscoveryAccount, 'allowWrites' | 'importMangaPlanning'>
+    > = {};
+    if (body.allowWrites !== undefined) {
+      if (typeof body.allowWrites !== 'boolean')
+        throw new DiscoveryIntegrationError(
+          400,
+          'Choose whether tracking writes are allowed.'
+        );
+      changes.allowWrites = body.allowWrites;
+    }
+    if (body.importMangaPlanning !== undefined) {
+      if (provider !== 'anilist')
+        throw new DiscoveryIntegrationError(
+          400,
+          'Only AniList can import Planning manga.'
+        );
+      if (typeof body.importMangaPlanning !== 'boolean')
+        throw new DiscoveryIntegrationError(
+          400,
+          'Choose whether to import Planning manga.'
+        );
+      changes.importMangaPlanning = body.importMangaPlanning;
+    }
+    if (!Object.keys(changes).length)
       throw new DiscoveryIntegrationError(
         400,
         'Choose whether tracking writes are allowed.'
@@ -417,7 +443,7 @@ router.put(
     await personalMutation(req, async () => {
       const result = await getRepository(DiscoveryAccount).update(
         { userId: req.user!.id, provider },
-        { allowWrites: req.body.allowWrites }
+        changes
       );
       if (!result.affected)
         throw new DiscoveryIntegrationError(404, 'Account is not connected.');

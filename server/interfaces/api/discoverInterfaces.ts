@@ -10,7 +10,7 @@ export interface WatchlistItem {
   tmdbId?: number;
   mbId?: string;
   externalId?: string;
-  mediaType: 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine';
+  mediaType: 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'manga';
   title: string;
 }
 

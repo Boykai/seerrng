@@ -12,9 +12,6 @@ import { z } from 'zod';
 const maxWatchlistId = 1_000_000_000;
 const maxWatchlistTextLength = 512;
 
-export const MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE =
-  'Manga watchlists are not available yet.';
-
 const strictPositiveInteger = z.preprocess(
   (value) =>
     typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value,
@@ -40,10 +37,15 @@ export const watchlistCreate = z
   })
   .superRefine((value, context) => {
     if (value.mediaType === MediaType.MANGA) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE,
-      });
+      if (
+        !value.externalId ||
+        !isValidExternalMediaId(value.externalId, MediaType.MANGA)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'AniList ID is invalid.',
+        });
+      }
       return;
     }
 

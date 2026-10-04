@@ -2,7 +2,7 @@ import ComicVineAPI from '@server/api/comicvine';
 import ListenBrainzAPI from '@server/api/listenbrainz';
 import OpenLibraryAPI from '@server/api/openlibrary';
 import TheMovieDb from '@server/api/themoviedb';
-import { MediaType } from '@server/constants/media';
+import { MediaStatus, MediaType } from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import MediaIdentifier, {
@@ -16,13 +16,14 @@ import {
   QuotaRestrictedError,
   RequestPermissionError,
   runWithRequestAdmission,
+  ServiceConfigurationError,
 } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
-import { MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE } from '@server/interfaces/api/watchlistCreate';
 import {
   isValidExternalMediaId,
   isValidMusicBrainzResourceId,
   isValidOpenLibraryResourceId,
+  normalizeAnilistMangaId,
   normalizeMusicBrainzId,
   normalizeOpenLibraryWorkId,
 } from '@server/lib/externalIds';
@@ -31,6 +32,17 @@ import {
   cleanMagazineTitle,
   normalizeMagazineTitle,
 } from '@server/lib/magazineIdentity';
+import {
+  createMangaMedia,
+  findMangaMedia,
+  getMangaAdmissionKey,
+} from '@server/lib/mangaMedia';
+import {
+  assertMangaRequestable,
+  MangaCatalogUnavailableError,
+  MangaRequestNotFoundError,
+} from '@server/lib/mangaRequests';
+import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import {
@@ -136,12 +148,6 @@ export class Watchlist {
       securityGranted?: boolean;
     } = {}
   ): Promise<Watchlist> {
-    // Checked before identifier normalization, which treats unknown types as
-    // Open Library book IDs.
-    if (watchlistRequest.mediaType === MediaType.MANGA) {
-      throw new Error(MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE);
-    }
-
     watchlistRequest = {
       ...watchlistRequest,
       mbId: watchlistRequest.mbId
@@ -152,7 +158,9 @@ export class Watchlist {
           ? watchlistRequest.externalId.trim()
           : watchlistRequest.mediaType === MediaType.MAGAZINE
             ? normalizeMagazineTitle(watchlistRequest.externalId)
-            : normalizeOpenLibraryWorkId(watchlistRequest.externalId)
+            : watchlistRequest.mediaType === MediaType.MANGA
+              ? normalizeAnilistMangaId(watchlistRequest.externalId)
+              : normalizeOpenLibraryWorkId(watchlistRequest.externalId)
         : undefined,
     };
 
@@ -187,6 +195,18 @@ export class Watchlist {
         !normalizeMagazineTitle(watchlistRequest.externalId))
     ) {
       throw new Error('Magazine title is invalid for magazine watchlists.');
+    }
+
+    if (watchlistRequest.mediaType === MediaType.MANGA) {
+      if (!isMediaCategoryEnabled('manga')) {
+        throw new NotFoundError('Not found.');
+      }
+      if (
+        !watchlistRequest.externalId ||
+        !isValidExternalMediaId(watchlistRequest.externalId, MediaType.MANGA)
+      ) {
+        throw new Error('AniList ID is invalid for manga watchlists.');
+      }
     }
 
     if (!options.securityGranted) {
@@ -240,12 +260,35 @@ export class Watchlist {
           activeUser,
           options.expectedCredentialVersion
         );
+      } else if (watchlistRequest.mediaType === MediaType.MANGA) {
+        await this.requestMangaFromWatchlist(
+          Number(watchlistRequest.externalId),
+          activeUser,
+          options.expectedCredentialVersion
+        );
       }
 
       return watchlist;
     }
 
     if (!options.admissionGranted) {
+      // Like a manga request, the catalog lookup runs before the title's
+      // canonical admission. Unknown and excluded titles fail the same way,
+      // and the stored title is the catalog's.
+      if (watchlistRequest.mediaType === MediaType.MANGA) {
+        const manga = await assertMangaRequestable(
+          Number(watchlistRequest.externalId)
+        );
+        watchlistRequest = {
+          ...watchlistRequest,
+          title:
+            manga.titles.english ??
+            manga.titles.romaji ??
+            manga.titles.native ??
+            watchlistRequest.externalId,
+        };
+      }
+
       const identity =
         watchlistRequest.mediaType === MediaType.MUSIC
           ? watchlistRequest.mbId
@@ -263,7 +306,9 @@ export class Watchlist {
               ? `request-canonical:comic:${MediaIdentifierProvider.COMICVINE}:${identity}`
               : watchlistRequest.mediaType === MediaType.MAGAZINE
                 ? `request-canonical:magazine:${MediaIdentifierProvider.LAZYLIBRARIAN}:${identity}`
-                : `request-media:${watchlistRequest.mediaType}:${identity}`;
+                : watchlistRequest.mediaType === MediaType.MANGA
+                  ? getMangaAdmissionKey(Number(watchlistRequest.externalId))
+                  : `request-media:${watchlistRequest.mediaType}:${identity}`;
 
       const watchlist = await runWithRequestAdmission([identityKey], () =>
         this.createWatchlist(
@@ -489,6 +534,49 @@ export class Watchlist {
       });
     }
 
+    if (watchlistRequest.mediaType === MediaType.MANGA) {
+      const anilistId = Number(watchlistRequest.externalId);
+      const existing = await watchlistRepository.findOne({
+        where: {
+          externalId: String(anilistId),
+          mediaType: MediaType.MANGA,
+          requestedBy: { id: user.id },
+        },
+      });
+
+      if (existing) {
+        logger.warn('Duplicate request for watchlist blocked', {
+          externalId: String(anilistId),
+          mediaType: watchlistRequest.mediaType,
+          label: 'Watchlist',
+        });
+
+        throw new DuplicateWatchlistRequestError();
+      }
+
+      return dataSource.transaction(async (manager) => {
+        const found = (await findMangaMedia(manager, [anilistId])).get(
+          anilistId
+        );
+        // The AniList ID already belongs to media of another type.
+        if (found === null) {
+          throw new MangaRequestNotFoundError();
+        }
+        const media =
+          found ??
+          (await createMangaMedia(manager, anilistId, MediaStatus.UNKNOWN));
+        const watchlist = new this({
+          ...watchlistRequest,
+          externalId: String(anilistId),
+          requestedBy: user,
+          media,
+        });
+
+        await manager.getRepository(this).save(watchlist);
+        return watchlist;
+      });
+    }
+
     if (watchlistRequest.mediaType === MediaType.MAGAZINE) {
       if (!watchlistRequest.externalId) {
         throw new Error('Magazine title is required for magazine watchlists.');
@@ -664,7 +752,8 @@ export class Watchlist {
         ? { mbId: id as string }
         : mediaType === MediaType.BOOK ||
             mediaType === MediaType.COMIC ||
-            mediaType === MediaType.MAGAZINE
+            mediaType === MediaType.MAGAZINE ||
+            mediaType === MediaType.MANGA
           ? { externalId: id as string }
           : { tmdbId: Number(id) }),
       mediaType,
@@ -912,6 +1001,62 @@ export class Watchlist {
             label: 'Watchlist',
             userId: user.id,
             magazineTitle: title,
+            errorMessage: e.message,
+          });
+      }
+    }
+  }
+
+  // Goes through the normal manga request path, so admission, quotas, the
+  // blocklist, the content policy and the parked state all apply.
+  private static async requestMangaFromWatchlist(
+    anilistId: number,
+    user: User,
+    expectedCredentialVersion?: number
+  ): Promise<void> {
+    if (
+      !isMediaCategoryEnabled('manga') ||
+      !user.settings?.watchlistSyncManga ||
+      !user.hasPermission(
+        [Permission.AUTO_REQUEST, Permission.AUTO_REQUEST_MANGA],
+        { type: 'or' }
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await MediaRequest.request(
+        { mediaId: anilistId, mediaType: MediaType.MANGA },
+        user,
+        { expectedCredentialVersion, isAutoRequest: true }
+      );
+    } catch (e) {
+      if (!(e instanceof Error)) {
+        return;
+      }
+
+      switch (e.constructor) {
+        case RequestPermissionError:
+        case DuplicateMediaRequestError:
+        case QuotaRestrictedError:
+        case ServiceConfigurationError:
+        case MangaRequestNotFoundError:
+        case MangaCatalogUnavailableError:
+          logger.debug('Failed to create manga request from watchlist', {
+            label: 'Watchlist',
+            userId: user.id,
+            anilistId,
+            errorMessage: e.message,
+          });
+          break;
+        case BlocklistedMediaError:
+          break;
+        default:
+          logger.error('Failed to create manga request from watchlist', {
+            label: 'Watchlist',
+            userId: user.id,
+            anilistId,
             errorMessage: e.message,
           });
       }

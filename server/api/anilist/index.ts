@@ -41,6 +41,7 @@ import type {
   AnilistMangaFilterOptions,
   AnilistMangaPage,
   AnilistMangaPageOptions,
+  AnilistMangaPlanningPage,
   AnilistMangaSummary,
 } from './manga';
 import {
@@ -53,12 +54,14 @@ import {
   MANGA_FILTER_OPTIONS_QUERY,
   MANGA_IDS_BY_MAL_QUERY,
   MANGA_PAGE_QUERY,
+  MANGA_PLANNING_PAGE_QUERY,
   buildAnilistMangaPageVariables,
   sanitizeAnilistMalLinkPage,
   sanitizeAnilistMangaBatch,
   sanitizeAnilistMangaDetails,
   sanitizeAnilistMangaFilterOptions,
   sanitizeAnilistMangaPage,
+  sanitizeAnilistMangaPlanningPage,
   sanitizeAnilistMangaSearch,
 } from './manga';
 import {
@@ -578,6 +581,28 @@ class AnilistAPI extends ExternalAPI {
       options.signal
     );
     const result = sanitizeAnilistMalLinkPage(data.Page, new Set(malIds));
+    if (!result) {
+      throw new AnilistBadResponseError();
+    }
+    return result;
+  }
+
+  /**
+   * One page of a user's Planning manga list, read with that user's own
+   * token. It is never cached or shared with another caller.
+   */
+  async getMangaPlanningPage(
+    userId: number,
+    page: number,
+    options: { signal?: AbortSignal } = {}
+  ): Promise<AnilistMangaPlanningPage> {
+    const data = await this.graphql<{ Page?: unknown }>(
+      MANGA_PLANNING_PAGE_QUERY,
+      { userId, page },
+      0,
+      options.signal
+    );
+    const result = sanitizeAnilistMangaPlanningPage(data.Page);
     if (!result) {
       throw new AnilistBadResponseError();
     }

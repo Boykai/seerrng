@@ -49,8 +49,6 @@ const MEDIA_SERVER_LIBRARY_TYPES =
   'Media-server library section types, not SeerrNG media types.';
 const COLLECTION_CATALOG =
   'TV franchise and artist album collections; manga collections are outside the MVP.';
-const WATCHLIST =
-  'L1 refuses manga watchlist items; manga watchlist support is planned follow-up work.';
 
 // Keyed by the location printed in a failure. Remove an entry when its enum
 // gains manga; the audit fails on entries that no longer match.
@@ -59,11 +57,6 @@ const MANGA_ENUM_EXCLUSIONS: Record<string, Exclusion> = {
     owner: 'post-MVP',
     reason:
       'Bulk requests cover music and book selections; manga requests are single-title in the MVP.',
-  },
-  'schema Watchlist mediaType': { owner: 'P4', reason: WATCHLIST },
-  'DELETE /watchlist/{mediaId} query mediaType': {
-    owner: 'P4',
-    reason: WATCHLIST,
   },
   'schema DiscoveryFeedItem mediaType': {
     owner: 'not applicable',

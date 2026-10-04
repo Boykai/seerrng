@@ -17,6 +17,7 @@ import type {
 } from 'axios';
 import axios, { AxiosError } from 'axios';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 
 type GraphQlBody = { query: string; variables: Record<string, unknown> };
@@ -688,6 +689,112 @@ describe('AniList manga batch reads', () => {
     }));
     await assert.rejects(
       limited.getMangaSummariesByIds([4]),
+      rateLimited(30, true)
+    );
+  });
+});
+
+describe('AniList Planning list reads', () => {
+  const planningPage = (
+    mediaList: unknown[],
+    pageInfo: unknown = { hasNextPage: false }
+  ): StubResponse => ({ data: { data: { Page: { pageInfo, mediaList } } } });
+
+  it("reads one uncached page of the user's Planning manga with their token", async () => {
+    const token = `fake-${randomUUID()}`;
+    const api = new AnilistAPI({ accessToken: token });
+    const bodies: GraphQlBody[] = [];
+    const authorization: unknown[] = [];
+    (api as unknown as { axios: AxiosInstance }).axios.defaults.adapter =
+      async (config) => {
+        authorization.push(config.headers?.Authorization);
+        bodies.push(JSON.parse(String(config.data)) as GraphQlBody);
+        return toResponse(
+          config,
+          planningPage(
+            [
+              {
+                updatedAt: 1_700_000_200,
+                media: { id: 12, format: 'MANGA', isAdult: false },
+              },
+              {
+                updatedAt: null,
+                media: { id: 11, format: 'NOVEL', isAdult: null },
+              },
+              { updatedAt: 1_700_000_100, media: { id: 10, isAdult: true } },
+              { updatedAt: 1_700_000_000, media: null },
+              { updatedAt: 1_700_000_000, media: { id: 0 } },
+              'row',
+            ],
+            { hasNextPage: true }
+          )
+        );
+      };
+
+    const page = await api.getMangaPlanningPage(77, 2);
+    await api.getMangaPlanningPage(77, 2);
+
+    assert.equal(bodies.length, 2);
+    assert.deepEqual(authorization, [`Bearer ${token}`, `Bearer ${token}`]);
+    assert.deepEqual(bodies[0].variables, { userId: 77, page: 2 });
+    assert.match(bodies[0].query, /^\s*query MangaPlanningPage/);
+    assert.doesNotMatch(bodies[0].query, /mutation/i);
+    assert.match(
+      bodies[0].query,
+      /mediaList\(\s*userId: \$userId\s*type: MANGA\s*status: PLANNING/
+    );
+    assert.match(bodies[0].query, /sort: \[UPDATED_TIME_DESC, MEDIA_ID_DESC\]/);
+    assert.match(bodies[0].query, /perPage: 50/);
+    assert.deepEqual(page, {
+      hasNextPage: true,
+      entries: [
+        {
+          anilistId: 12,
+          updatedAt: 1_700_000_200,
+          format: 'MANGA',
+          isAdult: false,
+        },
+        { anilistId: 11, updatedAt: 0, format: 'NOVEL', isAdult: false },
+        {
+          anilistId: 10,
+          updatedAt: 1_700_000_100,
+          format: undefined,
+          isAdult: true,
+        },
+      ],
+    });
+  });
+
+  it('rejects malformed Planning pages and reports rate limits', async () => {
+    for (const reply of [
+      { data: { data: { Page: null } } },
+      planningPage([], {}),
+      planningPage([], { hasNextPage: 'false' }),
+      { data: { data: { Page: { pageInfo: { hasNextPage: false } } } } },
+      planningPage(
+        Array.from({ length: 51 }, (_, index) => ({
+          updatedAt: 1,
+          media: { id: index + 1 },
+        }))
+      ),
+    ]) {
+      const api = new AnilistAPI();
+      stubAnilist(api, () => reply);
+      await assert.rejects(
+        api.getMangaPlanningPage(77, 1),
+        (error: unknown) =>
+          error instanceof Error && error.name === 'AnilistBadResponseError'
+      );
+    }
+
+    const limited = new AnilistAPI();
+    stubAnilist(limited, () => ({
+      status: 429,
+      data: {},
+      headers: { 'retry-after': '30' },
+    }));
+    await assert.rejects(
+      limited.getMangaPlanningPage(77, 1),
       rateLimited(30, true)
     );
   });

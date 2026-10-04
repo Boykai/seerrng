@@ -229,7 +229,8 @@ const NotificationTypeSelector = ({
             !user.settings?.watchlistSyncMusic &&
             !user.settings?.watchlistSyncBooks &&
             !user.settings?.watchlistSyncComics &&
-            !user.settings?.watchlistSyncMagazines) ||
+            !user.settings?.watchlistSyncMagazines &&
+            !user.settings?.watchlistSyncManga) ||
           !hasPermission(
             [
               Permission.AUTO_REQUEST,
@@ -239,6 +240,7 @@ const NotificationTypeSelector = ({
               Permission.AUTO_REQUEST_BOOK,
               Permission.AUTO_REQUEST_COMIC,
               Permission.AUTO_REQUEST_MAGAZINE,
+              Permission.AUTO_REQUEST_MANGA,
             ],
             { type: 'or' }
           ),

@@ -195,6 +195,22 @@ describe('scheduled job lifecycle', () => {
     assert.equal(followJob.running?.(), false);
   });
 
+  it('registers the AniList Planning import as an hourly process task', () => {
+    startJobs();
+
+    const importJob = scheduledJobs.find(
+      (job) => job.id === 'anilist-planning-import'
+    );
+
+    assert.ok(importJob);
+    assert.equal(importJob.name, 'AniList Planning Import');
+    assert.equal(importJob.type, 'process');
+    assert.equal(importJob.interval, 'hours');
+    assert.equal(importJob.cronSchedule, '0 23 * * * *');
+    assert.equal(typeof importJob.cancelFn, 'function');
+    assert.equal(importJob.running?.(), false);
+  });
+
   it('cancels future invocations and waits for active work', async () => {
     let cancelCalled = false;
     let release: (() => void) | undefined;

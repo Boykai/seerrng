@@ -11,10 +11,7 @@ import { Router } from 'express';
 import { QueryFailedError } from 'typeorm';
 
 import { MediaType } from '@server/constants/media';
-import {
-  MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE,
-  watchlistCreate,
-} from '@server/interfaces/api/watchlistCreate';
+import { watchlistCreate } from '@server/interfaces/api/watchlistCreate';
 import {
   isValidExternalMediaId,
   isValidMusicBrainzResourceId,
@@ -22,11 +19,25 @@ import {
   normalizeExternalMediaId,
   normalizeMusicBrainzId,
 } from '@server/lib/externalIds';
+import { sendAnilistFailure } from '@server/lib/mangaCatalog';
+import {
+  MangaCatalogUnavailableError,
+  MangaRequestNotFoundError,
+} from '@server/lib/mangaRequests';
+import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { UserMutationActorUnauthorizedError } from '@server/lib/userSecurityMutation';
+import type { Response } from 'express';
 
 const watchlistRoutes = Router();
 const maxWatchlistId = 1_000_000_000;
 const maxWatchlistExternalIdLength = 512;
+
+// Manga items answer like the category-gated routes while manga is disabled.
+const isUnavailableMangaWatchlist = (mediaType: unknown): boolean =>
+  mediaType === MediaType.MANGA && !isMediaCategoryEnabled('manga');
+
+const sendNotFound = (res: Response, message = 'Not found.') =>
+  res.status(404).json({ status: 404, message });
 
 const parseWatchlistNumericId = (id: unknown): number | undefined =>
   parsePositiveRouteId(id, maxWatchlistId);
@@ -57,15 +68,16 @@ watchlistRoutes.post<never, Watchlist, Watchlist>(
       }
       const parsedBody = watchlistCreate.safeParse(req.body);
       if (!parsedBody.success) {
-        const mangaUnavailable = parsedBody.error.issues.some(
-          (issue) => issue.message === MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE
-        );
+        if (isUnavailableMangaWatchlist(req.body?.mediaType)) {
+          return sendNotFound(res);
+        }
         return next({
           status: 400,
-          message: mangaUnavailable
-            ? MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE
-            : 'Invalid watchlist payload.',
+          message: 'Invalid watchlist payload.',
         });
+      }
+      if (isUnavailableMangaWatchlist(parsedBody.data.mediaType)) {
+        return sendNotFound(res);
       }
       const values = {
         ...parsedBody.data,
@@ -110,6 +122,16 @@ watchlistRoutes.post<never, Watchlist, Watchlist>(
         case UserMutationActorUnauthorizedError:
         case WatchlistActorUnavailableError:
           return next({ status: 403, message: 'Access denied.' });
+        case NotFoundError:
+          return sendNotFound(res);
+        case MangaRequestNotFoundError:
+          return sendNotFound(res, 'Manga not found.');
+        case MangaCatalogUnavailableError:
+          return sendAnilistFailure(
+            res,
+            (error as MangaCatalogUnavailableError).failure,
+            'Unable to retrieve manga details.'
+          );
         case QueryFailedError:
           logger.warn('Something wrong with data watchlist', {
             tmdbId: logPayload.tmdbId,
@@ -141,19 +163,24 @@ watchlistRoutes.delete('/:mediaId', async (req, res, next) => {
       mediaType !== MediaType.MUSIC &&
       mediaType !== MediaType.BOOK &&
       mediaType !== MediaType.COMIC &&
-      mediaType !== MediaType.MAGAZINE
+      mediaType !== MediaType.MAGAZINE &&
+      mediaType !== MediaType.MANGA
     ) {
       return next({
         status: 400,
         message: 'Invalid mediaType query parameter.',
       });
     }
+    if (isUnavailableMangaWatchlist(mediaType)) {
+      return sendNotFound(res);
+    }
 
     const parsedMediaId =
       mediaType === MediaType.MUSIC ||
       mediaType === MediaType.BOOK ||
       mediaType === MediaType.COMIC ||
-      mediaType === MediaType.MAGAZINE
+      mediaType === MediaType.MAGAZINE ||
+      mediaType === MediaType.MANGA
         ? parseWatchlistExternalId(req.params.mediaId)
         : parseWatchlistNumericId(req.params.mediaId);
 
@@ -166,7 +193,8 @@ watchlistRoutes.delete('/:mediaId', async (req, res, next) => {
         ? normalizeMusicBrainzId(parsedMediaId as string)
         : mediaType === MediaType.BOOK ||
             mediaType === MediaType.COMIC ||
-            mediaType === MediaType.MAGAZINE
+            mediaType === MediaType.MAGAZINE ||
+            mediaType === MediaType.MANGA
           ? normalizeExternalMediaId(parsedMediaId as string, mediaType)
           : parsedMediaId;
     if (
@@ -190,6 +218,12 @@ watchlistRoutes.delete('/:mediaId', async (req, res, next) => {
     if (
       mediaType === MediaType.MAGAZINE &&
       !isValidExternalMediaId(mediaId as string, MediaType.MAGAZINE)
+    ) {
+      return next({ status: 400, message: 'Invalid mediaId parameter.' });
+    }
+    if (
+      mediaType === MediaType.MANGA &&
+      !isValidExternalMediaId(mediaId as string, MediaType.MANGA)
     ) {
       return next({ status: 400, message: 'Invalid mediaId parameter.' });
     }

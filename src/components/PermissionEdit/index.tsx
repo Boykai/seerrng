@@ -99,6 +99,9 @@ export const messages = defineMessages('components.PermissionEdit', {
   autorequestMagazines: 'Auto-Request Magazines',
   autorequestMagazinesDescription:
     'Grant permission to automatically submit magazine requests via watchlists.',
+  autorequestManga: 'Auto-Request Manga',
+  autorequestMangaDescription:
+    'Grant permission to automatically submit manga requests via watchlists.',
   viewrequests: 'View Requests',
   viewrequestsDescription:
     'Grant permission to view media requests submitted by other users.',
@@ -441,6 +444,18 @@ export const PermissionEdit = ({
           requires: [
             {
               permissions: [Permission.REQUEST, Permission.REQUEST_MAGAZINE],
+              type: 'or',
+            },
+          ],
+        },
+        {
+          id: 'autorequestmanga',
+          name: intl.formatMessage(messages.autorequestManga),
+          description: intl.formatMessage(messages.autorequestMangaDescription),
+          permission: Permission.AUTO_REQUEST_MANGA,
+          requires: [
+            {
+              permissions: [Permission.REQUEST, Permission.REQUEST_MANGA],
               type: 'or',
             },
           ],

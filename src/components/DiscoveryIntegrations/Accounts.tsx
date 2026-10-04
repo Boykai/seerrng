@@ -1,5 +1,7 @@
 import Button from '@app/components/Common/Button';
 import discoveryMessages from '@app/components/DiscoveryIntegrations/messages';
+import useSettings from '@app/hooks/useSettings';
+import { isConfiguredMediaCategoryEnabled } from '@app/utils/serviceAvailability';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { FormattedMessage } from 'react-intl';
@@ -7,7 +9,20 @@ import useSWR from 'swr';
 import { providerNames, type ProviderConfiguration } from './Configuration';
 
 type Provider = 'trakt' | 'anilist' | 'simkl';
-type Account = { provider: Provider; username: string; allowWrites: boolean };
+type Account = {
+  provider: Provider;
+  username: string;
+  allowWrites: boolean;
+  importMangaPlanning?: boolean;
+};
+const preferences = [
+  ['allowWrites', 'accounts.allowwrites', 'accounts.writesdescription'],
+  [
+    'importMangaPlanning',
+    'accounts.importmangaplanning',
+    'accounts.importmangaplanningdescription',
+  ],
+] as const;
 type Pending = {
   provider: Provider;
   userCode?: string;
@@ -17,6 +32,11 @@ type Pending = {
 };
 const base = '/api/v1/integrations/discovery';
 export default function DiscoveryAccounts() {
+  const { currentSettings } = useSettings();
+  const mangaEnabled = isConfiguredMediaCategoryEnabled(
+    'manga',
+    currentSettings
+  );
   const { data: config } = useSWR<ProviderConfiguration>(
     `${base}/configuration`
   );
@@ -133,36 +153,46 @@ export default function DiscoveryAccounts() {
                     />
                   )}
                 </p>
-                {account && (
-                  <label className="mt-3 flex items-start gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={account.allowWrites}
-                      disabled={busy}
-                      onChange={(event) => {
-                        const allowWrites = event.target.checked;
-                        void act(async () => {
-                          await axios.put(
-                            `${base}/accounts/${provider}/preferences`,
-                            { allowWrites }
-                          );
-                          await mutate();
-                        });
-                      }}
-                    />
-                    <span>
-                      <FormattedMessage
-                        {...discoveryMessages['accounts.allowwrites']}
-                        values={{ provider: providerNames[provider] }}
-                      />
-                      <span className="mt-1 block text-xs text-gray-400">
-                        <FormattedMessage
-                          {...discoveryMessages['accounts.writesdescription']}
+                {account &&
+                  preferences
+                    .filter(
+                      ([preference]) =>
+                        preference === 'allowWrites' ||
+                        (provider === 'anilist' && mangaEnabled)
+                    )
+                    .map(([preference, label, description]) => (
+                      <label
+                        key={preference}
+                        className="mt-3 flex items-start gap-2 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!account[preference]}
+                          disabled={busy}
+                          onChange={(event) => {
+                            const enabled = event.target.checked;
+                            void act(async () => {
+                              await axios.put(
+                                `${base}/accounts/${provider}/preferences`,
+                                { [preference]: enabled }
+                              );
+                              await mutate();
+                            });
+                          }}
                         />
-                      </span>
-                    </span>
-                  </label>
-                )}
+                        <span>
+                          <FormattedMessage
+                            {...discoveryMessages[label]}
+                            values={{ provider: providerNames[provider] }}
+                          />
+                          <span className="mt-1 block text-xs text-gray-400">
+                            <FormattedMessage
+                              {...discoveryMessages[description]}
+                            />
+                          </span>
+                        </span>
+                      </label>
+                    ))}
               </div>
               {account ? (
                 <Button

@@ -104,6 +104,7 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages(
     'manga-dispatch-sweep': 'Manga Dispatch Sweep',
     'manga-progress': 'Manga Progress',
     'manga-follow': 'Manga Follow',
+    'anilist-planning-import': 'AniList Planning Import',
     'download-sync': 'Download Sync',
     'software-request-reconciliation': 'Software Request Reconciliation',
     'download-recovery': 'Download Recovery',

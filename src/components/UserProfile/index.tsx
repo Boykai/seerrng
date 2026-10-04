@@ -5,6 +5,8 @@ import ProgressCircle from '@app/components/Common/ProgressCircle';
 import RequestCard from '@app/components/RequestCard';
 import Slider from '@app/components/Slider';
 import TitleCard from '@app/components/TitleCard';
+import MangaTitleCard from '@app/components/TitleCard/MangaTitleCard';
+import { getMangaWatchlistBatch } from '@app/components/TitleCard/mangaWatchlistBatches';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import ProfileHeader from '@app/components/UserProfile/ProfileHeader';
 import { getPositiveQueryParamNumber } from '@app/hooks/useUpdateQueryParams';
@@ -542,7 +544,8 @@ const UserProfile = () => {
               user.settings?.watchlistSyncTv ||
               user.settings?.watchlistSyncMusic ||
               user.settings?.watchlistSyncBooks ||
-              user.settings?.watchlistSyncComics))) &&
+              user.settings?.watchlistSyncComics ||
+              user.settings?.watchlistSyncManga))) &&
         !watchlistError && (
           <>
             <Slider
@@ -565,7 +568,7 @@ const UserProfile = () => {
               isLoading={!watchlistItems}
               isEmpty={!!watchlistItems && watchlistItems.results.length === 0}
               emptyMessage={intl.formatMessage(messages.emptywatchlist)}
-              items={watchlistItems?.results.map((item) => (
+              items={watchlistItems?.results.map((item, index, items) => (
                 <div key={`watchlist-slider-item-${item.ratingKey}`}>
                   {item.mediaType === 'music' && item.mbId ? (
                     <TitleCard
@@ -587,6 +590,11 @@ const UserProfile = () => {
                       title={item.title}
                       mediaType="comic"
                       isAddedToWatchlist={true}
+                    />
+                  ) : item.mediaType === 'manga' && item.externalId ? (
+                    <MangaTitleCard
+                      id={Number(item.externalId)}
+                      batchIds={getMangaWatchlistBatch(items, index)}
                     />
                   ) : item.tmdbId ? (
                     <TmdbTitleCard

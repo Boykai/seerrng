@@ -1,10 +1,12 @@
 import Modal from '@app/components/Common/Modal';
 import PermissionEdit from '@app/components/PermissionEdit';
+import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import type { User } from '@app/hooks/useUser';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import { isConfiguredMediaCategoryEnabled } from '@app/utils/serviceAvailability';
 import type {
   UserBulkUpdateRequest,
   UserBulkUpdateSettings,
@@ -35,6 +37,7 @@ const messages = defineMessages('components.UserList', {
   autoRequestBooks: 'Books',
   autoRequestComics: 'Comics',
   autoRequestMagazines: 'Magazines',
+  autoRequestManga: 'Manga',
   noChange: 'No Change',
   enabled: 'Enabled',
   disabled: 'Disabled',
@@ -47,6 +50,7 @@ const autoRequestFields = [
   ['watchlistSyncBooks', 'autoRequestBooks'],
   ['watchlistSyncComics', 'autoRequestComics'],
   ['watchlistSyncMagazines', 'autoRequestMagazines'],
+  ['watchlistSyncManga', 'autoRequestManga'],
 ] as const satisfies readonly [
   keyof UserBulkUpdateSettings,
   (
@@ -56,6 +60,7 @@ const autoRequestFields = [
     | 'autoRequestBooks'
     | 'autoRequestComics'
     | 'autoRequestMagazines'
+    | 'autoRequestManga'
   ),
 ][];
 
@@ -67,6 +72,7 @@ const BulkEditModal = ({
   onSaving,
 }: BulkEditProps) => {
   const { user: currentUser } = useUser();
+  const { currentSettings } = useSettings();
   const intl = useIntl();
   const { addToast } = useToasts();
   const [currentPermission, setCurrentPermission] = useState(0);
@@ -77,6 +83,11 @@ const BulkEditModal = ({
 
   const hasChanges =
     permissionChanged || Object.keys(autoRequestSettings).length > 0;
+  const visibleAutoRequestFields = autoRequestFields.filter(
+    ([fieldName]) =>
+      fieldName !== 'watchlistSyncManga' ||
+      isConfiguredMediaCategoryEnabled('manga', currentSettings)
+  );
 
   useEffect(() => {
     if (onSaving) {
@@ -164,7 +175,7 @@ const BulkEditModal = ({
             {intl.formatMessage(messages.autoRequestSettingsDescription)}
           </p>
           <div className="settings-group-content">
-            {autoRequestFields.map(([fieldName, labelKey]) => (
+            {visibleAutoRequestFields.map(([fieldName, labelKey]) => (
               <div className="form-row" key={fieldName}>
                 <label htmlFor={`bulk-${fieldName}`} className="text-label">
                   {intl.formatMessage(messages[labelKey])}

@@ -376,6 +376,20 @@ describe('isDiscoverWatchlistTypeEnabled', () => {
     strictEqual(isDiscoverWatchlistTypeEnabled('magazine', availability), true);
   });
 
+  it('shows manga watchlist entries only while the manga category is enabled', () => {
+    strictEqual(isDiscoverWatchlistTypeEnabled('manga', availability), false);
+    strictEqual(
+      isDiscoverWatchlistTypeEnabled('manga', {
+        ...availability,
+        enabledMediaCategories: {
+          ...availability.enabledMediaCategories,
+          manga: true,
+        },
+      }),
+      true
+    );
+  });
+
   it('keeps a book watchlist entry while either book format is enabled', () => {
     strictEqual(isDiscoverWatchlistTypeEnabled('book', availability), true);
     strictEqual(

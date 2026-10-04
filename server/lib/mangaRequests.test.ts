@@ -576,7 +576,7 @@ describe('assertMangaRequestable', () => {
     }
 
     current = details({ format: 'ONE_SHOT' });
-    await assertMangaRequestable(900001);
+    assert.strictEqual(await assertMangaRequestable(900001), current);
     settings.main.mangaIncludeAdult = true;
     current = details({ isAdult: true });
     await assertMangaRequestable(900001);

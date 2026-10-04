@@ -34,6 +34,9 @@ export function publicDiscoveryAccount(account: DiscoveryAccount) {
     username: account.username,
     providerUserId: account.providerUserId,
     allowWrites: account.allowWrites,
+    ...(account.provider === 'anilist'
+      ? { importMangaPlanning: account.importMangaPlanning }
+      : {}),
     linkedAt: account.linkedAt,
     expiresAt: account.expiresAt,
   };
@@ -76,6 +79,9 @@ export async function saveDiscoveryAccount(
     expiresAt: tokens.expiresAt ?? null,
     ...identity,
     allowWrites: false,
+    importMangaPlanning: false,
+    mangaPlanningCursor: null,
+    mangaPlanningCursorId: null,
     linkedAt: new Date(),
     ...(previous ? { id: previous.id } : {}),
   });

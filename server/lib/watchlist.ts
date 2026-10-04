@@ -8,10 +8,12 @@ import type {
 } from '@server/interfaces/api/discoverInterfaces';
 import {
   isValidExternalMediaId,
+  normalizeAnilistMangaId,
   normalizeMusicBrainzId,
   normalizeOpenLibraryWorkId,
 } from '@server/lib/externalIds';
 import { normalizeMagazineTitle } from '@server/lib/magazineIdentity';
+import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import type { SelectQueryBuilder } from 'typeorm';
 
 const mapLocalWatchlistItem = (item: Watchlist): WatchlistItem => ({
@@ -25,10 +27,11 @@ const mapLocalWatchlistItem = (item: Watchlist): WatchlistItem => ({
       ? item.externalId.trim()
       : item.mediaType === MediaType.MAGAZINE
         ? normalizeMagazineTitle(item.externalId)
-        : normalizeOpenLibraryWorkId(item.externalId)
+        : item.mediaType === MediaType.MANGA
+          ? normalizeAnilistMangaId(item.externalId)
+          : normalizeOpenLibraryWorkId(item.externalId)
     : item.externalId,
-  mediaType: item.mediaType as
-    'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine',
+  mediaType: item.mediaType as WatchlistItem['mediaType'],
   title: item.title,
 });
 
@@ -43,8 +46,12 @@ const isRenderableWatchlistItem = (item: Watchlist): boolean =>
     isValidExternalMediaId(item.externalId, MediaType.COMIC)) ||
   (item.mediaType === MediaType.MAGAZINE &&
     !!item.externalId &&
-    isValidExternalMediaId(item.externalId, MediaType.MAGAZINE));
+    isValidExternalMediaId(item.externalId, MediaType.MAGAZINE)) ||
+  (item.mediaType === MediaType.MANGA &&
+    !!item.externalId &&
+    isValidExternalMediaId(item.externalId, MediaType.MANGA));
 
+// Manga items count and list only while the manga category is enabled.
 const applyRenderableWatchlistFilter = (query: SelectQueryBuilder<Watchlist>) =>
   query.andWhere(
     `(
@@ -55,7 +62,12 @@ const applyRenderableWatchlistFilter = (query: SelectQueryBuilder<Watchlist>) =>
     {
       screenMediaTypes: [MediaType.MOVIE, MediaType.TV],
       musicMediaType: MediaType.MUSIC,
-      externalMediaTypes: [MediaType.BOOK, MediaType.COMIC, MediaType.MAGAZINE],
+      externalMediaTypes: [
+        MediaType.BOOK,
+        MediaType.COMIC,
+        MediaType.MAGAZINE,
+        ...(isMediaCategoryEnabled('manga') ? [MediaType.MANGA] : []),
+      ],
     }
   );
 
@@ -83,6 +95,12 @@ const getWatchlistDedupeKey = (item: WatchlistItem) => {
 
   if (item.mediaType === MediaType.MAGAZINE && item.externalId) {
     return `${item.mediaType}:lazylibrarian:${normalizeMagazineTitle(
+      item.externalId
+    )}`;
+  }
+
+  if (item.mediaType === MediaType.MANGA && item.externalId) {
+    return `${item.mediaType}:anilist:${normalizeAnilistMangaId(
       item.externalId
     )}`;
   }
