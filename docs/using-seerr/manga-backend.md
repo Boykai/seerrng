@@ -1206,8 +1206,12 @@ source. So when a source gives no upload dates, every earlier chapter of the
 title shows on that first day, for example the day the title joined the
 library, and later chapters show on the day Suwayomi found them.
 
-Each chapter number counts once, on the first day any version of it appeared.
-Chapters without a number count one by one.
+Within the dates shown, each chapter number counts once, on the earliest day
+of any version of it. Versions dated before the dates shown are not checked.
+So a chapter number that appears again later, for example through a second
+match or a second server, counts again on that later day, and a day's count
+can change when the dates shown start earlier. Chapters without a number count
+one by one.
 
 ### Available and Released
 

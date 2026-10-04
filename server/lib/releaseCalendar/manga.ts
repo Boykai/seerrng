@@ -84,7 +84,7 @@ interface DayCount {
 }
 
 interface NumberedChapter {
-  /** The earliest day the number was released on. */
+  /** The number's earliest release day within the window read. */
   day: string;
   downloaded: boolean;
 }

@@ -20336,7 +20336,7 @@ paths:
                         chapterCount:
                           type: integer
                           minimum: 1
-                          description: Manga chapters released on this day, each chapter number counted once on the first day it appeared.
+                          description: Manga chapters released on this day. Each chapter number counts once, on its earliest day within the requested dates; versions dated before those dates are not checked.
                         available:
                           type: boolean
                         is4k:
