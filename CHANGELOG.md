@@ -174,6 +174,39 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.51.0](https://github.com/snapetech/seerrng/compare/v3.50.0..v3.51.0) - 2026-10-04
+
+### User-facing changes
+
+#### Changed
+
+- **Software Requests:** PC game details show IGDB community play-time estimates, and catalog availability separates QuestarrNG files, tracked games, and verified Steam library matches. Multi-file requests offer a compressed Download all files option while preserving individual downloads.
+  - **Action required:** Update QuestarrNG to request contract version 2 for play-time estimates and multi-file bundles.
+
+#### Fixed
+
+- **Requests:** The Requests badge now refreshes while SeerrNG stays open, so server-side request updates do not leave an outdated approval count in the sidebar.
+
+### 🚀 Features
+- *(integration)* Extend SeerrNG software acquisition - ([ccf9004](https://github.com/snapetech/seerrng/commit/ccf900453d63a09431b82bef635331ea9f505422))
+
+### 🐛 Bug Fixes
+- *(requests)* Refresh pending badge count - ([5c2bdd3](https://github.com/snapetech/seerrng/commit/5c2bdd3dd34c3b93225ae6295edd95f4c5b0ac25))
+
+### 🎨 Styling
+- Format ChaptarrNG integration smoke script - ([b0c8ffc](https://github.com/snapetech/seerrng/commit/b0c8ffcbf883b09ac16f2c2c6c2dd250a2a480fc))
+
+### 🧪 Testing
+- Align book API key helper assertion - ([06fbbce](https://github.com/snapetech/seerrng/commit/06fbbce72260a08f36139af5dcd94dcda0bd481f))
+
+### ⚙️ Miscellaneous Tasks
+- *(yunohost)* Align package with v3.50.0 - ([d6b11b6](https://github.com/snapetech/seerrng/commit/d6b11b6fe218e00fcc0efa586bea8a0b4e73712f))
+- Integrate latest request count refresh from main - ([9403246](https://github.com/snapetech/seerrng/commit/9403246fdbd992a9be13b26c2b7c00849a93355b))
+- Integrate latest SeerrNG main - ([98de362](https://github.com/snapetech/seerrng/commit/98de362a21c05eec96d78f47d9a3e2bf9e0c470a))
+- Integrate SeerrNG main v3.50.0 - ([8551d8b](https://github.com/snapetech/seerrng/commit/8551d8b505ade9286a4bf76e754a11367a8ea079))
+
 ## [3.50.0](https://github.com/snapetech/seerrng/compare/v3.49.0..v3.50.0) - 2026-10-04
 
 ### User-facing changes
