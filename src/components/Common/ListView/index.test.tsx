@@ -44,6 +44,10 @@ vi.mock('@app/components/TitleCard/TmdbTitleCard', () => ({
 vi.mock('@app/hooks/useCardTextVisibility', () => ({
   default: () => ({ visibility: {} }),
 }));
+vi.mock('@app/hooks/useUser', async () => {
+  const { Permission } = await import('@server/lib/permissions');
+  return { Permission, useUser: () => ({ hasPermission: () => false }) };
+});
 vi.mock('@app/hooks/useVerticalScroll', () => ({ default: () => undefined }));
 vi.mock('@app/hooks/useWarmImageCache', () => ({
   default: () => undefined,
