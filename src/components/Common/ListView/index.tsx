@@ -362,6 +362,7 @@ const ListView = ({
           case 'manga':
             titleCard = (
               <TitleCard
+                titleWeight={posterTitleWeight}
                 key={title.id}
                 id={title.id}
                 image={getMangaImageUrl(title.posterPath)}

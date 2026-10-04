@@ -562,6 +562,7 @@ const MediaSlider = ({
         case 'manga':
           return (
             <TitleCard
+              titleWeight={posterTitleWeight}
               key={title.id}
               id={title.id}
               image={getMangaImageUrl(title.posterPath)}
