@@ -144,7 +144,7 @@ test('container workflows use the canonical lowercase GitHub Container Registry 
   assert.match(digestResolver.run, /image="\$\{GHCR_IMAGE\}:\$\{VERSION\}"/u);
 });
 
-test('AppImage uses the current launcher and excludes binaries above its glibc baseline', () => {
+test('AppImage pins its builder, uses the current launcher, and excludes binaries above its glibc baseline', () => {
   const workflow = readWorkflow('release-linux-packages.yml');
   const job = workflow.jobs.appimage;
   const launcherCheckout = job.steps.find(
@@ -166,6 +166,16 @@ test('AppImage uses the current launcher and excludes binaries above its glibc b
 
   assert.equal(launcherCheckout.with.ref, 'main');
   assert.equal(launcherCheckout.with.path, 'appimage-packaging');
+  assert.match(
+    build.run,
+    /appimagetool_url='https:\/\/github\.com\/AppImage\/appimagetool\/releases\/download\/1\.9\.1\/appimagetool-x86_64\.AppImage'/u,
+    'AppImage must use a versioned appimagetool release instead of the mutable continuous asset'
+  );
+  assert.match(
+    build.run,
+    /ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0/u,
+    'AppImage must verify the upstream appimagetool release digest'
+  );
   assert.match(build.run, /@next\/swc-linux-x64-gnu/u);
   assert.ok(
     build.run.includes(`${applicationPackage.dependencies.next})`),
