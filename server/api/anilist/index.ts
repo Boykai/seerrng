@@ -21,6 +21,7 @@ import {
 } from '@server/api/anilist/interfaces';
 import ExternalAPI from '@server/api/externalapi';
 import cacheManager from '@server/lib/cache';
+import { recordCacheHit } from '@server/lib/metrics';
 import logger from '@server/logger';
 import { proxyRequestInterceptor } from '@server/utils/customProxyAgent';
 import axios from 'axios';
@@ -37,6 +38,7 @@ import type {
   AnilistMalLinkPage,
   AnilistMangaContentPolicy,
   AnilistMangaDetails,
+  AnilistMangaFilterOptions,
   AnilistMangaPage,
   AnilistMangaPageOptions,
   AnilistMangaSummary,
@@ -44,15 +46,18 @@ import type {
 import {
   ANILIST_MANGA_BATCH_SIZE,
   ANILIST_MANGA_DETAILS_TTL_SECONDS,
+  ANILIST_MANGA_FILTER_OPTIONS_TTL_SECONDS,
   ANILIST_MANGA_PAGE_TTL_SECONDS,
   MANGA_BY_IDS_QUERY,
   MANGA_DETAILS_QUERY,
+  MANGA_FILTER_OPTIONS_QUERY,
   MANGA_IDS_BY_MAL_QUERY,
   MANGA_PAGE_QUERY,
   buildAnilistMangaPageVariables,
   sanitizeAnilistMalLinkPage,
   sanitizeAnilistMangaBatch,
   sanitizeAnilistMangaDetails,
+  sanitizeAnilistMangaFilterOptions,
   sanitizeAnilistMangaPage,
   sanitizeAnilistMangaSearch,
 } from './manga';
@@ -75,6 +80,10 @@ const ANILIST_PAGE_SIZE = 20;
 const ANILIST_TITLE_SEARCH_SIZE = 5;
 const ANILIST_TOKEN_TTL_FALLBACK_SECONDS = 365 * 24 * 60 * 60;
 const PUBLIC_PAGE_CACHE_TTL_SECONDS = 300;
+
+// In-flight manga catalog reads shared by anonymous clients; see
+// readMangaShared.
+const pendingMangaReads = new Map<string, Promise<unknown>>();
 
 const MEDIA_FIELDS = `
   id
@@ -446,12 +455,81 @@ class AnilistAPI extends ExternalAPI {
   async getMangaPage(
     options: AnilistMangaPageOptions
   ): Promise<AnilistMangaPage> {
-    const data = await this.graphql<{ Page?: unknown }>(
-      MANGA_PAGE_QUERY,
-      buildAnilistMangaPageVariables(options, ANILIST_PAGE_SIZE),
-      ANILIST_MANGA_PAGE_TTL_SECONDS
+    const variables = buildAnilistMangaPageVariables(
+      options,
+      ANILIST_PAGE_SIZE
+    );
+    const data = await this.readMangaShared(
+      'manga-page',
+      variables,
+      ANILIST_MANGA_PAGE_TTL_SECONDS,
+      () => this.graphql<{ Page?: unknown }>(MANGA_PAGE_QUERY, variables, 0)
     );
     return sanitizeAnilistMangaPage(data.Page, options);
+  }
+
+  /**
+   * Every AniList genre and tag name with its adult flag, for the discover
+   * filters. One request a day at most while the reply stays cached; the
+   * caller applies the content policy.
+   */
+  async getMangaFilterOptions(): Promise<AnilistMangaFilterOptions> {
+    return this.readMangaShared(
+      'manga-filter-options',
+      {},
+      ANILIST_MANGA_FILTER_OPTIONS_TTL_SECONDS,
+      async () => {
+        const options = sanitizeAnilistMangaFilterOptions(
+          await this.graphql<unknown>(MANGA_FILTER_OPTIONS_QUERY, {}, 0)
+        );
+        if (!options) {
+          throw new AnilistBadResponseError();
+        }
+        return options;
+      }
+    );
+  }
+
+  /**
+   * A cached read that anonymous clients share. Identical concurrent reads
+   * make one AniList request, and only a successful reply is cached, so a
+   * rejected request is sent again next time instead of failing from cache.
+   */
+  private async readMangaShared<T>(
+    name: string,
+    variables: Record<string, unknown>,
+    ttl: number,
+    load: () => Promise<T>
+  ): Promise<T> {
+    const config = { params: variables };
+    const cached = this.getCached<T>(name, config);
+    if (cached !== undefined) {
+      recordCacheHit('external-api');
+      return cached;
+    }
+    // A client with a token neither shares nor joins another client's read.
+    const flightKey = this.accessToken
+      ? undefined
+      : JSON.stringify([name, variables]);
+    const pending = flightKey && pendingMangaReads.get(flightKey);
+    if (pending) {
+      return pending as Promise<T>;
+    }
+    const read = (async () => {
+      try {
+        const value = await load();
+        this.setCached(name, value, ttl, config);
+        return value;
+      } finally {
+        if (flightKey) {
+          pendingMangaReads.delete(flightKey);
+        }
+      }
+    })();
+    if (flightKey) {
+      pendingMangaReads.set(flightKey, read);
+    }
+    return read;
   }
 
   /**

@@ -12724,7 +12724,7 @@ paths:
   /discover/manga:
     get:
       summary: Discover manga
-      description: Returns manga from AniList. Requires the manga category; returns 404 while it is disabled. Adult titles and light novels are excluded unless an administrator enables them. Without sortBy, a query sorts by best match and no query sorts by trending.
+      description: Returns manga from AniList, which applies the filters. Requires the manga category; returns 404 while it is disabled. Adult titles and light novels are excluded unless an administrator enables them, whatever the filters ask for. Without sortBy, a query sorts by best match and no query sorts by trending. Range bounds are inclusive, and a range matches only titles for which AniList knows the value.
       tags:
         - search
       parameters:
@@ -12742,17 +12742,133 @@ paths:
             maxLength: 256
         - in: query
           name: sortBy
+          description: trending, popular and top_rated sort in descending order. The other values name their direction.
           schema:
             type: string
             enum:
               - trending
               - popular
               - top_rated
+              - popular.asc
+              - top_rated.asc
+              - start_date.desc
+              - start_date.asc
+              - title.asc
+              - title.desc
         - in: query
           name: genre
           schema:
             type: string
             maxLength: 64
+        - in: query
+          name: genres
+          description: Comma-separated AniList genre names to include, 1 to 10 of them.
+          schema:
+            type: string
+            maxLength: 649
+            pattern: '^[^,]{1,64}(,[^,]{1,64}){0,9}$'
+            example: 'Action,Drama'
+        - in: query
+          name: excludeGenres
+          description: Comma-separated AniList genre names to exclude, 1 to 10 of them. A name cannot be both included and excluded.
+          schema:
+            type: string
+            maxLength: 649
+            pattern: '^[^,]{1,64}(,[^,]{1,64}){0,9}$'
+            example: 'Horror'
+        - in: query
+          name: tags
+          description: Comma-separated AniList tag names to include, 1 to 10 of them.
+          schema:
+            type: string
+            maxLength: 649
+            pattern: '^[^,]{1,64}(,[^,]{1,64}){0,9}$'
+            example: 'Pirates'
+        - in: query
+          name: excludeTags
+          description: Comma-separated AniList tag names to exclude, 1 to 10 of them. A name cannot be both included and excluded.
+          schema:
+            type: string
+            maxLength: 649
+            pattern: '^[^,]{1,64}(,[^,]{1,64}){0,9}$'
+            example: 'Time Skip'
+        - in: query
+          name: source
+          description: The source material, as AniList records it.
+          schema:
+            type: string
+            enum:
+              - ORIGINAL
+              - MANGA
+              - LIGHT_NOVEL
+              - VISUAL_NOVEL
+              - VIDEO_GAME
+              - OTHER
+              - NOVEL
+              - DOUJINSHI
+              - ANIME
+              - WEB_NOVEL
+              - LIVE_ACTION
+              - GAME
+              - COMIC
+              - MULTIMEDIA_PROJECT
+              - PICTURE_BOOK
+        - in: query
+          name: minStartYear
+          description: Earliest year of first publication. Must not be greater than maxStartYear.
+          schema:
+            type: integer
+            minimum: 1800
+            maximum: 2200
+        - in: query
+          name: maxStartYear
+          description: Latest year of first publication.
+          schema:
+            type: integer
+            minimum: 1800
+            maximum: 2200
+        - in: query
+          name: minScore
+          description: Lowest AniList average score, out of 100. Must not be greater than maxScore.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+        - in: query
+          name: maxScore
+          description: Highest AniList average score, out of 100.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+        - in: query
+          name: minChapters
+          description: Fewest chapters. Must not be greater than maxChapters.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
+        - in: query
+          name: maxChapters
+          description: Most chapters.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
+        - in: query
+          name: minVolumes
+          description: Fewest volumes. Must not be greater than maxVolumes.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
+        - in: query
+          name: maxVolumes
+          description: Most volumes.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
         - in: query
           name: format
           schema:
@@ -12803,6 +12919,58 @@ paths:
                       $ref: '#/components/schemas/MangaResult'
         '400':
           description: A query parameter is invalid
+        '404':
+          description: The manga category is disabled
+        '429':
+          description: AniList rate limit reached. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+        '503':
+          description: AniList is unavailable
+  /discover/manga/filters:
+    get:
+      summary: List manga discover filter names
+      description: Returns the AniList genre and tag names and the formats that manga discovery can filter by. Requires the manga category; returns 404 while it is disabled. Names of adult genres and tags are left out, and so is the NOVEL format, unless an administrator enables those titles. AniList's lists are cached for a day.
+      tags:
+        - search
+      responses:
+        '200':
+          description: Filter names
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - genres
+                  - tags
+                  - formats
+                properties:
+                  genres:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: string
+                      maxLength: 64
+                    example: ['Action', 'Drama']
+                  tags:
+                    type: array
+                    maxItems: 1000
+                    items:
+                      type: string
+                      maxLength: 64
+                    example: ['Pirates', 'Time Skip']
+                  formats:
+                    type: array
+                    items:
+                      type: string
+                      enum:
+                        - MANGA
+                        - ONE_SHOT
+                        - NOVEL
         '404':
           description: The manga category is disabled
         '429':

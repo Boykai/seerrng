@@ -3,6 +3,7 @@ import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
 import AnilistAPI from '@server/api/anilist';
 import {
+  AnilistGraphQLError,
   AnilistOutageError,
   AnilistRateLimitedError,
 } from '@server/api/anilist/failures';
@@ -12,6 +13,7 @@ import type {
   AnilistMangaPageOptions,
   AnilistMangaSummary,
 } from '@server/api/anilist/manga';
+import { resetAnilistRateLimiterForTests } from '@server/api/anilist/rateLimiter';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import { Blocklist } from '@server/entity/Blocklist';
@@ -19,8 +21,12 @@ import Media from '@server/entity/Media';
 import MediaIdentifier, {
   MediaIdentifierProvider,
 } from '@server/entity/MediaIdentifier';
+import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
+import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
+import type { AxiosResponse } from 'axios';
+import axios, { AxiosError } from 'axios';
 import type { Express } from 'express';
 import express from 'express';
 import session from 'express-session';
@@ -552,5 +558,360 @@ describe('GET /discover/manga', () => {
     failure = new Error('socket hang up');
     res = await discover();
     assert.strictEqual(res.status, 503);
+  });
+});
+
+describe('AniList filters on GET /discover/manga', () => {
+  type AnilistBody = { query: string; variables: Record<string, unknown> };
+  const unavailable = {
+    status: 503,
+    message:
+      'AniList, the service used for manga discovery, timed out or is unavailable. Please try again.',
+  };
+  const anilistManga = (overrides: Record<string, unknown> = {}) => ({
+    id: 30013,
+    title: { romaji: 'Sample Romaji', english: 'Sample Manga' },
+    format: 'MANGA',
+    status: 'RELEASING',
+    isAdult: false,
+    ...overrides,
+  });
+  const anilistPage = (media: unknown[]) => ({
+    data: {
+      Page: {
+        pageInfo: { total: media.length, lastPage: 1, hasNextPage: false },
+        media,
+      },
+    },
+  });
+  const catalog = {
+    data: {
+      GenreCollection: ['Drama', 'Action', 'Hentai'],
+      MediaTagCollection: [
+        { name: 'Pirates', isAdult: false },
+        { name: 'Example Adult Tag', isAdult: true },
+      ],
+    },
+  };
+
+  let previousAdapter: typeof axios.defaults.adapter;
+  let anilistUrls: string[];
+
+  // Answers every AniList request the routes make, so a test can count them.
+  const stubAnilistNetwork = (
+    respond: (body: AnilistBody) => { status?: number; data: unknown }
+  ): AnilistBody[] => {
+    const bodies: AnilistBody[] = [];
+    axios.defaults.adapter = async (config) => {
+      anilistUrls.push(String(config.url));
+      const body = JSON.parse(String(config.data)) as AnilistBody;
+      bodies.push(body);
+      const { status = 200, data } = respond(body);
+      const response = {
+        data,
+        status,
+        statusText: String(status),
+        headers: {},
+        config,
+      } as AxiosResponse;
+      if (status >= 400) {
+        throw new AxiosError(
+          `Request failed with status code ${status}`,
+          AxiosError.ERR_BAD_REQUEST,
+          config,
+          undefined,
+          response
+        );
+      }
+      return response;
+    };
+    return bodies;
+  };
+
+  beforeEach(() => {
+    previousAdapter = axios.defaults.adapter;
+    anilistUrls = [];
+    let now = 1_000_000;
+    resetAnilistRateLimiterForTests({
+      now: () => now,
+      sleep: async (ms) => {
+        now += ms;
+      },
+    });
+    cacheManager.getCache('anilist').flush();
+  });
+
+  afterEach(() => {
+    axios.defaults.adapter = previousAdapter;
+    for (const url of anilistUrls) {
+      assert.match(url, /^https:\/\/graphql\.anilist\.co\/?$/);
+    }
+    cacheManager.getCache('anilist').flush();
+    resetAnilistRateLimiterForTests();
+  });
+
+  it('validates the AniList filters before calling AniList', async () => {
+    const getPage = mock.method(AnilistAPI.prototype, 'getMangaPage');
+    const agent = await loginAs('friend@seerr.dev');
+    const elevenGenres = Array.from({ length: 11 }, (_, i) => `Genre ${i}`);
+
+    for (const [query, message] of [
+      [
+        { genres: elevenGenres.join(',') },
+        'genres must list 1 to 10 names of up to 64 characters, separated by commas.',
+      ],
+      [
+        { excludeTags: 'Pirates,,Isekai' },
+        'excludeTags must list 1 to 10 names of up to 64 characters, separated by commas.',
+      ],
+      [{ source: 'BOOK' }, 'source must be valid.'],
+      [{ minScore: '101' }, 'minScore must be a whole number from 0 to 100.'],
+      [
+        { minStartYear: '1799' },
+        'minStartYear must be a whole number from 1800 to 2200.',
+      ],
+      [
+        { minChapters: '20', maxChapters: '10' },
+        'minChapters must not be greater than maxChapters.',
+      ],
+      [
+        { genre: 'Drama', excludeGenres: 'Drama' },
+        'genres and excludeGenres must not share a name.',
+      ],
+      [
+        { tags: 'Pirates', excludeTags: 'Pirates' },
+        'tags and excludeTags must not share a name.',
+      ],
+    ] as const) {
+      const res = await agent.get('/api/v1/discover/manga').query(query);
+      assert.strictEqual(res.status, 400, JSON.stringify(query));
+      assert.deepStrictEqual(res.body, { status: 400, message });
+    }
+    assert.strictEqual(getPage.mock.callCount(), 0);
+  });
+
+  it('passes the AniList filters and every sort to AniList', async () => {
+    const calls: AnilistMangaPageOptions[] = [];
+    mock.method(
+      AnilistAPI.prototype,
+      'getMangaPage',
+      async (options: AnilistMangaPageOptions) => {
+        calls.push(options);
+        return page({ media: [] });
+      }
+    );
+    const agent = await loginAs('friend@seerr.dev');
+
+    let res = await agent.get('/api/v1/discover/manga').query({
+      sortBy: 'start_date.desc',
+      genres: 'Action,Comedy',
+      excludeGenres: 'Horror',
+      tags: 'Pirates',
+      excludeTags: 'Time Skip',
+      source: 'WEB_NOVEL',
+      minStartYear: '1990',
+      maxStartYear: '2005',
+      minScore: '70',
+      maxChapters: '200',
+      minVolumes: '2',
+    });
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.deepStrictEqual(calls[0], {
+      page: 1,
+      sort: ['START_DATE_DESC', 'ID_DESC'],
+      search: undefined,
+      genre: undefined,
+      format: undefined,
+      status: undefined,
+      countryOfOrigin: undefined,
+      genres: ['Action', 'Comedy'],
+      excludedGenres: ['Horror'],
+      tags: ['Pirates'],
+      excludedTags: ['Time Skip'],
+      source: 'WEB_NOVEL',
+      startYear: { min: 1990, max: 2005 },
+      averageScore: { min: 70 },
+      chapters: { max: 200 },
+      volumes: { min: 2 },
+      includeAdult: false,
+      includeNovels: false,
+    });
+
+    const sorts = [
+      ['popular.asc', ['POPULARITY', 'ID']],
+      ['top_rated.asc', ['SCORE', 'ID']],
+      ['start_date.asc', ['START_DATE', 'ID']],
+      ['title.asc', ['TITLE_ROMAJI', 'ID']],
+      ['title.desc', ['TITLE_ROMAJI_DESC', 'ID_DESC']],
+    ] as const;
+    for (const [sortBy] of sorts) {
+      res = await agent.get('/api/v1/discover/manga').query({ sortBy });
+      assert.strictEqual(res.status, 200, sortBy);
+    }
+    assert.deepStrictEqual(
+      calls.slice(1).map(({ sort }) => sort),
+      sorts.map(([, sort]) => sort)
+    );
+  });
+
+  it('makes one AniList request per filtered page and keeps the content policy', async () => {
+    const bodies = stubAnilistNetwork(() => ({
+      data: anilistPage([
+        anilistManga(),
+        anilistManga({ id: 2, isAdult: true }),
+        anilistManga({ id: 3, format: 'NOVEL' }),
+      ]),
+    }));
+    const agent = await loginAs('friend@seerr.dev');
+
+    const res = await agent.get('/api/v1/discover/manga').query({
+      genres: 'Hentai',
+      format: 'MANGA',
+      tags: 'Example Adult Tag',
+      minScore: '60',
+      sortBy: 'title.asc',
+    });
+
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(bodies.length, 1);
+    assert.strictEqual(bodies[0].variables.isAdult, false);
+    assert.deepStrictEqual(bodies[0].variables.formatNotIn, ['NOVEL']);
+    assert.deepStrictEqual(bodies[0].variables.genreIn, ['Hentai']);
+    assert.strictEqual(bodies[0].variables.averageScoreGreater, 59);
+    assert.deepStrictEqual(
+      res.body.results.map((result: { id: number }) => result.id),
+      [30013]
+    );
+  });
+
+  it('answers fixed text and caches nothing when AniList rejects a filter', async () => {
+    const message = 'Example rejection of Unknown Example Tag';
+    let reply: { status?: number; data: unknown } = {
+      data: { data: null, errors: [{ message, status: 400 }] },
+    };
+    const bodies = stubAnilistNetwork(() => reply);
+    const agent = await loginAs('friend@seerr.dev');
+    const query = { tags: 'Unknown Example Tag', minVolumes: '7' };
+
+    for (const rejection of [
+      { data: { data: null, errors: [{ message, status: 400 }] } },
+      { status: 400, data: { data: null, errors: [{ message, status: 400 }] } },
+    ]) {
+      reply = rejection;
+      const sentBefore = bodies.length;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const res = await agent.get('/api/v1/discover/manga').query(query);
+        assert.strictEqual(res.status, 503);
+        assert.deepStrictEqual(res.body, unavailable);
+        assert.doesNotMatch(res.text, /Example rejection|Unknown Example/);
+      }
+      assert.strictEqual(bodies.length, sentBefore + 2);
+    }
+  });
+
+  it('lists filter names under the content policy', async () => {
+    const getOptions = mock.method(
+      AnilistAPI.prototype,
+      'getMangaFilterOptions',
+      async () => ({
+        genres: [
+          { name: 'Drama', isAdult: false },
+          { name: 'Action', isAdult: false },
+          { name: 'Hentai', isAdult: true },
+        ],
+        tags: [
+          { name: 'Pirates', isAdult: false },
+          { name: 'Example Adult Tag', isAdult: true },
+          { name: 'Isekai', isAdult: false },
+        ],
+      })
+    );
+    const agent = await loginAs('friend@seerr.dev');
+
+    let res = await agent.get('/api/v1/discover/manga/filters');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.deepStrictEqual(res.body, {
+      genres: ['Action', 'Drama'],
+      tags: ['Isekai', 'Pirates'],
+      formats: ['MANGA', 'ONE_SHOT'],
+    });
+
+    getSettings().main.mangaIncludeAdult = true;
+    getSettings().main.mangaIncludeNovels = true;
+    res = await agent.get('/api/v1/discover/manga/filters');
+    assert.deepStrictEqual(res.body, {
+      genres: ['Action', 'Drama', 'Hentai'],
+      tags: ['Example Adult Tag', 'Isekai', 'Pirates'],
+      formats: ['MANGA', 'ONE_SHOT', 'NOVEL'],
+    });
+    assert.strictEqual(getOptions.mock.callCount(), 2);
+  });
+
+  it('reads the filter names from AniList once a day at most', async () => {
+    const bodies = stubAnilistNetwork(() => ({ data: catalog }));
+    const agent = await loginAs('friend@seerr.dev');
+
+    const first = await agent.get('/api/v1/discover/manga/filters');
+    const second = await agent.get('/api/v1/discover/manga/filters');
+
+    assert.strictEqual(first.status, 200, JSON.stringify(first.body));
+    assert.deepStrictEqual(second.body, first.body);
+    assert.strictEqual(bodies.length, 1);
+    assert.match(bodies[0].query, /GenreCollection/);
+  });
+
+  it('reports filter name failures with fixed text and logs codes only', async () => {
+    let failure: Error = new AnilistRateLimitedError(30);
+    mock.method(AnilistAPI.prototype, 'getMangaFilterOptions', async () => {
+      throw failure;
+    });
+    const logged = mock.method(logger, 'error', () => logger);
+    const agent = await loginAs('friend@seerr.dev');
+
+    let res = await agent.get('/api/v1/discover/manga/filters');
+    assert.strictEqual(res.status, 429);
+    assert.strictEqual(res.headers['retry-after'], '30');
+
+    failure = new AnilistGraphQLError('Example failure detail', 400);
+    res = await agent.get('/api/v1/discover/manga/filters');
+    assert.strictEqual(res.status, 503);
+    assert.deepStrictEqual(res.body, unavailable);
+
+    const failureLogs = logged.mock.calls
+      .map((call) => call.arguments as unknown[])
+      .filter(([text]) => text === 'Failed to retrieve manga filter options');
+    assert.deepStrictEqual(
+      failureLogs.map(([, meta]) => meta),
+      [
+        { label: 'Discover Manga', errorName: 'AnilistRateLimitedError' },
+        {
+          label: 'Discover Manga',
+          errorName: 'AnilistGraphQLError',
+          status: 400,
+        },
+      ]
+    );
+    assert.doesNotMatch(
+      JSON.stringify(logged.mock.calls.map((call) => call.arguments)),
+      /Example failure detail/
+    );
+  });
+
+  it('answers like an unknown route while manga is disabled', async () => {
+    getSettings().main.enabledMediaCategories = {
+      ...getSettings().main.enabledMediaCategories,
+      manga: false,
+    };
+    const getOptions = mock.method(
+      AnilistAPI.prototype,
+      'getMangaFilterOptions'
+    );
+    const agent = await loginAs('friend@seerr.dev');
+
+    const res = await agent.get('/api/v1/discover/manga/filters');
+
+    assert.strictEqual(res.status, 404);
+    assert.deepStrictEqual(res.body, { status: 404, message: 'Not found.' });
+    assert.strictEqual(getOptions.mock.callCount(), 0);
   });
 });
