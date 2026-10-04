@@ -61,17 +61,7 @@ const BindModal = ({
   }, [key]);
 
   return (
-    <Transition
-      as="div"
-      appear
-      show
-      enter="transition-opacity ease-in-out duration-300"
-      enterFrom="opacity-0"
-      enterTo="opacity-100"
-      leave="transition-opacity ease-in-out duration-300"
-      leaveFrom="opacity-100"
-      leaveTo="opacity-0"
-    >
+    <Transition as="div" appear show>
       <Modal
         title={intl.formatMessage(messages.chooseTitle)}
         subTitle={libraryTitle ?? undefined}
