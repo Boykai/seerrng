@@ -5,9 +5,7 @@ import { createRequire } from 'node:module';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const require = createRequire(import.meta.url);
-const {
-  default: ReadarrAPI,
-} = require('../dist/api/servarr/readarr.js');
+const { default: ReadarrAPI } = require('../dist/api/servarr/readarr.js');
 
 const apiUrl = (
   process.env.CHAPTARR_API_URL ?? 'http://chaptarrng:8789/api/v1'
