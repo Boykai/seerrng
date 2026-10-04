@@ -27,6 +27,11 @@ Open **Profile → Settings → Linked Accounts → Discovery Accounts**. Choose
 Trakt and Simkl display an authorization code and wait for confirmation. AniList
 provides a code to paste into SeerrNG. You can cancel or disconnect a connection.
 
+While the Manga category is on, an AniList account can also add the manga on
+its Planning list to your SeerrNG watchlist. This is off by default and only
+reads the list; see
+[AniList Planning import](./manga-backend.md#anilist-planning-import).
+
 ## Browse
 
 Use **Explore provider recommendations and lists** on Discover. Trakt offers

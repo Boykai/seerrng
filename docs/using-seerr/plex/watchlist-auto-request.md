@@ -8,7 +8,8 @@ sidebar_position: 1
 
 SeerrNG can automatically request movies and series from a user's Plex
 Watchlist. Users can also keep local SeerrNG watchlists for music, books,
-comics, and magazines, and opt in to automatic requests for those formats.
+comics, magazines, and manga, and opt in to automatic requests for those
+formats.
 
 Both administrator permissions and the matching toggle in the user's profile
 are required. Auto requests still follow request permissions, quotas,
@@ -25,22 +26,27 @@ Movies** and/or **Auto-Request Series** permission. In their profile under
 **Auto-Request Series** toggle. SeerrNG periodically checks the Plex Watchlist
 and submits requests for eligible items that are not already available.
 
-## SeerrNG Watchlist: Music, Books, Comics, and Magazines
+## SeerrNG Watchlist: Music, Books, Comics, Magazines, and Manga
 
-Local SeerrNG watchlists are available for music albums, books, comics, and
-magazines. Add an item from its detail page or poster card. To submit a request
-automatically, the user needs **Auto-Request** plus the permission for that
-format, then enables its toggle in their profile under **General**:
+Local SeerrNG watchlists are available for music albums, books, comics,
+magazines, and manga. Add an item from its detail page or poster card. To
+submit a request automatically, the user needs **Auto-Request** plus the
+permission for that format, then enables its toggle in their profile under
+**General**:
 
 - **Auto-Request Music**
 - **Auto-Request Books**
 - **Auto-Request Comics**
 - **Auto-Request Magazines**
+- **Auto-Request Manga**
 
 SeerrNG submits an eligible request when the item is added to the local
 watchlist. For books, the request uses the default configured ebook destination
 when available, then the audiobook destination, and otherwise follows the
 standard book request default.
+
+For manga, see [Manga watchlist](../manga-backend.md#watchlist), which also
+covers adding manga from an AniList Planning list.
 
 ## For Administrators
 
@@ -54,5 +60,5 @@ Users > Default Permissions**.
 - Automatic requests obey the user's request quota, required request
   permissions, existing availability, and blocklist entries.
 - 4K movie and series requests are not created by the Plex Watchlist flow.
-- Users can remove local music, book, comic, and magazine entries from their
-  SeerrNG watchlist at any time.
+- Users can remove local music, book, comic, magazine, and manga entries from
+  their SeerrNG watchlist at any time.

@@ -206,6 +206,41 @@ see [Which match a request uses](#which-match-a-request-uses). While the
 request waits for a source, the API shows `awaitingBinding: true` in its
 `mangaScope`.
 
+## Watchlist
+
+Users who do not sign in through Plex can add a manga title to their SeerrNG
+watchlist from its card or details page, and remove it there again. Manga
+watchlist entries are shown while the Manga category is on.
+
+A user with **Auto-Request Manga** or **Auto-Request** permission, and
+permission to request manga, can turn on **Auto-Request Manga** under
+**General** in their profile settings. SeerrNG then requests each title they
+add, with **All chapters** and **Follow New Chapters** off, through the normal
+request path: approval, quotas, the blocklist, the content switches, and
+[Waiting for a source](#waiting-for-a-source) apply. Removing a title from the
+watchlist keeps its request.
+
+### AniList Planning import
+
+Users who
+[connect an AniList account](./discovery-integrations.md#connect-a-personal-account)
+can turn on **Add manga from my AniList Planning list to my SeerrNG
+watchlist** for it under **Linked Accounts**. The option is off by default, is
+shown while the Manga category is on, and turns off when the account is
+reconnected.
+
+The **AniList Planning Import** job runs at minute 23 of every hour and adds
+the Planning manga that changed on AniList since its last check. Each check
+reads at most the 200 most recently changed entries, so older entries of a
+long list are added only after they change on AniList. A run makes at most 15
+AniList calls and adds up to 10 titles per user; remaining users follow in the
+next runs. The job skips titles that are already on the watchlist, blocklisted,
+or hidden by the [Manga Content](#choose-which-titles-appear) switches. Each
+add works like an add in the app, so **Auto-Request Manga** applies. SeerrNG
+only reads the list: removing a title on AniList keeps its watchlist entry and
+any request. Nothing is imported while the Manga category is off, and while
+AniList is rate limiting or unavailable, the job tries again on its next run.
+
 ## Library scan
 
 The **Manga Library Scan** job reads the library of the connected Suwayomi
