@@ -16,7 +16,10 @@ const state = vi.hoisted(() => ({
 vi.mock('axios', () => ({
   default: { post: state.post, delete: state.remove },
 }));
-vi.mock('swr', () => ({ mutate: vi.fn() }));
+vi.mock('swr', () => ({
+  default: () => ({ data: undefined }),
+  mutate: vi.fn(),
+}));
 vi.mock('next/router', () => ({
   useRouter: () => ({ asPath: '/', query: {} }),
 }));
@@ -127,6 +130,7 @@ beforeEach(() => {
   dom = new JSDOM('<!doctype html><html><body></body></html>');
   vi.stubGlobal('window', dom.window);
   vi.stubGlobal('document', dom.window.document);
+  vi.stubGlobal('Element', dom.window.Element);
   vi.stubGlobal('React', React);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   host = document.createElement('div');
@@ -210,7 +214,11 @@ it('blocklists a manga card by its canonical AniList id', async () => {
     title: 'Sample Manga',
     user: 7,
   });
-  expect(host.querySelector('[data-testid="title-card"]')).toBeNull();
+  expect(
+    host
+      .querySelector('button[aria-label="Remove from Blocklist"]')
+      ?.getAttribute('aria-pressed')
+  ).toBe('true');
 });
 
 it('offers blocklist actions only to blocklist managers', async () => {
@@ -227,7 +235,7 @@ it('removes a blocklisted manga card from the manga blocklist', async () => {
   state.remove.mockResolvedValue({ status: 204 });
   await renderManga(MediaStatus.BLOCKLISTED);
   await openDetails();
-  await click(host.querySelector('span[title="Remove from Blocklist"] button'));
+  await click(host.querySelector('button[aria-label="Remove from Blocklist"]'));
 
   expect(state.remove).toHaveBeenCalledWith(
     '/api/v1/blocklist/30013?mediaType=manga'

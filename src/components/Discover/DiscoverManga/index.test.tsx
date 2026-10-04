@@ -30,6 +30,7 @@ vi.mock('@app/hooks/useDiscoverScrollRestoration', () => ({
   },
 }));
 vi.mock('@app/hooks/useSearchActivity', () => ({
+  default: () => false,
   useSearchActivityReporter: () => undefined,
 }));
 vi.mock('@app/components/Common/PageTitle', () => ({ default: () => null }));
