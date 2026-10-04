@@ -172,11 +172,17 @@ the missing source and keeps results from successful services. Results and
 backend reads are bounded and briefly cached; narrow the month or media type
 when the result limit is reached.
 
+While the Manga category is on, the calendar also shows manga chapters that
+have already been released on a connected Suwayomi server, one entry per title
+and day. Manga has no upcoming dates; see
+[Manga Backend](./manga-backend.md#release-calendar) for its scope, dates, and
+limits.
+
 SeerrNG checks monitored Radarr, Sonarr, Lidarr, Readarr-compatible Bookshelf,
 Mylar3, Kapowarr, and LazyLibrarian releases daily and records date changes
 after the first snapshot. Calendar entries can show the three most recent
 changes from the last 180 days, including the old and new dates or air times.
 The history uses the same **My requests** or shared-calendar visibility as the
 release itself. Administrators can run or disable **Release Calendar History**
-under **Settings → Jobs & Cache**. Software catalog dates are not included in
-these daily snapshots.
+under **Settings → Jobs & Cache**. Software catalog dates and manga chapters
+are not included in these daily snapshots.

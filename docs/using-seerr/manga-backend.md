@@ -1164,3 +1164,82 @@ download that Suwayomi or one of these limits stops partway is logged as
 chapters cannot be listed, the list is empty and SeerrNG logs
 `Unable to list manga download copies`. These log entries contain IDs and codes
 only, never titles or addresses.
+
+## Release calendar
+
+While the Manga category is on, the
+[Release Calendar](./discovery-integrations.md#release-calendar) also shows
+manga chapters that have already been released. It never shows upcoming
+chapters, because sources publish no reliable schedule.
+
+Each entry stands for one title on one day, for example **3 new chapters**,
+and links to the title's manga page. Titles use their AniList names, and the
+**Manga Content** switches apply; see
+[Choose which titles appear](#choose-which-titles-appear). Entries never show a
+source, a scanlator, or an address.
+
+### Which titles appear
+
+The calendar's usual scopes apply:
+
+- **My requests** shows the titles of your manga requests that SeerrNG has
+  sent to a Suwayomi server, from step 1 of [Dispatch](#dispatch) on, unless
+  the request was declined.
+- The shared calendar, for users who can view or manage requests, shows the
+  titles of every such request, newest 1,000 requests first.
+- **Include unmonitored titles**, which only administrators can choose, adds
+  every title matched to a manga in a Suwayomi library to the shared calendar,
+  up to 1,000 per server, requested or not.
+
+A title is left out while its match is rejected or not current, and while its
+manga in Suwayomi no longer has the matched source and address.
+
+### Dates and counts
+
+A chapter's date is the upload date its source gives. When the source gives
+none, the date is when Suwayomi stored the chapter. Manga dates are calendar
+days in UTC, like the calendar's other all-day dates, and chapters dated after
+the current time are left out.
+
+Suwayomi stores a title's chapters the first time it reads them from the
+source. So when a source gives no upload dates, every earlier chapter of the
+title shows on that first day, for example the day the title joined the
+library, and later chapters show on the day Suwayomi found them.
+
+Each chapter number counts once, on the first day any version of it appeared.
+Chapters without a number count one by one.
+
+### Available and Released
+
+An entry shows **Available** when Suwayomi lists a downloaded version of every
+chapter it counts, and **Released** otherwise. This follows Suwayomi's
+download records only. It does not check the files the way
+[Delivered chapters](#delivered-chapters) does, and it does not mean that you
+can download a copy.
+
+### Limits and failures
+
+Each calendar load reads at most 20 Suwayomi servers, three at a time. For each
+server, SeerrNG sends at most 30 read-only queries, each covering up to 100
+titles, gives up on the server after 20 seconds, and keeps what it read for 1
+minute. It names at most 200 titles through AniList, earliest release first,
+and shows at most 5,000 manga entries. When a limit is reached, the calendar
+says that it reached its result limit and leaves the rest out.
+
+When a Suwayomi server cannot be reached, answers with an error, or takes
+longer than 20 seconds, or when AniList cannot be reached, the calendar keeps
+every other entry and says that some services could not be reached. SeerrNG
+logs these failures at debug level under the **Release Calendar** label, with
+IDs, counts, and codes only, never titles or addresses.
+
+The daily **Release Calendar History** job leaves manga out, so manga entries
+show no date changes.
+
+### What the calendar sends
+
+- To Suwayomi: read-only queries for the matched manga and their chapters in
+  the dates shown. The calendar never asks a source for chapters and changes
+  nothing in Suwayomi.
+- To AniList: the IDs of up to 200 titles that have chapters in the dates
+  shown. These requests share SeerrNG's AniList request budget, and the answers
+  are cached.
