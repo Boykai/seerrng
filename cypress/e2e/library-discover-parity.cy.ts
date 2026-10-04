@@ -805,7 +805,7 @@ describe('Books and Music discover parity', () => {
       .closest('.form-row')
       .contains(
         '.settings-form-row-description',
-        'Find it in Bookshelf or Readarr'
+        'Find the key in Bookshelf or Readarr under Settings > General > Security > API Key'
       )
       .should('be.visible');
     cy.contains('label', 'URL Base')
