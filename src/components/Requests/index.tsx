@@ -205,6 +205,11 @@ const messages = defineMessages('components.Requests', {
   progressFrom: '{percent}% complete',
   sizeProgress: '{complete} of {total}',
   eta: 'ETA: {date}',
+  pendingImportTitle: 'ChaptarrNG is preparing this {format}.',
+  pendingImportAttempt: 'Import attempt {attempt} of {maxAttempts}.',
+  pendingImportRetrying:
+    'Import attempt {attempt}; retries will continue automatically.',
+  pendingImportNextRetry: 'Next retry: {time}.',
   history: 'History',
   noHistory: 'No status history has been recorded yet',
   requestedBy: 'Requested by {user}',
@@ -1923,6 +1928,58 @@ const RequestStatusCard = ({
             </div>
           </div>
         )}
+
+        {current.bookImportProgresses?.length ? (
+          <div
+            className="refreshed-detail-text-muted"
+            role="status"
+            aria-live="polite"
+          >
+            {current.bookImportProgresses.map((progress) => {
+              const format =
+                progress.format === 'audiobook' ? 'audiobook' : 'ebook';
+              const nextAttemptAt = getValidDate(progress.nextAttemptAt);
+              return (
+                <div key={progress.format}>
+                  <span>
+                    {intl.formatMessage(messages.pendingImportTitle, {
+                      format,
+                    })}
+                  </span>
+                  {typeof progress.attemptCount === 'number' &&
+                    progress.attemptCount > 0 &&
+                    (progress.maxAttempts && progress.maxAttempts > 0 ? (
+                      <span>
+                        {' '}
+                        {intl.formatMessage(messages.pendingImportAttempt, {
+                          attempt: progress.attemptCount,
+                          maxAttempts: progress.maxAttempts,
+                        })}
+                      </span>
+                    ) : (
+                      <span>
+                        {' '}
+                        {intl.formatMessage(messages.pendingImportRetrying, {
+                          attempt: progress.attemptCount,
+                        })}
+                      </span>
+                    ))}
+                  {nextAttemptAt && (
+                    <span>
+                      {' '}
+                      {intl.formatMessage(messages.pendingImportNextRetry, {
+                        time: intl.formatDate(nextAttemptAt, {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        }),
+                      })}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
 
         <div className="app-action-row request-status-action-row">
           <Tooltip content={current.message}>

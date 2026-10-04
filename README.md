@@ -29,6 +29,7 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
   - [Software requests: ROMs and PC games](./docs/using-seerr/software-acquisition.md)
   - [Request Status and Download copy](./docs/using-seerr/request-status.md)
   - [Books, authors, and series](./docs/using-seerr/books-and-series.md)
+  - [Audiobookshelf availability and ChaptarrNG integration](./docs/using-seerr/bookshelf-backend.md#audiobookshelf-availability)
   - [Move Bookshelf media paths](./docs/using-seerr/bookshelf-media-path-migration.md)
   - [Configure comics](./docs/using-seerr/comics-backend.md)
   - [Configure magazines](./docs/using-seerr/magazines-backend.md)
@@ -67,6 +68,9 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
   When both formats are enabled, their separate SeerrNG service entries can
   point to the same BookshelfNG URL and API key; separate app instances are
   not required.
+- Optional read-only Audiobookshelf library scanning marks ISBN-matched items
+  as available audiobooks without sending acquisition requests or changing
+  Audiobookshelf data.
 - Catalog browsing and requests for Retro and Modern emulation systems and PC games for Windows, Linux, and macOS, with QuestarrNG and ROMarrNG handling acquisition.
 - Administrator-controlled availability switches for each supported category, including separate ebook, audiobook, Retro, Modern, and PC Games controls.
 - Bookshelf backend diagnostics that classify Hardcover, softcover/Goodreads, and unknown metadata providers.
@@ -215,6 +219,7 @@ Books:
 
 - Bookshelf or another Readarr-compatible service configured in **Settings > Services**. New deployments should use the Hardcover-backed Bookshelf image.
 - One BookshelfNG instance can manage both ebooks and audiobooks. Add two SeerrNG service entries with the same connection details and mark one as ebook-capable and one as audiobook-capable.
+- Audiobookshelf can be connected separately under **Settings > Services > Audiobookshelf Availability** to detect existing audiobooks. It is read-only and matches books by ISBN.
 - Separate defaults for ebook and audiobook so **Both** format requests can route to each format.
 - Existing Readarr or softcover/Goodreads libraries should be migrated before switching to Hardcover metadata. The service settings modal links directly to the Bookshelf Hardcover migration runbook.
 

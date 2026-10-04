@@ -10,6 +10,7 @@ import ImageProxy from '@server/lib/imageproxy';
 import refreshToken from '@server/lib/refreshToken';
 import { captureReleaseCalendarHistory } from '@server/lib/releaseCalendar/history';
 import { reconcileActiveRequests } from '@server/lib/requestStatus';
+import { audiobookshelfScanner } from '@server/lib/scanners/audiobookshelf';
 import { backissueScanner } from '@server/lib/scanners/comics/backissue';
 import { kapowarrScanner } from '@server/lib/scanners/comics/kapowarr';
 import { mylarScanner } from '@server/lib/scanners/comics/mylar';
@@ -370,10 +371,17 @@ export const startJobs = (): void => {
     cronSchedule: jobs['readarr-scan'].schedule,
     job: schedule.scheduleJob(jobs['readarr-scan'].schedule, () => {
       logger.info('Starting scheduled job: Bookshelf Scan', { label: 'Jobs' });
-      return runTrackedJob('Bookshelf Scan', () => readarrScanner.run());
+      return runTrackedJob('Bookshelf Scan', async () => {
+        await readarrScanner.run();
+        await audiobookshelfScanner.run();
+      });
     }),
-    running: () => readarrScanner.status().running,
-    cancelFn: () => readarrScanner.cancel(),
+    running: () =>
+      readarrScanner.status().running || audiobookshelfScanner.status().running,
+    cancelFn: () => {
+      readarrScanner.cancel();
+      audiobookshelfScanner.cancel();
+    },
   });
 
   scheduledJobs.push({

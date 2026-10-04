@@ -31,6 +31,17 @@ describe('external runtime Servarr configuration', () => {
       sonarr: [{ id: 2 }],
       lidarr: [{ id: 3, is4k: null }],
       readarr: [{ id: 4, is4k: false }],
+      audiobookshelf: {
+        id: 5,
+        name: 'Audiobookshelf',
+        hostname: 'abs',
+        port: 13378,
+        apiKey: 'token',
+        useSsl: false,
+        libraryId: 'books',
+        libraryName: 'Books',
+        syncEnabled: true,
+      },
       notifications: { agents: {} },
       network: {},
     });
@@ -42,5 +53,6 @@ describe('external runtime Servarr configuration', () => {
     assert.equal(config.sonarr[0].is4k, false);
     assert.equal(config.lidarr[0].is4k, false);
     assert.equal(config.readarr[0].is4k, false);
+    assert.equal(config.audiobookshelf?.libraryId, 'books');
   });
 });

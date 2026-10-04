@@ -47,3 +47,14 @@ test('a service link alone does not make a processing book available', () => {
   assert.equal(isRequestedBookFormatAvailable(processing, 'audiobook'), false);
   assert.equal(isRequestedBookFormatAvailable(processing, 'both'), false);
 });
+
+test('Audiobookshelf library presence satisfies audiobook requests only', () => {
+  const audiobookOnly = bookMedia({
+    audiobookLibraryServiceId: 1,
+    audiobookLibraryItemId: 'li_audiobook_1',
+  });
+
+  assert.equal(hasAvailableBookFormat(audiobookOnly, 'audiobook'), true);
+  assert.equal(hasAvailableBookFormat(audiobookOnly, 'ebook'), false);
+  assert.equal(isRequestedBookFormatAvailable(audiobookOnly, 'both'), false);
+});

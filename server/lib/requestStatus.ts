@@ -80,6 +80,17 @@ export interface RequestStatusSnapshot {
   isTerminal: boolean;
   needsAttention: boolean;
   retryable: boolean;
+  bookImportProgresses?: {
+    format: 'ebook' | 'audiobook';
+    attemptCount?: number;
+    maxAttempts?: number;
+    nextAttemptAt?: Date | null;
+  }[];
+}
+
+interface BookSearchSnapshot {
+  state?: BookRequestSearch['state'];
+  pendingImports: NonNullable<RequestStatusSnapshot['bookImportProgresses']>;
 }
 
 export interface RequestStatusHistoryItem {
@@ -139,6 +150,8 @@ type RequestMediaLike = {
   externalServiceId4k?: number | null;
   audiobookServiceId?: number | null;
   audiobookExternalServiceId?: number | null;
+  audiobookLibraryServiceId?: number | null;
+  audiobookLibraryItemId?: string | null;
   comicServiceType?: 'mylar' | 'kapowarr' | 'backissue' | null;
   seasons?: {
     seasonNumber: number;
@@ -190,6 +203,7 @@ type StatusOptions = {
   downloads?: DownloadingItem[];
   dispatchPending?: boolean;
   bookSearchState?: BookRequestSearch['state'];
+  bookImportProgresses?: RequestStatusSnapshot['bookImportProgresses'];
   musicSearchTime?: Date | null;
   servarrHistory?: ServarrHistoryEvidence;
   resetTerminalOverride?: boolean;
@@ -237,7 +251,10 @@ const hasRequestedBookFormat = (
   format: 'ebook' | 'audiobook'
 ): boolean =>
   format === 'audiobook'
-    ? hasLink(media.audiobookServiceId, media.audiobookExternalServiceId)
+    ? hasLink(media.audiobookServiceId, media.audiobookExternalServiceId) ||
+      (media.audiobookLibraryServiceId !== null &&
+        media.audiobookLibraryServiceId !== undefined &&
+        !!media.audiobookLibraryItemId)
     : hasLink(media.serviceId, media.externalServiceId);
 
 const getTarget = (
@@ -839,11 +856,14 @@ const getStageFromRequest = (
     };
   }
   if (options.bookSearchState === 'pending') {
+    const pendingFormat = options.bookImportProgresses?.[0]?.format;
     return {
       stage: RequestStatusStage.SEARCHING,
       queueFailure: false,
       downloads,
-      message: 'Waiting for Bookshelf to prepare the requested book.',
+      message: pendingFormat
+        ? `ChaptarrNG is preparing the requested ${pendingFormat === 'audiobook' ? 'audiobook' : 'ebook'} while it imports the author.`
+        : 'Waiting for Bookshelf to prepare the requested book.',
     };
   }
   if (options.bookSearchState === 'monitoring') {
@@ -1045,6 +1065,9 @@ export const getRequestStatus = (
       (stage === RequestStatusStage.UNAVAILABLE &&
         request.status === MediaRequestStatus.APPROVED &&
         !hasRequestedServiceLink(request)),
+    ...(options.bookImportProgresses?.length
+      ? { bookImportProgresses: options.bookImportProgresses }
+      : {}),
   };
 };
 
@@ -1072,36 +1095,61 @@ const getDispatchPending = async (
     getRepository(RequestDispatchOutbox)
   ).exists({ where: { requestId } });
 
-const getBookSearchState = async (
+const getBookSearchSnapshot = async (
   requestId: number,
   manager?: EntityManager
-): Promise<BookRequestSearch['state'] | undefined> => {
+): Promise<BookSearchSnapshot> => {
   const records = await (
     manager?.getRepository(BookRequestSearch) ??
     getRepository(BookRequestSearch)
   ).find({
     where: { requestId },
-    select: { state: true, providerManagedSearch: true },
+    select: {
+      state: true,
+      providerManagedSearch: true,
+      format: true,
+      pendingId: true,
+      pendingAttemptCount: true,
+      pendingMaxAttempts: true,
+      pendingNextAttemptAt: true,
+    },
   });
   const trackedSearches = records.filter(
     (record) => !record.providerManagedSearch
   );
-  if (trackedSearches.some((record) => record.state === 'importing'))
-    return 'importing';
-  if (trackedSearches.some((record) => record.state === 'grabbed'))
-    return 'grabbed';
-  if (
-    trackedSearches.some(
-      (record) => record.state === 'searching' || record.state === 'settling'
-    )
-  ) {
-    return 'searching';
-  }
-  if (trackedSearches.some((record) => record.state === 'pending'))
-    return 'pending';
-  if (trackedSearches.some((record) => record.state === 'monitoring'))
-    return 'monitoring';
-  return undefined;
+  const state = trackedSearches.some((record) => record.state === 'importing')
+    ? 'importing'
+    : trackedSearches.some((record) => record.state === 'grabbed')
+      ? 'grabbed'
+      : trackedSearches.some(
+            (record) =>
+              record.state === 'searching' || record.state === 'settling'
+          )
+        ? 'searching'
+        : trackedSearches.some((record) => record.state === 'pending')
+          ? 'pending'
+          : trackedSearches.some((record) => record.state === 'monitoring')
+            ? 'monitoring'
+            : undefined;
+  return {
+    state,
+    pendingImports: trackedSearches
+      .filter(
+        (record) => record.state === 'pending' && record.pendingId != null
+      )
+      .map((record) => ({
+        format: record.format,
+        ...(record.pendingAttemptCount != null
+          ? { attemptCount: record.pendingAttemptCount }
+          : {}),
+        ...(record.pendingMaxAttempts != null
+          ? { maxAttempts: record.pendingMaxAttempts }
+          : {}),
+        ...(record.pendingNextAttemptAt
+          ? { nextAttemptAt: record.pendingNextAttemptAt }
+          : {}),
+      })),
+  };
 };
 
 const eventToHistoryItem = (
@@ -1230,14 +1278,15 @@ export const recordRequestStatus = async (
     return undefined;
   }
   const latestEvent = await getLatestStatusEvent(requestId, options.manager);
-  const [dispatchPending, bookSearchState] = await Promise.all([
+  const [dispatchPending, bookSearch] = await Promise.all([
     getDispatchPending(requestId, options.manager),
-    getBookSearchState(requestId, options.manager),
+    getBookSearchSnapshot(requestId, options.manager),
   ]);
   const status = getRequestStatus(request, {
     latestEvent: latestEvent ?? undefined,
     dispatchPending,
-    bookSearchState,
+    bookSearchState: bookSearch.state,
+    bookImportProgresses: bookSearch.pendingImports,
     resetTerminalOverride: options.resetTerminalOverride,
   });
   await persistStatusEvent(
@@ -1465,7 +1514,7 @@ const getPendingDispatchRequestIds = async (
 
 const getBookSearchStates = async (
   requestIds: number[]
-): Promise<Map<number, BookRequestSearch['state']>> => {
+): Promise<Map<number, BookSearchSnapshot>> => {
   if (requestIds.length === 0) return new Map();
   const records = await getRepository(BookRequestSearch).find({
     where: { requestId: In(requestIds) },
@@ -1473,9 +1522,25 @@ const getBookSearchStates = async (
       requestId: true,
       state: true,
       providerManagedSearch: true,
+      format: true,
+      pendingId: true,
+      pendingAttemptCount: true,
+      pendingMaxAttempts: true,
+      pendingNextAttemptAt: true,
     },
   });
-  const states = new Map<number, BookRequestSearch['state']>();
+  const states = new Map<number, BookSearchSnapshot>();
+  const statePriority: Record<BookRequestSearch['state'], number> = {
+    monitoring: 1,
+    pending: 2,
+    searching: 3,
+    settling: 3,
+    grabbed: 4,
+    importing: 5,
+    available: 6,
+    unavailable: 6,
+    failed: 6,
+  };
   for (const record of records) {
     if (record.providerManagedSearch) continue;
     if (
@@ -1488,20 +1553,29 @@ const getBookSearchStates = async (
     const nextState =
       record.state === 'settling' ? ('searching' as const) : record.state;
     const current = states.get(record.requestId);
-    const statePriority: Record<BookRequestSearch['state'], number> = {
-      monitoring: 1,
-      pending: 2,
-      searching: 3,
-      settling: 3,
-      grabbed: 4,
-      importing: 5,
-      available: 6,
-      unavailable: 6,
-      failed: 6,
-    };
-    if (!current || statePriority[nextState] > statePriority[current]) {
-      states.set(record.requestId, nextState);
+    const pendingImports = current?.pendingImports ?? [];
+    if (record.state === 'pending' && record.pendingId != null) {
+      pendingImports.push({
+        format: record.format,
+        ...(record.pendingAttemptCount != null
+          ? { attemptCount: record.pendingAttemptCount }
+          : {}),
+        ...(record.pendingMaxAttempts != null
+          ? { maxAttempts: record.pendingMaxAttempts }
+          : {}),
+        ...(record.pendingNextAttemptAt
+          ? { nextAttemptAt: record.pendingNextAttemptAt }
+          : {}),
+      });
     }
+    states.set(record.requestId, {
+      state:
+        !current?.state ||
+        statePriority[nextState] > statePriority[current.state]
+          ? nextState
+          : current.state,
+      pendingImports,
+    });
   }
   return states;
 };
@@ -1510,13 +1584,14 @@ const mapRequestStatusItem = async (
   request: MediaRequest,
   latestEvent: MediaRequestStatusEvent | undefined,
   dispatchPending: boolean,
-  bookSearchState: BookRequestSearch['state'] | undefined,
+  bookSearch: BookSearchSnapshot | undefined,
   persist: boolean
 ): Promise<RequestStatusPageItem> => {
   const status = getRequestStatus(request, {
     latestEvent,
     dispatchPending,
-    bookSearchState,
+    bookSearchState: bookSearch?.state,
+    bookImportProgresses: bookSearch?.pendingImports,
   });
   if (persist) {
     await persistStatusEvent(request, status, latestEvent);

@@ -13,8 +13,12 @@ export const hasAvailableBookFormat = (
 
   if (format === 'audiobook') {
     return (
-      media.audiobookExternalServiceId !== null &&
-      media.audiobookExternalServiceId !== undefined
+      (media.audiobookExternalServiceId !== null &&
+        media.audiobookExternalServiceId !== undefined) ||
+      (media.audiobookLibraryServiceId !== null &&
+        media.audiobookLibraryServiceId !== undefined &&
+        media.audiobookLibraryItemId !== null &&
+        media.audiobookLibraryItemId !== undefined)
     );
   }
 

@@ -1707,6 +1707,61 @@ components:
         - hostname
         - port
         - apiKey
+    AudiobookshelfSettings:
+      type: object
+      description: Read-only Audiobookshelf book library connection used for audiobook availability.
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          maxLength: 128
+        hostname:
+          type: string
+          maxLength: 512
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        useSsl:
+          type: boolean
+        apiKey:
+          type: string
+          description: User API token. Responses redact this value.
+        baseUrl:
+          type: string
+          maxLength: 512
+        externalUrl:
+          type: string
+          maxLength: 512
+        libraryId:
+          type: string
+          maxLength: 256
+        libraryName:
+          type: string
+          maxLength: 256
+        syncEnabled:
+          type: boolean
+      required:
+        - name
+        - hostname
+        - port
+        - apiKey
+        - libraryId
+        - libraryName
+        - syncEnabled
+    AudiobookshelfLibrary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        numBooks:
+          type: integer
+          minimum: 0
+      required: [id, name]
     RadarrSettings:
       type: object
       properties:
@@ -12879,6 +12934,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReadarrSettings'
+  /settings/audiobookshelf:
+    get:
+      summary: Get Audiobookshelf availability settings
+      description: Returns the configured read-only book library connection, with its API token redacted, or null when not configured.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Audiobookshelf availability settings returned
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/AudiobookshelfSettings'
+                nullable: true
+    put:
+      summary: Save Audiobookshelf availability settings
+      description: Configures a read-only Audiobookshelf book library. SeerrNG matches books by ISBN and never modifies Audiobookshelf items.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudiobookshelfSettings'
+      responses:
+        '200':
+          description: Audiobookshelf availability settings saved with the API token redacted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudiobookshelfSettings'
+        '400':
+          description: Invalid Audiobookshelf settings
+    delete:
+      summary: Remove Audiobookshelf availability settings
+      description: Removes the configured library and clears linked Audiobookshelf availability from books.
+      tags:
+        - settings
+      responses:
+        '204':
+          description: Audiobookshelf availability settings removed
+  /settings/audiobookshelf/test:
+    post:
+      summary: Test Audiobookshelf connection
+      description: Lists available Audiobookshelf book libraries without changing them.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServarrConnectionSettings'
+      responses:
+        '200':
+          description: Available book libraries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [libraries]
+                properties:
+                  libraries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AudiobookshelfLibrary'
+        '400':
+          description: Invalid connection settings
+        '502':
+          description: Audiobookshelf connection failed
   /settings/mylar:
     get:
       summary: Get Mylar settings
