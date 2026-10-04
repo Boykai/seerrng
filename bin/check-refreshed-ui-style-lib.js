@@ -63,7 +63,7 @@ const sharedStyleReferencePattern =
 
 const stylesheetDefines = (stylesheet, className) => {
   const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`\\.${escaped}(?=[\\s,{:.>])`).test(stylesheet);
+  return new RegExp(`\\.${escaped}(?=[\\s,{:.>]|\\[)`).test(stylesheet);
 };
 
 const validateGlobalStylesheet = (fileName, source) => {
@@ -78,6 +78,9 @@ const validateGlobalStylesheet = (fileName, source) => {
     '.detail-disclosure-control',
     '.format-request-control',
     '.media-detail-column-divider',
+    '.media-metadata-attribution',
+    '.media-metadata-supplemental',
+    '.media-tmdb-attribution',
     '.media-rating-row',
     '.media-primary-action-row',
     '.scrollable-card',

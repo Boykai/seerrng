@@ -1,5 +1,6 @@
 import Button from '@app/components/Common/Button';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
+import Header from '@app/components/Common/Header';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
@@ -218,12 +219,19 @@ const Discover = ({ initialSliders }: DiscoverProps) => {
     .split('T')[0];
 
   if (!discoverData && !discoverError) {
-    return <LoadingSpinner />;
+    return (
+      <>
+        <PageTitle title={intl.formatMessage(messages.discover)} />
+        <Header>{intl.formatMessage(messages.discover)}</Header>
+        <LoadingSpinner />
+      </>
+    );
   }
 
   return (
-    <div className="discover-home">
+    <div>
       <PageTitle title={intl.formatMessage(messages.discover)} />
+      <Header>{intl.formatMessage(messages.discover)}</Header>
       <Link
         href="/discover/providers"
         className="mb-4 inline-flex text-sm text-blue-400 hover:text-blue-300"
@@ -271,7 +279,7 @@ const Discover = ({ initialSliders }: DiscoverProps) => {
               aria-label={intl.formatMessage(messages.customizediscover)}
               className="shadow"
             >
-              <PencilIcon className="!mr-0 h-4 w-4" />
+              <PencilIcon />
             </Button>
           </Transition>
           <Transition

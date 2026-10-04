@@ -25,6 +25,12 @@ export class MediaSearchMetadata {
   public title?: string | null;
 
   @Column({ type: 'text', nullable: true })
+  public overview?: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  public posterPath?: string | null;
+
+  @Column({ type: 'text', nullable: true })
   public alternateTitle?: string | null;
 
   @Column({ type: 'text', nullable: true })
@@ -78,6 +84,9 @@ export class MediaSearchMetadata {
 
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public createdAt: Date;
+
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public videoMetadataExpiresAt?: Date | null;
 
   @UpdateDateColumn({
     type: resolveDbType('datetime'),

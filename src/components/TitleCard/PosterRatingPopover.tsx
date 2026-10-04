@@ -1,7 +1,6 @@
-import CollectionRatings from '@app/components/CollectionDetails/CollectionRatings';
 import MusicRatings from '@app/components/MediaDetails/MusicRatings';
 import OpenLibraryRating from '@app/components/MediaDetails/OpenLibraryRating';
-import { getCollectionMemberRatings } from '@app/utils/collectionRatings';
+import VideoRatings from '@app/components/MediaDetails/VideoRatings';
 import type { OpenLibraryWorkRatingResponse } from '@server/api/openlibrary';
 import type { RatingResponse } from '@server/api/ratings';
 import type { MusicRatingResponse } from '@server/models/Music';
@@ -123,23 +122,7 @@ export default function PosterRatingPopover({
     );
 
   if (typeof document === 'undefined') return null;
-  const videoRatings =
-    mediaType === 'movie' || mediaType === 'tv'
-      ? getCollectionMemberRatings(
-          {
-            id: Number(id),
-            voteAverage: userScore ?? 0,
-            voteCount: voteCount ?? 0,
-          },
-          mediaType === 'movie' ? movieRatings : tvRatings
-        )
-          .map((rating) =>
-            rating.source === 'tmdb' && mediaType === 'tv'
-              ? { ...rating, href: 'https://www.themoviedb.org/tv/' + id }
-              : rating
-          )
-          .filter((rating) => rating.value !== undefined)
-      : [];
+  const isVideo = mediaType === 'movie' || mediaType === 'tv';
   const albumRatings =
     musicRatings?.ratings ??
     (musicRatings?.rating ? [musicRatings.rating] : []);
@@ -151,7 +134,7 @@ export default function PosterRatingPopover({
     (mediaType === 'album' && musicLoading) ||
     (mediaType === 'book' && bookLoading);
   const hasRatings =
-    videoRatings.length > 0 ||
+    isVideo ||
     albumRatings.length > 0 ||
     (bookAverage !== undefined && !!bookCount);
 
@@ -172,8 +155,15 @@ export default function PosterRatingPopover({
       aria-label={'Ratings for ' + title}
     >
       <div className="poster-rating-values">
-        {videoRatings.length > 0 && (
-          <CollectionRatings ratings={videoRatings} />
+        {(mediaType === 'movie' || mediaType === 'tv') && (
+          <VideoRatings
+            mediaType={mediaType}
+            id={Number(id)}
+            voteAverage={userScore}
+            voteCount={voteCount}
+            ratings={mediaType === 'movie' ? movieRatings : tvRatings}
+            loading={mediaType === 'movie' ? movieLoading : tvLoading}
+          />
         )}
         {albumRatings.length > 0 && (
           <MusicRatings

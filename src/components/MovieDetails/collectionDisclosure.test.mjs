@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import postcss from 'postcss';
+import { styleContract } from '../../styles/cssContract.mjs';
 
 const source = readFileSync(
   new URL('./MovieDetailsLayout.tsx', import.meta.url),
@@ -51,31 +53,95 @@ test('collection page and movie summary share the same table placement', () => {
   }
 });
 
-test('collection table expands its overview before the final two genre rows', () => {
-  const css = readFileSync(
-    new URL('../../styles/globals.css', import.meta.url),
-    'utf8'
+const collectionCss = () =>
+  readFileSync(new URL('../../styles/globals.css', import.meta.url), 'utf8');
+const assertCollectionLayout = (css) => {
+  const contract = styleContract(css);
+  const tableRules = contract.rulesFor('.collection-summary-table');
+  const rowRules = tableRules.filter((rule) =>
+    rule.nodes.some(
+      (node) => node.type === 'decl' && node.prop === 'grid-template-rows'
+    )
+  );
+  assert.equal(rowRules.length, 2);
+  assert.equal(rowRules[0].parent.name, 'layer');
+  assert.equal(rowRules[1].parent.name, 'media');
+  assert.equal(rowRules[1].parent.params, '(min-width: 720px)');
+  assert.ok(
+    contract.applies('.collection-summary-overview-value').has('row-start-1')
+  );
+  assert.ok(
+    contract.applies('.collection-summary-genres-value').has('line-clamp-2')
+  );
+  assert.ok(
+    contract.applies('.collection-summary-genres-value').has('row-start-3')
+  );
+  assert.ok(
+    contract.applies('.collection-summary-genres-value').has('row-span-2')
   );
   assert.match(
-    css,
-    /grid-template-rows:\s*minmax\(calc\(3 \* var\(--detail-row-height\)\), auto\)\s*repeat\(2, minmax\(var\(--detail-row-height\), auto\)\)/
+    contract.declaration('.collection-summary-table', 'grid-template-rows'),
+    /minmax\(calc\(3 \* var\(--detail-row-height\)\), auto\)\s*repeat\(2, minmax\(var\(--detail-row-height\), auto\)\)/
   );
-  assert.match(css, /\.collection-summary-genres-value\s*\{[^}]*line-clamp-2/);
-  assert.match(
-    css,
-    /\.collection-summary-genres-value\s*\{\s*grid-column: 2 \/ 5;/
+  // The size pair owns its inner two-column grid; the wide table owns three tracks.
+  assert.ok(
+    contract
+      .applies('.collection-summary-size')
+      .has('grid-cols-[max-content_minmax(0,1fr)]')
   );
-  assert.match(
-    css,
-    /\.collection-summary-size-label\s*\{\s*grid-column: 5;\s*grid-row: 2;/
+  assert.ok(
+    contract.applies('.collection-summary-size-label').has('col-start-1')
   );
-  assert.match(
-    css,
-    /\.collection-summary-size-value\s*\{\s*grid-column: 6;\s*grid-row: 2;/
+  assert.ok(
+    contract.applies('.collection-summary-size-value').has('col-start-2')
   );
-  assert.match(
-    css,
-    /\.collection-summary-table::after\s*\{[^}]*grid-row: 2 \/ 4;/
+  assert.equal(
+    contract.declaration('.collection-summary-genres-value', 'grid-column'),
+    '2'
+  );
+  assert.equal(
+    contract.declaration('.collection-summary-genres-value', 'grid-row'),
+    '2 / 4'
+  );
+  assert.equal(
+    contract.declaration('.collection-summary-size', 'grid-column'),
+    '3'
+  );
+  assert.equal(
+    contract.declaration('.collection-summary-size', 'grid-row'),
+    '2 / 4'
+  );
+  assert.equal(
+    contract.declaration('.collection-summary-table::after', 'grid-column'),
+    '3'
+  );
+  assert.equal(
+    contract.declaration('.collection-summary-table::after', 'grid-row'),
+    '2 / 4'
+  );
+  for (const file of [
+    '../CollectionDetails/index.tsx',
+    '../CollectionDetails/CollectionSummaryCard.tsx',
+  ]) {
+    const consumer = readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert.match(
+      consumer,
+      /<div className="collection-summary-size">\s*<dt className="collection-summary-size-label">/
+    );
+  }
+};
+
+test('collection table expands its overview and shares responsive genre and size owners', () => {
+  assertCollectionLayout(collectionCss());
+});
+
+test('collection placement check rejects a size column detached from the divider', () => {
+  assert.throws(
+    () =>
+      assertCollectionLayout(
+        collectionCss() + '\n.collection-summary-size { grid-column: 4; }'
+      ),
+    assert.AssertionError
   );
 });
 
@@ -88,24 +154,22 @@ test('black glowing divider overrides are limited to Blackout', () => {
     new URL('../../styles/globals.css', import.meta.url),
     'utf8'
   );
-  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
-  const theme = css.match(
-    /\[data-theme-palette='blackout'\]\s*\{([^}]+)\}/
-  )?.[1];
-  assert.ok(theme);
-  assert.match(
-    theme,
-    /--theme-detail-divider-shadow:\s*0 0 4px 0 rgb\(255 255 255 \/ 0\.8\);/
+  const contract = styleContract(css);
+  const palette = "[data-theme-palette='seerr']";
+  assert.equal(
+    contract.declaration(palette, '--theme-detail-divider-shadow'),
+    '0 0 4px 0 rgb(255 255 255 / 0.8)'
   );
-  assert.doesNotMatch(theme, /0 0 0 1px rgb\(255 255 255\)/);
-  const glowing = rules.filter(([, , body]) =>
-    body.includes('box-shadow: var(--theme-detail-divider-shadow)')
-  );
+  const glowing = [];
+  postcss.parse(css).walkDecls('box-shadow', (decl) => {
+    if (decl.value === 'var(--theme-detail-divider-shadow)')
+      glowing.push(decl.parent);
+  });
   assert.equal(glowing.length, 2);
-  for (const [, selectors, body] of glowing) {
-    for (const selector of selectors.split(',')) {
-      assert.ok(selector.trim().startsWith("[data-theme-palette='blackout']"));
+  for (const rule of glowing) {
+    for (const selector of rule.selectors) {
+      assert.ok(selector.trim().startsWith(palette + ' '));
+      assert.equal(contract.declaration(selector, 'background-color'), 'black');
     }
-    assert.match(body, /background-color: black;/);
   }
 });

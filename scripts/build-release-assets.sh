@@ -55,6 +55,18 @@ cleanup() {
   [[ -z "$checksum_temporary" ]] || rm -f -- "$checksum_temporary"
 }
 trap cleanup EXIT
+
+time_phase() {
+  local release_phase="$1"
+  shift
+  local phase_started_at phase_elapsed
+  phase_started_at="$(date +%s)"
+  printf 'Starting release archive phase: %s\n' "$release_phase"
+  "$@"
+  phase_elapsed="$(( $(date +%s) - phase_started_at ))"
+  printf 'Completed release archive phase: %s in %ss\n' "$release_phase" "$phase_elapsed"
+}
+
 stage="${work_dir}/${asset}"
 mkdir -p "$stage"
 
@@ -65,54 +77,86 @@ command -v pnpm >/dev/null 2>&1 || {
   echo "pnpm or Corepack is required to build release assets" >&2
   exit 127
 }
-CI=true CYPRESS_INSTALL_BINARY=0 pnpm install --frozen-lockfile
-pnpm build
+time_phase 'Install build dependencies' env CI=true CYPRESS_INSTALL_BINARY=0 pnpm install --frozen-lockfile
+time_phase 'Build application' pnpm build
 
 # Next's build cache and development output are not runtime content. Removing
 # them before staging avoids copying gigabytes of transient files, which is
 # especially slow under Git Bash on Windows runners.
 rm -rf -- .next/cache .next/dev
-cp -R .next dist public "$stage"/
-cp package.json pnpm-lock.yaml pnpm-workspace.yaml next.config.ts seerr-api.yml LICENSE "$stage"/
+time_phase 'Copy built runtime files' cp -R .next dist public "$stage"/
+time_phase 'Copy runtime metadata' cp package.json pnpm-lock.yaml pnpm-workspace.yaml next.config.ts seerr-api.yml LICENSE "$stage"/
 mkdir -p "$stage/bin"
 cp bin/prepare.mjs "$stage/bin/"
 # pnpm-workspace.yaml pins checked-in patches that are required when the
 # production dependency tree is installed inside the staged archive.
 cp -R patches "$stage/"
-(cd "$stage" && CI=true CYPRESS_INSTALL_BINARY=0 pnpm install --prod --frozen-lockfile)
+(
+  cd "$stage"
+  time_phase 'Install staged production dependencies' env CI=true CYPRESS_INSTALL_BINARY=0 pnpm install --prod --frozen-lockfile
+)
 rm -rf "${stage:?}/.next/cache" "${stage:?}/.next/dev" "${stage:?}/bin" "${stage:?}/cache" "${stage:?}/patches"
 mkdir -p "$stage/config"
 touch "$stage/config/.gitkeep"
 
-while IFS= read -r -d '' link; do
-  target="$(readlink "$link")"
-  link_dir="$(dirname -- "$link")"
-  if [[ "$target" == /* ]]; then
-    resolved="$(realpath "$target")" || {
-      echo "Refusing broken archive symlink: $link -> $target" >&2
-      exit 1
-    }
-  else
-    resolved="$(realpath "$link_dir/$target")" || {
-      echo "Refusing broken archive symlink: $link -> $target" >&2
-      exit 1
-    }
-  fi
-  [[ "$resolved" == "$stage"/* ]] || {
-    if [[ "$target" == /* ]]; then
-      echo "Refusing absolute archive symlink: $link -> $target" >&2
-    else
-      echo "Refusing escaping archive symlink: $link -> $target" >&2
-    fi
-    exit 1
-  }
+# Keep symlink validation in one Node process instead of spawning several Git
+# Bash utilities for every link in the large Windows ARM64 tree.
+time_phase 'Validate and normalize runtime symlinks' node --input-type=module - "$stage" <<'NODE'
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
-  if [[ "$target" == /* ]]; then
-    relative_target="$(node -e 'const path = require("node:path"); process.stdout.write(path.posix.relative(process.argv[1], process.argv[2]));' "$link_dir" "$resolved")"
-    rm -- "$link"
-    ln -s -- "$relative_target" "$link"
-  fi
-done < <(find "$stage" -type l -print0)
+const stage = await fs.realpath(process.argv[2]);
+const pendingDirectories = [stage];
+
+function isInsideStage(target) {
+  const relative = path.relative(stage, target);
+  return (
+    relative !== '..' &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+}
+
+while (pendingDirectories.length > 0) {
+  const directory = pendingDirectories.pop();
+  const entries = await fs.readdir(directory, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      pendingDirectories.push(entryPath);
+      continue;
+    }
+    if (!entry.isSymbolicLink()) continue;
+
+    const target = await fs.readlink(entryPath);
+    let resolved;
+    try {
+      resolved = await fs.realpath(entryPath);
+    } catch {
+      throw new Error(`Refusing broken archive symlink: ${entryPath} -> ${target}`);
+    }
+    if (!isInsideStage(resolved)) {
+      const kind = path.isAbsolute(target) ? 'absolute' : 'escaping';
+      throw new Error(`Refusing ${kind} archive symlink: ${entryPath} -> ${target}`);
+    }
+
+    if (path.isAbsolute(target)) {
+      const relativeTarget = path.relative(path.dirname(entryPath), resolved);
+      const targetType =
+        process.platform === 'win32' && (await fs.stat(resolved)).isDirectory()
+          ? 'dir'
+          : 'file';
+      await fs.unlink(entryPath);
+      await fs.symlink(
+        relativeTarget,
+        entryPath,
+        process.platform === 'win32' ? targetType : undefined
+      );
+    }
+  }
+}
+NODE
 
 cat > "$stage/start.sh" <<'EOF'
 #!/usr/bin/env sh
@@ -141,20 +185,26 @@ EOF
 chmod 0755 "$stage/seerrng"
 cp "$stage/start.cmd" "$stage/seerrng.cmd"
 
-# The runtime bundle is installed by package managers and may run as a
-# dedicated service account. The build uses a restrictive umask for temporary
-# files, so normalize the non-secret application tree before archiving it.
-chmod -R u=rwX,go=rX "$stage"
+# POSIX archives need normalized modes because this build uses a restrictive
+# umask. Windows extracts with NTFS ACLs and launches through start.cmd, so a
+# recursive chmod of every staged file adds no runtime value there.
+if [[ "$os" == 'windows' ]]; then
+  echo 'Skipping recursive POSIX permission normalization for the Windows archive.'
+else
+  time_phase 'Normalize runtime permissions' chmod -R u=rwX,go=rX "$stage"
+fi
 
 if [[ "$os" == "windows" ]]; then
   archive_name="${asset}.zip"
+  archive_phase_started_at="$(date +%s)"
+  echo 'Starting release archive phase: Create Windows ZIP'
   archive_temporary="$(mktemp "${dist_abs}/.${archive_name}.tmp.XXXXXX.zip")"
   rm -f -- "$archive_temporary"
   if command -v 7z >/dev/null 2>&1; then
     # PowerShell Compress-Archive is prohibitively slow for the staged
-    # Next.js runtime on GitHub's Windows runners. Prefer the runner's
-    # 7-Zip installation, which handles the same tree in seconds.
-    (cd "$work_dir" && 7z a -tzip -mx=5 -bd "$archive_temporary" "$asset" >/dev/null)
+    # Next.js runtime on GitHub's Windows runners. Use 7-Zip's fast Deflate
+    # level and parallel workers to keep native ARM packaging practical.
+    (cd "$work_dir" && 7z a -tzip -mx=1 -mmt=on -bsp1 -bso0 -bse2 "$archive_temporary" "$asset")
   elif command -v zip >/dev/null 2>&1; then
     (cd "$work_dir" && zip -qr "$archive_temporary" "$asset")
   elif command -v tar >/dev/null 2>&1; then
@@ -186,12 +236,17 @@ if [[ "$os" == "windows" ]]; then
   fi
 else
   archive_name="${asset}.tar.gz"
+  archive_phase_started_at="$(date +%s)"
+  echo 'Starting release archive phase: Create POSIX tarball'
   archive_temporary="$(mktemp "${dist_abs}/.${archive_name}.tmp.XXXXXX.tar.gz")"
   tar -C "$work_dir" -czf "$archive_temporary" "$asset"
 fi
 
 chmod 0644 "$archive_temporary"
 mv -f -- "$archive_temporary" "${dist_abs}/${archive_name}"
+archive_bytes="$(wc -c < "${dist_abs}/${archive_name}" | tr -d '[:space:]')"
+printf 'Completed release archive phase: Create %s in %ss (%s bytes)\n' \
+  "$archive_name" "$(( $(date +%s) - archive_phase_started_at ))" "$archive_bytes"
 checksum_temporary="$(mktemp "${dist_abs}/.${asset}.sha256.tmp.XXXXXX")"
 (cd "$dist_abs" && sha256sum "$archive_name" >"$checksum_temporary")
 chmod 0644 "$checksum_temporary"

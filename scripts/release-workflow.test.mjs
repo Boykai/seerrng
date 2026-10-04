@@ -25,11 +25,18 @@ test('release assets build while image verification runs, then package channels 
   ).run;
 
   assert.equal(
+    release.on.workflow_dispatch.inputs.reuse_package_workflow_runs.default,
+    '{}'
+  );
+  assert.equal(
     packageDispatch.steps[0].uses,
     'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
   );
   assert.equal(assetBuild.uses, './.github/workflows/release-assets.yml');
-  assert.deepEqual(assetBuild.needs, ['validate-main-tag', 'create-draft-release']);
+  assert.deepEqual(assetBuild.needs, [
+    'validate-main-tag',
+    'create-draft-release',
+  ]);
   assert.equal(assetBuild.needs.includes('verify'), false);
   assert.equal(assetBuild.with.tag, '${{ inputs.tag || github.ref_name }}');
   assert.equal(assetBuild.permissions.actions, 'read');
@@ -38,11 +45,43 @@ test('release assets build while image verification runs, then package channels 
   assert.match(dispatchScript, /--ref main/u);
   assert.match(dispatchScript, /release-chocolatey\.yml/u);
   assert.match(dispatchScript, /release-linux-packages\.yml/u);
-  assert.match(dispatchScript, /watch-github-run\.mjs/u);
-  assert.match(dispatchScript, /release-snap\.yml[\s\S]*optional=false/u);
   assert.match(
     dispatchScript,
-    /Optional package workflow .*failed; continuing without that package channel/u
+    /required_workflows=\([\s\S]*release-copr\.yml/u
+  );
+  assert.match(
+    dispatchScript,
+    /optional_workflows=\([\s\S]*release-snap\.yml/u
+  );
+  assert.match(dispatchScript, /watch-github-run\.mjs/u);
+  assert.match(dispatchScript, /REUSE_PACKAGE_WORKFLOW_RUNS/u);
+  assert.match(
+    dispatchScript,
+    /repos\/\$REPO\/actions\/runs\/\$reused_run_id/u,
+    'reused package runs must be fetched from this repository'
+  );
+  assert.match(
+    dispatchScript,
+    /\.status == "completed" and[\s\S]*\.conclusion == "success"/u,
+    'only successful completed package runs may be reused'
+  );
+  assert.match(
+    dispatchScript,
+    /RELEASE_TAG: \$TAG/u,
+    'reused package runs must prove they built the requested release tag'
+  );
+  assert.match(
+    dispatchScript,
+    /Skipping optional Chocolatey and Snap workflows during release recovery/u
+  );
+  assert.match(
+    dispatchScript,
+    /node scripts\/watch-github-run\.mjs[\s\S]*\) &/u,
+    'required package channels must be monitored concurrently'
+  );
+  assert.match(
+    dispatchScript,
+    /Optional package workflow .*could not be dispatched; continuing/u
   );
   assert.match(
     dispatchScript,
@@ -135,11 +174,40 @@ test('AppImage uses the current launcher and excludes binaries above its glibc b
   assert.match(build.run, /@next\/swc-wasm-nodejs/u);
   assert.match(
     build.run,
+    /require\(require\('node:path'\)\.resolve\(process\.argv\[1\]\)\)/u,
+    'AppImage must resolve the extracted Next.js package.json as a filesystem path'
+  );
+  assert.match(
+    build.run,
     /next_directory="\$app_dir\/node_modules\/next"[\s\S]*swc_wasm_directory="\$next_directory\/wasm\/@next\/swc-wasm-nodejs"/u
   );
   assert.match(
     build.run,
     /sha512-Qbh5QIWcyzZfp\+neSFDxSaS0PjyCv7NUVipXcOaEp0\+bCAynyGAoGnZirESQyPwpn\/VXBncpZCVa0cnD\+EWDmQ==/u
+  );
+  assert.match(
+    build.run,
+    /manylinux_2_28_x86_64@sha256:[a-f0-9]{64}/u,
+    'AppImage native modules must be rebuilt in the pinned glibc 2.28 environment'
+  );
+  assert.match(
+    build.run,
+    /node-gyp rebuild --release --force_build=1 --nodedir=\/node-runtime/u,
+    'AppImage must compile better-sqlite3 from source for its Node runtime'
+  );
+  assert.match(
+    build.run,
+    /npm install --global --prefix \/tmp\/node-tooling/u,
+    'AppImage must keep node-gyp installation outside its read-only Node runtime mount'
+  );
+  assert.match(
+    build.run,
+    /install -m 0644 build\/Release\/better_sqlite3\.node prebuilds\/linux-x64\.node/u,
+    'AppImage must replace the incompatible upstream x64 SQLite prebuild'
+  );
+  assert.ok(
+    build.run.includes("sed -n 's/^[[:space:]]*Machine:[[:space:]]*//p'"),
+    'AppImage compatibility checks must ignore ELF binaries for other architectures'
   );
   assert.match(build.run, /dpkg --compare-versions[\s\S]*gt 2\.29/u);
   assert.match(smoke.run, /--appimage-extract-and-run/u);
@@ -425,6 +493,11 @@ test('release assets support trusted reuse and main-only manual dispatch', () =>
   assert.match(resolve.if, /github\.event_name != 'workflow_dispatch'/u);
   assert.match(resolve.if, /github\.ref == 'refs\/heads\/main'/u);
   assert.equal(workflowCall.inputs.reuse_windows_x64_artifact.type, 'boolean');
+  assert.equal(
+    workflowCall.inputs.reuse_windows_arm64_artifact.type,
+    'boolean'
+  );
+  assert.equal(workflowCall.inputs.reuse_windows_arm64_artifact.default, false);
   assert.match(
     resolve.steps.find((step) => step.name === 'Resolve version').env
       .RELEASE_TAG,
@@ -461,6 +534,10 @@ test('release recovery validates reusable artifacts and repairs the failed relea
     release.jobs['validate-main-tag'].outputs.reuse_windows_x64_artifact,
     /steps\.recovery\.outputs/u
   );
+  assert.match(
+    release.jobs['validate-main-tag'].outputs.reuse_windows_arm64_artifact,
+    /steps\.recovery\.outputs/u
+  );
   assert.match(recoveryValidation.run, /\.head_sha == \$sha/u);
   assert.match(
     recoveryValidation.run,
@@ -470,16 +547,33 @@ test('release recovery validates reusable artifacts and repairs the failed relea
     recoveryValidation.run,
     /Build release assets \/ Upload release assets/u
   );
+  assert.match(
+    recoveryValidation.run,
+    /\["Dispatch package channels"\]/u,
+    'a package-channel-only failure must be recoverable from verified assets'
+  );
+  assert.match(
+    recoveryValidation.run,
+    /reuse_windows_arm64_artifact=true/u,
+    'package-only recovery must preserve the successful Windows ARM64 artifact'
+  );
   assert.match(recoveryValidation.run, /event == "workflow_dispatch"/u);
   assert.match(recoveryValidation.run, /\.expired == false/u);
   assert.match(imageBuild.if, /inputs\.reuse_published_image != true/u);
   assert.match(imageReuse.if, /inputs\.reuse_published_image == true/u);
   assert.match(imageReuse.run, /org\.opencontainers\.image\.revision/u);
   assert.match(imageReuse.run, /EXPECTED_SHA/u);
-  assert.deepEqual(assetBuild.needs, ['validate-main-tag', 'create-draft-release']);
+  assert.deepEqual(assetBuild.needs, [
+    'validate-main-tag',
+    'create-draft-release',
+  ]);
   assert.match(
     assetBuild.with.reuse_windows_x64_artifact,
     /needs\.validate-main-tag\.outputs\.reuse_windows_x64_artifact/u
+  );
+  assert.match(
+    assetBuild.with.reuse_windows_arm64_artifact,
+    /needs\.validate-main-tag\.outputs\.reuse_windows_arm64_artifact/u
   );
   assert.equal(
     assetBuild.with.reuse_from_run_id,
@@ -494,8 +588,24 @@ test('release recovery validates reusable artifacts and repairs the failed relea
     /inputs\.reuse_windows_x64_artifact == true/u
   );
   assert.match(
+    reusedArtifactDownload.if,
+    /inputs\.reuse_windows_arm64_artifact == true/u
+  );
+  assert.match(
     assets.jobs.build.steps.find((step) => step.name === 'Build archive').if,
     /matrix\.arch == 'arm64'/u
+  );
+  assert.match(
+    assets.jobs.build.steps.find((step) => step.name === 'Build archive').if,
+    /inputs\.reuse_windows_arm64_artifact != true/u,
+    'recovery must skip a successful Windows ARM64 rebuild'
+  );
+  assert.match(
+    assets.jobs.build.steps.find(
+      (step) => step.name === 'Install node-gyp for Visual Studio 2026'
+    ).if,
+    /inputs\.reuse_windows_arm64_artifact != true/u,
+    'recovery must skip ARM64 build-tool setup when reusing its artifact'
   );
   assert.match(
     assets.jobs.build.steps.find((step) => step.name === 'Build archive').env
@@ -589,13 +699,19 @@ test('release assets build supported native archive platforms', () => {
   assert.equal(downloadAssets.with.path, 'dist-release/downloaded');
   assert.equal(downloadAssets.with['merge-multiple'], undefined);
   assert.match(flattenAssets.run, /Unexpected file in release artifact/u);
-  assert.match(flattenAssets.run, /Duplicate release asset filename.*collides with/u);
+  assert.match(
+    flattenAssets.run,
+    /Duplicate release asset filename.*collides with/u
+  );
   assert.match(flattenAssets.run, /windows-arm64.*expected_archive/u);
   assert.match(flattenAssets.run, /find "\$downloads" -type f/u);
   assert.match(releaseTooling.with.ref, /github\.sha/u);
   assert.equal(releaseTooling.with.path, '.release-tooling');
   assert.equal(releaseTooling.with['sparse-checkout'], 'scripts');
-  assert.match(archiveBuild.run, /\.release-tooling\/scripts\/build-release-assets\.sh/u);
+  assert.match(
+    archiveBuild.run,
+    /\.release-tooling\/scripts\/build-release-assets\.sh/u
+  );
   assert.match(buildScript, /node -p 'process\.arch'/u);
   assert.doesNotMatch(buildScript, /uname -m/u);
   assert.match(verifyInventory, /sha256sum -c/u);
@@ -670,6 +786,7 @@ test('release notes flow into the draft release and Discord announcement', () =>
     'changelog',
     'publish',
     'publish-release',
+    'sync-yunohost-package',
     'dispatch-package-channels',
   ]);
   assert.equal(

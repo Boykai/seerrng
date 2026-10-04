@@ -44,12 +44,15 @@ const ButtonWithDropdown = ({
     : props.title;
 
   return (
-    <Menu as="div" className="relative z-10 inline-flex">
+    <Menu
+      as="div"
+      className="app-dropdown"
+      data-dropdown-segmented={!!children}
+    >
       <TriggerElement
         type="button"
-        className={`relative z-10 hover:z-20 focus:z-20 ${sharedClasses} ${
-          children ? 'rounded-r-none' : ''
-        } ${className ?? ''}`}
+        className={`${sharedClasses} ${className ?? ''}`}
+        data-dropdown-part="main"
         {...(props as Record<string, string>)}
         data-button-help={props.title}
         data-disabled-reason={disabled ? disabledTitle : undefined}
@@ -58,11 +61,12 @@ const ButtonWithDropdown = ({
         {text}
       </TriggerElement>
       {children && (
-        <span className="relative -ml-px block">
+        <span data-dropdown-part="toggle-slot">
           <MenuButton
             type="button"
             disabled={disabled}
-            className={`relative z-10 -ml-px rounded-l-none px-1.5 hover:z-20 focus:z-20 ${sharedClasses}`}
+            className={sharedClasses}
+            data-dropdown-part="toggle"
             aria-label="Expand"
             data-disabled-reason={disabled ? disabledTitle : undefined}
           >

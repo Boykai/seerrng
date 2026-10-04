@@ -13,5 +13,8 @@ const subjectTagTones = [
   'purple',
 ] as const;
 
+export const subjectTagTone = (index: number) =>
+  subjectTagTones[index % subjectTagTones.length];
+
 export const subjectTagClassName = (index: number): string =>
-  `compact-control subject-tag subject-tag-${subjectTagTones[index % subjectTagTones.length]}`;
+  `compact-control subject-tag subject-tag-${subjectTagTone(index)}`;

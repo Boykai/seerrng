@@ -2,6 +2,1122 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+const parsedCssOwner = (stylesheet, selector, expected, media) => {
+  try {
+    const normalize = (value) => value.replace(/\s+/g, ' ').trim();
+    const declarations = [];
+    require('postcss')
+      .parse(stylesheet)
+      .walkRules((rule) => {
+        if (
+          !rule.selectors.some(
+            (item) => normalize(item) === normalize(selector)
+          )
+        )
+          return;
+        if (
+          media &&
+          !(
+            rule.parent.type === 'atrule' &&
+            rule.parent.name === 'media' &&
+            normalize(rule.parent.params) === media
+          )
+        )
+          return;
+        for (const node of rule.nodes) {
+          if (node.type === 'atrule' && node.name === 'apply')
+            throw new Error('Retired utility owner');
+          if (node.type === 'decl') declarations.push(node);
+        }
+      });
+    return Object.entries(expected).every(([property, value]) => {
+      const matches = declarations.filter((item) => item.prop === property);
+      const competing =
+        property === 'background-color'
+          ? ['background', 'all']
+          : property.startsWith('font-') || property === 'line-height'
+            ? ['font', 'all']
+            : property === 'border-bottom'
+              ? [
+                  'border',
+                  'border-color',
+                  'border-width',
+                  'border-style',
+                  'all',
+                ]
+              : ['all'];
+      return (
+        matches.length === 1 &&
+        normalize(matches[0].value) === normalize(value) &&
+        !declarations.some((item) => competing.includes(item.prop))
+      );
+    });
+  } catch {
+    return false;
+  }
+};
+
+const parsedJsx = (source) => {
+  const ts = require('typescript');
+  const tree = ts.createSourceFile(
+    'Owner.tsx',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX
+  );
+  if (tree.parseDiagnostics.length) throw new Error('Invalid JSX source');
+  const elements = [];
+  const visit = (node) => {
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node))
+      elements.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  const opening = (node) =>
+    ts.isJsxElement(node) ? node.openingElement : node;
+  const tag = (node) => opening(node).tagName.getText(tree);
+  const attr = (node, name) =>
+    opening(node).attributes.properties.find(
+      (item) => ts.isJsxAttribute(item) && item.name.getText(tree) === name
+    )?.initializer;
+  const expression = (node, name) => {
+    const value = attr(node, name);
+    return value && ts.isJsxExpression(value) ? value.expression : value;
+  };
+  const present = (node, name) =>
+    opening(node).attributes.properties.some(
+      (item) => ts.isJsxAttribute(item) && item.name.getText(tree) === name
+    );
+  const text = (node, name) => {
+    const value = expression(node, name);
+    return value && ts.isStringLiteral(value) ? value.text : undefined;
+  };
+  const roles = (node, ...names) =>
+    names.every((name) =>
+      (text(node, 'className') ?? '').split(/\s+/).includes(name)
+    );
+  const compact = (node) => node?.getText(tree).replace(/\s+/g, '');
+  const within = (node, ancestor) => {
+    for (let current = node.parent; current; current = current.parent)
+      if (current === ancestor) return true;
+    return false;
+  };
+  return {
+    ts,
+    tree,
+    elements,
+    tag,
+    attr,
+    expression,
+    present,
+    text,
+    roles,
+    compact,
+    within,
+  };
+};
+
+// Read connected Cypress actions/assertions, not a test title or retired format
+// control. One test must exercise entry, both in-dialog choices and zero writes.
+const validateSeriesRequestEntryEvidence = (source) => {
+  try {
+    const { ts, tree } = parsedJsx(source);
+    const callsWithin = (root) => {
+      const calls = [];
+      const visit = (node) => {
+        if (ts.isCallExpression(node)) calls.push(node);
+        ts.forEachChild(node, visit);
+      };
+      visit(root);
+      return calls;
+    };
+    const chain = (node) => {
+      if (!node || !ts.isCallExpression(node)) return [];
+      if (ts.isIdentifier(node.expression))
+        return [{ name: node.expression.text, args: node.arguments }];
+      if (!ts.isPropertyAccessExpression(node.expression)) return [];
+      let owner = node.expression.expression;
+      while (ts.isPropertyAccessExpression(owner)) owner = owner.expression;
+      const prior = ts.isCallExpression(owner)
+        ? chain(owner)
+        : ts.isIdentifier(owner) && owner.text === 'cy'
+          ? [{ name: 'cy', args: [] }]
+          : [];
+      return prior.length
+        ? [...prior, { name: node.expression.name.text, args: node.arguments }]
+        : [];
+    };
+    const text = (node) =>
+      node && ts.isStringLiteral(node) ? node.text : undefined;
+    const has = (steps, name, first, second) =>
+      steps.some(
+        (step) =>
+          step.name === name &&
+          (first === undefined || text(step.args[0]) === first) &&
+          (second === undefined || text(step.args[1]) === second)
+      );
+    const assertion = (steps, name, value) =>
+      has(steps, 'should', name, value) || has(steps, 'and', name, value);
+    const label = (node, expected) => {
+      if (!node) return false;
+      if (ts.isStringLiteral(node)) return node.text === expected;
+      if (!ts.isRegularExpressionLiteral(node)) return false;
+      const match = node.text.match(/^\/(.*)\/([a-z]*)$/);
+      if (!match || !match[1].startsWith('^') || !match[1].endsWith('$'))
+        return false;
+      const pattern = new RegExp(match[1], match[2]);
+      return pattern.test(expected) && !pattern.test(`${expected} Extra`);
+    };
+    const contains = (steps, expected) =>
+      steps.some(
+        (step) =>
+          step.name === 'contains' &&
+          text(step.args[0]) === 'button' &&
+          label(step.args[1], expected)
+      );
+    const tests = callsWithin(tree).filter(
+      (call) =>
+        ts.isIdentifier(call.expression) && call.expression.text === 'it'
+    );
+    return tests.some((test) => {
+      const body = test.arguments.find(ts.isArrowFunction)?.body;
+      if (!body) return false;
+      const calls = callsWithin(body);
+      const entry = calls.find((call) => {
+        const steps = chain(call);
+        return (
+          steps[0]?.name === 'cy' &&
+          contains(steps, 'Request') &&
+          has(steps, 'filter', ':visible') &&
+          assertion(steps, 'be.enabled') &&
+          steps.at(-1)?.name === 'click'
+        );
+      });
+      const dialog = calls.find((call) => {
+        const steps = chain(call);
+        return (
+          has(steps, 'get', '[role="dialog"]') &&
+          assertion(steps, 'be.visible') &&
+          steps.at(-1)?.name === 'within'
+        );
+      });
+      if (!entry || !dialog || entry.pos >= dialog.pos) return false;
+      const choiceCalls = callsWithin(dialog.arguments[0]?.body ?? dialog);
+      const choices = choiceCalls.map(chain);
+      const quality = (steps, expected) =>
+        has(steps, 'get', '[role="group"][aria-label="Quality"]') &&
+        contains(steps, expected);
+      const pressed = (steps) =>
+        steps.some(
+          (step) =>
+            ['should', 'and'].includes(step.name) &&
+            text(step.args[0]) === 'have.attr' &&
+            text(step.args[1]) === 'aria-pressed' &&
+            text(step.args[2]) === 'true'
+        );
+      if (
+        !choices.some((steps) => quality(steps, 'HD') && pressed(steps)) ||
+        !choices.some(
+          (steps) =>
+            quality(steps, 'HD') && has(steps, 'click') && pressed(steps)
+        ) ||
+        !choices.some(
+          (steps) =>
+            quality(steps, '4K') &&
+            assertion(steps, 'be.enabled') &&
+            has(steps, 'click')
+        ) ||
+        !choices.some((steps) => quality(steps, '4K') && pressed(steps)) ||
+        !calls.some((call) => {
+          const steps = chain(call);
+          return (
+            call.pos < entry.pos &&
+            has(steps, 'get', '[data-testid=format-request-option-standard]') &&
+            assertion(steps, 'not.exist')
+          );
+        })
+      )
+        return false;
+      const switch4k = choiceCalls.find((call) => {
+        const steps = chain(call);
+        return quality(steps, '4K') && has(steps, 'click');
+      });
+      const selected4k = choiceCalls.find(
+        (call) =>
+          call.pos > switch4k.pos &&
+          quality(chain(call), '4K') &&
+          pressed(chain(call))
+      );
+      if (
+        !selected4k ||
+        !choiceCalls.some(
+          (call) =>
+            call.pos < switch4k.pos &&
+            quality(chain(call), 'HD') &&
+            pressed(chain(call))
+        ) ||
+        !choiceCalls.some(
+          (call) =>
+            call.pos > selected4k.pos &&
+            quality(chain(call), 'HD') &&
+            has(chain(call), 'click') &&
+            pressed(chain(call))
+        )
+      )
+        return false;
+      return calls.some((call) => {
+        const steps = chain(call);
+        const expectation = steps[0];
+        const counter = expectation?.args[0];
+        const zero = steps.at(-1);
+        if (
+          expectation?.name !== 'expect' ||
+          !counter ||
+          !ts.isIdentifier(counter) ||
+          zero?.name !== 'eq' ||
+          !zero.args[0] ||
+          !ts.isNumericLiteral(zero.args[0]) ||
+          zero.args[0].text !== '0' ||
+          call.pos <= dialog.pos
+        )
+          return false;
+        let queuedAssertion = false;
+        for (
+          let owner = call.parent;
+          owner && owner !== body;
+          owner = owner.parent
+        ) {
+          if (ts.isCallExpression(owner) && has(chain(owner), 'then'))
+            queuedAssertion = true;
+        }
+        const initialized = body.statements?.some(
+          (statement) =>
+            ts.isVariableStatement(statement) &&
+            statement.declarationList.declarations.some(
+              (declaration) =>
+                ts.isIdentifier(declaration.name) &&
+                declaration.name.text === counter.text &&
+                declaration.initializer &&
+                ts.isNumericLiteral(declaration.initializer) &&
+                declaration.initializer.text === '0'
+            )
+        );
+        const observed = calls.some((intercept) => {
+          const observer = intercept.arguments[2];
+          if (
+            intercept.pos >= entry.pos ||
+            !has(chain(intercept), 'intercept', 'POST', '/api/v1/request*') ||
+            !observer ||
+            !ts.isArrowFunction(observer)
+          )
+            return false;
+          let incremented = false;
+          const scan = (node) => {
+            if (
+              (ts.isPostfixUnaryExpression(node) ||
+                ts.isPrefixUnaryExpression(node)) &&
+              node.operator === ts.SyntaxKind.PlusPlusToken &&
+              ts.isIdentifier(node.operand) &&
+              node.operand.text === counter.text
+            )
+              incremented = true;
+            if (
+              ts.isBinaryExpression(node) &&
+              node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
+              ts.isIdentifier(node.left) &&
+              node.left.text === counter.text &&
+              ts.isNumericLiteral(node.right) &&
+              node.right.text === '1'
+            )
+              incremented = true;
+            ts.forEachChild(node, scan);
+          };
+          scan(observer.body);
+          return incremented;
+        });
+        return initialized && observed && queuedAssertion;
+      });
+    });
+  } catch {
+    return false;
+  }
+};
+
+const validateRequestFolders = (source, stylesheet, aspect) => {
+  try {
+    const { elements, roles, text, expression, compact, within } =
+      parsedJsx(source);
+    const table = elements.find(
+      (node) =>
+        roles(node, 'card-table') &&
+        text(node, 'data-table-layout') === 'request-folders'
+    );
+    if (!table) return false;
+    const header = elements.find(
+      (node) =>
+        within(node, table) && text(node, 'data-table-part') === 'header'
+    );
+    const rows = elements.find(
+      (node) => within(node, table) && text(node, 'data-table-part') === 'rows'
+    );
+    if (!header || !rows || within(header, rows)) return false;
+    const base = ".card-table[data-table-layout='request-folders']";
+    if (aspect === 'scroll')
+      return (
+        roles(rows, 'scrollable-card') &&
+        compact(expression(rows, 'data-scrollable')) ===
+          '(serverData?.rootFolders.length??0)>5' &&
+        parsedCssOwner(stylesheet, `${base} [data-scrollable='true']`, {
+          'max-height': '8.5rem',
+          'overflow-y': 'auto',
+        })
+      );
+    if (aspect === 'border')
+      return parsedCssOwner(stylesheet, `${base} [data-table-part='header']`, {
+        'border-bottom':
+          'var(--detail-divider-width) solid rgb(var(--theme-control-border) / 0.72)',
+      });
+    return (
+      parsedCssOwner(stylesheet, base, {
+        width: 'fit-content',
+        'max-width': '100%',
+        '--card-table-columns': 'minmax(0, max-content) max-content',
+      }) &&
+      ['header', 'rows', 'choice-row'].every((part) =>
+        parsedCssOwner(stylesheet, `${base} [data-table-part='${part}']`, {
+          display: 'grid',
+          'grid-column': '1 / -1',
+          'grid-template-columns': 'subgrid',
+        })
+      )
+    );
+  } catch {
+    return false;
+  }
+};
+
+const validateRequestMediaArtwork = (
+  source,
+  artworkSource,
+  stylesheet,
+  aspect
+) => {
+  try {
+    const request = parsedJsx(source);
+    const shell = request.elements.find(
+      (node) =>
+        request.tag(node) === 'article' &&
+        request.roles(
+          node,
+          'media-detail-card',
+          'app-card-main',
+          'card-layout',
+          'refreshed-card-surface'
+        )
+    );
+    if (!shell) return false;
+    const artwork = request.elements.find(
+      (node) =>
+        request.tag(node) === 'MediaDetailArtwork' &&
+        request.within(node, shell)
+    );
+    const content = request.elements.find(
+      (node) =>
+        request.text(node, 'data-card-part') === 'content' &&
+        request.within(node, shell)
+    );
+    if (
+      !artwork ||
+      !content ||
+      request.compact(request.expression(artwork, 'src')) !== 'artwork' ||
+      request.compact(request.expression(artwork, 'type')) !== 'artworkType'
+    )
+      return false;
+    const shared = parsedJsx(artworkSource);
+    const layer = shared.elements.find((node) =>
+      shared.roles(node, 'media-detail-artwork-layer')
+    );
+    if (!layer) return false;
+    if (aspect === 'clip')
+      return (
+        parsedCssOwner(stylesheet, '.media-detail-card', {
+          position: 'relative',
+          overflow: 'hidden',
+        }) &&
+        parsedCssOwner(stylesheet, '.media-detail-artwork-layer', {
+          position: 'absolute',
+          inset: '0',
+          overflow: 'hidden',
+        })
+      );
+    if (aspect === 'crop')
+      return (
+        shared.elements.some(
+          (node) =>
+            shared.tag(node) === 'CachedImage' &&
+            shared.within(node, layer) &&
+            shared.roles(node, 'media-detail-artwork-image') &&
+            shared.present(node, 'fill')
+        ) &&
+        parsedCssOwner(stylesheet, '.media-detail-artwork-image', {
+          'object-fit': 'cover',
+        }) &&
+        parsedCssOwner(
+          stylesheet,
+          '.media-detail-artwork-layer .media-detail-artwork-image',
+          { 'object-position': 'var(--card-artwork-position)' }
+        ) &&
+        parsedCssOwner(stylesheet, '.card-layout', {
+          '--card-artwork-position': 'top',
+        })
+      );
+    return (
+      shared.elements.some(
+        (node) =>
+          shared.roles(node, 'refreshed-artwork-scrim') &&
+          shared.within(node, layer)
+      ) &&
+      parsedCssOwner(stylesheet, '.refreshed-artwork-scrim', {
+        position: 'absolute',
+        inset: '0',
+        'background-color': 'rgb(var(--theme-artwork-scrim) / 0.46)',
+      })
+    );
+  } catch {
+    return false;
+  }
+};
+
+const validateTvRequestCanvas = (source, stylesheet, inset) => {
+  try {
+    const jsx = parsedJsx(source);
+    const modal = jsx.elements.find(
+      (node) =>
+        jsx.tag(node) === 'Modal' &&
+        (jsx.text(node, 'dialogClass') ?? '')
+          .split(/\s+/)
+          .includes('request-modal-site-surface')
+    );
+    const shell = jsx.elements.find(
+      (node) =>
+        jsx.tag(node) === 'RequestMediaCard' && modal && jsx.within(node, modal)
+    );
+    if (!modal || !shell) return false;
+    return inset
+      ? jsx.elements.some(
+          (node) =>
+            jsx.within(node, shell) &&
+            jsx.roles(
+              node,
+              'app-card-inset',
+              'refreshed-inset-surface',
+              'detail-summary-card'
+            )
+        )
+      : parsedCssOwner(
+          stylesheet,
+          '.request-modal-site-surface',
+          { 'max-width': '64rem' },
+          '(min-width: 640px)'
+        );
+  } catch {
+    return false;
+  }
+};
+
+const validateTreeEligibility = (source, aspect) => {
+  try {
+    const jsx = parsedJsx(source);
+    const { ts, tree, elements, text, tag, expression, compact } = jsx;
+    const declarations = new Map();
+    const scan = (node) => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name))
+        declarations.set(node.name.text, node.initializer);
+      ts.forEachChild(node, scan);
+    };
+    scan(tree);
+    const fallback = declarations.get('isTreeEpisodeSelectable');
+    if (
+      !fallback ||
+      !ts.isArrowFunction(fallback) ||
+      compact(fallback.body) !== 'episode.selectable??episode.available'
+    )
+      return false;
+    if (aspect === 'row') {
+      const row = elements.find(
+        (node) =>
+          tag(node) === 'button' &&
+          text(node, 'data-tree-part') === 'episode-selection'
+      );
+      return (
+        row &&
+        compact(expression(row, 'disabled')) ===
+          'disabled||!isTreeEpisodeSelectable(episode)'
+      );
+    }
+    if (aspect === 'guard') {
+      const toggle = declarations.get('toggleEpisode');
+      return (
+        toggle &&
+        ts.isArrowFunction(toggle) &&
+        ts.isBlock(toggle.body) &&
+        toggle.body.statements.some(
+          (node) =>
+            ts.isIfStatement(node) &&
+            compact(node.expression) === '!isTreeEpisodeSelectable(episode)' &&
+            ts.isReturnStatement(node.thenStatement) &&
+            !node.thenStatement.expression
+        )
+      );
+    }
+    if (aspect === 'all') {
+      const control = elements.find(
+        (node) =>
+          tag(node) === 'SelectionCircle' &&
+          compact(expression(node, 'onClick')) === 'toggleAll'
+      );
+      return (
+        control &&
+        compact(expression(control, 'disabled')) ===
+          'disabled||availableIds.size===0'
+      );
+    }
+    return ['seasonSelection', 'toggleSeasonSelection', 'availableIds'].every(
+      (name) => {
+        const owner = declarations.get(name);
+        let filtered = false;
+        const visit = (node) => {
+          if (
+            ts.isCallExpression(node) &&
+            ts.isPropertyAccessExpression(node.expression) &&
+            node.expression.name.text === 'filter' &&
+            node.arguments.length === 1 &&
+            ts.isIdentifier(node.arguments[0]) &&
+            node.arguments[0].text === 'isTreeEpisodeSelectable'
+          )
+            filtered = true;
+          ts.forEachChild(node, visit);
+        };
+        if (owner) visit(owner);
+        return filtered;
+      }
+    );
+  } catch {
+    return false;
+  }
+};
+
+const isProviderSelectionIndicator = (source, stylesheet) => {
+  try {
+    const jsx = parsedJsx(source);
+    const button = jsx.elements.find((node) => jsx.tag(node) === 'button');
+    if (
+      !button ||
+      !jsx.roles(button, 'provider-container') ||
+      jsx.compact(jsx.expression(button, 'aria-pressed')) !== 'isActive' ||
+      jsx.compact(jsx.expression(button, 'data-selected')) !== 'isActive' ||
+      jsx.compact(jsx.expression(button, 'onClick')) !==
+        '()=>toggleProvider(provider.id)' ||
+      jsx.compact(jsx.expression(button, 'aria-label')) !== 'provider.name'
+    )
+      return false;
+    const logo = jsx.elements.find(
+      (node) =>
+        jsx.text(node, 'data-provider-region') === 'logo' &&
+        jsx.within(node, button)
+    );
+    const check = jsx.elements.find(
+      (node) =>
+        jsx.text(node, 'data-provider-region') === 'check' &&
+        jsx.within(node, button)
+    );
+    if (
+      !logo ||
+      !check ||
+      jsx.tag(check) !== 'div' ||
+      !jsx.elements.some(
+        (node) => jsx.tag(node) === 'CachedImage' && jsx.within(node, logo)
+      )
+    )
+      return false;
+    const conditional = check.parent?.parent;
+    if (
+      !conditional ||
+      !jsx.ts.isBinaryExpression(conditional) ||
+      conditional.operatorToken.kind !==
+        jsx.ts.SyntaxKind.AmpersandAmpersandToken ||
+      jsx.compact(conditional.left) !== 'isActive'
+    )
+      return false;
+    const icons = jsx.elements.filter(
+      (node) => jsx.tag(node) === 'CheckCircleIcon' && jsx.within(node, button)
+    );
+    return (
+      icons.length === 1 &&
+      jsx.within(icons[0], check) &&
+      parsedCssOwner(
+        stylesheet,
+        ".provider-container > [data-provider-region='check']",
+        { 'pointer-events': 'none', position: 'absolute' }
+      ) &&
+      parsedCssOwner(
+        stylesheet,
+        ".provider-container [data-provider-region='logo'] img",
+        { 'object-fit': 'contain' }
+      )
+    );
+  } catch {
+    return false;
+  }
+};
+
+// Inspect the actual section descriptors/children instead of retired heading or
+// Tailwind strings. A declaration elsewhere must not mask a missing panel.
+const readPinnedFilterSections = (source) => {
+  const ts = require('typescript');
+  const tree = ts.createSourceFile(
+    'FilterConsumer.tsx',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX
+  );
+  if (tree.parseDiagnostics.length) throw new Error('Invalid filter consumer');
+  const unwrap = (node) => {
+    while (
+      node &&
+      (ts.isParenthesizedExpression(node) || ts.isJsxExpression(node))
+    )
+      node = node.expression;
+    return node;
+  };
+  const attribute = (node, name) =>
+    node.attributes.properties.find(
+      (item) => ts.isJsxAttribute(item) && item.name.getText(tree) === name
+    )?.initializer;
+  const property = (node, name) =>
+    node.properties.find(
+      (item) =>
+        ts.isPropertyAssignment(item) &&
+        item.name.getText(tree).replace(/['"]/g, '') === name
+    )?.initializer;
+  const sections = new Map();
+  const add = (name, children, label) => {
+    name = unwrap(name);
+    if (
+      !name ||
+      !ts.isStringLiteral(name) ||
+      sections.has(name.text) ||
+      !unwrap(label) ||
+      !children
+    )
+      throw new Error('Missing or duplicate pinned filter section');
+    let rendered = false;
+    const visit = (node) => {
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const opening = ts.isJsxElement(node) ? node.openingElement : node;
+        if (opening.tagName.getText(tree) !== 'PinnedFilterSection')
+          rendered = true;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(children);
+    if (!rendered) throw new Error('Missing pinned filter content');
+    sections.set(name.text, { children: unwrap(children), tree });
+  };
+  const visit = (node) => {
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const opening = ts.isJsxElement(node) ? node.openingElement : node;
+      const tag = opening.tagName.getText(tree);
+      if (tag === 'PinnedFilterSectionGroup') {
+        if (!unwrap(attribute(opening, 'mediaType')))
+          throw new Error('Missing pin context');
+        const entries = unwrap(attribute(opening, 'sections'));
+        if (!entries || !ts.isArrayLiteralExpression(entries))
+          throw new Error('Unresolved filter section descriptors');
+        for (const entry of entries.elements) {
+          if (!ts.isObjectLiteralExpression(entry))
+            throw new Error('Unresolved filter section descriptor');
+          add(
+            property(entry, 'section'),
+            property(entry, 'children'),
+            property(entry, 'label')
+          );
+        }
+      } else if (tag === 'PinnedFilterSection') {
+        if (!ts.isJsxElement(node) || !unwrap(attribute(opening, 'mediaType')))
+          throw new Error('Missing pin context or panel');
+        add(attribute(opening, 'section'), node, attribute(opening, 'label'));
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  return sections;
+};
+
+const validatePinnedFilterSections = (source, required) => {
+  try {
+    const sections = readPinnedFilterSections(source);
+    return required.every((name) => sections.has(name));
+  } catch {
+    return false;
+  }
+};
+
+const validateNativeFilterGeometry = (stylesheet) => {
+  try {
+    const css = require('postcss').parse(stylesheet);
+    const owners = new Map([
+      [
+        '.app-filter-segment-focus',
+        new Map([
+          ['display', 'flex'],
+          ['height', '100%'],
+          ['align-items', 'center'],
+          ['padding-inline', 'var(--button-padding-x)'],
+          ['column-gap', 'var(--button-content-gap)'],
+        ]),
+      ],
+      [
+        '.app-filter-search-control',
+        new Map([
+          ['max-width', '100%'],
+          ['flex', 'none'],
+          ['align-self', 'center'],
+        ]),
+      ],
+      [
+        '.app-filter-row',
+        new Map([
+          ['display', 'flex'],
+          ['flex-wrap', 'wrap'],
+          ['align-items', 'center'],
+          ['gap', '5px'],
+        ]),
+      ],
+      [
+        '.app-pinned-filter-section',
+        new Map([
+          ['margin-top', '0'],
+          ['margin-bottom', '20px'],
+        ]),
+      ],
+      ['.app-pinned-filter-panel', new Map([['margin-top', '12px']])],
+    ]);
+    for (const [selector, expected] of owners) {
+      const declarations = [];
+      css.walkRules((rule) => {
+        if (!rule.selectors.includes(selector)) return;
+        for (const node of rule.nodes) {
+          if (node.type === 'atrule' && node.name === 'apply')
+            throw new Error('Utility-owned filter geometry');
+          if (node.type === 'decl') declarations.push(node);
+        }
+      });
+      for (const [property, value] of expected) {
+        const values = declarations.filter((node) => node.prop === property);
+        if (values.length !== 1 || values[0].value !== value)
+          throw new Error('Missing or competing shared filter geometry');
+      }
+      const competing =
+        selector === '.app-filter-segment-focus'
+          ? ['padding', 'padding-left', 'padding-right', 'gap', 'all']
+          : selector === '.app-filter-search-control' ||
+              selector === '.app-filter-row'
+            ? ['all']
+            : ['margin', 'all'];
+      if (declarations.some((node) => competing.includes(node.prop)))
+        throw new Error('Competing shorthand geometry');
+    }
+    css.walkRules((rule) => {
+      if (rule.selectors.includes('.app-filter-button > button'))
+        rule.walkDecls((decl) => {
+          if (/^(padding|gap|column-gap)(-|$)/.test(decl.prop))
+            throw new Error('Retired descendant spacing owner');
+        });
+    });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const validateMusicFilterLayout = (source) => {
+  try {
+    const ts = require('typescript');
+    const { children, tree } = readPinnedFilterSections(source).get('filters');
+    if (!ts.isJsxElement(children)) return false;
+    const row = children.openingElement.attributes.properties.find(
+      (item) =>
+        ts.isJsxAttribute(item) && item.name.getText(tree) === 'className'
+    )?.initializer;
+    if (
+      !row ||
+      !ts.isStringLiteral(row) ||
+      !row.text.split(/\s+/).includes('app-filter-row')
+    )
+      return false;
+    const controls = [];
+    const visit = (node) => {
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const opening = ts.isJsxElement(node) ? node.openingElement : node;
+        const tag = opening.tagName.getText(tree);
+        if (
+          [
+            'FilterResetButton',
+            'CardTextVisibilityToggle',
+            'AvailabilityQualityControl',
+            'MusicArtistFilter',
+            'form',
+            'CompactSelect',
+            'MusicReleaseTypeSelect',
+          ].includes(tag)
+        ) {
+          const label = opening.attributes.properties.find(
+            (item) =>
+              ts.isJsxAttribute(item) && item.name.getText(tree) === 'label'
+          )?.initializer;
+          const expression =
+            label && ts.isJsxExpression(label) ? label.expression : undefined;
+          const message =
+            expression &&
+            ts.isCallExpression(expression) &&
+            expression.expression.getText(tree) === 'intl.formatMessage'
+              ? expression.arguments[0]
+              : undefined;
+          const key =
+            message &&
+            ts.isPropertyAccessExpression(message) &&
+            ts.isIdentifier(message.expression) &&
+            message.expression.text === 'messages'
+              ? message.name.text
+              : undefined;
+          controls.push(tag === 'CompactSelect' ? `${tag}:${key}` : tag);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(children);
+    const expected = [
+      'FilterResetButton',
+      'CardTextVisibilityToggle',
+      'AvailabilityQualityControl',
+      'MusicArtistFilter',
+      'form',
+      'CompactSelect:releaseYear',
+      'MusicReleaseTypeSelect',
+      'CompactSelect:genres',
+    ];
+    return (
+      controls.length === expected.length &&
+      controls.every((control, index) => control === expected[index])
+    );
+  } catch {
+    return false;
+  }
+};
+
+const validateRequestListSortDirection = (source) => {
+  try {
+    const ts = require('typescript');
+    const { children, tree } = readPinnedFilterSections(source).get('sortBy');
+    const matches = [];
+    const visit = (node) => {
+      if (
+        ts.isJsxElement(node) &&
+        node.openingElement.tagName.getText(tree) === 'button'
+      ) {
+        const attr = (name) =>
+          node.openingElement.attributes.properties.find(
+            (item) =>
+              ts.isJsxAttribute(item) && item.name.getText(tree) === name
+          )?.initializer;
+        let direction = false;
+        const inspect = (item) => {
+          if (
+            ts.isCallExpression(item) &&
+            item.expression.getText(tree) === 'setCurrentSortDirection'
+          )
+            direction = true;
+          ts.forEachChild(item, inspect);
+        };
+        if (attr('onClick')) inspect(attr('onClick'));
+        if (direction) {
+          const className = attr('className');
+          const expression =
+            className && ts.isJsxExpression(className)
+              ? className.expression
+              : undefined;
+          matches.push(
+            Boolean(
+              expression &&
+              ts.isCallExpression(expression) &&
+              expression.expression.getText(tree) ===
+                'getFilterToggleButtonClass' &&
+              expression.arguments.length === 1 &&
+              expression.arguments[0].kind === ts.SyntaxKind.FalseKeyword &&
+              attr('aria-label') &&
+              node.parent &&
+              ts.isJsxElement(node.parent) &&
+              node.parent.openingElement.tagName.getText(tree) === 'Tooltip'
+            )
+          );
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(children);
+    return matches.length === 1 && matches[0];
+  } catch {
+    return false;
+  }
+};
+
+const compactRequestGeometryReason =
+  'loaded and loading compact Request cards must share CSS geometry without fixed loaded height';
+const validateCompactRequestGeometry = (source, stylesheet) => {
+  const ts = require('typescript');
+  const postcss = require('postcss');
+  const tree = ts.createSourceFile(
+    'RequestCard.tsx',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX
+  );
+  const roots = [];
+  const attr = (node, name) =>
+    node.attributes.properties.find(
+      (item) => ts.isJsxAttribute(item) && item.name.getText(tree) === name
+    );
+  const text = (node) => {
+    if (ts.isJsxExpression(node)) return text(node.expression);
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+      return node.text;
+    if (ts.isTemplateExpression(node))
+      return (
+        node.head.text +
+        node.templateSpans
+          .map((span) => text(span.expression) + span.literal.text)
+          .join('')
+      );
+    if (
+      ts.isConditionalExpression(node) &&
+      ts.isIdentifier(node.condition) &&
+      node.condition.text === 'compact'
+    )
+      return text(node.whenTrue);
+    throw new Error('Unresolved compact root classes');
+  };
+  try {
+    const visit = (node) => {
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const className = attr(node, 'className');
+        if (className?.initializer) {
+          let tokens;
+          try {
+            tokens = text(className.initializer).split(/\s+/).filter(Boolean);
+          } catch {
+            tokens = [];
+          }
+          const loaded =
+            attr(node, 'data-testid')?.initializer?.text === 'request-card';
+          const placeholder = tokens.includes('request-card-placeholder');
+          if (loaded || placeholder)
+            roots.push({ node, tokens, loaded, placeholder });
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    const scanComponents = (node) => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        ['RequestCard', 'RequestCardPlaceholder'].includes(node.name.text) &&
+        node.initializer &&
+        ts.isArrowFunction(node.initializer)
+      ) {
+        visit(node.initializer.body);
+      } else {
+        ts.forEachChild(node, scanComponents);
+      }
+    };
+    scanComponents(tree);
+    if (
+      !roots.some((root) => root.loaded) ||
+      !roots.some((root) => root.placeholder)
+    )
+      return false;
+    for (const root of roots) {
+      if (!root.tokens.includes('request-card-compact-layout')) return false;
+      if (
+        root.tokens.some((token) =>
+          /^(?:[a-z]+:)*!?(?:w-72|w-96|h-\[9\.5rem\]|min-h-0)$/.test(token)
+        )
+      )
+        return false;
+      const style = attr(root.node, 'style');
+      if (style?.initializer) {
+        let geometry = false;
+        const inspect = (node) => {
+          if (
+            ts.isPropertyAssignment(node) &&
+            /^(?:width|height|minWidth|minHeight|maxWidth|maxHeight)$/.test(
+              node.name.getText(tree).replace(/['"]/g, '')
+            )
+          )
+            geometry = true;
+          ts.forEachChild(node, inspect);
+        };
+        inspect(style.initializer);
+        if (geometry) return false;
+      }
+    }
+    const css = postcss.parse(stylesheet);
+    const declarations = (selector, property) => {
+      const values = [];
+      css.walkRules((rule) => {
+        if (rule.selectors.includes(selector))
+          rule.walkDecls(property, (decl) => values.push(decl.value));
+      });
+      return values;
+    };
+    const exactly = (selector, property, value) => {
+      const values = declarations(selector, property);
+      return values.length === 1 && values[0] === value;
+    };
+    return (
+      exactly(
+        '.request-card-compact-layout',
+        'width',
+        'var(--request-card-compact-width)'
+      ) &&
+      exactly(
+        '.request-card-compact-layout',
+        'min-height',
+        'var(--request-card-compact-height)'
+      ) &&
+      exactly(
+        '.request-card-placeholder',
+        'height',
+        'var(--request-card-compact-height)'
+      ) &&
+      ['height', 'max-height', 'overflow'].every(
+        (property) =>
+          declarations('.request-card-compact-layout', property).length === 0
+      ) &&
+      ['width', 'min-width', 'max-width', 'min-height', 'max-height'].every(
+        (property) =>
+          declarations('.request-card-placeholder', property).length === 0
+      )
+    );
+  } catch {
+    return false;
+  }
+};
+
 const readRepositoryFiles = (root, fileNames) =>
   Object.fromEntries(
     fileNames.map((fileName) => [
@@ -31,15 +1147,29 @@ const validateCurrentBatchContract = (files) => {
   };
   // Shared roles can belong to comma-separated selector groups. Check the
   // owning declaration block, not an unrelated occurrence elsewhere in CSS.
+  let cssBlocks;
   const requireCssRule = (selector, declarations, reason) => {
-    const source = requireFile('src/styles/globals.css');
-    const blocks = [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
-    const matches = blocks.filter(([, selectors]) =>
-      selectors.split(',').some((value) => value.trim() === selector)
+    if (!cssBlocks) {
+      const source = requireFile('src/styles/globals.css').replace(
+        /\/\*[\s\S]*?\*\//g,
+        ''
+      );
+      cssBlocks = [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+    }
+    const normalize = (value) =>
+      value
+        .replace(/\s+/g, ' ')
+        .replace(/\(\s+/g, '(')
+        .replace(/\s+\)/g, ')')
+        .trim();
+    const matches = cssBlocks.filter(([, selectors]) =>
+      selectors
+        .split(',')
+        .some((value) => normalize(value) === normalize(selector))
     );
     if (
-      !matches.some(([, , body]) =>
-        declarations.every((text) => body.includes(text))
+      !declarations.every((text) =>
+        matches.some(([, , body]) => normalize(body).includes(normalize(text)))
       )
     ) {
       errors.push(`src/styles/globals.css: ${reason}`);
@@ -325,28 +1455,28 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'Request Status uses one wrapping Task Filters row in this exact order',
-    'the style standard must preserve the single wrapping Request Status task row'
+    'Filter section controls sit above the section they control, with shared spacing and wrapping.',
+    'the style standard must govern filter section placement and wrapping'
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'separate media type into a dedicated `Media Filters` section',
-    'the style standard must preserve workflow-page Media Filters sections'
+    'Keep media/context/state filters distinct.',
+    'the style standard must distinguish media, context, and state filter roles'
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'On Books, `All Books` is not a reset control',
-    'the style standard must keep All Books distinct from Clear Filters'
+    'Clearing must clear both pending/debounced and active state',
+    'the style standard must govern truthful filter reset behavior'
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'Request cards show approval state in the right details group',
-    'the style standard must keep Approval in the right request-details group'
+    'UI actions and count/status displays must reflect real eligibility and permissions.',
+    'the style standard must preserve truthful status and action eligibility'
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'Remove duplicate approval text beside `Advanced Options`',
-    'the style standard must reject duplicate Approval beside Advanced Options'
+    'Status badges are classified by role and interaction',
+    'the style standard must distinguish status presentation from actionable controls'
   );
   requireText(
     'docs/maintainers/site-visual-audit-2026-09-11.md',
@@ -588,29 +1718,42 @@ const validateCurrentBatchContract = (files) => {
     'the public Search contract must admit the independent music result refinement'
   );
   requireText(
+    'src/components/Common/LoadingSpinner/index.tsx',
+    'const searching = useSearchActivity();',
+    'Global Search progress must feed the shared page-status display'
+  );
+  requireText(
+    'src/components/Common/LoadingSpinner/index.tsx',
+    'className="page-status"',
+    'Global Search and page loading progress must reference the same page-status style'
+  );
+  requireCssRule(
+    '.page-title-row',
+    [
+      'display: flex;',
+      'align-items: center;',
+      'justify-content: space-between;',
+    ],
+    'page title and progress must share one aligned layout row'
+  );
+  requireCssRule(
+    '.page-status',
+    [
+      'display: inline-flex;',
+      'justify-content: flex-end;',
+      'margin-inline-start: auto;',
+    ],
+    'page progress must remain right justified in the shared page-title row'
+  );
+  rejectText(
     'src/components/Layout/index.tsx',
-    'className="global-search-progress-region"',
-    'Global Search progress must use the shared non-collapsing title-margin region'
-  );
-  requireText(
-    'src/components/Layout/index.tsx',
-    'className="global-search-progress-indicator"',
-    'Global Search progress must reference its shared indicator style'
-  );
-  requireText(
-    'src/styles/globals.css',
-    '.global-search-progress-region {\n    @apply relative flow-root;',
-    'the Global Search progress region must prevent page-title margin collapse'
-  );
-  requireText(
-    'src/styles/globals.css',
-    '.global-search-progress-indicator {\n    @apply pointer-events-none absolute top-1 left-0',
-    'Global Search progress must occupy the reserved margin above the page title'
+    'global-search-progress-region',
+    'Global Search progress must not restore the separate reserved-margin display'
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'occupies the reserved top margin above the page title and must never overlap the title',
-    'the shared UI standard must preserve Search progress above page titles'
+    '`page-status`',
+    'the shared UI standard must govern the one shared page-status asset'
   );
   rejectText(
     'src/components/Layout/SearchInput/index.tsx',
@@ -639,9 +1782,10 @@ const validateCurrentBatchContract = (files) => {
   );
 
   const globals = 'src/styles/globals.css';
+  const seriesTree = 'src/components/MediaDetails/SeasonEpisodeTree.tsx';
   requireText(
     'src/components/Common/Modal/index.tsx',
-    'className={`app-modal-screen-backdrop fixed top-0',
+    'className="page-overlay"',
     'every shared modal must reference the site-wide screen-backdrop style'
   );
   rejectText(
@@ -651,12 +1795,12 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     globals,
-    '.app-modal-screen-backdrop {\n    background-color: rgb(0 0 0 / 0.8);',
+    '.page-overlay {\n    background-color: rgb(0 0 0 / 0.8);',
     'the shared modal backdrop must use the approved less-transparent black layer'
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'single shared black screen backdrop at 80-percent opacity',
+    'Overlapping screens use `page-overlay` for the established black 80% backdrop',
     'the shared UI standard must preserve the site-wide modal backdrop treatment'
   );
   requireText(
@@ -720,9 +1864,31 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     globals,
-    '.app-button.button-md,\n  .app-button.button-standard,\n  .app-button.button-sm,\n  .button-md,\n  .button-standard,\n  .button-sm {\n    @apply px-2.5 text-xs;\n    box-sizing: border-box;\n    height: var(--action-control-height);\n    min-height: var(--action-control-height);\n    max-height: var(--action-control-height);\n    padding-top: 0;\n    padding-bottom: 0;',
-    'standard, medium, and small action buttons must enforce the 30-pixel border-box geometry in the final cascade'
+    'padding-inline: var(--action-control-padding-x) !important;',
+    'standard action padding must resolve through the shared action-control token'
   );
+  for (const selector of [
+    '.app-button.button-md',
+    '.app-button.button-standard',
+    '.app-button.button-sm',
+    '.button-md',
+    '.button-standard',
+    '.button-sm',
+  ]) {
+    requireCssRule(
+      selector,
+      [
+        'box-sizing: border-box;',
+        'height: var(--action-control-height);',
+        'min-height: var(--action-control-height);',
+        'max-height: var(--action-control-height);',
+        'padding-top: 0;',
+        'padding-bottom: 0;',
+        'padding-inline: var(--action-control-padding-x) !important;',
+      ],
+      'standard, medium, and small action buttons must enforce shared border-box geometry in the final cascade'
+    );
+  }
   requireCssRule(
     '.app-button-report-issue',
     [
@@ -887,7 +2053,7 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'src/components/Common/StatusBadgeMini/index.tsx',
-    'className={`poster-control shadow-md ${tone}`}',
+    ': `poster-control ${tone}`',
     'poster quality states must match the rounded media-type badge silhouette'
   );
   requireCssRule(
@@ -938,13 +2104,13 @@ const validateCurrentBatchContract = (files) => {
   for (const [fileName, token, description] of [
     [
       'src/components/Common/MediaTypeBadge/index.tsx',
-      'bg-blue-700/35',
-      'media-type badges must use the shared button resting transparency',
+      "card: 'poster-control media-type-badge-card'",
+      'media-type poster badges must consume the shared poster-control surface',
     ],
     [
       'src/components/Common/BookFormatBadge/index.tsx',
-      'bg-amber-700/35',
-      'book-format badges must use the shared button resting transparency',
+      "card: 'poster-control poster-control-book-format media-type-badge-width'",
+      'book-format poster badges must consume the shared poster-control surface',
     ],
     [
       'src/components/Common/Badge/index.tsx',
@@ -966,23 +2132,25 @@ const validateCurrentBatchContract = (files) => {
   requireOrder(
     'src/components/TitleCard/index.tsx',
     [
-      'flex w-full min-w-0 items-start justify-between gap-1',
+      'data-poster-region="control-stack"',
+      'data-poster-region="type-slot"',
       '{primaryStatusBadge && (',
-      'flex w-full min-w-0 items-center justify-between gap-1',
-      '<AssociationBadge',
+      'data-poster-region="watchlist-slot"',
       '{secondaryStatusBadge && (',
+      '{associationControls}',
+      '{watchedControl}',
     ],
-    'poster overlays must use independent full-width rows with primary status on row one, Associations on row two left, and secondary status on row two right'
+    'poster overlays must use shared media-type, saved-item, association, quality, and watched-status slots without local layout utilities'
   );
-  requireOrder(
+  requireText(
     'src/components/TitleCard/index.tsx',
-    [
-      'const canShowBlocklistAction =',
-      '{primaryStatusBadge && (',
-      '{!primaryStatusBadge && canShowBlocklistAction && (',
-      '<AssociationBadge',
-    ],
-    'the no-request blocklist action must occupy the empty top-right poster status slot'
+    'const showHideButton =\n    canManageBlocklist &&',
+    'poster blocklist controls must remain permission gated independently of availability'
+  );
+  requireText(
+    'src/components/TitleCard/index.tsx',
+    'data-poster-region="blocklist-slot"',
+    'poster blocklist controls must use their own semantic slot rather than occupying a quality-status slot'
   );
   requireText(
     'server/lib/musicQualityAvailability.ts',
@@ -1024,25 +2192,45 @@ const validateCurrentBatchContract = (files) => {
     'className="request-form-control mt-2 block h-10 w-full',
     'playlist URL input must use the shared request control styling'
   );
-  requireText(
+  for (const fileName of [
     'src/components/Discover/index.tsx',
-    '<div className="discover-home">',
-    'Discover must scope its larger poster-card treatment to the home page'
-  );
-  requireText(
     'src/components/Association/index.tsx',
-    '<div className="discover-home">',
-    'the Associations list explorer must reuse Discover poster and shelf formatting'
+  ]) {
+    rejectText(
+      fileName,
+      'className="discover-home"',
+      'ordinary browsing wrappers must not activate legacy Lab-only enlarging poster geometry'
+    );
+  }
+  requireText(
+    'src/components/TitleCard/index.tsx',
+    'className="poster-layout title-card-shell"',
+    'all browsing posters must use the shared poster layout owner'
   );
   requireText(
+    'src/components/TitleCard/index.tsx',
+    'data-media-type={mediaType}',
+    'poster variants must select their shared properties by media type'
+  );
+  requireCssRule(
+    '.poster-layout',
+    ['width: var(--poster-width);', 'flex: 0 0 var(--poster-width);'],
+    'poster width must remain fixed through the shared poster-width token rather than enlarge with the window'
+  );
+  requireCssRule(
+    ".poster-layout [data-poster-region='frame']",
+    ['aspect-ratio: var(--poster-aspect-ratio);'],
+    'poster frames must retain the shared aspect ratio'
+  );
+  rejectText(
     globals,
     '.discover-home .title-card-shell',
-    'Discover poster cards must retain their wider responsive sizing'
+    'shared poster geometry must not restore page-specific responsive enlargement'
   );
-  requireText(
+  rejectText(
     globals,
-    '.discover-home .slider-track:not(.slider-track-compact)',
-    'Discover poster shelves must retain enough height for the complete card border'
+    '.discover-home .slider-track',
+    'poster shelves must not restore the obsolete Discover-only height override'
   );
   requireText(
     'server/routes/request.test.ts',
@@ -1056,12 +2244,22 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'src/components/TitleCard/index.tsx',
-    'pointer-events-none absolute inset-0 z-40',
+    'data-poster-region="busy"',
+    'poster mutation feedback must consume its shared non-interactive slot'
+  );
+  requireCssRule(
+    ".poster-layout [data-poster-region='busy']",
+    ['pointer-events: none;', 'z-index: 40;'],
     'poster mutation feedback must never intercept detail navigation'
+  );
+  requireCssRule(
+    ".poster-layout [data-poster-region='busy']",
+    ['position: absolute;', 'inset: 0;'],
+    'poster mutation feedback must remain inside its poster frame'
   );
   requireText(
     globals,
-    '.media-rating-icon {\n    @apply flex-none;\n    width: var(--action-control-content-height);\n    height: var(--action-control-content-height);',
+    '.media-rating-icon {\n    flex: none;\n    width: var(--action-control-content-height);\n    height: var(--action-control-content-height);',
     'rating icons must share the tomato height'
   );
   requireText(
@@ -1071,7 +2269,7 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     globals,
-    '.media-rating-wordmark {\n    @apply w-auto flex-none;\n    height: var(--action-control-content-height);',
+    '.media-rating-wordmark {\n    width: auto;\n    flex: none;\n    height: var(--action-control-content-height);',
     'wide rating wordmarks must be optically normalized to the tomato image height'
   );
   requireText(
@@ -1123,13 +2321,13 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     globals,
-    '.media-rating-row {\n    @apply flex flex-nowrap items-center justify-between;\n    padding-top: var(--card-spacing);\n    min-height: calc(var(--action-control-height) + var(--card-spacing));',
+    '.media-rating-row {\n    display: flex;\n    flex-wrap: nowrap;\n    align-items: center;\n    justify-content: space-between;\n    padding-top: var(--card-spacing);\n    min-height: calc(var(--action-control-height) + var(--card-spacing));',
     'quality selection and ratings must use the compact full-width shared row'
   );
   requireText(
     globals,
-    '.media-rating-link {\n    @apply inline-flex flex-none items-center gap-[5px] text-xs text-gray-300 hover:text-white;\n    height: var(--action-control-height);',
-    'rating image and value pairs must use only the shared five-pixel internal gap'
+    '.media-rating-link {\n    display: inline-flex;\n    flex: none;\n    align-items: center;\n    column-gap: var(--button-padding-x);',
+    'rating image and value pairs must use only the shared internal spacing token'
   );
   requireCssRule(
     '.media-rating-provider-link',
@@ -1138,12 +2336,17 @@ const validateCurrentBatchContract = (files) => {
   );
   requireCssRule(
     '.media-request-action-row',
-    ['flex w-full flex-nowrap items-center'],
+    [
+      'display: flex;',
+      'width: 100%;',
+      'flex-wrap: nowrap;',
+      'align-items: center;',
+    ],
     'detail Search Prowlarr and Request controls must share one non-wrapping row'
   );
   requireCssRule(
     '.media-request-submit-action',
-    ['ml-auto', 'justify-end'],
+    ['margin-inline-start: auto;', 'justify-content: flex-end;'],
     'detail Request controls must remain right-justified opposite Search Prowlarr'
   );
   rejectText(
@@ -1153,7 +2356,7 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     globals,
-    '.media-rating-row {\n    @apply flex flex-nowrap items-center justify-between;\n    padding-top: var(--card-spacing);\n    min-height: calc(var(--action-control-height) + var(--card-spacing));\n  }',
+    '.media-rating-row {\n    display: flex;\n    flex-wrap: nowrap;\n    align-items: center;\n    justify-content: space-between;\n    padding-top: var(--card-spacing);\n    min-height: calc(var(--action-control-height) + var(--card-spacing));\n  }',
     'the ratings row must not add bottom spacing before the primary actions'
   );
   requireText(
@@ -1228,7 +2431,7 @@ const validateCurrentBatchContract = (files) => {
   }
   requireText(
     globals,
-    '.media-availability-cell {\n    @apply flex w-full items-center justify-center justify-self-stretch;',
+    '.media-availability-cell {\n    display: flex;\n    width: 100%;\n    align-items: center;\n    justify-content: center;',
     'availability headings and status icons must share one centered cell style'
   );
   requireText(
@@ -1237,10 +2440,15 @@ const validateCurrentBatchContract = (files) => {
     'scrolling media table headers must reserve the shared thin scrollbar width'
   );
   requireCount(
-    'src/components/MediaDetails/SeriesSeasonEpisodeBrowser.tsx',
-    'media-scroll-grid-header',
-    2,
-    'both series selector headers must reserve the same right-side space as their rows'
+    seriesTree,
+    'className="scrollable-card"',
+    1,
+    'Series selection must use one shared scroll viewport rather than separate season and episode scrollers'
+  );
+  requireOrder(
+    seriesTree,
+    ['{columnHeadings()}', '{feedback}', 'data-tree-part="viewport"'],
+    'Series headings and feedback must remain outside and before the scrolling selectable rows'
   );
   requireCount(
     'src/components/MediaDetails/PlaybackTrackList.tsx',
@@ -1249,7 +2457,7 @@ const validateCurrentBatchContract = (files) => {
     'playback selector headers must reserve the same right-side space as their rows'
   );
   for (const fileName of [
-    'src/components/MediaDetails/SeriesSeasonEpisodeBrowser.tsx',
+    seriesTree,
     'src/components/MediaDetails/AlbumTrackList.tsx',
     'src/components/MediaDetails/PlaybackTrackList.tsx',
   ]) {
@@ -1264,9 +2472,13 @@ const validateCurrentBatchContract = (files) => {
       'availability icons must not use standalone margin centering'
     );
   }
-  requireText(
+  requireOrder(
     'src/components/Discover/FilterPanel/index.tsx',
-    'order-[13]',
+    [
+      '<FilterResetButton',
+      '<CardTextVisibilityToggle',
+      'messages.streamingservices)}',
+    ],
     'streaming services must remain after Clear Filters and Title View'
   );
   rejectText(
@@ -1299,10 +2511,6 @@ const validateCurrentBatchContract = (files) => {
       'className="media-rating-row"',
     ],
     [
-      'src/components/TvDetails/SeriesDetailsLayout.tsx',
-      'className="media-rating-row"',
-    ],
-    [
       'src/components/MusicDetails/MusicDetailsLayout.tsx',
       'className="media-rating-row"',
     ],
@@ -1321,6 +2529,16 @@ const validateCurrentBatchContract = (files) => {
       'the rating row must appear above the primary action row'
     );
   }
+  requireOrder(
+    'src/components/TvDetails/SeriesDetailsLayout.tsx',
+    [
+      'className="media-primary-action-row"',
+      '{primaryActions}',
+      '{reportIssueAction}',
+      '<VideoRatings',
+    ],
+    'Series ratings and report action must share the main fully justified content-action row'
+  );
   const issueListItem = 'src/components/IssueList/IssueItem/index.tsx';
   requireCount(
     issueListItem,
@@ -1345,8 +2563,8 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'both separators are ordinary `media-detail-column-divider` borders on the second and third groups',
-    'the style standard must explicitly govern both Issue card dividers'
+    'Column dividers belong to the owning column, not separate divider tracks that consume content width.',
+    'the style standard must govern divider ownership independently of page examples'
   );
   const blocklist = 'src/components/Blocklist/index.tsx';
   requireCount(
@@ -1393,8 +2611,8 @@ const validateCurrentBatchContract = (files) => {
   }
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'Blocklist cards use the identical three-group divider construction as Issue cards',
-    'the style standard must explicitly govern Blocklist and Affected Episodes dividers'
+    'Preserve the shared 2px divider treatment and responsive transition between stacked and side-by-side groups.',
+    'the style standard must preserve responsive divider geometry'
   );
   for (const fileName of [
     'src/components/MovieDetails/MovieDetailsLayout.tsx',
@@ -1436,9 +2654,17 @@ const validateCurrentBatchContract = (files) => {
       'detail primary actions must not use an auto-margin spacer'
     );
   }
-  requireText(
-    globals,
-    '.selection-circle {\n    @apply flex h-4 w-4 flex-none items-center justify-center rounded-full border text-transparent',
+  requireCssRule(
+    '.selection-circle',
+    [
+      'display: flex;',
+      'width: var(--detail-row-height);',
+      'height: var(--detail-row-height);',
+      'align-items: center;',
+      'justify-content: center;',
+      'padding: 0;',
+      'border-radius: 50%;',
+    ],
     'selection circles must use the fixed global inactive geometry'
   );
   requireText(
@@ -1446,36 +2672,70 @@ const validateCurrentBatchContract = (files) => {
     '--theme-control-surface: 49 46 129;\n    --theme-control-surface-hover: 55 48 163;\n    --theme-control-border: 99 102 241;\n    --theme-control-text: 199 210 254;',
     'shared controls must retain the approved dark-indigo palette'
   );
-  requireText(
-    globals,
-    'background-color: rgb(var(--theme-control-surface) / 0.92);',
+  requireCssRule(
+    '.selection-circle',
+    ['--selection-circle-surface: rgb(var(--theme-control-surface) / 0.92);'],
     'inactive selection circles must use the shared control surface'
   );
-  requireText(
-    globals,
-    ".selection-circle[aria-pressed='true'] {\n    @apply border-emerald-400 bg-emerald-500 text-white;",
+  requireCssRule(
+    '.selection-circle-icon circle',
+    [
+      'stroke: var(--selection-circle-border);',
+      'fill: var(--selection-circle-surface);',
+    ],
+    'selection glyphs must consume the shared border and surface state variables'
+  );
+  requireCssRule(
+    ".selection-circle[aria-pressed='true']",
+    [
+      '--selection-circle-border: rgb(var(--selection-color-bright));',
+      '--selection-circle-surface: rgb(var(--selection-color-fill));',
+      'color: #fff;',
+    ],
     'selected circles must use the established green fill and white check state'
   );
-  requireText(
-    globals,
-    ".selection-circle[data-partial='true'] {\n    @apply border-emerald-600 bg-emerald-800 text-white;",
+  requireCssRule(
+    ".selection-circle[data-partial='true']",
+    [
+      '--selection-circle-border: rgb(var(--selection-color-partial));',
+      '--selection-circle-surface: rgb(var(--selection-color-dark));',
+      'color: #fff;',
+    ],
     'partially selected seasons must use the shared dark-green circle state'
   );
-  requireText(
-    globals,
-    '.selection-circle-icon {\n    @apply h-3 w-3;',
+  requireCssRule(
+    '.selection-circle-icon',
+    ['width: var(--detail-row-height);', 'height: var(--detail-row-height);'],
     'selection-circle icon geometry must remain global'
   );
-  requireText(
-    globals,
-    '.playback-button-label {\n    @apply inline-flex min-w-0 items-center gap-[5px] leading-none;',
+  requireCssRule(
+    '.playback-button-label',
+    [
+      'display: inline-flex;',
+      'min-width: 0;',
+      'align-items: center;',
+      'gap: var(--button-padding-x);',
+      'line-height: 1;',
+    ],
     'playback labels must share centered text and explicit logo spacing'
   );
-  requireText(
-    globals,
-    'svg.playback-provider-icon {\n    @apply m-0 w-auto max-w-12 flex-none;\n    height: var(--action-control-content-height);',
-    'playback provider artwork must preserve full text-height sizing and intrinsic aspect ratio'
-  );
+  for (const selector of [
+    '.button-md svg.playback-provider-icon',
+    '.button-sm svg.playback-provider-icon',
+    '.button-standard svg.playback-provider-icon',
+  ]) {
+    requireCssRule(
+      selector,
+      [
+        'margin: 0;',
+        'width: auto;',
+        'max-width: 3rem;',
+        'flex: none;',
+        'height: var(--action-control-content-height);',
+      ],
+      'playback provider artwork must preserve full text-height sizing and intrinsic aspect ratio'
+    );
+  }
   requireText(
     globals,
     '.app-search-input {',
@@ -1483,9 +2743,86 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'package.json',
-    'node bin/check-current-batch-contract.js && node bin/check-refreshed-ui-style.js',
-    'the current batch gate must run the refreshed UI style-boundary validator'
+    '"validate:development": "node bin/run-local-validation.mjs"',
+    'the optional complete validation command must retain the discovered local validation runner'
   );
+  // The maintainer restored the upstream public workflow. Keep visual and
+  // translation checks on the ordinary build, without forcing the archived
+  // cumulative test runner into every build, development session or commit.
+  let publicScripts = {};
+  try {
+    publicScripts = JSON.parse(requireFile('package.json')).scripts ?? {};
+  } catch {
+    errors.push('package.json: public command bindings require valid JSON');
+  }
+  const requirePublicCommand = (name, command, reason) => {
+    if (
+      typeof publicScripts[name] !== 'string' ||
+      publicScripts[name].trim().replace(/\s+/g, ' ') !== command
+    )
+      errors.push(`package.json: ${reason}`);
+  };
+  requirePublicCommand(
+    'build',
+    'pnpm build:all',
+    'the public build must retain the upstream build-all entry point'
+  );
+  requirePublicCommand(
+    'build:all',
+    'run-p build:next build:server',
+    'the public build must compile both client and server through upstream commands'
+  );
+  requirePublicCommand(
+    'build:next',
+    'next build --webpack',
+    'the public client build must retain the upstream Next compiler'
+  );
+  requirePublicCommand(
+    'build:server',
+    'tsc --project server/tsconfig.json && copyfiles -u 2 server/templates/**/*.{html,pug} dist/templates && copyfiles -u 2 "server/i18n/locale/*.json" dist/i18n && tsc-alias -p server/tsconfig.json && node scripts/replace-server-import-aliases.mjs dist',
+    'the public server build must retain upstream compilation, resources and alias resolution'
+  );
+  requirePublicCommand(
+    'prebuild',
+    'pnpm i18n:check && pnpm current-batch:check',
+    'the public build must fail closed on translation and current-batch checks'
+  );
+  requirePublicCommand(
+    'current-batch:check',
+    'node bin/check-current-batch-contract.js && pnpm ui-style:check',
+    'the current-batch command must fail closed on shared visual checks'
+  );
+  requirePublicCommand(
+    'ui-style:check',
+    'node bin/check-refreshed-ui-style.js && node --test src/styles/buttonGeometry.test.mjs',
+    'the shared visual command must retain style and control-geometry checks'
+  );
+  requirePublicCommand(
+    'i18n:check',
+    'node bin/check-i18n.js',
+    'the translation command must retain its actual validator'
+  );
+  if (
+    typeof publicScripts.dev !== 'string' ||
+    !publicScripts.dev.startsWith('nodemon ') ||
+    !publicScripts.dev.includes(
+      '--project server/tsconfig.json server/index.ts'
+    )
+  ) {
+    errors.push(
+      'package.json: public development must retain the upstream watched server entry point'
+    );
+  }
+  for (const check of [
+    'check-current-batch-contract.js',
+    'check-refreshed-ui-style.js',
+  ]) {
+    requireText(
+      'bin/local-validation.mjs',
+      check,
+      'the cumulative runner must discover current-batch and shared-style checks'
+    );
+  }
   requireText(
     'bin/check-refreshed-ui-style-lib.test.mjs',
     'rejects visual inline and embedded styles in refreshed components',
@@ -1496,24 +2833,34 @@ const validateCurrentBatchContract = (files) => {
     '.app-filter-button-idle {',
     'inactive filter controls must consume the shared blue control surface'
   );
-  requireText(
-    globals,
-    '.app-filter-button {\n    @apply relative inline-flex items-center justify-center gap-1.5',
+  requireCssRule(
+    '.app-filter-button',
+    [
+      'position: relative;',
+      'display: inline-flex;',
+      'align-items: center;',
+      'justify-content: center;',
+      'column-gap: var(--button-content-gap);',
+    ],
     'filter buttons must consume the shared compact geometry'
   );
-  requireText(
-    globals,
-    'height: var(--compact-control-height);\n    min-height: var(--compact-control-height);\n    max-height: var(--compact-control-height);',
-    'filter buttons must resolve through the shared 20-pixel height'
+  requireCssRule(
+    '.app-filter-button',
+    [
+      'height: var(--action-control-height);',
+      'min-height: var(--action-control-height);',
+      'max-height: var(--action-control-height);',
+    ],
+    'filter buttons must resolve through the shared action-height token'
   );
   requireText(
     globals,
     '.app-filter-button:focus-within,\n  .app-filter-button:focus-visible {\n    outline: 2px solid rgb(129 140 248);\n    outline-offset: 1px;',
     'filter button focus emphasis must render outside the fixed control box'
   );
-  requireText(
-    globals,
-    '.app-filter-button-active {\n    @apply border-indigo-400 bg-indigo-500 text-white;\n    outline: 1px solid rgb(129 140 248);\n    outline-offset: 1px;',
+  requireCssRule(
+    '.app-filter-button-active',
+    ['outline: 1px solid rgb(129 140 248);', 'outline-offset: 1px;'],
     'selected filter emphasis must render outside the fixed control box'
   );
   requireText(
@@ -1521,9 +2868,16 @@ const validateCurrentBatchContract = (files) => {
     '.pinned-filter-section .detail-disclosure-pin-active {\n    background-color: hsl(217 100% 20% / 0.55);',
     'pinned filter section icons must use the shared dark-blue selected surface'
   );
-  requireText(
-    globals,
-    '.discover-filter-control {\n    @apply relative inline-flex max-w-full min-w-0 rounded-md border',
+  requireCssRule(
+    '.discover-filter-control',
+    [
+      'position: relative;',
+      'display: inline-flex;',
+      'max-width: 100%;',
+      'min-width: 0;',
+      'border-radius: var(--control-corner-radius);',
+      'height: var(--action-control-height);',
+    ],
     'filter fields and dropdowns must use the shared compact row'
   );
   rejectText(
@@ -1561,34 +2915,43 @@ const validateCurrentBatchContract = (files) => {
     '.discover-compact-select\n    .react-select__indicator-separator {\n    @apply hidden;',
     'compact searchable dropdowns must not restore the oversized legacy indicator divider'
   );
-  requireText(
-    'src/components/Search/index.tsx',
-    '<PinnedFilterSection',
-    'filter categories must retain the shared larger vertical gap'
-  );
-  for (const fileName of [
-    'src/components/Requests/index.tsx',
-    'src/components/IssueList/index.tsx',
-    'src/components/Blocklist/index.tsx',
+  for (const [fileName, sections] of [
+    ['src/components/Search/index.tsx', ['mediaFilters', 'filters', 'sortBy']],
+    [
+      'src/components/Requests/index.tsx',
+      ['taskFilters', 'mediaFilters', 'filters', 'sortBy'],
+    ],
+    [
+      'src/components/IssueList/index.tsx',
+      ['taskFilters', 'mediaFilters', 'filters', 'sortBy'],
+    ],
+    [
+      'src/components/Blocklist/index.tsx',
+      ['taskFilters', 'mediaFilters', 'filters', 'sortBy'],
+    ],
+    [
+      'src/components/Discover/DiscoverBooks/index.tsx',
+      ['mediaFilters', 'filters', 'sortBy'],
+    ],
+    ['src/components/Discover/DiscoverMusic/index.tsx', ['filters', 'sortBy']],
+    [
+      'src/components/Discover/MediaDiscoveryControls.tsx',
+      ['filters', 'sortBy'],
+    ],
+    [
+      'src/components/RequestList/index.tsx',
+      ['taskFilters', 'mediaFilters', 'sortBy'],
+    ],
   ]) {
-    requireText(
-      fileName,
-      'app-filter-section-gap',
-      'filter categories must retain the shared larger vertical gap'
-    );
+    if (!validatePinnedFilterSections(requireFile(fileName), sections))
+      errors.push(
+        `${fileName}: filter categories must retain distinct labeled pinned sections and rendered content`
+      );
   }
-  for (const fileName of ['src/components/Discover/DiscoverMusic/index.tsx']) {
-    requireText(
-      fileName,
-      'app-filter-section-heading',
-      'discovery filter categories must retain the shared larger vertical gap'
+  if (!validateNativeFilterGeometry(requireFile(globals)))
+    errors.push(
+      `${globals}: native filter geometry must retain shared segmented spacing, wrapping, narrow bounds and pinned panel boundaries`
     );
-  }
-  requireText(
-    'src/components/Discover/DiscoverBooks/index.tsx',
-    '<PinnedFilterSection',
-    'discovery filter categories must retain the shared larger vertical gap'
-  );
   for (const fileName of [
     'src/components/Common/BookFormatSelector/index.tsx',
     'src/components/Discover/FilterPanel/index.tsx',
@@ -1697,10 +3060,25 @@ const validateCurrentBatchContract = (files) => {
     '.request-divider-dark.border-t {\n    border-top-width: var(--detail-divider-width) !important;',
     'request horizontal dividers must use the shared divider width'
   );
-  requireText(
-    globals,
-    '.media-detail-column-divider {\n    @apply mt-2 border-t pt-2;\n    border-top-width: var(--detail-divider-width);',
-    'detail columns must own their responsive divider border'
+  requireCssRule(
+    '.media-detail-column-divider',
+    [
+      'margin-top: var(--card-spacing);',
+      'padding-top: var(--inset-card-padding);',
+      'border-top-style: solid;',
+      'border-top-width: var(--detail-divider-width);',
+    ],
+    'detail columns must own their horizontal divider border'
+  );
+  requireCssRule(
+    '.media-detail-column-divider',
+    [
+      'margin-top: 0;',
+      'padding-top: 0;',
+      'border-top-width: 0;',
+      'border-left-width: var(--detail-divider-width);',
+    ],
+    'detail columns must own their responsive vertical divider border'
   );
   requireText(
     globals,
@@ -1750,7 +3128,6 @@ const validateCurrentBatchContract = (files) => {
     );
   }
   for (const fileName of [
-    'src/components/MediaDetails/SeriesSeasonEpisodeBrowser.tsx',
     'src/components/MediaDetails/AlbumTrackList.tsx',
     'src/components/MediaDetails/PlaybackTrackList.tsx',
   ]) {
@@ -1800,17 +3177,16 @@ const validateCurrentBatchContract = (files) => {
     "disabledReason ?? 'This action is unavailable in the current state.'",
     'every disabled shared button must expose an explanatory tooltip'
   );
-  for (const disabledToken of [
-    'disabled:cursor-not-allowed',
-    'disabled:brightness-50',
-    'disabled:grayscale',
-  ]) {
-    requireText(
-      globals,
-      disabledToken,
-      'disabled buttons must be darkened and use the prohibited cursor'
-    );
-  }
+  for (const selector of ['.app-button:disabled', '.poster-control:disabled'])
+    if (
+      !parsedCssOwner(requireFile(globals), selector, {
+        cursor: 'not-allowed',
+        opacity: '0.6',
+      })
+    )
+      errors.push(
+        `${globals}: disabled buttons must be darkened and use the prohibited cursor`
+      );
   requireText(
     splitButton,
     'const sharedClasses = `app-button',
@@ -1830,7 +3206,7 @@ const validateCurrentBatchContract = (files) => {
   requireText(
     requestButton,
     '<FormatRequestControl options={requestOptions}',
-    'Movie and Series detail requests must use the shared segmented control'
+    'Movie detail requests must retain the shared segmented control'
   );
   requireText(
     requestButton,
@@ -1852,14 +3228,18 @@ const validateCurrentBatchContract = (files) => {
     'hides the 4K request action without 4K request permission',
     'Movie details must test that the 4K action is hidden without permission'
   );
-  for (const fileName of [
+  requireText(
     'cypress/e2e/movie-details.cy.ts',
-    'cypress/e2e/tv-details.cy.ts',
-  ]) {
-    requireText(
-      fileName,
-      'shows standard and 4K requests in one segmented control',
-      'Movie and Series details must test the shared segmented request control'
+    'shows standard and 4K requests in one segmented control',
+    'Movie details must test the shared segmented request control'
+  );
+  if (
+    !validateSeriesRequestEntryEvidence(
+      requireFile('cypress/e2e/tv-details.cy.ts')
+    )
+  ) {
+    errors.push(
+      'cypress/e2e/tv-details.cy.ts: Series details must exercise one request-screen entry, in-dialog HD and 4K choices and observed zero submissions'
     );
   }
 
@@ -2013,13 +3393,23 @@ const validateCurrentBatchContract = (files) => {
   const credits = 'src/components/MediaDetails/ExpandableCreditList.tsx';
   requireText(
     credits,
-    'grid-cols-3',
+    'data-list-layout="portrait"',
     'cast and crew must render three person cards per row'
   );
   requireText(
     credits,
-    'max-h-[252px]',
+    'data-scroll-layout="portrait"',
     'cast and crew must show three rows before scrolling'
+  );
+  requireCssRule(
+    ".card-list[data-list-layout='portrait']",
+    ['--card-list-columns: repeat(3, minmax(0, 1fr));'],
+    'portrait lists must retain three cards per row through their shared layout owner'
+  );
+  requireCssRule(
+    ".scrollable-card[data-scroll-layout='portrait']",
+    ['--scroll-viewport-height: 252px;'],
+    'portrait lists must retain the accepted bounded viewport through their shared scroll owner'
   );
   requireText(
     credits,
@@ -2053,16 +3443,39 @@ const validateCurrentBatchContract = (files) => {
     'MapPinIcon',
     'detail disclosure pins must not regress to map-location icons'
   );
-  requireText(
-    globals,
-    '.detail-disclosure-control {\n    @apply inline-flex items-stretch overflow-hidden rounded-md border text-[11px] font-medium transition;',
-    'Cast, Crew, and Subject Tags must use the shared dropdown control'
-  );
-  requireText(
-    globals,
-    '.detail-disclosure-control {\n    @apply inline-flex items-stretch overflow-hidden rounded-md border text-[11px] font-medium transition;\n    height: var(--action-control-height);',
-    'Cast, Crew, and Subject Tags must match the shared action-height surface'
-  );
+  try {
+    const postcss = require('postcss');
+    const layout = new Map([
+      ['display', 'inline-flex'],
+      ['align-items', 'stretch'],
+      ['overflow', 'hidden'],
+      ['border-radius', 'var(--control-corner-radius)'],
+      ['border-width', '1px'],
+      ['border-style', 'solid'],
+      ['height', 'var(--action-control-height)'],
+      ['min-height', 'var(--action-control-height)'],
+      ['max-height', 'var(--action-control-height)'],
+    ]);
+    const declarations = [];
+    postcss.parse(requireFile(globals)).walkRules((rule) => {
+      if (rule.selectors.includes('.detail-disclosure-control'))
+        for (const node of rule.nodes)
+          if (node.type === 'decl') declarations.push(node);
+    });
+    for (const [property, expected] of layout) {
+      const values = declarations.filter((node) => node.prop === property);
+      if (values.length !== 1 || values[0].value !== expected)
+        throw new Error('Missing or competing native disclosure geometry');
+    }
+    if (
+      declarations.some((node) => node.prop === 'border' || node.prop === 'all')
+    )
+      throw new Error('Competing disclosure geometry shorthand');
+  } catch {
+    errors.push(
+      'src/styles/globals.css: Cast, Crew, and Subject Tags must match the shared segmented action-height surface'
+    );
+  }
   requireText(
     globals,
     '--compact-control-height: 1.25rem;',
@@ -2198,7 +3611,9 @@ const validateCurrentBatchContract = (files) => {
   ]) {
     requireText(
       fileName,
-      'className="media-detail-disclosure-row',
+      fileName.includes('/TvDetails/')
+        ? '<ReorderableDisclosureRow'
+        : 'className="media-detail-disclosure-row',
       'the disclosure row must consume the shared spacing role'
     );
     requireText(
@@ -2234,9 +3649,9 @@ const validateCurrentBatchContract = (files) => {
     [
       'src/components/TvDetails/SeriesDetailsLayout.tsx',
       [
-        'setShowCast(pins.cast)',
-        'setShowCrew(pins.crew)',
-        'setShowTags(pins.subjectTags)',
+        'setShowCast(!collapseInformation && (expandInformation || pins.cast))',
+        'setShowCrew(!collapseInformation && (expandInformation || pins.crew))',
+        '!collapseInformation && (expandInformation || pins.subjectTags)',
       ],
     ],
     [
@@ -2281,7 +3696,7 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     mediaDetailArtwork,
-    'className="media-detail-artwork-image object-cover object-top"',
+    'className="media-detail-artwork-image"',
     'the standard artwork image must preserve the expanding cover behavior'
   );
   requireText(
@@ -2312,16 +3727,21 @@ const validateCurrentBatchContract = (files) => {
     '(serverData?.rootFolders.length ?? 0) > 5',
     'root-folder scrolling must begin only after five rows'
   );
-  requireText(
-    advancedRequester,
-    "'scrollable-card max-h-[8.5rem] overflow-y-auto'",
-    'long root-folder tables must scroll their data rows'
-  );
-  requireText(
-    advancedRequester,
-    'className="request-divider-dark col-span-2 mb-1 grid grid-cols-subgrid border-b px-1 pb-2"',
-    'root-folder table rules must use the dark Destination Server color'
-  );
+  for (const [aspect, reason] of [
+    ['scroll', 'long root-folder tables must scroll their data rows'],
+    [
+      'border',
+      'root-folder table rules must use the dark Destination Server color',
+    ],
+  ])
+    if (
+      !validateRequestFolders(
+        requireFile(advancedRequester),
+        requireFile(globals),
+        aspect
+      )
+    )
+      errors.push(`${advancedRequester}: ${reason}`);
   requireText(
     advancedRequester,
     'className="request-listbox-control"',
@@ -2421,17 +3841,16 @@ const validateCurrentBatchContract = (files) => {
       'full-size request cards must use the site background gradient'
     );
   }
-  for (const token of [
-    'dialogClass="request-modal-site-surface sm:max-w-5xl"',
-    '<RequestMediaCard',
-    'className="app-card-inset refreshed-inset-surface rounded-lg border border-gray-700 p-3"',
-  ]) {
-    requireText(
-      'src/components/RequestModal/TvRequestModal.tsx',
-      token,
-      'Request Series must reuse the shared request site canvas and inset artwork card'
+  if (
+    !validateTvRequestCanvas(
+      requireFile('src/components/RequestModal/TvRequestModal.tsx'),
+      requireFile(globals),
+      true
+    )
+  )
+    errors.push(
+      'src/components/RequestModal/TvRequestModal.tsx: Request Series must reuse the shared request site canvas and inset artwork card'
     );
-  }
   rejectText(
     'src/components/RequestModal/TvRequestModal.tsx',
     'backdropFull',
@@ -2459,8 +3878,8 @@ const validateCurrentBatchContract = (files) => {
   }
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'same shared blue control surface and border as the Destination Server dropdown',
-    'the style standard must document the shared blue request-control treatment'
+    'Semantic action colors retain their roles',
+    'the style standard must govern shared semantic action palettes'
   );
   requireText(
     'docs/maintainers/current-batch-acceptance-ledger.md',
@@ -2474,12 +3893,12 @@ const validateCurrentBatchContract = (files) => {
   ]) {
     requireText(
       fileName,
-      'className="media-rating-row"',
-      'must use the shared rating row'
+      '<VideoRatings',
+      'Movie and Series layouts must delegate provider rating presentation to the shared VideoRatings owner'
     );
     requireText(
-      fileName,
-      'className="media-rating-wordmark"',
+      'src/components/CollectionDetails/CollectionRatings.tsx',
+      "'media-rating-wordmark'",
       'wordmarks must use shared sizing'
     );
     requireText(
@@ -2489,7 +3908,9 @@ const validateCurrentBatchContract = (files) => {
     );
     requireText(
       fileName,
-      'refreshed-card-surface refreshed-detail-text relative overflow-hidden',
+      fileName.includes('/TvDetails/')
+        ? 'app-card-main card-layout refreshed-card-surface refreshed-detail-text'
+        : 'refreshed-card-surface refreshed-detail-text relative overflow-hidden',
       'artwork must live inside the main card'
     );
     requireText(
@@ -2530,8 +3951,14 @@ const validateCurrentBatchContract = (files) => {
       'main detail cards must retain the standard contained poster'
     );
     requireText(
-      summaryOwner === fileName ? fileName : globals,
-      'sm:grid-cols-[80px_minmax(0,1fr)]',
+      fileName.includes('/TvDetails/')
+        ? fileName
+        : summaryOwner === fileName
+          ? fileName
+          : globals,
+      fileName.includes('/TvDetails/')
+        ? 'app-detail-summary-grid'
+        : 'sm:grid-cols-[80px_minmax(0,1fr)]',
       'main detail cards must retain the responsive poster and detail geometry'
     );
     requireText(
@@ -2546,12 +3973,16 @@ const validateCurrentBatchContract = (files) => {
     );
     requireText(
       summaryOwner,
-      'card:col-span-3 card:col-start-3',
+      fileName.includes('/TvDetails/')
+        ? 'className="card-table-value"'
+        : 'card:col-span-3 card:col-start-3',
       'main detail card Genres value must begin in the first value column and span through the second detail group'
     );
     requireText(
       summaryOwner,
-      'min-w-0 break-words',
+      fileName.includes('/TvDetails/')
+        ? 'data-wrap="true"'
+        : 'min-w-0 break-words',
       'main detail card Genres value must wrap naturally within its combined width'
     );
     rejectText(
@@ -2565,6 +3996,21 @@ const validateCurrentBatchContract = (files) => {
       'detail actions must use one full-width justified wrapping row'
     );
   }
+  requireCssRule(
+    '.card-table.detail-paired-columns > dd:nth-of-type(4)',
+    ['grid-column: 3 / span 3;'],
+    'Series Genres must span the paired summary value groups through its shared table owner'
+  );
+  requireCssRule(
+    ".card-table-value[data-wrap='true']",
+    ['overflow-wrap: anywhere;', 'white-space: normal;'],
+    'wrapped Series summary values must use the shared table wrap treatment rather than clamping'
+  );
+  requireText(
+    'src/components/TvDetails/SeriesDetailsLayout.tsx',
+    'className="card-table-value"\n                      data-wrap="true"\n                      data-testid="media-details-genres"',
+    'Series Genres must attach the shared wrapping value role to the actual Genres cell'
+  );
 
   const mediaQualitySelect =
     'src/components/MediaDetails/MediaQualitySelect.tsx';
@@ -2579,11 +4025,15 @@ const validateCurrentBatchContract = (files) => {
     'detail quality selection must use the shared green Quality-button treatment'
   );
   for (const selector of ['.format-request-label', '.format-request-option']) {
-    requireCssRule(
-      selector,
-      ['inline-flex items-center'],
-      'detail quality controls must vertically center their text and icons'
-    );
+    if (
+      !parsedCssOwner(requireFile(globals), selector, {
+        display: 'inline-flex',
+        'align-items': 'center',
+      })
+    )
+      errors.push(
+        `${globals}: detail quality controls must vertically center their text and icons`
+      );
   }
   requireText(
     mediaQualitySelect,
@@ -2600,11 +4050,20 @@ const validateCurrentBatchContract = (files) => {
     'aria-pressed={option.selected}',
     'segmented quality controls must expose the selected state accessibly'
   );
-  requireCssRule(
-    ".format-request-option[aria-pressed='true']:not(:disabled)",
-    ['bg-green-900/70 text-white'],
-    'segmented quality controls must visibly highlight the selected available format'
-  );
+  if (
+    !parsedCssOwner(
+      requireFile(globals),
+      ".format-request-option[aria-pressed='true']:not(:disabled)",
+      {
+        'background-color': 'rgb(20 83 45 / 0.7)',
+        color: 'white',
+        'box-shadow': 'inset 0 -1px 0 currentColor',
+      }
+    )
+  )
+    errors.push(
+      `${globals}: segmented quality controls must visibly highlight the selected available format`
+    );
 
   const musicLayout = 'src/components/MusicDetails/MusicDetailsLayout.tsx';
   requireCssRule(
@@ -2778,8 +4237,8 @@ const validateCurrentBatchContract = (files) => {
     'Series IMDb fallback must use the normalized MDBList IMDb score'
   );
   requireText(
-    seriesLayout,
-    'getEffectiveVideoRatings(ratingData)',
+    'src/components/MediaDetails/VideoRatings.tsx',
+    'getEffectiveVideoRatings(props.ratings)',
     'series ratings must use the source-aware shared rating adapter'
   );
   rejectText(
@@ -2822,27 +4281,31 @@ const validateCurrentBatchContract = (files) => {
     requireOrder(
       detailLayout,
       [
-        'className="media-rating-row"',
         'className="media-primary-action-row"',
-        '{playbackActions?.(',
         '{primaryActions}',
         'className="media-request-action-row"',
+        'className="media-request-search-action"',
         '{indexerSearchAction}',
+        'className="media-request-submit-action"',
         '{requestAction}',
       ],
-      'Movie and Series must keep playback before Blocklist and Search Prowlarr opposite Request on the following row'
+      'Movie and Series must keep acquisition search and request in their own opposing shared row'
     );
   }
   requireOrder(
     seriesLayout,
     [
-      'className="media-rating-row"',
+      'data-card-layout="media-server-panel"',
+      '<SeriesSeasonEpisodeBrowser',
+      'data-card-part="actions"',
       '<MediaQualitySelect',
       'label={intl.formatMessage(messages.quality)}',
-      'className="media-primary-action-row"',
       '{playbackActions?.(',
+      '<PlayOnDeviceButton',
+      'data-card-part="saved-item-action"',
+      'data-card-part="collection-action"',
     ],
-    'Series quality selection and ratings must precede playback in the primary action row'
+    'Series quality and media-server actions must share the selection panel sidebar in their established order'
   );
   rejectText(
     seriesLayout,
@@ -2855,6 +4318,7 @@ const validateCurrentBatchContract = (files) => {
       'className="media-rating-row"',
       '<MediaQualitySelect',
       'label={intl.formatMessage(messages.quality)}',
+      '<VideoRatings',
       'className="media-primary-action-row"',
       "playbackActions?.(selectedQuality === '4k')",
     ],
@@ -2874,46 +4338,44 @@ const validateCurrentBatchContract = (files) => {
     'src/components/MediaDetails/SeriesSeasonEpisodeBrowser.tsx';
   requireText(
     seriesBrowser,
-    'const toggleSeason =',
-    'series selection must support selecting all available episodes in a season'
+    '<SeasonEpisodeTree',
+    'the live Series browser must delegate selection presentation to the shared tree'
   );
   requireText(
     seriesBrowser,
-    'data-testid="season-list"',
-    'the read-only season list must retain a stable browser-audit target'
+    'selectedTreeEpisodeIds(',
+    'Series playback selection must map provider item IDs back to tree episode identities'
   );
   requireText(
     seriesBrowser,
-    'data-testid="episode-list"',
-    'the read-only episode list must retain a stable browser-audit target'
+    'treeSelectionToPlaybackIds(treeData.playbackIdsByEpisode, ids)',
+    'tree selection must map only catalog-authorized episode identities to playable provider IDs'
   );
+  for (const [aspect, reason] of [
+    ['row', 'ineligible episodes must remain visible but cannot be selected'],
+    [
+      'guard',
+      'episode selection handlers must reject ineligible episodes even if invoked directly',
+    ],
+  ])
+    if (!validateTreeEligibility(requireFile(seriesTree), aspect))
+      errors.push(`${seriesTree}: ${reason}`);
   requireText(
-    seriesBrowser,
-    'disabled={!playableItem}',
-    'unavailable episodes must remain visible but cannot be selected'
+    seriesTree,
+    'onClick={toggleAll}',
+    'the shared tree heading must expose one all-seasons selection control'
   );
+  for (const [aspect, reason] of [
+    ['all', 'tree select-all must be disabled when no eligible episodes exist'],
+    [
+      'sets',
+      'season and global selection sets must exclude ineligible episodes',
+    ],
+  ])
+    if (!validateTreeEligibility(requireFile(seriesTree), aspect))
+      errors.push(`${seriesTree}: ${reason}`);
   requireText(
-    seriesBrowser,
-    'onClick={() => toggleItems(allPlayableItemIds)}',
-    'the Season heading must expose a select-all control'
-  );
-  requireText(
-    seriesBrowser,
-    'onClick={() => toggleItems(activeItemIds)}',
-    'the Episode heading must expose a select-all control'
-  );
-  requireText(
-    seriesBrowser,
-    'className="text-left"',
-    'Season, Episode, and Title headings must remain left aligned'
-  );
-  requireText(
-    seriesBrowser,
-    'className="text-center"',
-    'episode counts and availability headings must remain centered'
-  );
-  requireText(
-    seriesBrowser,
+    seriesTree,
     "from '@app/components/Common/SelectionCircle';",
     'Series selection controls must consume the shared SelectionCircle component'
   );
@@ -2958,8 +4420,8 @@ const validateCurrentBatchContract = (files) => {
   const selectionCircle = 'src/components/Common/SelectionCircle/index.tsx';
   requireText(
     selectionCircle,
-    "import { CheckIcon } from '@heroicons/react/24/solid';",
-    'selector component must use the established solid CheckIcon'
+    'const SelectionCircleGlyph = () => (',
+    'selector component must render its shared selection glyph rather than import availability artwork'
   );
   requireText(
     selectionCircle,
@@ -2982,9 +4444,26 @@ const validateCurrentBatchContract = (files) => {
     'selection circles must expose the approved partial-season state'
   );
   requireText(
-    seriesBrowser,
-    'partial={partiallySelected}',
+    seriesTree,
+    'partial={state.partial}',
     'Series playback season rows must show partial episode selection'
+  );
+  requireText(
+    seriesTree,
+    'useState<number[]>([])',
+    'selection trees must start collapsed without changing selection'
+  );
+  requireOrder(
+    seriesTree,
+    [
+      'data-tree-part="episode-selection"',
+      'data-tree-part="selection"',
+      'data-tree-part="number"',
+      'data-tree-part="name"',
+      '</button>',
+      'data-tree-part="release-date"',
+    ],
+    'episode selection must cover circle, number, and title while facts remain outside the shared target'
   );
   requireText(
     'src/components/Common/SeriesSeasonEpisodeSelector.tsx',
@@ -2993,13 +4472,13 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'The outlined `CheckCircleIcon` and `XCircleIcon` are availability/status symbols only.',
+    'Selection and availability are different semantics but share visible circle geometry.',
     'the style standard must distinguish selection controls from availability icons'
   );
 
   for (const selectorConsumer of [
     'src/components/Common/SeriesSeasonEpisodeSelector.tsx',
-    seriesBrowser,
+    seriesTree,
     albumTrackList,
     'src/components/MediaDetails/PlaybackTrackList.tsx',
     'src/components/CollectionDetails/index.tsx',
@@ -3075,7 +4554,8 @@ const validateCurrentBatchContract = (files) => {
       buttonBlocks.some(
         (buttonBlock) =>
           buttonBlock.includes('aria-pressed') &&
-          buttonBlock.includes('CheckCircleIcon')
+          buttonBlock.includes('CheckCircleIcon') &&
+          !isProviderSelectionIndicator(buttonBlock, requireFile(globals))
       )
     ) {
       errors.push(
@@ -3182,11 +4662,10 @@ const validateCurrentBatchContract = (files) => {
     '<ThreeItemScroll label={data.name}>',
     'movie collections must use the same labeled scrolling list as music and series collections'
   );
-  requireCount(
-    'src/components/MediaDetails/SeriesSeasonEpisodeBrowser.tsx',
-    'scrollable-card -mr-2',
-    2,
-    'Series season and episode scroll regions must share edge-aligned scrollbar geometry'
+  requireCssRule(
+    '.scrollable-card',
+    ['scrollbar-width: thin;', 'scrollbar-gutter: stable;'],
+    'Series selection scrollbars must retain the shared thin stable-gutter geometry'
   );
   requireText(
     'src/utils/bookMarkdown.test.ts',
@@ -3273,20 +4752,25 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'Do not replace Root Folder with a native select or page-local dropdown styling.',
-    'the style standard must require Root Folder to reuse the shared request listbox'
+    'Use the established shared custom select where its role requires consistent menu surfaces, checkmarks and effects',
+    'the style standard must govern shared custom select ownership and semantics'
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'keep the status control at the left edge and History at the right edge',
-    'the style standard must preserve full justification when request actions wrap'
+    'Use the shared action-row justification variable for alignment differences; retain wrapping and the standard card gap.',
+    'the style standard must govern justified wrapping action-row layout'
   );
   const advanced = 'src/components/RequestModal/AdvancedRequester/index.tsx';
-  requireText(
-    advanced,
-    'grid-cols-[minmax(0,max-content)_max-content]',
-    'root folder and available space columns must be adjacent and content-sized'
-  );
+  if (
+    !validateRequestFolders(
+      requireFile(advanced),
+      requireFile(globals),
+      'columns'
+    )
+  )
+    errors.push(
+      `${advanced}: root folder and available space columns must be adjacent and content-sized`
+    );
   requireText(
     advanced,
     'serverData.rootFolders.map((folder)',
@@ -3302,11 +4786,22 @@ const validateCurrentBatchContract = (files) => {
     'invisible col-start-1 row-start-1 whitespace-nowrap',
     'Requested By must fit the selected username rather than reserve space for every user'
   );
-  requireText(
-    'src/styles/globals.css',
-    '@apply z-[100] w-max overflow-auto',
-    'request dropdown portals must sit above the z-60 modal backdrop'
-  );
+  try {
+    const postcss = require('postcss');
+    const indices = [];
+    postcss.parse(requireFile('src/styles/globals.css')).walkRules((rule) => {
+      if (rule.selectors.includes('.request-listbox-menu'))
+        for (const node of rule.nodes)
+          if (node.type === 'decl' && node.prop === 'z-index')
+            indices.push(node.value);
+    });
+    if (indices.length !== 1 || indices[0] !== '100')
+      throw new Error('Lost portal stack owner');
+  } catch {
+    errors.push(
+      'src/styles/globals.css: request dropdown portals must sit above the z-60 modal backdrop'
+    );
+  }
   requireText(
     'src/styles/globals.css',
     '--anchor-max-height: calc(8 * var(--filter-option-height) + 0.5rem + 2px)',
@@ -3323,21 +4818,20 @@ const validateCurrentBatchContract = (files) => {
     'server-only overrides must still load the selected server quality profile'
   );
   const requestMediaCard = 'src/components/RequestModal/RequestMediaCard.tsx';
-  requireText(
-    requestMediaCard,
-    'relative overflow-hidden rounded-xl',
-    'request artwork must be clipped inside the full main card'
-  );
-  requireText(
-    requestMediaCard,
-    'className="object-cover object-top"',
-    'request artwork must fill the full card from the top edge'
-  );
-  requireText(
-    requestMediaCard,
-    'className="refreshed-artwork-scrim"',
-    'request artwork must use the shared scrim'
-  );
+  for (const [aspect, reason] of [
+    ['clip', 'request artwork must be clipped inside the full main card'],
+    ['crop', 'request artwork must fill the full card from the top edge'],
+    ['scrim', 'request artwork must use the shared scrim'],
+  ])
+    if (
+      !validateRequestMediaArtwork(
+        requireFile(requestMediaCard),
+        requireFile(mediaDetailArtwork),
+        requireFile(globals),
+        aspect
+      )
+    )
+      errors.push(`${requestMediaCard}: ${reason}`);
 
   const formatRequestControl =
     'src/components/Common/FormatRequestControl/index.tsx';
@@ -3511,7 +5005,16 @@ const validateCurrentBatchContract = (files) => {
   const paginationFooter = 'src/components/Common/PaginationFooter/index.tsx';
   requireText(
     paginationFooter,
-    'grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]',
+    'className="pagination-footer"',
+    'shared pagination must consume its shared layout owner'
+  );
+  requireCssRule(
+    '.pagination-footer',
+    [
+      'display: grid;',
+      'grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);',
+      'align-items: center;',
+    ],
     'shared pagination must use stable left, center, and right zones'
   );
   requireOrder(
@@ -3597,8 +5100,8 @@ const validateCurrentBatchContract = (files) => {
   }
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'The Users page places its controls and user list inside one shared translucent outer card',
-    'the style standard must explicitly govern the refreshed Users page'
+    'Main, nested and inset card arrangement: `card-layout` and the shared card families.',
+    'the style standard must govern shared card arrangement rather than page-specific copies'
   );
 
   const settingsLayout = 'src/components/Settings/SettingsLayout.tsx';
@@ -3689,19 +5192,19 @@ const validateCurrentBatchContract = (files) => {
   }
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'Every application Settings route uses one shared page shell',
-    'the style standard must explicitly govern the shared Settings refresh'
+    '`page-layout` owns page margins and heading-container padding.',
+    'the style standard must govern shared page-shell ownership'
   );
   for (const token of [
-    'The gap from Search Settings to the main card is 20 pixels',
-    'Legacy heading/body pairs must suppress the old 24- and 40-pixel margins',
-    'Setting names top-align with their adjacent button, badge, selector, text field, or dropdown.',
-    'nested options within one setting use the shared five-pixel gap',
+    'Trace the complete spacing boundary.',
+    'Parent gap, child margin, container padding and fixed-header offsets must not accidentally add together.',
+    "A card's layout selects its own column/row arrangement without re-owning typography or button appearance.",
+    'Shared card spacing is 8px.',
   ]) {
     requireText(
       'docs/maintainers/ui-style-standard.md',
       token,
-      'the style standard must preserve Settings card continuity, alignment, and spacing'
+      'the style standard must preserve shared spacing and arrangement ownership'
     );
   }
   for (const token of [
@@ -4199,7 +5702,7 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'src/components/Requests/index.tsx',
-    'className="request-status-action-row"',
+    'className="app-action-row request-status-action-row"',
     'request cards must resolve wrapping action alignment through the shared global style'
   );
   requireText(
@@ -4242,9 +5745,15 @@ const validateCurrentBatchContract = (files) => {
       'Request Status and Blocklist filters must not override the shared compact height'
     );
   }
-  requireText(
-    globals,
-    '.request-status-action-row {\n    @apply relative z-10 flex w-full flex-wrap items-center justify-between;\n    padding-top: var(--card-spacing);',
+  requireCssRule(
+    '.app-action-row.request-status-action-row',
+    [
+      '--action-row-justify: space-between;',
+      'position: relative;',
+      'z-index: 10;',
+      'width: 100%;',
+      'padding-top: var(--card-spacing);',
+    ],
     'request action rows must remain fully justified'
   );
   requireText(
@@ -4498,11 +6007,16 @@ const validateCurrentBatchContract = (files) => {
       'edit-request content must retain darker inset subcards'
     );
   }
-  requireText(
-    'src/components/RequestModal/TvRequestModal.tsx',
-    'request-modal-site-surface sm:max-w-5xl',
-    'Series new and pending requests must use the same site canvas as other media'
-  );
+  if (
+    !validateTvRequestCanvas(
+      requireFile('src/components/RequestModal/TvRequestModal.tsx'),
+      requireFile(globals),
+      false
+    )
+  )
+    errors.push(
+      'src/components/RequestModal/TvRequestModal.tsx: Series new and pending requests must use the same site canvas as other media'
+    );
   for (const token of ['action="delete"', 'action="remove"']) {
     requireOrder(
       'src/components/Requests/index.tsx',
@@ -5134,10 +6648,10 @@ const validateCurrentBatchContract = (files) => {
       '<FilterResetButton',
       '<CardTextVisibilityToggle',
       '<AvailabilityQualityControl',
-      'className="order-3"',
-      "variant === 'search' ? 'contents' : 'discover-filter-secondary-row'",
+      'className="discover-filter-secondary-row"',
+      "data-filter-layout={variant === 'search' ? 'contents' : undefined}",
       '<form',
-      'order-5',
+      'className="discover-filter-control app-filter-search-control"',
     ],
     'movie and series must preserve the shared compact gap between their primary and wrapping filter rows'
   );
@@ -5257,20 +6771,14 @@ const validateCurrentBatchContract = (files) => {
     ],
     'Books and Audiobooks must separate Media Filters from the continuous regular filter row'
   );
-  requireOrder(
-    'src/components/Discover/DiscoverMusic/index.tsx',
-    [
-      'className="discover-filter-primary-row"',
-      '<FilterResetButton',
-      '<CardTextVisibilityToggle',
-      '<AvailabilityQualityControl',
-      'className="order-3"',
-      'className="discover-filter-secondary-row"',
-      '<form',
-      'order-5',
-    ],
-    'Music must preserve the shared compact gap between its primary and wrapping filter rows'
-  );
+  if (
+    !validateMusicFilterLayout(
+      requireFile('src/components/Discover/DiscoverMusic/index.tsx')
+    )
+  )
+    errors.push(
+      'src/components/Discover/DiscoverMusic/index.tsx: Music filters must preserve their effective control order inside the shared wrapping pinned panel'
+    );
   requireOrder(
     'src/components/Discover/FilterPanel/index.tsx',
     ['<form', "type === 'tv'", 'messages.status', 'messages.releaseDate'],
@@ -5299,8 +6807,8 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'Genres is a single-value filter on Movie, Series, Music, and Book discovery.',
-    'the style standard must preserve single-value Genres filtering site-wide'
+    'Matching follows meaningful visible metadata, documented term/phrase behavior and the actual filter state.',
+    'the style standard must preserve meaningful filtering behavior while refactoring presentation'
   );
   requireText(
     'src/components/Selector/genreOptions.test.ts',
@@ -5546,11 +7054,14 @@ const validateCurrentBatchContract = (files) => {
       'filter and sort buttons must remain exempt from the shared action-button shadow'
     );
   }
-  requireText(
-    'src/components/RequestList/index.tsx',
-    'className="app-control-shadow-exempt z-40 mr-2 rounded-l-none px-3"',
-    'the legacy Request List sort-direction button must remain shadow-free'
-  );
+  if (
+    !validateRequestListSortDirection(
+      requireFile('src/components/RequestList/index.tsx')
+    )
+  )
+    errors.push(
+      'src/components/RequestList/index.tsx: Request List sort direction must retain the shared shadow-free filter owner, accessible help and direction callback inside its pinned sort panel'
+    );
   for (const [fileName, mediaType] of [
     ['src/components/MovieDetails/MovieRecommendations.tsx', 'movie'],
     ['src/components/MovieDetails/MovieSimilar.tsx', 'movie'],
@@ -5568,19 +7079,29 @@ const validateCurrentBatchContract = (files) => {
       'linked Recommendations and Similar pages must apply their visible filters and sorts'
     );
   }
-  for (const token of [
-    '.media-inset-heading {',
-    '@apply text-sm leading-5 font-semibold;',
-    '.media-inset-table-heading {',
-    '@apply text-xs leading-4 font-semibold;',
-    'color: rgb(var(--theme-heading-text));',
-  ]) {
-    requireText(
-      globals,
-      token,
-      'media inset and table headings must use their shared mode-aware typography'
-    );
-  }
+  for (const [selector, fontSize, lineHeight] of [
+    [
+      '.media-inset-heading',
+      'var(--card-subheading-font-size)',
+      'var(--card-copy-line-height)',
+    ],
+    [
+      '.media-inset-table-heading',
+      'var(--card-table-font-size)',
+      'var(--detail-row-height)',
+    ],
+  ])
+    if (
+      !parsedCssOwner(requireFile(globals), selector, {
+        'font-size': fontSize,
+        'line-height': lineHeight,
+        'font-weight': 'var(--card-table-heading-weight)',
+        color: 'rgb(var(--theme-heading-text))',
+      })
+    )
+      errors.push(
+        `${globals}: media inset and table headings must use their shared mode-aware typography`
+      );
   for (const fileName of [
     'src/components/MovieDetails/index.tsx',
     'src/components/TvDetails/index.tsx',
@@ -5603,10 +7124,22 @@ const validateCurrentBatchContract = (files) => {
     'Discover customization must use the shared compact button'
   );
 
-  requireText(
+  requireOrder(
     'src/components/Requests/index.tsx',
-    'grid-cols-[7rem_6rem_7.5rem_minmax(0,1fr)]',
+    [
+      'className="card-table app-history-grid"',
+      'className="app-history-row"',
+      'app-history-time',
+      'app-history-time',
+      'app-history-action',
+      'app-history-description',
+    ],
     'Request Status history must keep Date, Time, Action, Description columns'
+  );
+  requireCssRule(
+    '.app-history-grid',
+    ['--card-table-columns: 7rem 6rem 7.5rem minmax(0, 1fr);'],
+    'request history must preserve its four shared table tracks'
   );
 
   const slider = 'src/components/Slider/index.tsx';
@@ -5617,8 +7150,13 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     slider,
-    "'slider-track-compact min-h-[5.5rem]'",
+    "data-slider-size={compact ? 'compact' : undefined}",
     'compact sliders must not reserve poster height'
+  );
+  requireCssRule(
+    ".slider-layout[data-slider-size='compact']",
+    ['--slider-min-height: 5.5rem;'],
+    'compact slider height must use its shared layout variant rather than poster geometry'
   );
   requireText(
     'src/components/Discover/RecentRequestsSlider/index.tsx',
@@ -5641,11 +7179,16 @@ const validateCurrentBatchContract = (files) => {
     '<RequestCardPlaceholder compact={compact} />',
     'Request-card loading must retain its caller compact geometry'
   );
-  requireText(
-    'src/components/RequestCard/index.tsx',
-    "compact ? 'min-h-0' : 'min-h-[17rem]'",
-    'loaded compact Request cards must contract to their content'
-  );
+  if (
+    !validateCompactRequestGeometry(
+      requireFile('src/components/RequestCard/index.tsx'),
+      requireFile('src/styles/globals.css')
+    )
+  ) {
+    errors.push(
+      `src/components/RequestCard/index.tsx: ${compactRequestGeometryReason}`
+    );
+  }
   requireText(
     'src/components/RequestCard/index.tsx',
     'showApprovalActions &&',
@@ -5672,9 +7215,9 @@ const validateCurrentBatchContract = (files) => {
     'media details must not expose a separate decline action'
   );
   requireText(
-    'src/components/MediaDetails/SeriesSeasonEpisodeBrowser.tsx',
-    "partial ? 'text-emerald-600' : 'text-green-400'",
-    'partial season availability must use the dark emerald marker'
+    'src/components/MediaDetails/seriesTreeData.ts',
+    'available: Boolean(playableItem)',
+    'Series tree availability must come from the exact playable catalog episode rather than an aggregate season state'
   );
   requireText(
     globals,
@@ -5714,18 +7257,18 @@ const validateCurrentBatchContract = (files) => {
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'occupies one full-width row; never place two result cards beside each other',
-    'the shared UI standard must preserve the one-card-per-row Associations layout'
+    "A card's layout selects its own column/row arrangement without re-owning typography or button appearance.",
+    'the shared UI standard must govern card arrangement separately from content styling'
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'Do not show a redundant Status heading or value.',
-    'the shared UI standard must prohibit redundant Association status rows'
+    'UI actions and count/status displays must reflect real eligibility and permissions.',
+    'the shared UI standard must preserve truthful status presentation'
   );
   requireText(
     'docs/maintainers/ui-style-standard.md',
-    'closes the popup as navigation begins',
-    'the shared UI standard must require Associations popups to close during result navigation'
+    'Links represent actual valid destinations.',
+    'the shared UI standard must preserve valid navigation semantics'
   );
   requireText(
     'src/components/Discover/StudioSlider/index.tsx',

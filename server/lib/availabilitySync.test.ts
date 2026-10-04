@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { beforeEach, describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 
 import type {
   JellyfinLibraryItem,
@@ -11,6 +11,7 @@ import PlexAPI from '@server/api/plexapi';
 import RadarrAPI from '@server/api/servarr/radarr';
 import type { SonarrSeason, SonarrSeries } from '@server/api/servarr/sonarr';
 import SonarrAPI from '@server/api/servarr/sonarr';
+import type { TmdbTvScanDetails } from '@server/api/themoviedb/interfaces';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import { getRepository } from '@server/datasource';
@@ -142,6 +143,47 @@ Object.defineProperty(SonarrAPI.prototype, 'getSeriesById', {
 import availabilitySync from '@server/lib/availabilitySync';
 
 setupTestDb();
+
+// AvailabilitySync also enriches season counts through TMDB. Stub the actual
+// singleton client's scan method: its arrow function shadows prototype mocks.
+// Keep the external-network guard enabled and the real scan/reconciler intact.
+const scanSeasonCounts = new Map([
+  [1408, 8],
+  [1409, 8],
+  [1410, 8],
+  [1411, 1],
+  [2000, 8],
+  [2001, 1],
+  [2002, 4],
+  [2003, 1],
+]);
+let unexpectedScanIds: number[] = [];
+let scanIds: number[] = [];
+let unexpectedTvdbIds: number[] = [];
+
+function fakeTmdbShow(tvId: number, seasonCount: number): TmdbTvScanDetails {
+  return {
+    id: tvId,
+    name: 'Test Show',
+    original_name: 'Test Show',
+    first_air_date: '2001-01-01',
+    external_ids: {},
+    keywords: { results: [] },
+    genres: [],
+    episode_run_time: [45],
+    created_by: [],
+    production_companies: [],
+    networks: [],
+    seasons: Array.from({ length: seasonCount }, (_, index) => ({
+      id: index + 1,
+      season_number: index + 1,
+      episode_count: 22,
+      name: `Season ${index + 1}`,
+      overview: '',
+      air_date: '2001-01-01',
+    })),
+  };
+}
 
 function configureSonarr(overrides: Partial<SonarrSettings>[] = [{}]): void {
   const settings = getSettings();
@@ -318,6 +360,36 @@ function fakeSonarrSeasons(
 
 describe('AvailabilitySync', () => {
   beforeEach(async () => {
+    unexpectedScanIds = [];
+    scanIds = [];
+    unexpectedTvdbIds = [];
+    mock.method(
+      availabilitySync.tmdb,
+      'getTvShowForScan',
+      async ({
+        tvId,
+      }: Parameters<typeof availabilitySync.tmdb.getTvShowForScan>[0]) => {
+        scanIds.push(tvId);
+        const seasonCount = scanSeasonCounts.get(tvId);
+        if (seasonCount === undefined) {
+          unexpectedScanIds.push(tvId);
+          throw new Error(`Unexpected TMDB scan fixture: ${tvId}`);
+        }
+        return fakeTmdbShow(tvId, seasonCount);
+      }
+    );
+    mock.method(
+      availabilitySync.tmdb,
+      'getShowByTvdbIdForScan',
+      async ({
+        tvdbId,
+      }: Parameters<
+        typeof availabilitySync.tmdb.getShowByTvdbIdForScan
+      >[0]) => {
+        unexpectedTvdbIds.push(tvdbId);
+        throw new Error(`Unexpected TVDB scan fixture: ${tvdbId}`);
+      }
+    );
     deletionMovieIds = [];
     getDeletionItemImpl = async () => undefined;
     getSystemInfoImpl = async () => ({ ServerName: 'Test' });
@@ -343,6 +415,17 @@ describe('AvailabilitySync', () => {
     admin.permissions = 2;
     admin.username = 'admin';
     await userRepository.save(admin);
+  });
+
+  afterEach(() => {
+    try {
+      // The scan catches metadata failures. Assert outside that catch so an
+      // accidental new lookup cannot silently pass with an unrelated fixture.
+      assert.deepEqual(unexpectedScanIds, []);
+      assert.deepEqual(unexpectedTvdbIds, []);
+    } finally {
+      mock.restoreAll();
+    }
   });
 
   describe('TV season availability - Jellyfin', () => {
@@ -416,6 +499,8 @@ describe('AvailabilitySync', () => {
       };
 
       await availabilitySync.run();
+
+      assert.deepEqual(scanIds, [1408]);
 
       const updated = await mediaRepository.findOneOrFail({
         where: { tmdbId: 1408 },
@@ -495,6 +580,7 @@ describe('AvailabilitySync', () => {
         where: { tmdbId: 1409 },
         relations: { seasons: true },
       });
+      assert.deepEqual(scanIds, [1409]);
 
       const s6 = updated.seasons.find((s) => s.seasonNumber === 6);
       assert.strictEqual(
@@ -592,6 +678,7 @@ describe('AvailabilitySync', () => {
         where: { tmdbId: 1410 },
         relations: { seasons: true },
       });
+      assert.deepEqual(scanIds, [1410]);
 
       const s6 = updated.seasons.find((s) => s.seasonNumber === 6);
       assert.strictEqual(
@@ -677,6 +764,7 @@ describe('AvailabilitySync', () => {
         where: { tmdbId: 1411 },
         relations: { seasons: true },
       });
+      assert.deepEqual(scanIds, [1411]);
 
       assert.strictEqual(
         updated.seasons[0].status,
@@ -745,6 +833,7 @@ describe('AvailabilitySync', () => {
 
       assert.strictEqual(updated.status, MediaStatus.AVAILABLE);
       assert.strictEqual(updated.seasons[0].status, MediaStatus.AVAILABLE);
+      assert.deepEqual(scanIds, [2003]);
     });
 
     it('preserves season status when Plex returns empty season metadata entries', async () => {
@@ -823,6 +912,7 @@ describe('AvailabilitySync', () => {
         where: { tmdbId: 2000 },
         relations: { seasons: true },
       });
+      assert.deepEqual(scanIds, [2000]);
 
       const s6 = updated.seasons.find((s) => s.seasonNumber === 6);
       assert.strictEqual(
@@ -904,6 +994,7 @@ describe('AvailabilitySync', () => {
         where: { tmdbId: 2001 },
         relations: { seasons: true },
       });
+      assert.deepEqual(scanIds, [2001]);
 
       assert.strictEqual(
         updated.seasons[0].status,
@@ -973,6 +1064,7 @@ describe('AvailabilitySync', () => {
         where: { tmdbId: 2002 },
         relations: { seasons: true },
       });
+      assert.deepEqual(scanIds, [2002]);
 
       const s2 = updated.seasons.find((s) => s.seasonNumber === 2);
       const s4 = updated.seasons.find((s) => s.seasonNumber === 4);
@@ -996,6 +1088,50 @@ describe('AvailabilitySync', () => {
   });
 
   describe('scan lifecycle and pagination', () => {
+    it('preserves available seasons when TMDB enrichment is unavailable', async () => {
+      configurePlex();
+      configureSonarr([]);
+      const mediaRepository = getRepository(Media);
+      const media = await mediaRepository.save(
+        new Media({
+          tmdbId: 2003,
+          mediaType: MediaType.TV,
+          status: MediaStatus.AVAILABLE,
+          ratingKey: 'metadata-unavailable-show',
+          seasons: [
+            new Season({
+              seasonNumber: 1,
+              status: MediaStatus.AVAILABLE,
+              status4k: MediaStatus.UNKNOWN,
+            }),
+          ],
+        })
+      );
+      getMetadataImpl = async () => fakePlexShow('metadata-unavailable-show');
+      getChildrenMetadataImpl = async (key) =>
+        key === 'metadata-unavailable-show'
+          ? [fakePlexSeason(1, 'metadata-unavailable-season')]
+          : fakePlexEpisodes(22);
+      const lookup = mock.method(
+        availabilitySync.tmdb,
+        'getTvShowForScan',
+        async () => {
+          throw new Error('TMDB fixture unavailable');
+        }
+      );
+
+      await availabilitySync.run();
+
+      assert.equal(lookup.mock.callCount(), 1);
+      assert.deepEqual(lookup.mock.calls[0].arguments, [{ tvId: 2003 }]);
+      const updated = await mediaRepository.findOneOrFail({
+        where: { id: media.id },
+        relations: { seasons: true },
+      });
+      assert.equal(updated.status, MediaStatus.AVAILABLE);
+      assert.equal(updated.seasons[0].status, MediaStatus.AVAILABLE);
+    });
+
     it('cleans up a movie after both Arr and the media server confirm deletion', async () => {
       configureJellyfin();
       configureSonarr([]);

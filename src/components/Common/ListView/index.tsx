@@ -6,6 +6,8 @@ import TitleCard from '@app/components/TitleCard';
 import LibraryTitleCard from '@app/components/TitleCard/LibraryTitleCard';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import useCardTextVisibility from '@app/hooks/useCardTextVisibility';
+import useSettings from '@app/hooks/useSettings';
+import { Permission, useUser } from '@app/hooks/useUser';
 import useVerticalScroll from '@app/hooks/useVerticalScroll';
 import useWarmImageCache, {
   MAIN_MEDIA_POSTER_CACHE_WARM_LIMIT,
@@ -58,6 +60,9 @@ type ListViewProps = {
   mutateParent?: () => void;
   preferredBookFormat?: 'ebook' | 'audiobook';
   showAllBookFormats?: boolean;
+  posterTitleWeight?: 'regular';
+  watchlistPreview?: boolean;
+  watchlistPreviewDisabled?: boolean;
   emptyMessage?: React.ReactNode;
   emptyClassName?: string;
 };
@@ -76,16 +81,23 @@ const ListView = ({
   mutateParent,
   preferredBookFormat,
   showAllBookFormats = false,
+  posterTitleWeight,
+  watchlistPreview = false,
+  watchlistPreviewDisabled = false,
   emptyMessage,
   emptyClassName,
 }: ListViewProps) => {
   const intl = useIntl();
   const { visibility } = useCardTextVisibility();
+  const { hasPermission } = useUser();
+  const { currentSettings } = useSettings();
+  const canManageBlocklist = hasPermission(Permission.MANAGE_BLOCKLIST);
 
   const visibleItems = useMemo(
     () =>
       items?.filter(
         (title) =>
+          (canManageBlocklist && !currentSettings.hideBlocklisted) ||
           (
             title as
               | TvResult
@@ -97,7 +109,7 @@ const ListView = ({
               | MangaResult
           ).mediaInfo?.status !== MediaStatus.BLOCKLISTED
       ),
-    [items]
+    [items, canManageBlocklist, currentSettings.hideBlocklisted]
   );
 
   useWarmImageCache(visibleItems ?? [], {
@@ -163,6 +175,7 @@ const ListView = ({
           case 'movie':
             titleCard = (
               <TitleCard
+                titleWeight={posterTitleWeight}
                 key={title.id}
                 id={title.id}
                 isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
@@ -187,6 +200,9 @@ const ListView = ({
           case 'tv':
             titleCard = (
               <TitleCard
+                titleWeight={posterTitleWeight}
+                watchlistPreview={watchlistPreview}
+                watchlistPreviewDisabled={watchlistPreviewDisabled}
                 key={title.id}
                 id={title.id}
                 isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
@@ -211,6 +227,7 @@ const ListView = ({
           case 'collection':
             titleCard = (
               <TitleCard
+                titleWeight={posterTitleWeight}
                 id={title.id}
                 image={title.posterPath}
                 summary={title.overview}
@@ -233,6 +250,7 @@ const ListView = ({
           case 'album':
             titleCard = (
               <TitleCard
+                titleWeight={posterTitleWeight}
                 key={title.id}
                 id={title.id}
                 isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
@@ -279,6 +297,7 @@ const ListView = ({
           case 'book':
             titleCard = (
               <TitleCard
+                titleWeight={posterTitleWeight}
                 key={title.id}
                 id={title.id}
                 image={title.posterPath}
@@ -302,6 +321,7 @@ const ListView = ({
           case 'comic':
             titleCard = (
               <TitleCard
+                titleWeight={posterTitleWeight}
                 key={title.id}
                 id={title.id}
                 isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
@@ -318,6 +338,7 @@ const ListView = ({
           case 'magazine':
             titleCard = (
               <TitleCard
+                titleWeight={posterTitleWeight}
                 key={title.id}
                 id={title.id}
                 isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
@@ -341,6 +362,7 @@ const ListView = ({
           case 'manga':
             titleCard = (
               <TitleCard
+                titleWeight={posterTitleWeight}
                 key={title.id}
                 id={title.id}
                 image={getMangaImageUrl(title.posterPath)}
@@ -369,6 +391,9 @@ const ListView = ({
       visibility.tv,
       preferredBookFormat,
       showAllBookFormats,
+      posterTitleWeight,
+      watchlistPreview,
+      watchlistPreviewDisabled,
     ]
   );
   const hasRenderableItems =
@@ -398,10 +423,9 @@ const ListView = ({
       )}
       {effectiveIsEmpty && (
         <div
-          className={twMerge(
-            'mt-64 w-full text-center text-2xl text-gray-400',
-            emptyClassName
-          )}
+          className={twMerge('page-error-message', emptyClassName)}
+          data-severity="empty"
+          role="status"
         >
           {emptyMessage ?? intl.formatMessage(globalMessages.noresults)}
         </div>

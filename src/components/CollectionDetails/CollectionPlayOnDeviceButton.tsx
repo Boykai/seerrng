@@ -99,7 +99,7 @@ const CollectionPlayOnDeviceButton = ({
                 void startPlayback(device);
               }}
             >
-              <ComputerDesktopIcon className="mr-2 h-4 w-4 flex-none" />
+              <ComputerDesktopIcon />
               <span className="min-w-0">
                 <span className="block truncate">{device.name}</span>
                 <span className="block truncate text-xs text-gray-500">

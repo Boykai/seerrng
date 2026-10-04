@@ -3,6 +3,7 @@ import Button from '@app/components/Common/Button';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import PageTitle from '@app/components/Common/PageTitle';
+import { getFilterToggleButtonClass } from '@app/components/Discover/FilterPanel/CompactFilterSelect';
 import RequestModal from '@app/components/RequestModal';
 import useDebouncedState from '@app/hooks/useDebouncedState';
 import useDiscover from '@app/hooks/useDiscover';
@@ -113,16 +114,16 @@ const DiscoverMagazines = () => {
   return (
     <>
       <PageTitle title={title} />
-      <div className="mb-4">
+      <div className="app-filter-section-gap">
         <Header>{title}</Header>
         <p className="description mt-2">
           {intl.formatMessage(
             isPublicCatalog ? messages.publicCatalogHint : messages.catalogHint
           )}
         </p>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="app-filter-row">
           <div
-            className="flex items-center gap-1 rounded-lg border border-gray-700 bg-gray-900/70 p-1"
+            className="app-filter-row"
             role="group"
             aria-label="Magazine catalog source"
           >
@@ -135,11 +136,7 @@ const DiscoverMagazines = () => {
               <button
                 key={source}
                 type="button"
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  catalog === source
-                    ? 'bg-indigo-500 text-white'
-                    : 'text-gray-300 hover:bg-gray-800'
-                }`}
+                className={getFilterToggleButtonClass(catalog === source)}
                 aria-pressed={catalog === source}
                 onClick={() => {
                   void router.replace(
@@ -162,7 +159,7 @@ const DiscoverMagazines = () => {
             ))}
           </div>
           <form
-            className="discover-filter-control w-72 max-w-full flex-none"
+            className="discover-filter-control app-filter-search-control"
             onSubmit={(event) => {
               event.preventDefault();
               const nextSearch = search.trim();
@@ -171,11 +168,11 @@ const DiscoverMagazines = () => {
             }}
           >
             <span
-              className={`discover-filter-control-label gap-1.5 ${
+              className={`discover-filter-control-label ${
                 search.trim() ? 'discover-filter-control-label-active' : ''
               }`}
             >
-              <MagnifyingGlassIcon className="h-4 w-4" aria-hidden="true" />
+              <MagnifyingGlassIcon aria-hidden="true" />
               {intl.formatMessage(
                 isPublicCatalog ? messages.searchPublic : messages.search
               )}
@@ -188,7 +185,7 @@ const DiscoverMagazines = () => {
               aria-label={intl.formatMessage(
                 isPublicCatalog ? messages.searchPublic : messages.search
               )}
-              className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0 text-xs font-medium text-gray-200 placeholder:text-gray-500 focus:ring-0"
+              className="app-filter-search-input"
             />
           </form>
           {canRequest && search.trim() && (
@@ -211,12 +208,12 @@ const DiscoverMagazines = () => {
             <p className="mb-2 text-xs font-semibold text-gray-400">
               {intl.formatMessage(messages.suggestedSearches)}
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="app-filter-row">
               {suggestedMagazineSearches.map((suggestion) => (
                 <button
                   key={suggestion}
                   type="button"
-                  className="min-h-12 rounded-full border border-gray-700 bg-gray-900/70 px-3 text-xs font-medium text-gray-200 transition-colors hover:border-indigo-400 hover:bg-gray-800"
+                  className={getFilterToggleButtonClass(false)}
                   onClick={() => setSearch(suggestion)}
                 >
                   {suggestion}

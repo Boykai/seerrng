@@ -147,7 +147,9 @@ it('keeps ROM acquisition working through the legacy integration prefix', async 
       const payload =
         url.pathname === '/romarr/api/v1/integration/ping'
           ? { service: 'ROMarrNG', apiVersion: 1 }
-          : { externalRequestId: 'request-legacy', status: 'accepted' };
+          : url.pathname.endsWith('/search-page')
+            ? { results: [], nextCursor: null }
+            : { externalRequestId: 'request-legacy', status: 'accepted' };
       response.writeHead(200, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify(payload));
     });
@@ -163,6 +165,7 @@ it('keeps ROM acquisition working through the legacy integration prefix', async 
       apiKey: 'romarr-legacy-test',
     });
     const handshake = await api.getHandshake();
+    const catalog = await api.searchCatalogPage('Legacy catalog');
     const request = await api.createRequest(
       'request-legacy',
       'Example game',
@@ -173,20 +176,53 @@ it('keeps ROM acquisition working through the legacy integration prefix', async 
 
     assert.equal(handshake.service, 'ROMarrNG');
     assert.equal(handshake.requestContractVersion, undefined);
+    assert.deepEqual(catalog.results, []);
     assert.equal(request.externalRequestId, 'request-legacy');
     assert.deepEqual(
       requests.map(({ method, path }) => `${method} ${path}`),
       [
         'GET /romarr/api/integration/seerrng/v1/ping',
         'GET /romarr/api/v1/integration/ping',
+        'GET /romarr/api/v1/integration/catalog/search-page',
         'POST /romarr/api/v1/integration/requests',
       ]
     );
-    assert.deepEqual(requests[2].body, {
+    assert.deepEqual(requests[3].body, {
       externalRequestId: 'request-legacy',
       game: 'Example game',
       platform: 'nes',
     });
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+it('rejects a request contract version it does not understand', async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(
+      JSON.stringify({
+        service: 'ROMarrNG',
+        apiVersion: 1,
+        requestContractVersion: 2,
+      })
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+  try {
+    const api = new ROMarrNGAPI({
+      hostname: '127.0.0.1',
+      port: (server.address() as AddressInfo).port,
+      baseUrl: '',
+      useSsl: false,
+      apiKey: 'romarr-contract-test',
+    });
+    await assert.rejects(
+      api.lookupLibrary([{ title: 'Example', platform: 'nes' }]),
+      /request contract v2 is not supported/
+    );
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

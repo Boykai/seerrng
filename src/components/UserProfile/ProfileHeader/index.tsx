@@ -147,15 +147,15 @@ const ProfileHeader = ({ user, isSettingsPage }: ProfileHeaderProps) => {
                 />
                 <button
                   type="button"
-                  className="app-button app-button-default absolute -bottom-2 left-1/2 -translate-x-1/2 gap-1 rounded-full px-2 py-0.5 text-xs shadow disabled:cursor-wait disabled:opacity-70"
+                  className="app-button app-button-default button-standard absolute -bottom-2 left-1/2 -translate-x-1/2 gap-1 rounded-full px-2 py-0.5 text-xs shadow disabled:cursor-wait disabled:opacity-70"
                   aria-label={intl.formatMessage(messages.editAvatarLabel)}
                   disabled={isUploadingAvatar}
                   onClick={() => avatarInputRef.current?.click()}
                 >
                   {isUploadingAvatar ? (
-                    <ArrowPathIcon className="h-3 w-3 animate-spin" />
+                    <ArrowPathIcon className="animate-spin" />
                   ) : (
-                    <PencilSquareIcon className="h-3 w-3" />
+                    <PencilSquareIcon />
                   )}
                   <span>
                     {intl.formatMessage(
@@ -175,7 +175,7 @@ const ProfileHeader = ({ user, isSettingsPage }: ProfileHeaderProps) => {
               href={
                 user.id === loggedInUser?.id ? '/profile' : `/users/${user.id}`
               }
-              className="text-overseerr text-lg font-bold hover:to-purple-200 sm:text-2xl"
+              className="page-title"
             >
               {user.displayName}
             </Link>

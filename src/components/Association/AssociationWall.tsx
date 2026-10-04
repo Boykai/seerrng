@@ -103,7 +103,7 @@ const AssociationWall = ({
         <div key={section.key}>
           {section.key !== 'similar' && (
             <div className="slider-header">
-              <div className="slider-title">
+              <div className="page-heading">
                 <span>{section.title}</span>
               </div>
             </div>

@@ -3,7 +3,9 @@ import BlocklistedTagsBadge, {
 } from '@app/components/BlocklistedTagsBadge';
 import Badge from '@app/components/Common/Badge';
 import CachedImage from '@app/components/Common/CachedImage';
-import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import LoadingSpinner, {
+  PageStatus,
+} from '@app/components/Common/LoadingSpinner';
 import MediaTypeBadge, {
   getMediaTypeBadgeType,
 } from '@app/components/Common/MediaTypeBadge';
@@ -17,7 +19,7 @@ import {
   type CompactSelectOption,
 } from '@app/components/Discover/FilterPanel/CompactFilterSelect';
 import MediaFilterOption from '@app/components/Discover/MediaFilterOption';
-import PinnedFilterSection from '@app/components/Discover/PinnedFilterSection';
+import { PinnedFilterSectionGroup } from '@app/components/Discover/PinnedFilterSection';
 import useDebouncedState from '@app/hooks/useDebouncedState';
 import useMediaFilterPin from '@app/hooks/useMediaFilterPin';
 import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
@@ -447,7 +449,17 @@ const Blocklist = () => {
   );
 
   if (!data && error) {
-    return <ErrorPage statusCode={500} />;
+    return (
+      <>
+        <PageTitle title={intl.formatMessage(globalMessages.blocklist)} />
+        <div className="page-title-row">
+          <h2 className="page-title">
+            {intl.formatMessage(globalMessages.blocklist)}
+          </h2>
+        </div>
+        <ErrorPage statusCode={500} />
+      </>
+    );
   }
 
   const resetPage = () => {
@@ -502,183 +514,181 @@ const Blocklist = () => {
     resetPage();
   };
 
+  const pinMediaType =
+    mediaFilter === 'tv'
+      ? 'tv'
+      : mediaFilter === 'music'
+        ? 'music'
+        : mediaFilter === 'book'
+          ? 'book'
+          : 'movie';
   return (
     <>
       <PageTitle title={intl.formatMessage(globalMessages.blocklist)} />
-      <h2 className="mt-8 text-2xl leading-7 font-bold text-gray-100 sm:text-4xl sm:leading-9">
-        <span className="text-overseerr">
+      <div className="page-title-row">
+        <h2 className="page-title">
           {intl.formatMessage(globalMessages.blocklist)}
-        </span>
-      </h2>
+        </h2>
+        <PageStatus />
+      </div>
 
-      <section
-        className="app-filter-section-gap mt-4"
-        aria-label={intl.formatMessage(messages.taskFilters)}
-      >
-        <div className="mb-2 text-sm text-gray-300">
-          {intl.formatMessage(messages.taskFilters)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterResetButton
-            label={intl.formatMessage(messages.clearFilters)}
-            selected={
-              currentFilter === Filter.ALL &&
-              timeFrame === 'all' &&
-              mediaFilter === 'all' &&
-              !searchFilter &&
-              sort === 'date' &&
-              sortDirection === 'desc'
-            }
-            onClick={clearFilters}
-          />
-          {filterOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={currentFilter === option.value}
-              onClick={() => {
-                setCurrentFilter(option.value);
-                resetPage();
-              }}
-              className={getFilterToggleButtonClass(
-                currentFilter === option.value
-              )}
-            >
-              {intl.formatMessage(option.label)}
-              <span className="ml-2 rounded-full bg-gray-950/40 px-1.5 py-0.5 text-[10px] leading-none font-semibold text-gray-100">
-                {option.count}
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <PinnedFilterSection
-        mediaType={
-          mediaFilter === 'tv'
-            ? 'tv'
-            : mediaFilter === 'music'
-              ? 'music'
-              : mediaFilter === 'book'
-                ? 'book'
-                : 'movie'
-        }
-        section="mediaFilters"
-        label={intl.formatMessage(messages.mediaFilters)}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          {(
-            [
-              ['all', messages.allMedia],
-              ['movie', messages.movies],
-              ['tv', messages.series],
-              ['music', messages.music],
-              ['book', messages.books],
-              ['comic', messages.comics],
-              ['magazine', messages.magazines],
-              ...(mangaEnabled
-                ? ([['manga', globalMessages.manga]] as const)
-                : []),
-            ] as const
-          ).map(([value, label]) => (
-            <MediaFilterOption
-              key={value}
-              pin={mediaPin}
-              value={value}
-              label={intl.formatMessage(label)}
-              selected={mediaFilter === value}
-            >
-              <button
-                type="button"
-                aria-pressed={mediaFilter === value}
-                onClick={() => {
-                  setMediaFilter(value);
-                  resetPage();
-                }}
-                className="app-control-shadow-exempt app-filter-segment-focus flex h-full items-center px-2"
-              >
-                {intl.formatMessage(label)}
-              </button>
-            </MediaFilterOption>
-          ))}
-        </div>
-      </PinnedFilterSection>
-
-      <section
-        className="app-filter-section-gap"
-        aria-label={intl.formatMessage(messages.filters)}
-      >
-        <div className="mb-2 text-sm text-gray-300">
-          {intl.formatMessage(messages.filters)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <CompactSelect
-            label={intl.formatMessage(messages.timePeriod)}
-            value={timeFrame}
-            options={timeFrameOptions}
-            onChange={(value) => {
-              setTimeFrame(value as TimeFrame);
-              resetPage();
-            }}
-          />
-          <label className="discover-filter-control w-72 flex-none self-center">
-            <span
-              className={`discover-filter-control-label ${
-                searchFilter.trim()
-                  ? 'discover-filter-control-label-active'
-                  : ''
-              }`}
-            >
-              <MagnifyingGlassIcon className="h-3.5 w-3.5" aria-hidden="true" />
-              {intl.formatMessage(messages.search)}
-            </span>
-            <input
-              type="search"
-              value={searchFilter}
-              onChange={(event) => {
-                setSearchFilter(event.target.value);
-                resetPage();
-              }}
-              placeholder={intl.formatMessage(messages.searchPlaceholder)}
-              aria-label={intl.formatMessage(messages.searchPlaceholder)}
-              className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0 text-xs font-medium text-gray-200 placeholder:text-gray-500 focus:ring-0"
-            />
-          </label>
-        </div>
-      </section>
-
-      <section className="app-filter-section-gap">
-        <div className="mb-2 text-sm text-gray-300">
-          {intl.formatMessage(messages.sortBy)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {(
-            [
-              ['date', messages.sortDate],
-              ['title', messages.sortTitle],
-              ['mediaType', messages.sortMediaType],
-            ] as const
-          ).map(([value, label]) => {
-            const active = sort === value;
-            const DirectionIcon =
-              active && sortDirection === 'asc'
-                ? BarsArrowUpIcon
-                : BarsArrowDownIcon;
-            return (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={active}
-                onClick={() => updateSort(value)}
-                className={getFilterToggleButtonClass(active)}
-              >
-                {intl.formatMessage(label)}
-                <DirectionIcon className="h-4 w-4" />
-              </button>
-            );
-          })}
-        </div>
-      </section>
+      <PinnedFilterSectionGroup
+        mediaType={pinMediaType}
+        sections={[
+          {
+            section: 'taskFilters',
+            label: intl.formatMessage(messages.taskFilters),
+            children: (
+              <div className="app-filter-row">
+                <FilterResetButton
+                  label={intl.formatMessage(messages.clearFilters)}
+                  selected={
+                    currentFilter === Filter.ALL &&
+                    timeFrame === 'all' &&
+                    mediaFilter === 'all' &&
+                    !searchFilter &&
+                    sort === 'date' &&
+                    sortDirection === 'desc'
+                  }
+                  onClick={clearFilters}
+                />
+                {filterOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={currentFilter === option.value}
+                    onClick={() => {
+                      setCurrentFilter(option.value);
+                      resetPage();
+                    }}
+                    className={getFilterToggleButtonClass(
+                      currentFilter === option.value
+                    )}
+                  >
+                    {intl.formatMessage(option.label)}
+                    <span className="app-filter-count">{option.count}</span>
+                  </button>
+                ))}
+              </div>
+            ),
+          },
+          {
+            section: 'mediaFilters',
+            label: intl.formatMessage(messages.mediaFilters),
+            children: (
+              <div className="app-filter-row">
+                {(
+                  [
+                    ['all', messages.allMedia],
+                    ['movie', messages.movies],
+                    ['tv', messages.series],
+                    ['music', messages.music],
+                    ['book', messages.books],
+                    ['comic', messages.comics],
+                    ['magazine', messages.magazines],
+                    ...(mangaEnabled
+                      ? ([['manga', globalMessages.manga]] as const)
+                      : []),
+                  ] as const
+                ).map(([value, label]) => (
+                  <MediaFilterOption
+                    key={value}
+                    pin={mediaPin}
+                    value={value}
+                    label={intl.formatMessage(label)}
+                    selected={mediaFilter === value}
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={mediaFilter === value}
+                      onClick={() => {
+                        setMediaFilter(value);
+                        resetPage();
+                      }}
+                      className="app-control-shadow-exempt app-filter-segment-focus"
+                    >
+                      {intl.formatMessage(label)}
+                    </button>
+                  </MediaFilterOption>
+                ))}
+              </div>
+            ),
+          },
+          {
+            section: 'filters',
+            label: intl.formatMessage(messages.filters),
+            children: (
+              <div className="app-filter-row">
+                <CompactSelect
+                  label={intl.formatMessage(messages.timePeriod)}
+                  value={timeFrame}
+                  options={timeFrameOptions}
+                  onChange={(value) => {
+                    setTimeFrame(value as TimeFrame);
+                    resetPage();
+                  }}
+                />
+                <label className="discover-filter-control app-filter-search-control">
+                  <span
+                    className={`discover-filter-control-label ${
+                      searchFilter.trim()
+                        ? 'discover-filter-control-label-active'
+                        : ''
+                    }`}
+                  >
+                    <MagnifyingGlassIcon aria-hidden="true" />
+                    {intl.formatMessage(messages.search)}
+                  </span>
+                  <input
+                    type="search"
+                    value={searchFilter}
+                    onChange={(event) => {
+                      setSearchFilter(event.target.value);
+                      resetPage();
+                    }}
+                    placeholder={intl.formatMessage(messages.searchPlaceholder)}
+                    aria-label={intl.formatMessage(messages.searchPlaceholder)}
+                    className="app-filter-search-input"
+                  />
+                </label>
+              </div>
+            ),
+          },
+          {
+            section: 'sortBy',
+            label: intl.formatMessage(messages.sortBy),
+            children: (
+              <div className="app-filter-row">
+                {(
+                  [
+                    ['date', messages.sortDate],
+                    ['title', messages.sortTitle],
+                    ['mediaType', messages.sortMediaType],
+                  ] as const
+                ).map(([value, label]) => {
+                  const active = sort === value;
+                  const DirectionIcon =
+                    active && sortDirection === 'asc'
+                      ? BarsArrowUpIcon
+                      : BarsArrowDownIcon;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => updateSort(value)}
+                      className={getFilterToggleButtonClass(active)}
+                    >
+                      {intl.formatMessage(label)}
+                      <DirectionIcon />
+                    </button>
+                  );
+                })}
+              </div>
+            ),
+          },
+        ]}
+      />
 
       {!data ? (
         <LoadingSpinner />

@@ -250,21 +250,22 @@ it('names a manga request without an AniList ID neutrally', async () => {
   expect(
     state.keys.some((key) => String(key).startsWith('/api/v1/manga'))
   ).toBe(false);
-  expect(host.textContent).toContain('Unknown title');
+  expect(host.textContent).toContain('Unknown Title');
   expect(host.textContent).not.toContain('MANGA #');
 });
 
-it('shows the waiting status in place of Approved while a source is missing', async () => {
+it('shows the waiting status in place of the approved status while a source is missing', async () => {
   await render(mangaItem({ mangaScope: scope({ awaitingBinding: true }) }));
 
   expect(chip()?.textContent).toBe('Waiting for a source');
-  expect(chip()?.className).toContain('app-button-default');
+  expect(chip()?.className).toContain('request-status-control-pending');
   expect(chip()?.getAttribute('aria-label')).toBe(
     'Waiting for a source: Approved for processing.'
   );
 
   await render(mangaItem());
-  expect(chip()?.textContent).toBe('Approved');
+  expect(chip()?.textContent).toBe('Processing');
+  expect(chip()?.getAttribute('aria-label')).toMatch(/^Approved: /);
 
   await render(
     mangaItem(
@@ -275,7 +276,7 @@ it('shows the waiting status in place of Approved while a source is missing', as
       'requested'
     )
   );
-  expect(chip()?.textContent).toBe('Requested');
+  expect(chip()?.textContent).toBe('Pending');
 });
 
 it('shows request managers the waiting-for-a-source hint', async () => {

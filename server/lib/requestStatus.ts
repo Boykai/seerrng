@@ -1486,6 +1486,8 @@ const isLatestObservation = (
   );
 };
 
+const RETRY_FINGERPRINT = /^retry:\d+:\d+$/;
+
 // Skips only a row whose fingerprint the request already has. Any other
 // conflict, such as on the primary key, still fails the insert.
 export const withStatusEventConflictTarget = <Entity extends ObjectLiteral>(
@@ -1540,6 +1542,16 @@ export const insertRequestStatusEvent = async (
         select: { id: true },
         where: { requestId: event.requestId, fingerprint },
       });
+      // A retry entry stays the latest event while the request waits: an
+      // observation already recorded at its stage and attempt adds nothing.
+      if (
+        earlier &&
+        RETRY_FINGERPRINT.test(latestEvent.fingerprint) &&
+        latestEvent.stage === event.stage &&
+        latestEvent.attempt === event.attempt
+      ) {
+        return;
+      }
       if (earlier && earlier.id < latestEvent.id) {
         fingerprint = makeReentryFingerprint(fingerprint, latestEvent.id);
       }
@@ -1680,6 +1692,50 @@ export const recordRequestStatusOverride = async (
   status.needsAttention = stage !== RequestStatusStage.AVAILABLE;
   status.observedAt = new Date();
   await persistStatusEvent(request, status, latestEvent ?? undefined);
+};
+
+export const recordRequestRetry = async (requestId: number): Promise<void> => {
+  const request = await loadRequest(requestId);
+  if (!request) {
+    return;
+  }
+
+  const repository = getStatusEventRepository();
+  const latestEvent = await getLatestStatusEvent(requestId);
+  const attempt = latestEvent?.attempt ?? 0;
+  const fingerprint = `retry:${latestEvent?.id ?? 0}:${attempt}`.slice(0, 255);
+
+  try {
+    await repository.insert(
+      new MediaRequestStatusEvent({
+        requestId: request.id,
+        requestedById: request.requestedBy.id,
+        mediaId: request.media.id,
+        mediaType: request.type,
+        stage: RequestStatusStage.APPROVED,
+        attempt,
+        format: request.bookFormat ?? null,
+        service: getServiceName(request) ?? latestEvent?.service ?? null,
+        message: 'The request was retried and is waiting to be dispatched.',
+        percent: null,
+        size: null,
+        sizeLeft: null,
+        estimatedCompletionTime: null,
+        downloadCount: 0,
+        downloadId: null,
+        fingerprint,
+      })
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.toLocaleLowerCase().includes('unique')) {
+      logger.warn('Unable to persist request retry event', {
+        label: 'Request Status',
+        requestId,
+        errorMessage: message,
+      });
+    }
+  }
 };
 
 export const recordRequestCancellation = async (

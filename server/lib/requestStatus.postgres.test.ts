@@ -152,6 +152,24 @@ const eventsOf = (requestId: number) =>
     order: { id: 'ASC' },
   });
 
+type StatusEventRow = Awaited<ReturnType<typeof eventsOf>>[number];
+
+// A retry records an approved entry named after the latest event before it.
+const assertRetryEntry = (entry: StatusEventRow, previous: StatusEventRow) => {
+  assert.strictEqual(
+    entry.fingerprint,
+    `retry:${previous.id}:${previous.attempt}`
+  );
+  assert.strictEqual(
+    entry.stage,
+    modules.requestStatus.RequestStatusStage.APPROVED
+  );
+  assert.strictEqual(
+    entry.message,
+    'The request was retried and is waiting to be dispatched.'
+  );
+};
+
 const outboxOf = (requestId: number): Promise<RequestDispatchOutboxEntity[]> =>
   modules
     .getRepository(modules.RequestDispatchOutbox)
@@ -523,6 +541,7 @@ describe('request retries on PostgreSQL', () => {
 
       const retried = await admin.post(`/request/${created.id}/retry`);
       await modules.waitForBackgroundTasks();
+      const latestAfterDispatch = (await eventsOf(created.id)).at(-1);
       const statusPage = await admin.get('/request/status');
 
       assert.strictEqual(retried.status, 200);
@@ -543,12 +562,18 @@ describe('request retries on PostgreSQL', () => {
           RequestStatusStage.APPROVED,
           RequestStatusStage.FAILED,
           RequestStatusStage.APPROVED,
+          RequestStatusStage.APPROVED,
         ]
       );
       assert.strictEqual(
         events[3].fingerprint,
         `${events[1].fingerprint}:after:${events[2].id}`
       );
+      assertRetryEntry(events[4], events[3]);
+      // The queued dispatch and the status page's refresh add nothing, so the
+      // retry entry is still the latest event.
+      assert.strictEqual(latestAfterDispatch?.id, events[4].id);
+      assert.strictEqual(events.at(-1)?.id, events[4].id);
       assert.strictEqual(statusPage.status, 200);
       assert.deepStrictEqual(
         statusPage.body.results.map(
@@ -655,12 +680,14 @@ describe('request retries on PostgreSQL', () => {
           RequestStatusStage.APPROVED,
           RequestStatusStage.FAILED,
           RequestStatusStage.APPROVED,
+          RequestStatusStage.APPROVED,
         ]
       );
       assert.strictEqual(
         events[3].fingerprint,
         `${events[1].fingerprint}:after:${events[2].id}`
       );
+      assertRetryEntry(events[4], events[3]);
     }
   );
 });

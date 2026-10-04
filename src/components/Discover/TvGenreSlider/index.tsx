@@ -29,12 +29,14 @@ const TvGenreSlider = () => {
 
   return (
     <div ref={ref}>
-      <div className="slider-header">
-        <Link href="/discover/tv/genres" className="slider-title">
-          <span>{intl.formatMessage(messages.tvgenres)}</span>
-        </Link>
-      </div>
       <Slider
+        heading={
+          <>
+            <Link href="/discover/tv/genres" className="page-heading">
+              <span>{intl.formatMessage(messages.tvgenres)}</span>
+            </Link>
+          </>
+        }
         compact
         sliderKey="tv-genres"
         isLoading={isLoading && !error}

@@ -46,6 +46,7 @@ vi.mock('@app/hooks/useDiscover', () => ({
 }));
 vi.mock('@app/hooks/useMediaFilterPin', () => ({ default: () => ({}) }));
 vi.mock('@app/hooks/useSearchActivity', () => ({
+  default: () => false,
   setSearchActivity: vi.fn(),
 }));
 vi.mock('@app/components/Common/ListView', () => ({

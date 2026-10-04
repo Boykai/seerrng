@@ -145,6 +145,33 @@ function mockBookDetailsWithoutCover() {
   }));
 }
 
+function mockLinkedBookshelfMetadata() {
+  const book = {
+    id: 44,
+    foreignBookId: 'fixture-book-44',
+    title: 'The Test Book',
+    authorTitle: 'Test Author',
+  };
+  const getBook = mock.method(
+    ReadarrAPI.prototype,
+    'getBook',
+    async () => book
+  );
+  const lookup = mock.method(ReadarrAPI.prototype, 'lookupBook', async () => [
+    book,
+  ]);
+  return () => {
+    assert.deepStrictEqual(
+      getBook.mock.calls.map((call) => call.arguments),
+      [[44, 300]]
+    );
+    assert.deepStrictEqual(
+      lookup.mock.calls.map((call) => call.arguments),
+      [['isbn:9780000000002']]
+    );
+  };
+}
+
 describe('GET /book/:id', () => {
   it('resolves a Bookshelf series member using its title hint and exact provider ID', async () => {
     const settings = getSettings();
@@ -486,6 +513,7 @@ describe('GET /book/:id', () => {
 
   it('does not substitute a linked Bookshelf cover when Open Library has no cover', async () => {
     mockBookDetailsWithoutCover();
+    const verifyLibrary = mockLinkedBookshelfMetadata();
 
     const settings = getSettings();
     const priorReadarr = settings.readarr;
@@ -537,6 +565,7 @@ describe('GET /book/:id', () => {
 
       assert.strictEqual(res.status, 200);
       assert.strictEqual(res.body.posterPath, undefined);
+      verifyLibrary();
     } finally {
       settings.readarr = priorReadarr;
     }
@@ -544,6 +573,7 @@ describe('GET /book/:id', () => {
 
   it('retains the Open Library cover for an available linked book', async () => {
     mockBookDetails();
+    const verifyLibrary = mockLinkedBookshelfMetadata();
 
     const settings = getSettings();
     const priorReadarr = settings.readarr;
@@ -598,6 +628,7 @@ describe('GET /book/:id', () => {
         res.body.posterPath,
         'https://covers.openlibrary.org/b/id/123-L.jpg'
       );
+      verifyLibrary();
     } finally {
       settings.readarr = priorReadarr;
     }

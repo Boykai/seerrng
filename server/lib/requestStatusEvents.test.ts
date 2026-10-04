@@ -21,6 +21,8 @@ import {
   getRequestStatusPage,
   insertRequestStatusEvent,
   recordRequestCancellation,
+  recordRequestRetry,
+  recordRequestStatus,
   withStatusEventConflictTarget,
 } from './requestStatus';
 
@@ -37,6 +39,8 @@ const fingerprintOf = (stage: RequestStatusStage) =>
   `${stage}:0:unknown:unknown:unknown:0:unknown`;
 const APPROVED = fingerprintOf(RequestStatusStage.APPROVED);
 const FAILED = fingerprintOf(RequestStatusStage.FAILED);
+const RETRY_MESSAGE =
+  'The request was retried and is waiting to be dispatched.';
 
 const statusEvent = (
   stage: RequestStatusStage,
@@ -74,6 +78,21 @@ const observe = async (
     latestEvent: await latestOf(),
     manager,
   });
+
+// Approved, failed and approved again, then a retry entry in the form a retry
+// records it: approved and named after the latest event.
+const retryAfterFailure = async () => {
+  await observe(RequestStatusStage.APPROVED);
+  await observe(RequestStatusStage.FAILED);
+  await observe(RequestStatusStage.APPROVED);
+  const latest = await latestOf();
+  await getRepository(MediaRequestStatusEvent).insert(
+    statusEvent(RequestStatusStage.APPROVED, `retry:${latest?.id}:0`, {
+      message: RETRY_MESSAGE,
+    })
+  );
+  return latestOf();
+};
 
 const createMovieRequest = async (tmdbId: number): Promise<MediaRequest> => {
   const requestedBy = await getRepository(User).findOneByOrFail({ id: 2 });
@@ -206,6 +225,40 @@ describe('request status event inserts', () => {
     assert.strictEqual(reentry.length, 255);
     assert.ok(reentry.endsWith(`:after:${failed?.id}`));
     assert.ok(long.startsWith(reentry.slice(0, reentry.indexOf(':after:'))));
+  });
+
+  it('adds nothing after a retry entry for an observation already recorded', async () => {
+    const retry = await retryAfterFailure();
+
+    await observe(RequestStatusStage.APPROVED);
+    await observe(RequestStatusStage.APPROVED);
+
+    const events = await eventsOf();
+    assert.strictEqual(events.length, 4);
+    assert.strictEqual(events.at(-1)?.id, retry?.id);
+  });
+
+  it('records a new observation after a retry entry', async () => {
+    const retry = await retryAfterFailure();
+    const elsewhere = `${RequestStatusStage.APPROVED}:0:unknown:unknown:another-service:0:unknown`;
+
+    await observe(RequestStatusStage.APPROVED, elsewhere);
+
+    assert.deepStrictEqual(
+      (await eventsOf()).slice(3).map(({ fingerprint }) => fingerprint),
+      [retry?.fingerprint, elsewhere]
+    );
+  });
+
+  it('records a repeated failure after a retry entry as a return', async () => {
+    const retry = await retryAfterFailure();
+
+    await observe(RequestStatusStage.FAILED);
+
+    assert.deepStrictEqual(
+      (await eventsOf()).slice(3).map(({ fingerprint }) => fingerprint),
+      [retry?.fingerprint, `${FAILED}:after:${retry?.id}`]
+    );
   });
 
   sqliteIt('still fails an insert that conflicts on another key', async () => {
@@ -347,5 +400,47 @@ describe('request status event inserts', () => {
       attention: 0,
       failed: 0,
     });
+  });
+
+  it('keeps the retry entry latest while a retried request waits', async () => {
+    mock.method(
+      requestDispatchManager as unknown as { dispatch: () => void },
+      'dispatch',
+      () => undefined
+    );
+    const request = await createMovieRequest(91003);
+    const repository = getRepository(MediaRequest);
+    for (const status of [
+      MediaRequestStatus.APPROVED,
+      MediaRequestStatus.FAILED,
+      MediaRequestStatus.APPROVED,
+    ]) {
+      request.status = status;
+      await repository.save(request);
+    }
+
+    await recordRequestRetry(request.id);
+    await recordRequestStatus(request.id);
+    await getRequestStatusPage({ take: 10, skip: 0 });
+
+    const events = await eventsOf(request.id);
+    assert.deepStrictEqual(
+      events.map(({ stage }) => stage),
+      [
+        RequestStatusStage.REQUESTED,
+        RequestStatusStage.APPROVED,
+        RequestStatusStage.FAILED,
+        RequestStatusStage.APPROVED,
+        RequestStatusStage.APPROVED,
+      ]
+    );
+    assert.strictEqual(
+      events[4].fingerprint,
+      `retry:${events[3].id}:${events[3].attempt}`
+    );
+    assert.strictEqual(
+      (await getRequestStatusHistory(request.id)).results[0].message,
+      RETRY_MESSAGE
+    );
   });
 });

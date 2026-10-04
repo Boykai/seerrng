@@ -224,6 +224,8 @@ export default function ProviderDiscoverPage() {
                 tmdbId={item.tmdbId}
                 type={item.mediaType}
                 title={item.title}
+                posterPath={item.imageUrl}
+                year={item.year?.toString()}
               />
               {(item.identityMapped ||
                 item.identityResolution === 'external-id' ||

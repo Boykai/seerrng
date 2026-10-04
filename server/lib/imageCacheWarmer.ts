@@ -24,6 +24,12 @@ const tvdbImageProxy = new ImageProxy('tvdb', 'https://artworks.thetvdb.com', {
     maxRPS: 20,
   },
 });
+const tvmazeImageProxy = new ImageProxy('tvmaze', 'https://static.tvmaze.com', {
+  rateLimitOptions: {
+    maxRequests: 5,
+    maxRPS: 5,
+  },
+});
 const coverArtArchiveImageProxy = new ImageProxy(
   'coverartarchive',
   'https://coverartarchive.org',
@@ -95,6 +101,8 @@ export const getImageCacheWarmProvider = (url: URL): string | null => {
       return 'tmdb';
     case 'https://artworks.thetvdb.com':
       return 'tvdb';
+    case 'https://static.tvmaze.com':
+      return 'tvmaze';
     case 'https://coverartarchive.org':
       return 'coverartarchive';
     case 'https://archive.org':
@@ -146,6 +154,8 @@ const getProxyForUrl = (url: URL): ImageProxy | null => {
       return tmdbImageProxy;
     case 'tvdb':
       return tvdbImageProxy;
+    case 'tvmaze':
+      return tvmazeImageProxy;
     case 'coverartarchive':
       return coverArtArchiveImageProxy;
     case 'archiveorg':

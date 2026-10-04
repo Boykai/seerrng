@@ -507,7 +507,7 @@ const main = async () => {
       const allowlist = buildDriftAllowlist(
         drift,
         readPreviousAllowlist(),
-        `Schema records that differ between a ${driver} database built from empty by the migrations and one built by synchronize() from the entities. Each predates the manga work and has a reviewed reason; manga drift is never allowlisted. Any other drift, or an entry that no longer drifts, fails scripts/manga-migration-checks.mjs.`
+        `Schema records that differ between a ${driver} database built from empty by the migrations and one built by synchronize() from the entities. Each lies outside the manga tables and has a reviewed reason; manga drift is never allowlisted. Any other drift, or an entry that no longer drifts, fails scripts/manga-migration-checks.mjs.`
       );
       writeFileSync(allowlistPath, formatDriftAllowlist(allowlist));
       const unexplained = allowlist.records.filter(

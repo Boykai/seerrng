@@ -1,5 +1,5 @@
 {
-  "description": "Schema records that differ between a sqlite database built from empty by the migrations and one built by synchronize() from the entities. Each predates the manga work and has a reviewed reason; manga drift is never allowlisted. Any other drift, or an entry that no longer drifts, fails scripts/manga-migration-checks.mjs.",
+  "description": "Schema records that differ between a sqlite database built from empty by the migrations and one built by synchronize() from the entities. Each lies outside the manga tables and has a reviewed reason; manga drift is never allowlisted. Any other drift, or an entry that no longer drifts, fails scripts/manga-migration-checks.mjs.",
   "records": [
     {
       "reason": "Name only: both sides have the one-to-one unique constraint on mediaId, but the migration's generated name differs from the one synchronize() derives. Same column and behaviour; renaming it is a separate cleanup.",
@@ -204,6 +204,18 @@
       }
     },
     {
+      "reason": "Index on the migrations side only: AddVideoMetadataCacheExpiry1790986600000 creates IDX_media_search_video_metadata_expires on media_search_metadata(videoMetadataExpiresAt). The MediaSearchMetadata entity declares no index on that column, so synchronize() does not create one. The column is the same on both sides.",
+      "side": "migrations",
+      "record": {
+        "kind": "index",
+        "table": "media_search_metadata",
+        "name": "IDX_media_search_video_metadata_expires",
+        "columns": ["videoMetadataExpiresAt"],
+        "unique": false,
+        "where": null
+      }
+    },
+    {
       "reason": "Name only: both sides have the unique constraint on mbAlbumId. The migration named it UQ_metadata_album_mbAlbumId, while the entity's unique: true column gets TypeORM's generated name. Same column and behaviour.",
       "side": "entities",
       "record": {
@@ -323,6 +335,26 @@
         "primary": false,
         "generated": null,
         "unique": false
+      }
+    },
+    {
+      "reason": "Name only: both sides have the unique constraint on (mediaType, provider, sourceId). AddVideoMetadataSourceRecords1790986402000 creates it as UQ_video_metadata_source_identity, with the name and UNIQUE on separate lines; TypeORM reads a SQLite constraint name back only from the one-line form that synchronize() writes, so it derives its generated name for the migrated table. Same columns and behaviour.",
+      "side": "migrations",
+      "record": {
+        "kind": "unique",
+        "table": "video_metadata_source_record",
+        "name": "UQ_4225ccd348cf5b2a40c3d23d71a",
+        "columns": ["mediaType", "provider", "sourceId"]
+      }
+    },
+    {
+      "reason": "Name only: both sides have the unique constraint on (mediaType, provider, sourceId). AddVideoMetadataSourceRecords1790986402000 creates it as UQ_video_metadata_source_identity, with the name and UNIQUE on separate lines; TypeORM reads a SQLite constraint name back only from the one-line form that synchronize() writes, so it derives its generated name for the migrated table. Same columns and behaviour.",
+      "side": "entities",
+      "record": {
+        "kind": "unique",
+        "table": "video_metadata_source_record",
+        "name": "UQ_video_metadata_source_identity",
+        "columns": ["mediaType", "provider", "sourceId"]
       }
     }
   ]

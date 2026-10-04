@@ -183,16 +183,7 @@ const SettingsSuwayomi = () => {
           }}
         />
       )}
-      <Transition
-        as={Fragment}
-        show={deleteId !== undefined}
-        enter="transition-opacity ease-in-out duration-300"
-        enterFrom="opacity-0"
-        enterTo="opacity-100"
-        leave="transition-opacity ease-in-out duration-300"
-        leaveFrom="opacity-100"
-        leaveTo="opacity-0"
-      >
+      <Transition as={Fragment} show={deleteId !== undefined}>
         <Modal
           okText={intl.formatMessage(
             isDeleting ? globalMessages.deleting : globalMessages.delete

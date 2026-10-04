@@ -1280,10 +1280,8 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                 messages.watchAheadEpisodeBadgeTooltip
               )}
             >
-              <span className="inline-flex">
-                <Badge badgeType="association">
-                  {intl.formatMessage(messages.watchAheadEpisodeBadge)}
-                </Badge>
+              <span className="request-status-control request-status-control-success">
+                {intl.formatMessage(messages.watchAheadEpisodeBadge)}
               </span>
             </Tooltip>
           )}

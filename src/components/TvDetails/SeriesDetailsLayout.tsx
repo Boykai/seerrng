@@ -1,37 +1,40 @@
-import RTAudFresh from '@app/assets/rt_aud_fresh.svg';
-import RTAudRotten from '@app/assets/rt_aud_rotten.svg';
-import RTFresh from '@app/assets/rt_fresh.svg';
-import RTRotten from '@app/assets/rt_rotten.svg';
-import ImdbLogo from '@app/assets/services/imdb.svg';
-import TmdbLogo from '@app/assets/tmdb_logo.svg';
 import CollectionNavigation from '@app/components/CollectionDetails/CollectionNavigation';
+import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
+import MediaServerIcon from '@app/components/Common/MediaServerIcon';
+import PageErrorMessage, {
+  type MessageRetry,
+} from '@app/components/Common/PageErrorMessage';
 import PlayOnDeviceButton from '@app/components/Common/PlayOnDeviceButton';
 import Tooltip from '@app/components/Common/Tooltip';
 import WatchedBadge from '@app/components/Common/WatchedBadge';
 import AvailabilityValue from '@app/components/MediaDetails/AvailabilityValue';
 import DetailDisclosureButton from '@app/components/MediaDetails/DetailDisclosureButton';
 import ExpandableCreditList from '@app/components/MediaDetails/ExpandableCreditList';
-import MdblistRatingBadges from '@app/components/MediaDetails/MdblistRatingBadges';
 import MediaDetailArtwork from '@app/components/MediaDetails/MediaDetailArtwork';
 import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
+import MetadataAttribution from '@app/components/MediaDetails/MetadataAttribution';
+import ReorderableDisclosureRow, {
+  OrderedDisclosurePanels,
+} from '@app/components/MediaDetails/ReorderableDisclosureRow';
 import SeriesSeasonEpisodeBrowser from '@app/components/MediaDetails/SeriesSeasonEpisodeBrowser';
-import { subjectTagClassName } from '@app/components/MediaDetails/subjectTagStyle';
+import VideoRatings from '@app/components/MediaDetails/VideoRatings';
+import { subjectTagTone } from '@app/components/MediaDetails/subjectTagStyle';
 import MediaSlider from '@app/components/MediaSlider';
+import useDetailDisclosureOrder from '@app/hooks/useDetailDisclosureOrder';
 import useDetailDisclosurePins from '@app/hooks/useDetailDisclosurePins';
-import useLocale from '@app/hooks/useLocale';
 import usePlaybackCatalog from '@app/hooks/usePlaybackCatalog';
+import useSettings from '@app/hooks/useSettings';
 import useWatchStatus from '@app/hooks/useWatchStatus';
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
 import { resolveCanonicalPlaybackSelection } from '@app/utils/playbackSelection';
-import { getSafeHref } from '@app/utils/safeUrl';
-import { getEffectiveVideoRatings } from '@app/utils/videoRatings';
 import type { RatingResponse } from '@server/api/ratings';
 import { MediaStatus } from '@server/constants/media';
+import { MediaServerType } from '@server/constants/server';
 import type { TvDetails } from '@server/models/Tv';
 import Link from 'next/link';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.TvDetails.Layout', {
@@ -42,6 +45,8 @@ const messages = defineMessages('components.TvDetails.Layout', {
   creator: 'Creator',
   network: 'Network',
   seriesType: 'Series Type',
+  director: 'Director',
+  writers: 'Writers',
   hd: 'HD',
   ultraHd: '4K',
   watched: 'Watched',
@@ -52,9 +57,9 @@ const messages = defineMessages('components.TvDetails.Layout', {
   subjectTags: 'Subject Tags',
   fullCastList: 'Full Cast List',
   fullCrewList: 'Full Crew List',
-  noCast: 'No cast information available',
-  noCrew: 'No crew information available',
-  noTags: 'No subject tags available',
+  noCast: 'No Cast Information Available',
+  noCrew: 'No Crew Information Available',
+  noTags: 'No Subject Tags Available',
   seriesDetails: 'Details',
   status: 'Status',
   airDates: 'Air Dates',
@@ -74,9 +79,21 @@ const messages = defineMessages('components.TvDetails.Layout', {
   imdbScore: 'IMDb user score',
   tmdbUserScore: 'TMDB User Score',
   quality: 'Quality',
+  mediaServer: 'Media Server',
+  addToWatchlist: 'Add to Watchlist',
+  addToWatchlistTooltip: 'Add this series to your Plex Watchlist.',
+  addToFavorites: 'Add to Favorites',
+  addToFavoritesTooltip: 'Add this series to your media server Favorites.',
+  addToCollection: 'Add to Collection',
+  addToCollectionTooltip:
+    'Add this series to an existing shared collection on your media server. Collection editing permission is required.',
+  mediaServerTooltip:
+    'Show or hide season and episode selection and the media server action area without changing your selection.',
 });
 
 interface SeriesDetailsLayoutProps {
+  metadataRetry: MessageRetry;
+  onLoadingChange?: (loading: boolean) => void;
   data: TvDetails;
   ratingData?: RatingResponse;
   sortedCrew: TvDetails['credits']['crew'];
@@ -89,6 +106,21 @@ interface SeriesDetailsLayoutProps {
   reportIssueAction: ReactNode;
   requestAction: ReactNode;
   playbackActions?: (itemIds: string[], is4k: boolean) => ReactNode;
+  mediaServerWatchlistAction?: (
+    is4k: boolean,
+    onLoadingChange: (loading: boolean) => void
+  ) => ReactNode;
+  mediaServerCollectionAction?: (
+    is4k: boolean,
+    onLoadingChange: (loading: boolean) => void
+  ) => ReactNode;
+  seasonBrowser?: ReactNode;
+  showRelated?: boolean;
+  expandInformation?: boolean;
+  collapseInformation?: boolean;
+  showOverview?: boolean;
+  showInformationControls?: boolean;
+  embedded?: boolean;
 }
 
 const availableStatuses = new Set([
@@ -117,6 +149,8 @@ const getAvailabilityText = (
 };
 
 const SeriesDetailsLayout = ({
+  metadataRetry,
+  onLoadingChange,
   data,
   ratingData,
   sortedCrew,
@@ -129,24 +163,59 @@ const SeriesDetailsLayout = ({
   reportIssueAction,
   requestAction,
   playbackActions,
+  mediaServerWatchlistAction,
+  mediaServerCollectionAction,
+  seasonBrowser,
+  showRelated = true,
+  expandInformation = false,
+  collapseInformation = false,
+  showOverview = true,
+  showInformationControls = true,
+  embedded = false,
 }: SeriesDetailsLayoutProps) => {
   const intl = useIntl();
-  const { locale } = useLocale();
-  const effectiveRatings = getEffectiveVideoRatings(ratingData);
-  const { data: watchedStatus } = useWatchStatus(
+  const { currentSettings } = useSettings();
+  const { data: watchedStatus, isValidating: watchedLoading } = useWatchStatus(
     'tv',
     data.id,
     Boolean(data.mediaInfo),
     true
   );
   const { pins, togglePinned } = useDetailDisclosurePins('tv');
+  const {
+    order: disclosureOrder,
+    setOrder: setDisclosureOrder,
+    canReorder,
+    preferenceKey,
+  } = useDetailDisclosureOrder(!embedded && showInformationControls);
   const [showDetails, setShowDetails] = useState(false);
+  const [overviewOpen, setOverviewOpen] = useState(false);
   useEffect(() => {
-    setShowDetails(pins.details);
-  }, [pins.details, data.id]);
+    setOverviewOpen(
+      showOverview &&
+        (!showInformationControls ||
+          (!collapseInformation && (expandInformation || pins.overview)))
+    );
+  }, [
+    showOverview,
+    showInformationControls,
+    pins.overview,
+    data.id,
+    expandInformation,
+    collapseInformation,
+  ]);
+  useEffect(() => {
+    setShowDetails(!collapseInformation && (expandInformation || pins.details));
+  }, [pins.details, data.id, expandInformation, collapseInformation]);
   const [showCast, setShowCast] = useState(false);
   const [showCrew, setShowCrew] = useState(false);
   const [showTags, setShowTags] = useState(false);
+  const [showMediaServer, setShowMediaServer] = useState(false);
+  useEffect(() => {
+    setShowMediaServer(
+      !collapseInformation && (expandInformation || pins.mediaServer)
+    );
+  }, [pins.mediaServer, data.id, expandInformation, collapseInformation]);
   const [selectedQuality, setSelectedQuality] = useState<'hd' | '4k'>(() =>
     show4kAvailability &&
     !availableStatuses.has(data.mediaInfo?.status as MediaStatus) &&
@@ -162,21 +231,30 @@ const SeriesDetailsLayout = ({
     }
   }, [selectedQuality, show4kAvailability]);
   useEffect(() => {
-    setShowCast(pins.cast);
-  }, [pins.cast]);
+    setShowCast(!collapseInformation && (expandInformation || pins.cast));
+  }, [pins.cast, expandInformation, collapseInformation]);
   useEffect(() => {
-    setShowCrew(pins.crew);
-  }, [pins.crew]);
+    setShowCrew(!collapseInformation && (expandInformation || pins.crew));
+  }, [pins.crew, expandInformation, collapseInformation]);
   useEffect(() => {
-    setShowTags(pins.subjectTags);
-  }, [pins.subjectTags]);
+    setShowTags(
+      !collapseInformation && (expandInformation || pins.subjectTags)
+    );
+  }, [pins.subjectTags, expandInformation, collapseInformation]);
   const [selectedPlaybackItemIds, setSelectedPlaybackItemIds] = useState<
     string[]
   >([]);
-  const { data: standardPlaybackCatalog } = usePlaybackCatalog(
-    data.mediaInfo?.id
-  );
-  const { data: highQualityPlaybackCatalog } = usePlaybackCatalog(
+  const [episodesLoading, setEpisodesLoading] = useState(false);
+  const [savedItemLoading, setSavedItemLoading] = useState(false);
+  const [collectionsLoading, setCollectionsLoading] = useState(false);
+  const {
+    data: standardPlaybackCatalog,
+    isValidating: standardCatalogLoading,
+  } = usePlaybackCatalog(data.mediaInfo?.id);
+  const {
+    data: highQualityPlaybackCatalog,
+    isValidating: highQualityCatalogLoading,
+  } = usePlaybackCatalog(
     show4kAvailability ? data.mediaInfo?.id : undefined,
     true
   );
@@ -184,6 +262,20 @@ const SeriesDetailsLayout = ({
     effectiveSelectedQuality === '4k'
       ? highQualityPlaybackCatalog
       : standardPlaybackCatalog;
+  const mediaServerType =
+    watchedStatus?.serverType ??
+    playbackCatalog?.serverType ??
+    currentSettings.mediaServerType;
+  const detailsLoading =
+    watchedLoading ||
+    standardCatalogLoading ||
+    highQualityCatalogLoading ||
+    episodesLoading ||
+    (!embedded && (savedItemLoading || collectionsLoading));
+  useEffect(() => {
+    onLoadingChange?.(detailsLoading);
+  }, [detailsLoading, onLoadingChange]);
+  useEffect(() => () => onLoadingChange?.(false), [onLoadingChange]);
   useEffect(() => {
     const allowedIds = new Set(
       playbackCatalog?.groups.flatMap((group) =>
@@ -208,6 +300,18 @@ const SeriesDetailsLayout = ({
     ...creators.map((person) => ({ ...person, job: 'Creator' })),
     ...sortedCrew,
   ].slice(0, 6);
+  const knownCrewNames = new Set(
+    [
+      ...creators.map((person) => person.name),
+      ...sortedCrew.map((person) => person.name),
+    ].map((name) => name.trim().toLocaleLowerCase())
+  );
+  const supplementalDirectors = (
+    data.supplementalMetadata?.directors ?? []
+  ).filter((name) => !knownCrewNames.has(name.trim().toLocaleLowerCase()));
+  const supplementalWriters = (data.supplementalMetadata?.writers ?? []).filter(
+    (name) => !knownCrewNames.has(name.trim().toLocaleLowerCase())
+  );
   const featuredCrewGroups = [0, 1, 2].map((column) =>
     [featuredCrew[column], featuredCrew[column + 3]].filter(Boolean)
   );
@@ -267,8 +371,11 @@ const SeriesDetailsLayout = ({
   );
 
   return (
-    <div className="media-page">
-      <article className="media-detail-card app-card-main refreshed-card-surface refreshed-detail-text relative overflow-hidden rounded-xl border border-gray-700 p-3 shadow-lg shadow-gray-950/20">
+    <div
+      className="media-page"
+      data-page-layout={embedded ? 'embedded' : undefined}
+    >
+      <article className="media-detail-card app-card-main card-layout refreshed-card-surface refreshed-detail-text">
         {data.backdropPath && (
           <MediaDetailArtwork
             type="tmdb"
@@ -276,10 +383,10 @@ const SeriesDetailsLayout = ({
           />
         )}
 
-        <div className="relative z-10">
-          <div className="app-card-inset refreshed-inset-surface detail-summary-card grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[80px_minmax(0,1fr)]">
+        <div data-card-part="content">
+          <div className="app-card-inset refreshed-inset-surface detail-summary-card app-detail-summary-grid">
             <div
-              className="relative h-24 w-16 overflow-hidden rounded-lg ring-1 ring-gray-600 sm:h-[120px] sm:w-20"
+              className="app-detail-poster-frame detail-card-poster"
               data-testid="media-details-poster"
             >
               <CachedImage
@@ -292,32 +399,34 @@ const SeriesDetailsLayout = ({
                 fill
                 priority
                 sizes="(min-width: 640px) 80px, 64px"
-                className="object-cover"
+                className="media-detail-artwork-image"
               />
             </div>
 
-            <div className="flex min-w-0 flex-col">
+            <div>
               <h1
-                className="detail-summary-title text-lg leading-5 font-semibold text-white"
+                className="card-title detail-summary-title"
+                data-title-weight="regular"
                 data-testid="media-title"
               >
                 {data.name}
                 {data.firstAirDate ? ` (${data.firstAirDate.slice(0, 4)})` : ''}
               </h1>
 
-              <div className="detail-card-heading-spacing detail-three-column-grid grid min-w-0 flex-1">
-                <div className="detail-paired-column-span min-w-0">
-                  <dl className="media-detail-rows detail-paired-columns grid min-w-0 content-start text-xs">
-                    <dt className="card:col-start-1 card:row-start-1 font-medium text-gray-100">
+              <div
+                className="detail-card-heading-spacing detail-three-column-grid"
+                data-table-layout="series-title-details-table"
+              >
+                <div className="detail-paired-column-span">
+                  <dl className="card-table detail-paired-columns">
+                    <dt className="card-table-heading">
                       {intl.formatMessage(messages.mediaAndFormat)}:
                     </dt>
-                    <dd className="card:col-start-3 card:row-start-1 m-0 truncate">
-                      {mediaAndFormat}
-                    </dd>
-                    <dt className="card:col-start-1 card:row-start-2 font-medium text-gray-100">
+                    <dd className="card-table-value">{mediaAndFormat}</dd>
+                    <dt className="card-table-heading">
                       {intl.formatMessage(messages.firstAirDate)}:
                     </dt>
-                    <dd className="card:col-start-3 card:row-start-2 m-0 truncate">
+                    <dd className="card-table-value">
                       {data.firstAirDate
                         ? intl.formatDate(data.firstAirDate, {
                             year: 'numeric',
@@ -327,28 +436,28 @@ const SeriesDetailsLayout = ({
                           })
                         : unavailable}
                     </dd>
-                    <dt className="card:col-start-1 card:row-start-3 font-medium text-gray-100">
+                    <dt className="card-table-heading">
                       {intl.formatMessage(messages.episodeRuntime)}:
                     </dt>
-                    <dd className="card:col-start-3 card:row-start-3 m-0 truncate">
+                    <dd className="card-table-value">
                       {data.episodeRunTime[0]
                         ? intl.formatMessage(messages.minutes, {
                             minutes: data.episodeRunTime[0],
                           })
                         : unavailable}
                     </dd>
-                    <div className="media-detail-rows media-detail-column-divider card:col-span-1 card:col-start-5 card:row-span-3 card:row-start-1 col-span-2 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3">
-                      <dt className="font-medium text-gray-100">
+                    <div className="card-table media-detail-column-divider">
+                      <dt className="card-table-heading">
                         {intl.formatMessage(messages.creator)}:
                       </dt>
-                      <dd className="m-0 truncate">
+                      <dd className="card-table-value">
                         {creators.length > 0
                           ? creators.slice(0, 2).map((person, index) => (
                               <span key={person.id}>
                                 {index > 0 && ', '}
                                 <Link
                                   href={`/person/${person.id}`}
-                                  className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                                  className="app-detail-link"
                                 >
                                   {person.name}
                                 </Link>
@@ -356,46 +465,53 @@ const SeriesDetailsLayout = ({
                             ))
                           : unavailable}
                       </dd>
-                      <dt className="font-medium text-gray-100">
+                      <dt className="card-table-heading">
                         {intl.formatMessage(messages.network)}:
                       </dt>
-                      <dd className="m-0 truncate">
-                        {data.networks[0] ? (
+                      <dd className="card-table-value">
+                        {data.networks[0]?.id > 0 ? (
                           <Link
                             href={`/discover/tv/network/${data.networks[0].id}`}
-                            className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                            className="app-detail-link"
                           >
                             {data.networks[0].name}
                           </Link>
+                        ) : data.networks[0] ? (
+                          data.networks[0].name
                         ) : (
                           unavailable
                         )}
                       </dd>
-                      <dt className="font-medium text-gray-100">
+                      <dt className="card-table-heading">
                         {intl.formatMessage(messages.seriesType)}:
                       </dt>
-                      <dd className="m-0 truncate">
+                      <dd className="card-table-value">
                         {data.type || unavailable}
                       </dd>
                     </div>
 
-                    <dt className="card:col-start-1 card:row-start-4 font-medium text-gray-100">
+                    <dt className="card-table-heading">
                       {intl.formatMessage(messages.genres)}:
                     </dt>
                     <dd
-                      className="card:col-span-3 card:col-start-3 card:row-start-4 m-0 min-w-0 break-words"
+                      className="card-table-value"
+                      data-wrap="true"
                       data-testid="media-details-genres"
                     >
                       {data.genres.length > 0
                         ? data.genres.map((genre, index) => (
-                            <span key={genre.id}>
+                            <span key={`${genre.id}-${genre.name}`}>
                               {index > 0 && ', '}
-                              <Link
-                                href={`/discover/tv?genre=${genre.id}`}
-                                className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                              >
-                                {genre.name}
-                              </Link>
+                              {genre.id > 0 ? (
+                                <Link
+                                  href={`/discover/tv?genre=${genre.id}`}
+                                  className="app-detail-link"
+                                >
+                                  {genre.name}
+                                </Link>
+                              ) : (
+                                genre.name
+                              )}
                             </span>
                           ))
                         : unavailable}
@@ -403,12 +519,12 @@ const SeriesDetailsLayout = ({
                   </dl>
                 </div>
 
-                <div className="media-detail-column-divider flex min-w-0 flex-col text-xs leading-4">
-                  <dl className="media-detail-rows grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3">
-                    <dt className="font-medium text-gray-100">
+                <div className="media-detail-column-divider">
+                  <dl className="card-table" data-table-layout="availability">
+                    <dt className="card-table-heading">
                       {intl.formatMessage(messages.hd)}:
                     </dt>
-                    <dd className="m-0 truncate">
+                    <dd className="card-table-value">
                       <AvailabilityValue status={data.mediaInfo?.status}>
                         {getAvailabilityText(
                           data.mediaInfo?.status,
@@ -418,10 +534,10 @@ const SeriesDetailsLayout = ({
                     </dd>
                     {show4kAvailability && (
                       <>
-                        <dt className="font-medium text-gray-100">
+                        <dt className="card-table-heading">
                           {intl.formatMessage(messages.ultraHd)}:
                         </dt>
-                        <dd className="m-0 truncate">
+                        <dd className="card-table-value">
                           <AvailabilityValue status={data.mediaInfo?.status4k}>
                             {getAvailabilityText(
                               data.mediaInfo?.status4k,
@@ -433,10 +549,16 @@ const SeriesDetailsLayout = ({
                     )}
                     {!!watchedStatus?.availableCount && (
                       <>
-                        <dt className="card:row-start-5 font-medium text-gray-100">
+                        <dt
+                          className="card-table-heading"
+                          data-table-slot="footer"
+                        >
                           {intl.formatMessage(messages.watched)}:
                         </dt>
-                        <dd className="card:row-start-5 m-0">
+                        <dd
+                          className="card-table-value"
+                          data-table-slot="footer"
+                        >
                           <WatchedBadge
                             status={watchedStatus}
                             className="detail-watched-button"
@@ -459,380 +581,479 @@ const SeriesDetailsLayout = ({
             </div>
           </div>
 
-          <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
-            <h2 className="media-inset-heading">
-              {intl.formatMessage(messages.overview)}
-            </h2>
-            {data.tagline && (
-              <p className="mt-1 text-sm text-indigo-300 italic">
-                {data.tagline}
-              </p>
-            )}
-            <p className="refreshed-detail-text-muted mt-4 text-sm leading-5">
-              {data.overview ||
-                intl.formatMessage(messages.overviewUnavailable)}
-            </p>
+          {showInformationControls && (
+            <ReorderableDisclosureRow
+              distributed
+              key={preferenceKey}
+              order={disclosureOrder}
+              onOrderChange={setDisclosureOrder}
+              disabled={!canReorder}
+              leading={<CollectionNavigation kind="tv" id={String(data.id)} />}
+            >
+              {showOverview && (
+                <DetailDisclosureButton
+                  key="overview"
+                  label={intl.formatMessage(messages.overview)}
+                  open={overviewOpen}
+                  onClick={() => setOverviewOpen((open) => !open)}
+                  pinned={pins.overview}
+                  onPinClick={() => void togglePinned('overview')}
+                  controls="series-overview-panel"
+                />
+              )}
+              <DetailDisclosureButton
+                key="cast"
+                label={intl.formatMessage(messages.viewCast)}
+                open={showCast}
+                onClick={() => setShowCast((open) => !open)}
+                pinned={pins.cast}
+                onPinClick={() => void togglePinned('cast')}
+              />
+              <DetailDisclosureButton
+                key="crew"
+                label={intl.formatMessage(messages.viewCrew)}
+                open={showCrew}
+                onClick={() => setShowCrew((open) => !open)}
+                pinned={pins.crew}
+                onPinClick={() => void togglePinned('crew')}
+              />
+              <DetailDisclosureButton
+                key="subjectTags"
+                label={intl.formatMessage(messages.subjectTags)}
+                open={showTags}
+                onClick={() => setShowTags((open) => !open)}
+                pinned={pins.subjectTags}
+                onPinClick={() => void togglePinned('subjectTags')}
+              />
+              <DetailDisclosureButton
+                key="details"
+                label={intl.formatMessage(messages.seriesDetails)}
+                open={showDetails}
+                onClick={() => setShowDetails((open) => !open)}
+                pinned={pins.details}
+                onPinClick={() => void togglePinned('details')}
+                controls="tv-additional-details"
+              />
+              <DetailDisclosureButton
+                key="mediaServer"
+                label={intl.formatMessage(messages.mediaServer)}
+                icon={
+                  <MediaServerIcon
+                    mediaServerType={mediaServerType}
+                    className="watched-status-logo"
+                  />
+                }
+                open={showMediaServer}
+                onClick={() => setShowMediaServer((open) => !open)}
+                pinned={pins.mediaServer}
+                onPinClick={() => void togglePinned('mediaServer')}
+                controls="series-media-server-panel"
+                title={intl.formatMessage(messages.mediaServerTooltip)}
+              />
+            </ReorderableDisclosureRow>
+          )}
 
-            {featuredCrew.length > 0 && (
-              <div className="detail-three-column-grid card:border-t-0 card:pt-0 mt-4 grid border-t border-gray-600 pt-3">
-                {featuredCrewGroups.map((group, groupIndex) => (
-                  <dl
-                    key={`featured-crew-${groupIndex}`}
-                    className={`media-detail-rows grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs ${
-                      groupIndex > 0
-                        ? `media-detail-column-divider ${groupIndex === 1 ? 'card:pr-3' : ''}`
-                        : 'card:pr-3'
-                    }`}
+          <OrderedDisclosurePanels order={disclosureOrder}>
+            <Fragment key="overview">
+              {showOverview && overviewOpen && (
+                <section
+                  id="series-overview-panel"
+                  className="app-card-inset refreshed-inset-surface card-spacing-before"
+                >
+                  <h2 className="media-inset-heading">
+                    {intl.formatMessage(messages.overview)}
+                  </h2>
+                  {data.tagline && (
+                    <p className="card-subheading">{data.tagline}</p>
+                  )}
+                  <p className="card-body-text">
+                    {data.overview ||
+                      intl.formatMessage(messages.overviewUnavailable)}
+                  </p>
+                </section>
+              )}
+            </Fragment>
+            <Fragment key="cast">
+              {showCast && (
+                <ExpandableCreditList
+                  title={intl.formatMessage(messages.fullCastList)}
+                  credits={castCredits}
+                  emptyLabel={intl.formatMessage(messages.noCast)}
+                  retry={metadataRetry}
+                />
+              )}
+            </Fragment>
+            <Fragment key="crew">
+              {showCrew && (
+                <ExpandableCreditList
+                  title={intl.formatMessage(messages.fullCrewList)}
+                  credits={crewCredits}
+                  emptyLabel={intl.formatMessage(messages.noCrew)}
+                  retry={metadataRetry}
+                />
+              )}
+            </Fragment>
+            <Fragment key="subjectTags">
+              {showTags && (
+                <section className="app-card-inset refreshed-inset-surface card-spacing-before">
+                  <h2 className="media-inset-heading card-spacing-after">
+                    {intl.formatMessage(messages.subjectTags)}
+                  </h2>
+                  {data.keywords.length === 0 ? (
+                    <PageErrorMessage
+                      title={intl.formatMessage(messages.noTags)}
+                      severity="empty"
+                      retry={metadataRetry}
+                    />
+                  ) : (
+                    <div className="card-list" data-list-layout="tags">
+                      {data.keywords.map((keyword, index) => (
+                        <Link
+                          key={keyword.id}
+                          href={`/discover/tv/keyword?keywords=${keyword.id}`}
+                          className="compact-control subject-tag"
+                          data-tone={subjectTagTone(index)}
+                        >
+                          {keyword.name}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+            </Fragment>
+
+            <Fragment key="details">
+              {showDetails && (
+                <section
+                  id="tv-additional-details"
+                  className="app-card-inset refreshed-inset-surface card-spacing-before"
+                >
+                  <h2 className="media-inset-heading detail-card-heading-after">
+                    {intl.formatMessage(messages.seriesDetails)}
+                  </h2>
+                  <div
+                    className="detail-three-column-grid"
+                    data-table-layout="series-details-table"
                   >
-                    {group.map((person) => (
-                      <div
-                        className="contents"
-                        key={`${person.id}-${person.job}`}
+                    <dl className="card-table">
+                      <dt className="card-table-heading">
+                        {intl.formatMessage(messages.status)}:
+                      </dt>
+                      <dd className="card-table-value">
+                        {data.status || unavailable}
+                      </dd>
+                      <dt className="card-table-heading">
+                        {intl.formatMessage(messages.airDates)}:
+                      </dt>
+                      <dd
+                        className="card-table-value"
+                        data-value-layout="stacked"
                       >
-                        <dt className="font-medium text-gray-100">
-                          {person.job}:
-                        </dt>
-                        <dd className="m-0 truncate">
-                          <Link
-                            href={`/person/${person.id}`}
-                            className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                          >
-                            {person.name}
-                          </Link>
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                ))}
-              </div>
-            )}
-          </section>
+                        {airDates.length > 0
+                          ? airDates.map((airDate) => (
+                              <span key={airDate.label.id}>
+                                {intl.formatMessage(airDate.label)} ·{' '}
+                                {intl.formatDate(airDate.value, {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  timeZone: 'UTC',
+                                })}
+                              </span>
+                            ))
+                          : unavailable}
+                      </dd>
+                    </dl>
 
-          <div className="media-detail-disclosure-row">
-            <CollectionNavigation kind="tv" id={String(data.id)} />
-            <DetailDisclosureButton
-              label={intl.formatMessage(messages.viewCast)}
-              open={showCast}
-              onClick={() => setShowCast((open) => !open)}
-              pinned={pins.cast}
-              onPinClick={() => void togglePinned('cast')}
-            />
-            <DetailDisclosureButton
-              label={intl.formatMessage(messages.viewCrew)}
-              open={showCrew}
-              onClick={() => setShowCrew((open) => !open)}
-              pinned={pins.crew}
-              onPinClick={() => void togglePinned('crew')}
-            />
-            <DetailDisclosureButton
-              label={intl.formatMessage(messages.subjectTags)}
-              open={showTags}
-              onClick={() => setShowTags((open) => !open)}
-              pinned={pins.subjectTags}
-              onPinClick={() => void togglePinned('subjectTags')}
-            />
-            <DetailDisclosureButton
-              label={intl.formatMessage(messages.seriesDetails)}
-              open={showDetails}
-              onClick={() => setShowDetails((open) => !open)}
-              pinned={pins.details}
-              onPinClick={() => void togglePinned('details')}
-              controls="tv-additional-details"
-            />
-          </div>
+                    <dl className="card-table media-detail-column-divider">
+                      <dt className="card-table-heading">
+                        {intl.formatMessage(messages.seriesType)}:
+                      </dt>
+                      <dd className="card-table-value">
+                        {data.type || unavailable}
+                      </dd>
+                      <dt className="card-table-heading">
+                        {intl.formatMessage(messages.episodeRuntime)}:
+                      </dt>
+                      <dd className="card-table-value">
+                        {data.episodeRunTime[0]
+                          ? intl.formatMessage(messages.minutes, {
+                              minutes: data.episodeRunTime[0],
+                            })
+                          : unavailable}
+                      </dd>
+                      <dt className="card-table-heading">
+                        {intl.formatMessage(messages.language)}:
+                      </dt>
+                      <dd className="card-table-value">
+                        <Link
+                          href={`/discover/tv/language/${data.originalLanguage}`}
+                          className="app-detail-link"
+                        >
+                          {originalLanguage}
+                        </Link>
+                      </dd>
+                      <dt className="card-table-heading">
+                        {intl.formatMessage(messages.country)}:
+                      </dt>
+                      <dd className="card-table-value">
+                        {data.productionCountries.length > 0
+                          ? data.productionCountries.map((country, index) => (
+                              <span key={country.iso_3166_1}>
+                                {index > 0 && ', '}
+                                <Link
+                                  href={`/discover/tv?country=${country.iso_3166_1}`}
+                                  className="app-detail-link"
+                                >
+                                  {intl.formatDisplayName(country.iso_3166_1, {
+                                    type: 'region',
+                                    fallback: 'none',
+                                  }) ?? country.name}
+                                </Link>
+                              </span>
+                            ))
+                          : unavailable}
+                      </dd>
+                    </dl>
 
-          {showCast && (
-            <ExpandableCreditList
-              title={intl.formatMessage(messages.fullCastList)}
-              credits={castCredits}
-              emptyLabel={intl.formatMessage(messages.noCast)}
-            />
-          )}
-          {showCrew && (
-            <ExpandableCreditList
-              title={intl.formatMessage(messages.fullCrewList)}
-              credits={crewCredits}
-              emptyLabel={intl.formatMessage(messages.noCrew)}
-            />
-          )}
-          {showTags && (
-            <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
-              <h2 className="media-inset-heading mb-2">
-                {intl.formatMessage(messages.subjectTags)}
-              </h2>
-              {data.keywords.length === 0 ? (
-                <p className="refreshed-detail-text-muted text-xs">
-                  {intl.formatMessage(messages.noTags)}
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {data.keywords.map((keyword, index) => (
-                    <Link
-                      key={keyword.id}
-                      href={`/discover/tv/keyword?keywords=${keyword.id}`}
-                      className={subjectTagClassName(index)}
+                    <dl className="card-table media-detail-column-divider">
+                      <dt className="card-table-heading">
+                        {intl.formatMessage(messages.networks)}:
+                      </dt>
+                      <dd
+                        className="card-table-value"
+                        data-value-layout="stacked"
+                      >
+                        {data.networks.length > 0
+                          ? data.networks.slice(0, 4).map((network) =>
+                              network.id > 0 ? (
+                                <Link
+                                  key={network.id}
+                                  href={`/discover/tv/network/${network.id}`}
+                                  className="app-detail-link"
+                                >
+                                  {network.name}
+                                </Link>
+                              ) : (
+                                <span key={network.name}>{network.name}</span>
+                              )
+                            )
+                          : unavailable}
+                      </dd>
+                    </dl>
+                  </div>
+                  <MetadataAttribution sources={data.metadataSources} />
+                  {(supplementalDirectors.length > 0 ||
+                    supplementalWriters.length > 0) && (
+                    <dl className="media-metadata-supplemental">
+                      {supplementalDirectors.length > 0 && (
+                        <div>
+                          <dt>{intl.formatMessage(messages.director)}:</dt>
+                          <dd>
+                            {supplementalDirectors.slice(0, 4).join(', ')}
+                          </dd>
+                        </div>
+                      )}
+                      {supplementalWriters.length > 0 && (
+                        <div>
+                          <dt>{intl.formatMessage(messages.writers)}:</dt>
+                          <dd>{supplementalWriters.slice(0, 4).join(', ')}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  )}
+                  {featuredCrew.length > 0 && (
+                    <div
+                      className="detail-three-column-grid"
+                      data-details-layout="facts"
                     >
-                      {keyword.name}
-                    </Link>
-                  ))}
+                      {featuredCrewGroups.map((group, groupIndex) => (
+                        <dl
+                          key={`featured-crew-${groupIndex}`}
+                          className={`card-table ${groupIndex > 0 ? 'media-detail-column-divider' : ''}`}
+                        >
+                          {group.map((person) => (
+                            <Fragment key={`${person.id}-${person.job}`}>
+                              <dt className="card-table-heading">
+                                {person.job}:
+                              </dt>
+                              <dd className="card-table-value">
+                                <Link
+                                  href={`/person/${person.id}`}
+                                  className="app-detail-link"
+                                >
+                                  {person.name}
+                                </Link>
+                              </dd>
+                            </Fragment>
+                          ))}
+                        </dl>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+            </Fragment>
+
+            <Fragment key="mediaServer">
+              {seasonBrowser !== undefined ? (
+                seasonBrowser
+              ) : (
+                <div
+                  id="series-media-server-panel"
+                  className="card-layout card-spacing-before"
+                  data-card-layout="media-server-panel"
+                  hidden={!showMediaServer}
+                >
+                  <SeriesSeasonEpisodeBrowser
+                    contained
+                    metadataRetry={metadataRetry}
+                    onLoadingChange={setEpisodesLoading}
+                    tvId={data.id}
+                    seasons={visibleSeasons}
+                    catalog={playbackCatalog}
+                    watchedStatus={watchedStatus}
+                    selectedItemIds={selectedPlaybackItemIds}
+                    onSelectionChange={setSelectedPlaybackItemIds}
+                  />
+                  <div data-card-part="actions">
+                    <MediaQualitySelect
+                      value={effectiveSelectedQuality}
+                      options={[
+                        {
+                          label: 'HD',
+                          value: 'hd',
+                          disabled: !availableFormats.includes('HD'),
+                        },
+                        ...(show4kAvailability
+                          ? ([
+                              {
+                                label: '4K',
+                                value: '4k',
+                                disabled: !availableFormats.includes('4K'),
+                              },
+                            ] as const)
+                          : []),
+                      ]}
+                      onChange={setSelectedQuality}
+                      label={intl.formatMessage(messages.quality)}
+                    />
+                    <div className="app-action-row">
+                      {playbackActions?.(
+                        effectivePlaybackItemIds,
+                        effectiveSelectedQuality === '4k'
+                      )}
+                    </div>
+                    {playbackActions && (
+                      <div className="app-action-row">
+                        <PlayOnDeviceButton
+                          mediaId={data.mediaInfo?.id}
+                          itemIds={effectivePlaybackItemIds}
+                          is4k={effectiveSelectedQuality === '4k'}
+                        />
+                      </div>
+                    )}
+                    {[
+                      MediaServerType.PLEX,
+                      MediaServerType.JELLYFIN,
+                      MediaServerType.EMBY,
+                    ].includes(mediaServerType) && (
+                      <>
+                        <div
+                          className="app-action-row"
+                          data-card-part="saved-item-action"
+                        >
+                          {(!embedded && showMediaServer
+                            ? mediaServerWatchlistAction?.(
+                                effectiveSelectedQuality === '4k',
+                                setSavedItemLoading
+                              )
+                            : undefined) ?? (
+                            /* Visual review only: no handler or provider write. */
+                            <Tooltip
+                              content={intl.formatMessage(
+                                mediaServerType === MediaServerType.PLEX
+                                  ? messages.addToWatchlistTooltip
+                                  : messages.addToFavoritesTooltip
+                              )}
+                            >
+                              <Button
+                                buttonType="playback"
+                                buttonSize="sm"
+                                type="button"
+                              >
+                                <span className="playback-button-label">
+                                  <MediaServerIcon
+                                    mediaServerType={mediaServerType}
+                                    className="playback-provider-icon"
+                                  />
+                                  <span>
+                                    {intl.formatMessage(
+                                      mediaServerType === MediaServerType.PLEX
+                                        ? messages.addToWatchlist
+                                        : messages.addToFavorites
+                                    )}
+                                  </span>
+                                </span>
+                              </Button>
+                            </Tooltip>
+                          )}
+                        </div>
+                        <div
+                          className="app-action-row"
+                          data-card-part="collection-action"
+                        >
+                          {(!embedded && showMediaServer
+                            ? mediaServerCollectionAction?.(
+                                effectiveSelectedQuality === '4k',
+                                setCollectionsLoading
+                              )
+                            : undefined) ?? (
+                            <Tooltip
+                              content={intl.formatMessage(
+                                messages.addToCollectionTooltip
+                              )}
+                            >
+                              <Button
+                                buttonType="playback"
+                                buttonSize="sm"
+                                type="button"
+                              >
+                                <span className="playback-button-label">
+                                  <MediaServerIcon
+                                    mediaServerType={mediaServerType}
+                                    className="playback-provider-icon"
+                                  />
+                                  <span>
+                                    {intl.formatMessage(
+                                      messages.addToCollection
+                                    )}
+                                  </span>
+                                </span>
+                              </Button>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
-            </section>
-          )}
-
-          {showDetails && (
-            <section
-              id="tv-additional-details"
-              className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3"
-            >
-              <h2 className="media-inset-heading detail-card-heading-after">
-                {intl.formatMessage(messages.seriesDetails)}
-              </h2>
-              <div className="detail-three-column-grid grid">
-                <dl className="media-detail-rows grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
-                  <dt className="font-medium text-gray-100">
-                    {intl.formatMessage(messages.status)}:
-                  </dt>
-                  <dd className="m-0">{data.status || unavailable}</dd>
-                  <dt className="font-medium text-gray-100">
-                    {intl.formatMessage(messages.airDates)}:
-                  </dt>
-                  <dd className="m-0 min-w-0">
-                    {airDates.length > 0
-                      ? airDates.map((airDate) => (
-                          <span className="block" key={airDate.label.id}>
-                            {intl.formatMessage(airDate.label)} ·{' '}
-                            {intl.formatDate(airDate.value, {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              timeZone: 'UTC',
-                            })}
-                          </span>
-                        ))
-                      : unavailable}
-                  </dd>
-                </dl>
-
-                <dl className="media-detail-rows media-detail-column-divider card:pr-3 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
-                  <dt className="font-medium text-gray-100">
-                    {intl.formatMessage(messages.seriesType)}:
-                  </dt>
-                  <dd className="m-0 truncate">{data.type || unavailable}</dd>
-                  <dt className="font-medium text-gray-100">
-                    {intl.formatMessage(messages.episodeRuntime)}:
-                  </dt>
-                  <dd className="m-0 truncate">
-                    {data.episodeRunTime[0]
-                      ? intl.formatMessage(messages.minutes, {
-                          minutes: data.episodeRunTime[0],
-                        })
-                      : unavailable}
-                  </dd>
-                  <dt className="font-medium text-gray-100">
-                    {intl.formatMessage(messages.language)}:
-                  </dt>
-                  <dd className="m-0 truncate">
-                    <Link
-                      href={`/discover/tv/language/${data.originalLanguage}`}
-                      className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                    >
-                      {originalLanguage}
-                    </Link>
-                  </dd>
-                  <dt className="font-medium text-gray-100">
-                    {intl.formatMessage(messages.country)}:
-                  </dt>
-                  <dd className="m-0 min-w-0">
-                    {data.productionCountries.length > 0
-                      ? data.productionCountries.map((country, index) => (
-                          <span key={country.iso_3166_1}>
-                            {index > 0 && ', '}
-                            <Link
-                              href={`/discover/tv?country=${country.iso_3166_1}`}
-                              className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                            >
-                              {intl.formatDisplayName(country.iso_3166_1, {
-                                type: 'region',
-                                fallback: 'none',
-                              }) ?? country.name}
-                            </Link>
-                          </span>
-                        ))
-                      : unavailable}
-                  </dd>
-                </dl>
-
-                <dl className="media-detail-rows media-detail-column-divider grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
-                  <dt className="font-medium text-gray-100">
-                    {intl.formatMessage(messages.networks)}:
-                  </dt>
-                  <dd className="m-0 min-w-0">
-                    {data.networks.length > 0
-                      ? data.networks.slice(0, 4).map((network) => (
-                          <Link
-                            key={network.id}
-                            href={`/discover/tv/network/${network.id}`}
-                            className="block truncate text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                          >
-                            {network.name}
-                          </Link>
-                        ))
-                      : unavailable}
-                  </dd>
-                </dl>
-              </div>
-            </section>
-          )}
-
-          <SeriesSeasonEpisodeBrowser
-            tvId={data.id}
-            seasons={visibleSeasons}
-            catalog={playbackCatalog}
-            watchedStatus={watchedStatus}
-            selectedItemIds={selectedPlaybackItemIds}
-            onSelectionChange={setSelectedPlaybackItemIds}
-          />
-
-          {(playbackActions ||
-            effectiveRatings.rtCriticsScore !== undefined ||
-            effectiveRatings.rtAudienceScore !== undefined ||
-            effectiveRatings.imdbScore !== undefined ||
-            ratingData?.mdblist?.metacriticRating !== undefined ||
-            ratingData?.mdblist?.traktRating !== undefined ||
-            data.voteCount > 0) && (
-            <div className="media-rating-row">
-              <MediaQualitySelect
-                value={effectiveSelectedQuality}
-                options={[
-                  {
-                    label: 'HD',
-                    value: 'hd',
-                    disabled: !availableFormats.includes('HD'),
-                  },
-                  ...(show4kAvailability
-                    ? ([
-                        {
-                          label: '4K',
-                          value: '4k',
-                          disabled: !availableFormats.includes('4K'),
-                        },
-                      ] as const)
-                    : []),
-                ]}
-                onChange={setSelectedQuality}
-                label={intl.formatMessage(messages.quality)}
-              />
-              {effectiveRatings.rtCriticsRating !== undefined &&
-                effectiveRatings.rtCriticsScore !== undefined && (
-                  <Tooltip
-                    content={intl.formatMessage(messages.rtCriticsScore)}
-                  >
-                    <a
-                      href={getSafeHref(effectiveRatings.rtUrl)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="media-rating-link"
-                    >
-                      {effectiveRatings.rtCriticsRating === 'Rotten' ? (
-                        <RTRotten className="media-rating-icon" />
-                      ) : (
-                        <RTFresh className="media-rating-icon" />
-                      )}
-                      <span className="media-rating-value">
-                        {effectiveRatings.rtCriticsScore}%
-                      </span>
-                    </a>
-                  </Tooltip>
-                )}
-              {effectiveRatings.rtAudienceRating !== undefined &&
-                effectiveRatings.rtAudienceScore !== undefined && (
-                  <Tooltip
-                    content={intl.formatMessage(messages.rtAudienceScore)}
-                  >
-                    <a
-                      href={getSafeHref(effectiveRatings.rtUrl)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="media-rating-link"
-                    >
-                      {effectiveRatings.rtAudienceRating === 'Spilled' ? (
-                        <RTAudRotten className="media-rating-icon media-rating-icon-audience" />
-                      ) : (
-                        <RTAudFresh className="media-rating-icon media-rating-icon-audience" />
-                      )}
-                      <span className="media-rating-value">
-                        {effectiveRatings.rtAudienceScore}%
-                      </span>
-                    </a>
-                  </Tooltip>
-                )}
-              {effectiveRatings.imdbScore !== undefined && (
-                <Tooltip
-                  content={
-                    effectiveRatings.imdbVotes
-                      ? intl.formatMessage(messages.imdbUserScore, {
-                          formattedCount: intl.formatNumber(
-                            effectiveRatings.imdbVotes,
-                            {
-                              notation: 'compact',
-                              compactDisplay: 'short',
-                              maximumFractionDigits: 1,
-                            }
-                          ),
-                        })
-                      : intl.formatMessage(messages.imdbScore)
-                  }
-                >
-                  <a
-                    href={getSafeHref(effectiveRatings.imdbUrl)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="media-rating-link"
-                  >
-                    <ImdbLogo className="media-rating-wordmark" />
-                    <span className="media-rating-value">
-                      {effectiveRatings.imdbScore.toFixed(1)}
-                    </span>
-                  </a>
-                </Tooltip>
-              )}
-              <MdblistRatingBadges ratings={ratingData?.mdblist} />
-              {data.voteCount > 0 && (
-                <Tooltip content={intl.formatMessage(messages.tmdbUserScore)}>
-                  <a
-                    href={`https://www.themoviedb.org/tv/${data.id}?language=${locale}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="media-rating-link"
-                  >
-                    <TmdbLogo className="media-rating-wordmark" />
-                    <span className="media-rating-value">
-                      {Math.round(data.voteAverage * 10)}%
-                    </span>
-                  </a>
-                </Tooltip>
-              )}
-            </div>
-          )}
+            </Fragment>
+          </OrderedDisclosurePanels>
 
           <div className="media-primary-action-row">
-            {playbackActions?.(
-              effectivePlaybackItemIds,
-              effectiveSelectedQuality === '4k'
-            )}
-            {playbackActions && (
-              <PlayOnDeviceButton
-                mediaId={data.mediaInfo?.id}
-                itemIds={effectivePlaybackItemIds}
-                is4k={effectiveSelectedQuality === '4k'}
-              />
-            )}
             {primaryActions}
+            {reportIssueAction}
             {secondaryActions}
-            <div className="media-primary-report-action">
-              {reportIssueAction}
-            </div>
+            <VideoRatings
+              mediaType="tv"
+              id={data.id}
+              voteAverage={data.voteAverage}
+              voteCount={data.voteCount}
+              ratings={ratingData}
+            />
           </div>
 
           <div className="media-request-action-row">
@@ -845,21 +1066,27 @@ const SeriesDetailsLayout = ({
         </div>
       </article>
 
-      <MediaSlider
-        sliderKey="recommendations"
-        title={intl.formatMessage(messages.recommendations)}
-        url={`/api/v1/tv/${data.id}/recommendations`}
-        linkUrl={`/tv/${data.id}/recommendations`}
-        hideWhenEmpty
-      />
-      <MediaSlider
-        sliderKey="similar"
-        title={intl.formatMessage(messages.similar)}
-        url={`/api/v1/tv/${data.id}/similar`}
-        linkUrl={`/tv/${data.id}/similar`}
-        hideWhenEmpty
-      />
-      <div className="extra-bottom-space relative" />
+      {showRelated && (
+        <>
+          <MediaSlider
+            sliderKey="recommendations"
+            posterTitleWeight="regular"
+            title={intl.formatMessage(messages.recommendations)}
+            url={`/api/v1/tv/${data.id}/recommendations`}
+            linkUrl={`/tv/${data.id}/recommendations`}
+            hideWhenEmpty
+          />
+          <MediaSlider
+            sliderKey="similar"
+            posterTitleWeight="regular"
+            title={intl.formatMessage(messages.similar)}
+            url={`/api/v1/tv/${data.id}/similar`}
+            linkUrl={`/tv/${data.id}/similar`}
+            hideWhenEmpty
+          />
+          <div className="extra-bottom-space" />
+        </>
+      )}
     </div>
   );
 };

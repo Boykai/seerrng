@@ -14,6 +14,18 @@ describe('User Profile', () => {
     });
   });
 
+  it('opens Advanced Theme from self user settings', () => {
+    cy.visit('/users/1/settings/main');
+
+    cy.get('[data-testid=settings-nav-desktop]')
+      .contains('Advanced Theme')
+      .should('have.attr', 'href', '/profile/advanced-theme')
+      .click();
+
+    cy.location('pathname').should('eq', '/profile/advanced-theme');
+    cy.contains('h1', 'Advanced Theme Overrides').should('be.visible');
+  });
+
   it('loads plex watchlist', () => {
     cy.intercept('/api/v1/user/[0-9]*/watchlist', {
       fixture: 'watchlist.json',
@@ -25,16 +37,44 @@ describe('User Profile', () => {
 
     cy.wait('@getWatchlist');
 
-    const sliderHeader = cy.contains('.slider-header', 'Watchlist');
+    // The supplied watchlist title renders a fallback card before metadata.
+    // Its parent div, not the outer slider item, is TmdbTitleCard's IO target.
+    cy.contains('.slider-header', 'Watchlist')
+      .closest('[data-testid=media-slider]')
+      .find('[data-testid=title-card]')
+      .first()
+      .parent()
+      .scrollIntoView()
+      .should('be.visible')
+      .should(($observedCard) => {
+        const target = $observedCard[0];
+        const bounds = target.getBoundingClientRect();
+        const window = target.ownerDocument.defaultView;
+        if (!window) throw new Error('Watchlist card has no browsing context');
+        expect(bounds.width, 'observed card width').to.be.greaterThan(0);
+        expect(bounds.height, 'observed card height').to.be.greaterThan(0);
+        expect(
+          bounds.right,
+          'observed card crosses viewport left edge'
+        ).to.be.greaterThan(0);
+        expect(
+          bounds.bottom,
+          'observed card crosses viewport top edge'
+        ).to.be.greaterThan(0);
+        expect(
+          bounds.left,
+          'observed card crosses viewport right edge'
+        ).to.be.lessThan(window.innerWidth);
+        expect(
+          bounds.top,
+          'observed card crosses viewport bottom edge'
+        ).to.be.lessThan(window.innerHeight);
+      });
 
-    sliderHeader.scrollIntoView();
+    cy.wait('@getTmdbMovie').its('response.statusCode').should('eq', 200);
 
-    cy.wait('@getTmdbMovie');
-    // Wait a little longer to make sure the movie component reloaded
-    cy.wait(500);
-
-    sliderHeader
-      .next('[data-testid=media-slider]')
+    cy.contains('.slider-header', 'Watchlist')
+      .closest('[data-testid=media-slider]')
       .find('[data-testid=title-card]')
       .first()
       .trigger('mouseover')
@@ -42,7 +82,7 @@ describe('User Profile', () => {
       .invoke('text')
       .then((text) => {
         cy.contains('.slider-header', 'Watchlist')
-          .next('[data-testid=media-slider]')
+          .closest('[data-testid=media-slider]')
           .find('[data-testid=title-card]')
           .first()
           .click();

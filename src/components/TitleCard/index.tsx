@@ -43,6 +43,7 @@ import {
   MinusCircleIcon,
   StarIcon,
 } from '@heroicons/react/24/outline';
+import { StarIcon as SolidStarIcon } from '@heroicons/react/24/solid';
 import { MediaStatus } from '@server/constants/media';
 import type { Watchlist } from '@server/entity/Watchlist';
 import type { AlbumResult, MediaType } from '@server/models/Search';
@@ -52,7 +53,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { mutate } from 'swr';
+import useSWR, { mutate } from 'swr';
 
 const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
   ssr: false,
@@ -60,9 +61,15 @@ const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
 interface TitleCardProps {
   id: number | string;
   image?: string;
+  fallbackImage?: string;
+  enablePosterFallbackLookup?: boolean;
   summary?: string;
   year?: string;
   title: string;
+  titleWeight?: 'regular';
+  /** Development visual prototype only; never uses persisted membership. */
+  watchlistPreview?: boolean;
+  watchlistPreviewDisabled?: boolean;
   artist?: string;
   type?: string;
   userScore?: number;
@@ -92,6 +99,16 @@ interface TitleCardProps {
 
 const messages = defineMessages('components.TitleCard', {
   addToWatchList: 'Add to watchlist',
+  watchlistPreviewLabel: 'Watchlist',
+  watchlistPreviewAdd: 'Add {title} to your Watchlist.',
+  watchlistPreviewRemove: 'Remove {title} from your Watchlist.',
+  watchlistPreviewDisabled:
+    'Watchlist is disabled. Use Enable Watchlist above the posters to enable it.',
+  blocklistAddDescription:
+    'Add {title} to the Blocklist. Users without Blocklist management permission will not see it in browsing.',
+  blocklistRemoveDescription:
+    'Remove {title} from the Blocklist and restore normal browsing visibility.',
+  blocklistUpdatingDescription: 'The Blocklist is updating. Please wait.',
   watchlistSuccess:
     '<strong>{title}</strong> added to watchlist  successfully!',
   watchlistDeleted:
@@ -110,9 +127,14 @@ const messages = defineMessages('components.TitleCard', {
 const TitleCard = ({
   id,
   image,
+  fallbackImage,
+  enablePosterFallbackLookup = false,
   summary,
   year,
   title,
+  titleWeight = 'regular',
+  watchlistPreview = false,
+  watchlistPreviewDisabled = false,
   artist,
   userScore,
   voteCount,
@@ -125,7 +147,6 @@ const TitleCard = ({
   inProgress = false,
   inProgress4k = false,
   canRequestAdditionalFormat = false,
-  canExpand = false,
   requestable = true,
   providerTracked = false,
   mutateParent,
@@ -142,7 +163,10 @@ const TitleCard = ({
   const intl = useIntl();
   const settings = useSettings();
   const { user, hasPermission } = useUser();
+  const canManageBlocklist = hasPermission(Permission.MANAGE_BLOCKLIST);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [posterFallbackLookupKey, setPosterFallbackLookupKey] =
+    useState<string>();
   const [currentStatus, setCurrentStatus] = useState(status);
   const [currentStatus4k, setCurrentStatus4k] = useState(status4k);
   const [showDetail, setShowDetail] = useState(false);
@@ -151,7 +175,7 @@ const TitleCard = ({
   const { addToast } = useToasts();
   const [toggleWatchlist, setToggleWatchlist] =
     useState<boolean>(!isAddedToWatchlist);
-  const [wasBlocklistedHere, setWasBlocklistedHere] = useState(false);
+  const [previewWatchlisted, setPreviewWatchlisted] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const statusBadges = getTitleCardStatusBadges({
     mediaType,
@@ -338,7 +362,7 @@ const TitleCard = ({
           { appearance: 'success', autoDismiss: true }
         );
         setCurrentStatus(MediaStatus.BLOCKLISTED);
-        setWasBlocklistedHere(true);
+        setCurrentStatus4k(MediaStatus.BLOCKLISTED);
         if (mutateParent) {
           mutateParent();
         }
@@ -396,6 +420,7 @@ const TitleCard = ({
               { appearance: 'success', autoDismiss: true }
             );
             setCurrentStatus(MediaStatus.UNKNOWN);
+            setCurrentStatus4k(MediaStatus.UNKNOWN);
             if (mutateParent) {
               mutateParent();
             }
@@ -423,6 +448,7 @@ const TitleCard = ({
               { appearance: 'success', autoDismiss: true }
             );
             setCurrentStatus(MediaStatus.UNKNOWN);
+            setCurrentStatus4k(MediaStatus.UNKNOWN);
             if (mutateParent) {
               mutateParent();
             }
@@ -509,6 +535,32 @@ const TitleCard = ({
     numericId > 0
       ? numericId
       : undefined;
+  const posterFallbackIdentity = `${mediaType}:${id}:${image ?? ''}:${fallbackImage ?? ''}`;
+  const posterFallbackRequestUrl =
+    enablePosterFallbackLookup &&
+    !fallbackImage &&
+    posterFallbackLookupKey === posterFallbackIdentity &&
+    Number.isSafeInteger(numericId) &&
+    numericId > 0 &&
+    (mediaType === 'movie' || mediaType === 'tv')
+      ? `/api/v1/${mediaType}/${numericId}`
+      : null;
+  const { data: posterFallbackDetails } = useSWR<{
+    supplementalMetadata?: { posterUrl?: string };
+  }>(
+    posterFallbackRequestUrl,
+    (requestUrl: string) =>
+      axios
+        .get<{ supplementalMetadata?: { posterUrl?: string } }>(requestUrl)
+        .then(({ data }) => data),
+    {
+      dedupingInterval: 60_000,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      shouldRetryOnError: false,
+    }
+  );
   const canUseRequestActions =
     canUseVideoActions ||
     isAlbum ||
@@ -544,13 +596,84 @@ const TitleCard = ({
                     ? `/manga/${encodeApiPathSegment(canonicalId)}`
                     : `/artist/${encodeApiPathSegment(canonicalId)}`;
   const displayImage = getTmdbPosterImageUrl(artwork);
+  const supplementalPoster = getTmdbPosterImageUrl(
+    fallbackImage ?? posterFallbackDetails?.supplementalMetadata?.posterUrl
+  );
+  const posterImage = displayImage ?? supplementalPoster;
+  const posterPlaceholder = '/images/seerr_poster_not_found_logo_top.png';
+  const posterErrorFallback =
+    displayImage && supplementalPoster && displayImage !== supplementalPoster
+      ? supplementalPoster
+      : posterPlaceholder;
   // Resolved provider artwork is routed by URL when image caching is enabled.
   const imageCacheType =
-    isResolvedImageUrl(displayImage) && isBook
+    isResolvedImageUrl(posterImage) && isBook
       ? 'book'
-      : isResolvedImageUrl(displayImage) && isAlbum
+      : isResolvedImageUrl(posterImage) && isAlbum
         ? 'music'
         : 'tmdb';
+  const requestPosterFallback = useCallback(() => {
+    if (
+      !enablePosterFallbackLookup ||
+      fallbackImage ||
+      posterFallbackLookupKey === posterFallbackIdentity ||
+      !Number.isSafeInteger(numericId) ||
+      numericId <= 0 ||
+      (mediaType !== 'movie' && mediaType !== 'tv')
+    ) {
+      return;
+    }
+
+    setPosterFallbackLookupKey(posterFallbackIdentity);
+  }, [
+    enablePosterFallbackLookup,
+    fallbackImage,
+    mediaType,
+    numericId,
+    posterFallbackIdentity,
+    posterFallbackLookupKey,
+  ]);
+  useEffect(() => {
+    if (
+      !enablePosterFallbackLookup ||
+      displayImage ||
+      supplementalPoster ||
+      posterFallbackLookupKey === posterFallbackIdentity
+    ) {
+      return;
+    }
+    const card = cardRef.current;
+    if (!card) return;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      requestPosterFallback();
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          observer.disconnect();
+          requestPosterFallback();
+        }
+      },
+      { rootMargin: '250px' }
+    );
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [
+    displayImage,
+    enablePosterFallbackLookup,
+    posterFallbackIdentity,
+    posterFallbackLookupKey,
+    requestPosterFallback,
+    supplementalPoster,
+  ]);
+  const handlePosterImageError = useCallback(() => {
+    if (displayImage) {
+      requestPosterFallback();
+    }
+  }, [displayImage, requestPosterFallback]);
 
   const requestPermissions = [
     Permission.REQUEST,
@@ -582,9 +705,7 @@ const TitleCard = ({
     !isArtist;
 
   const showHideButton =
-    hasPermission([Permission.MANAGE_BLOCKLIST], {
-      type: 'or',
-    }) &&
+    canManageBlocklist &&
     (canUseVideoActions ||
       isAlbum ||
       isBook ||
@@ -620,8 +741,8 @@ const TitleCard = ({
     currentStatus !== MediaStatus.UNKNOWN &&
     currentStatus !== MediaStatus.DELETED;
   const showTextOverlay =
-    showText || !artwork || showDetail || showRequestModal;
-  const showFullDetailOverlay = !artwork || showDetail || showRequestModal;
+    showText || !posterImage || showDetail || showRequestModal;
+  const showFullDetailOverlay = !posterImage || showDetail || showRequestModal;
   const requestLabel =
     isBook && preferredBookFormat
       ? intl.formatMessage(messages.requestBookFormat, {
@@ -663,23 +784,84 @@ const TitleCard = ({
     }
     return undefined;
   })();
-  const canShowBlocklistAction =
-    showDetail &&
-    showHideButton &&
-    currentStatus !== MediaStatus.PROCESSING &&
-    currentStatus !== MediaStatus.AVAILABLE &&
-    currentStatus !== MediaStatus.PARTIALLY_AVAILABLE &&
-    currentStatus !== MediaStatus.PENDING;
-
-  if (wasBlocklistedHere) {
+  if (currentStatus === MediaStatus.BLOCKLISTED && !canManageBlocklist) {
     return null;
   }
 
+  const watchedControl = watchedStatus && watchedStatus.watchedCount > 0 && (
+    <div data-poster-region="watched-slot">
+      <WatchedBadge
+        status={watchedStatus}
+        incompleteLibrary={
+          mediaType === 'tv' &&
+          (currentStatus === MediaStatus.PARTIALLY_AVAILABLE ||
+            (currentStatus !== MediaStatus.AVAILABLE &&
+              currentStatus4k === MediaStatus.PARTIALLY_AVAILABLE))
+        }
+      />
+    </div>
+  );
+  const isBlocklisted = currentStatus === MediaStatus.BLOCKLISTED;
+  const associationControls = (
+    <div data-poster-region="association-slot">
+      {!isBlocklisted && (
+        <AssociationBadge
+          mediaType={mediaType}
+          id={id}
+          variant="card"
+          hideWhenEmpty={hideAssociationWhenEmpty}
+        />
+      )}
+    </div>
+  );
+  const blocklistControl = showHideButton && (
+    <Tooltip
+      content={intl.formatMessage(
+        isUpdating
+          ? messages.blocklistUpdatingDescription
+          : isBlocklisted
+            ? messages.blocklistRemoveDescription
+            : messages.blocklistAddDescription,
+        { title }
+      )}
+    >
+      <div data-poster-region="blocklist-slot">
+        <button
+          type="button"
+          className="poster-control poster-control-blocklist app-control-shadow-exempt"
+          aria-label={intl.formatMessage(
+            isBlocklisted
+              ? globalMessages.removefromBlocklist
+              : globalMessages.addToBlocklist
+          )}
+          aria-pressed={isBlocklisted}
+          disabled={isUpdating}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (isUpdating) return;
+            if (isBlocklisted) {
+              void onClickShowBlocklistBtn();
+            } else {
+              setShowBlocklistModal(true);
+            }
+          }}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          {isBlocklisted ? (
+            <EyeIcon aria-hidden="true" />
+          ) : (
+            <EyeSlashIcon aria-hidden="true" />
+          )}
+        </button>
+      </div>
+    </Tooltip>
+  );
+
   return (
     <div
-      className={`title-card-shell ${
-        canExpand ? 'w-full' : 'w-36 sm:w-36 md:w-44'
-      }`}
+      className="poster-layout title-card-shell"
+      data-media-type={mediaType}
       data-testid="title-card"
       ref={cardRef}
     >
@@ -765,16 +947,25 @@ const TitleCard = ({
         </>
       )}
       <div
-        className={`app-card-poster app-card-poster-interactive group aspect-[2/3] ${
+        className={`app-card-poster app-card-poster-interactive ${
           showDetail ? 'app-card-poster-active' : ''
         }`}
+        data-poster-region="frame"
         onMouseEnter={() => {
           if (!isTouch) {
             showDetails();
           }
         }}
         onMouseLeave={hideDetails}
-        onClick={showDetails}
+        onClick={(event) => {
+          if (
+            event.target instanceof Element &&
+            (event.target.closest('[data-poster-region="watchlist-slot"]') ||
+              event.target.closest('[data-poster-region="blocklist-slot"]'))
+          )
+            return;
+          showDetails();
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             showDetails();
@@ -783,49 +974,42 @@ const TitleCard = ({
         role="link"
         tabIndex={0}
       >
-        <div className="absolute inset-0 h-full w-full overflow-hidden">
+        <div data-poster-region="content">
           <CachedImage
             type={imageCacheType}
-            className="absolute inset-0 h-full w-full object-cover"
+            data-poster-region="image"
             alt=""
-            src={displayImage ?? '/images/seerr_poster_not_found_logo_top.png'}
+            src={posterImage ?? posterPlaceholder}
+            fallbackSrc={posterErrorFallback}
+            errorFallbackSrc={posterPlaceholder}
+            onError={handlePosterImageError}
             fill
             priority={priority}
           />
-          <div className="absolute right-0 left-0 p-2">
-            <div className="flex flex-col gap-1">
-              <div className="flex w-full min-w-0 items-start justify-between gap-1">
-                <div className="flex min-w-0 flex-col items-start gap-1">
+          <div data-poster-region="controls">
+            <div data-poster-region="control-stack">
+              <div data-poster-region="control-row">
+                <div data-poster-region="type-slot">
                   {isBook ? (
                     showAllBookFormats ? (
                       <>
-                        <BookFormatBadge
-                          format="ebook"
-                          variant="card"
-                          className="pointer-events-none z-40 self-start"
-                        />
-                        <BookFormatBadge
-                          format="audiobook"
-                          variant="card"
-                          className="pointer-events-none z-40 self-start"
-                        />
+                        <BookFormatBadge format="ebook" variant="card" />
+                        <BookFormatBadge format="audiobook" variant="card" />
                       </>
                     ) : (
                       <BookFormatBadge
                         format={preferredBookFormat}
                         variant="card"
-                        className="pointer-events-none z-40 self-start"
                       />
                     )
                   ) : (
                     <MediaTypeBadge
                       mediaType={mediaType === 'person' ? 'artist' : mediaType}
                       variant="card"
-                      className="pointer-events-none z-40 self-start"
                     />
                   )}
                 </div>
-                <div className="z-40 flex min-h-4 shrink-0 items-center justify-end">
+                <div data-poster-region="status-slot">
                   {primaryStatusBadge && (
                     <StatusBadgeMini
                       status={primaryStatusBadge.status}
@@ -834,38 +1018,50 @@ const TitleCard = ({
                       shrink
                     />
                   )}
-                  {!primaryStatusBadge && canShowBlocklistAction && (
-                    <Tooltip
-                      content={intl.formatMessage(
-                        globalMessages.addToBlocklist
-                      )}
-                    >
-                      <button
-                        type="button"
-                        className="poster-control poster-control-blocklist app-control-shadow-exempt z-40"
-                        aria-label={intl.formatMessage(
-                          globalMessages.addToBlocklist
-                        )}
-                        onClick={() => setShowBlocklistModal(true)}
-                      >
-                        <EyeSlashIcon />
-                      </button>
-                    </Tooltip>
-                  )}
                 </div>
               </div>
-              <div className="flex w-full min-w-0 items-center justify-between gap-1">
-                <div className="z-40 flex min-h-4 min-w-0 items-center">
-                  {currentStatus !== MediaStatus.BLOCKLISTED && (
-                    <AssociationBadge
-                      mediaType={mediaType}
-                      id={id}
-                      variant="card"
-                      hideWhenEmpty={hideAssociationWhenEmpty}
-                    />
-                  )}
-                </div>
-                <div className="z-40 flex min-h-4 shrink-0 items-center justify-end">
+              <div data-poster-region="control-row">
+                {watchlistPreview ? (
+                  <Tooltip
+                    content={intl.formatMessage(
+                      watchlistPreviewDisabled
+                        ? messages.watchlistPreviewDisabled
+                        : previewWatchlisted
+                          ? messages.watchlistPreviewRemove
+                          : messages.watchlistPreviewAdd,
+                      { title }
+                    )}
+                  >
+                    <div data-poster-region="watchlist-slot">
+                      <button
+                        className="poster-control poster-control-watchlist poster-control-icon"
+                        type="button"
+                        aria-label={intl.formatMessage(
+                          messages.watchlistPreviewLabel
+                        )}
+                        aria-pressed={previewWatchlisted}
+                        disabled={watchlistPreviewDisabled}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          if (watchlistPreviewDisabled) return;
+                          // Visual prototype: deliberately no API, cache, or database mutation.
+                          setPreviewWatchlisted((added) => !added);
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        {previewWatchlisted ? (
+                          <SolidStarIcon aria-hidden="true" />
+                        ) : (
+                          <StarIcon aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
+                  </Tooltip>
+                ) : (
+                  associationControls
+                )}
+                <div data-poster-region="status-slot">
                   {secondaryStatusBadge && (
                     <StatusBadgeMini
                       status={secondaryStatusBadge.status}
@@ -876,149 +1072,117 @@ const TitleCard = ({
                   )}
                 </div>
               </div>
-              {watchedStatus && watchedStatus.watchedCount > 0 && (
-                <div className="z-40 flex w-full items-center justify-end">
-                  <WatchedBadge
-                    status={watchedStatus}
-                    incompleteLibrary={
-                      mediaType === 'tv' &&
-                      (currentStatus === MediaStatus.PARTIALLY_AVAILABLE ||
-                        (currentStatus !== MediaStatus.AVAILABLE &&
-                          currentStatus4k === MediaStatus.PARTIALLY_AVAILABLE))
-                    }
-                  />
+              {watchlistPreview && (
+                <div data-poster-region="control-row">
+                  {associationControls}
+                  {watchedControl}
                 </div>
+              )}
+              {watchlistPreview ? (
+                blocklistControl
+              ) : blocklistControl ? (
+                <div data-poster-region="control-row">
+                  {blocklistControl}
+                  {watchedControl}
+                </div>
+              ) : (
+                watchedControl
               )}
             </div>
             {showDetail && currentStatus !== MediaStatus.BLOCKLISTED && (
-              <div className="mt-1 flex justify-end">
-                <div className="flex flex-col items-end gap-1">
+              <div data-poster-region="hover-actions">
+                <div>
                   {canUseWatchlistActions &&
+                    !watchlistPreview &&
                     user?.userType !== UserType.PLEX &&
                     (toggleWatchlist ? (
                       <Button
                         buttonType={'ghost'}
-                        className="poster-control poster-control-icon z-40"
+                        className="poster-control poster-control-icon"
                         buttonSize={'sm'}
                         iconOnly
                         onClick={onClickWatchlistBtn}
                       >
-                        <StarIcon className={'h-3 text-amber-300'} />
+                        <StarIcon data-icon-tone="accent" />
                       </Button>
                     ) : (
                       <Button
-                        className="poster-control poster-control-icon z-40"
+                        className="poster-control poster-control-icon"
                         buttonSize={'sm'}
                         iconOnly
                         onClick={onClickDeleteWatchlistBtn}
                       >
-                        <MinusCircleIcon className={'h-3'} />
+                        <MinusCircleIcon />
                       </Button>
                     ))}
                 </div>
               </div>
             )}
-            {showDetail &&
-              showHideButton &&
-              currentStatus == MediaStatus.BLOCKLISTED && (
-                <div className="mt-1 flex justify-end">
-                  <Tooltip
-                    content={intl.formatMessage(
-                      globalMessages.removefromBlocklist
-                    )}
-                  >
-                    <Button
-                      buttonType={'ghost'}
-                      className="poster-control poster-control-icon z-40"
-                      buttonSize={'sm'}
-                      iconOnly
-                      onClick={() => onClickShowBlocklistBtn()}
-                    >
-                      <EyeIcon className={'h-3'} />
-                    </Button>
-                  </Tooltip>
-                </div>
-              )}
           </div>
           <Transition
             as={Fragment}
             show={isUpdating}
-            enter="transition-opacity ease-in-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="transition-opacity ease-in-out duration-300"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
+            enter="poster-fade"
+            enterFrom="poster-fade-hidden"
+            enterTo="poster-fade-visible"
+            leave="poster-fade"
+            leaveFrom="poster-fade-visible"
+            leaveTo="poster-fade-hidden"
           >
-            <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-xl bg-gray-800/75 text-white">
-              <Spinner className="h-10 w-10" />
+            <div data-poster-region="busy">
+              <Spinner />
             </div>
           </Transition>
 
           <Transition
             as={Fragment}
             show={showTextOverlay}
-            enter="transition-opacity"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="transition-opacity"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
+            enter="poster-fade"
+            enterFrom="poster-fade-hidden"
+            enterTo="poster-fade-visible"
+            leave="poster-fade"
+            leaveFrom="poster-fade-visible"
+            leaveTo="poster-fade-hidden"
           >
-            <div className="absolute inset-0 overflow-hidden rounded-xl">
+            <div data-poster-region="overlay">
               <Link
                 href={detailHref}
                 prefetch={false}
-                className={`absolute inset-0 h-full w-full cursor-pointer overflow-hidden text-left ${
-                  showFullDetailOverlay
-                    ? 'title-card-overlay-full'
-                    : 'title-card-overlay-compact'
-                }`}
+                data-poster-region="detail-link"
+                data-poster-detail={showFullDetailOverlay ? 'full' : 'compact'}
+                data-poster-has-action={
+                  canShowRequestButton && showFullDetailOverlay
+                }
               >
-                <div className="flex h-full w-full items-end">
-                  <div
-                    className={`px-2 text-white ${
-                      canShowRequestButton && showFullDetailOverlay
-                        ? 'pb-11'
-                        : 'pb-2'
-                    }`}
-                  >
-                    {year && <div className="text-sm font-medium">{year}</div>}
+                <div data-poster-region="copy-anchor">
+                  <div data-poster-region="copy">
+                    {year && <div data-poster-region="year">{year}</div>}
 
                     <h1
-                      className={`text-xl leading-tight font-bold break-words whitespace-normal ${
-                        showFullDetailOverlay ? 'line-clamp-3' : 'line-clamp-2'
-                      }`}
+                      className="card-title"
+                      data-poster-region="title"
                       data-testid="title-card-title"
+                      data-title-weight={titleWeight}
                     >
                       {title}
                     </h1>
                     {artist && (
-                      <div className="mt-1 truncate text-sm font-medium text-gray-200">
-                        {artist}
-                      </div>
+                      <div data-poster-region="subtitle">{artist}</div>
                     )}
                     {showFullDetailOverlay && (
-                      <div
-                        className={`text-xs break-words whitespace-normal ${
-                          canShowRequestButton ? 'line-clamp-3' : 'line-clamp-5'
-                        }`}
-                      >
-                        {summary}
-                      </div>
+                      <div data-poster-region="summary">{summary}</div>
                     )}
                   </div>
                 </div>
               </Link>
 
-              <div className="absolute right-0 bottom-0 left-0 flex justify-between px-2 py-2">
+              <div data-poster-region="actions">
                 {magazineRequestState && showFullDetailOverlay ? (
                   <Button
                     buttonType="default"
                     buttonSize="sm"
                     disabled
                     disabledReason={magazineRequestState.reason}
-                    className="h-7 w-full"
                     aria-label={magazineRequestState.label}
                   >
                     <span>{magazineRequestState.label}</span>
@@ -1046,7 +1210,6 @@ const TitleCard = ({
                       }
                       setShowRequestModal(true);
                     }}
-                    className="h-7 w-full"
                   >
                     <ArrowDownTrayIcon />
                     <span>{requestLabel}</span>

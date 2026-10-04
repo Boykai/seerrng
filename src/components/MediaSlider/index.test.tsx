@@ -3,6 +3,7 @@ import type { MangaResult } from '@server/models/Manga';
 import type { MovieResult } from '@server/models/Search';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { IntlProvider } from 'react-intl';
 import { beforeEach, expect, it, vi } from 'vitest';
 import MediaSlider from '.';
 
@@ -139,13 +140,15 @@ it('renders manga cards in sliders, hides blocklisted manga and requests the sor
   ];
 
   const html = renderToStaticMarkup(
-    <MediaSlider
-      title="Trending Manga"
-      url="/api/v1/discover/manga"
-      extraParams="sortBy=trending"
-      linkUrl="/discover/manga?sortBy=trending"
-      sliderKey="manga-trending"
-    />
+    <IntlProvider locale="en">
+      <MediaSlider
+        title="Trending Manga"
+        url="/api/v1/discover/manga"
+        extraParams="sortBy=trending"
+        linkUrl="/discover/manga?sortBy=trending"
+        sliderKey="manga-trending"
+      />
+    </IntlProvider>
   );
 
   expect(html).toContain(

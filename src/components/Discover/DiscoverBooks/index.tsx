@@ -279,7 +279,7 @@ const DiscoverBooks = ({
   return (
     <>
       <PageTitle title={title} />
-      <div className="mb-4">
+      <div className="app-filter-section-gap">
         <Header>{title}</Header>
         {mediaFilters}
         {showFormatTabs && (
@@ -301,7 +301,7 @@ const DiscoverBooks = ({
           section="filters"
           label={intl.formatMessage(messages.filters)}
         >
-          <div className="flex flex-wrap gap-2">
+          <div className="app-filter-row">
             <FilterResetButton
               label={intl.formatMessage(messages.clearFilters)}
               selected={!hasActiveFilters}
@@ -356,7 +356,7 @@ const DiscoverBooks = ({
           section="sortBy"
           label={intl.formatMessage(messages.sortBy)}
         >
-          <div className="flex flex-wrap gap-2">
+          <div className="app-filter-row">
             <button
               className={getFilterToggleButtonClass(
                 sortBy === 'ranked' || sortBy === 'ranked.asc'
@@ -369,9 +369,9 @@ const DiscoverBooks = ({
             >
               {intl.formatMessage(messages.recommended)}
               {sortBy === 'ranked.asc' ? (
-                <BarsArrowUpIcon className="h-4 w-4" />
+                <BarsArrowUpIcon className="app-action-icon" />
               ) : (
-                <BarsArrowDownIcon className="h-4 w-4" />
+                <BarsArrowDownIcon className="app-action-icon" />
               )}
             </button>
             <button
@@ -397,9 +397,9 @@ const DiscoverBooks = ({
             >
               {intl.formatMessage(messages.rating)}
               {sortBy === 'rating.asc' ? (
-                <BarsArrowUpIcon className="h-4 w-4" />
+                <BarsArrowUpIcon className="app-action-icon" />
               ) : (
-                <BarsArrowDownIcon className="h-4 w-4" />
+                <BarsArrowDownIcon className="app-action-icon" />
               )}
             </button>
             <button
@@ -414,9 +414,9 @@ const DiscoverBooks = ({
             >
               {intl.formatMessage(messages.editions)}
               {sortBy === 'editions.asc' ? (
-                <BarsArrowUpIcon className="h-4 w-4" />
+                <BarsArrowUpIcon className="app-action-icon" />
               ) : (
-                <BarsArrowDownIcon className="h-4 w-4" />
+                <BarsArrowDownIcon className="app-action-icon" />
               )}
             </button>
             <button
@@ -429,9 +429,9 @@ const DiscoverBooks = ({
             >
               {intl.formatMessage(messages.date)}
               {sortBy === 'oldest' ? (
-                <BarsArrowUpIcon className="h-4 w-4" />
+                <BarsArrowUpIcon className="app-action-icon" />
               ) : (
-                <BarsArrowDownIcon className="h-4 w-4" />
+                <BarsArrowDownIcon className="app-action-icon" />
               )}
             </button>
             <button
@@ -443,7 +443,7 @@ const DiscoverBooks = ({
               }
             >
               {intl.formatMessage(messages.random)}
-              <BarsArrowDownIcon className="h-4 w-4" />
+              <BarsArrowDownIcon className="app-action-icon" />
             </button>
           </div>
         </PinnedFilterSection>

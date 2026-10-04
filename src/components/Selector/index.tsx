@@ -1,8 +1,10 @@
+import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import { SmallLoadingSpinner } from '@app/components/Common/LoadingSpinner';
 import Tooltip from '@app/components/Common/Tooltip';
 import RegionSelector from '@app/components/RegionSelector';
 import { encodeURIExtraParams } from '@app/hooks/useDiscover';
+import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
 import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
 import { ArrowDownIcon, ArrowUpIcon } from '@heroicons/react/20/solid';
@@ -20,7 +22,7 @@ import type {
   WatchProviderDetails,
 } from '@server/models/common';
 import axios from 'axios';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useIntl } from 'react-intl';
 import type {
   ControlProps,
@@ -518,6 +520,11 @@ export const WatchProviderSelector = ({
       type === 'movie' ? 'movies' : 'tv'
     }?watchRegion=${watchRegion}`
   );
+  const activityId = useId();
+  useSearchActivityReporter(
+    Boolean(regionLabel) && isLoading,
+    `watch-provider-selector:${activityId}`
+  );
 
   useEffect(() => {
     onChange(watchRegion, activeProvider);
@@ -551,7 +558,7 @@ export const WatchProviderSelector = ({
   return (
     <>
       {regionLabel ? (
-        <div className="discover-filter-control mb-2">
+        <div className="discover-filter-control" data-provider-region="region">
           <span className="discover-filter-control-label">{regionLabel}</span>
           <RegionSelector
             value={watchRegion}
@@ -582,10 +589,12 @@ export const WatchProviderSelector = ({
         />
       )}
       {isLoading ? (
-        <SmallLoadingSpinner />
+        regionLabel ? null : (
+          <SmallLoadingSpinner />
+        )
       ) : (
-        <div className="grid">
-          <div className="provider-icons grid gap-2">
+        <div className="provider-icons" data-provider-region="layout">
+          <div className="provider-icons">
             {initialProviders.map((provider) => {
               const isActive = activeProvider.includes(provider.id);
               return (
@@ -593,42 +602,34 @@ export const WatchProviderSelector = ({
                   content={provider.name}
                   key={`prodiver-${provider.id}`}
                 >
-                  <div
-                    className={`provider-container relative w-full cursor-pointer rounded-lg ring-1 ${
-                      isActive
-                        ? 'bg-gray-600 ring-indigo-500 hover:bg-gray-500'
-                        : 'bg-gray-700 ring-gray-500 hover:bg-gray-600'
-                    }`}
+                  <button
+                    type="button"
+                    className="provider-container"
+                    data-selected={isActive}
+                    aria-label={provider.name}
+                    aria-pressed={isActive}
                     onClick={() => toggleProvider(provider.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        toggleProvider(provider.id);
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
                   >
-                    <div className="aspect-1 relative m-2">
+                    <div data-provider-region="logo">
                       <CachedImage
                         type="tmdb"
                         src={`https://image.tmdb.org/t/p/w185${provider.logoPath}`}
                         alt=""
                         fill
-                        className="rounded-lg object-contain"
                       />
                     </div>
                     {isActive && (
-                      <div className="pointer-events-none absolute -top-1 -left-1 flex items-center justify-center text-indigo-100 opacity-90">
-                        <CheckCircleIcon className="h-6 w-6" />
+                      <div data-provider-region="check">
+                        <CheckCircleIcon />
                       </div>
                     )}
-                  </div>
+                  </button>
                 </Tooltip>
               );
             })}
           </div>
           {showMore && otherProviders.length > 0 && (
-            <div className="provider-icons relative top-2 grid gap-2">
+            <div className="provider-icons" data-provider-region="expanded">
               {otherProviders.map((provider) => {
                 const isActive = activeProvider.includes(provider.id);
                 return (
@@ -636,63 +637,56 @@ export const WatchProviderSelector = ({
                     content={provider.name}
                     key={`prodiver-${provider.id}`}
                   >
-                    <div
-                      className={`provider-container relative w-full cursor-pointer rounded-lg ring-1 transition ${
-                        isActive
-                          ? 'bg-gray-600 ring-indigo-500 hover:bg-gray-500'
-                          : 'bg-gray-700 ring-gray-500 hover:bg-gray-600'
-                      }`}
+                    <button
+                      type="button"
+                      className="provider-container"
+                      data-selected={isActive}
+                      aria-label={provider.name}
+                      aria-pressed={isActive}
                       onClick={() => toggleProvider(provider.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          toggleProvider(provider.id);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
                     >
-                      <div className="aspect-1 relative m-2">
+                      <div data-provider-region="logo">
                         <CachedImage
                           type="tmdb"
                           src={`https://image.tmdb.org/t/p/w185${provider.logoPath}`}
                           alt=""
                           fill
-                          className="rounded-lg object-contain"
                         />
                       </div>
                       {isActive && (
-                        <div className="pointer-events-none absolute -top-1 -left-1 flex items-center justify-center text-indigo-100 opacity-90">
-                          <CheckCircleIcon className="h-6 w-6" />
+                        <div data-provider-region="check">
+                          <CheckCircleIcon />
                         </div>
                       )}
-                    </div>
+                    </button>
                   </Tooltip>
                 );
               })}
             </div>
           )}
           {otherProviders.length > 0 && (
-            <button
-              className="relative top-4 flex items-center justify-center space-x-2 text-sm text-gray-400 transition hover:text-gray-200"
+            <Button
+              buttonSize="standard"
+              data-provider-region="expand-control"
               type="button"
               onClick={() => setShowMore(!showMore)}
             >
-              <div className="h-0.5 flex-1 bg-gray-600" />
+              <span data-provider-region="divider" aria-hidden="true" />
               {showMore ? (
                 <>
-                  <ArrowUpIcon className="h-4 w-4" />
+                  <ArrowUpIcon />
                   <span>{intl.formatMessage(messages.showless)}</span>
-                  <ArrowUpIcon className="h-4 w-4" />
+                  <ArrowUpIcon />
                 </>
               ) : (
                 <>
-                  <ArrowDownIcon className="h-4 w-4" />
+                  <ArrowDownIcon />
                   <span>{intl.formatMessage(messages.showmore)}</span>
-                  <ArrowDownIcon className="h-4 w-4" />
+                  <ArrowDownIcon />
                 </>
               )}
-              <div className="h-0.5 flex-1 bg-gray-600" />
-            </button>
+              <span data-provider-region="divider" aria-hidden="true" />
+            </Button>
           )}
         </div>
       )}

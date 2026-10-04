@@ -126,7 +126,7 @@ it('shows a downloading manga request its verified chapters and picks up a newly
   expect(list?.getAttribute('aria-labelledby')).toBe(
     list?.querySelector('h4')?.id
   );
-  expect(list?.querySelector('h4')?.textContent).toBe('Download copies');
+  expect(list?.querySelector('h4')?.textContent).toBe('Download Copies');
   expect(host.querySelector('details')).toBeNull();
   expect(links().map(({ label }) => label)).toEqual([
     'Download Sample Manga - Ch. 2.cbz',

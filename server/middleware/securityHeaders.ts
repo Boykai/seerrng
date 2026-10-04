@@ -14,7 +14,7 @@ export const buildContentSecurityPolicy = (
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    `connect-src 'self' https://plex.tv https://*.plex.tv${development ? ' ws: wss:' : ''}`,
+    `connect-src 'self' https://plex.tv https://*.plex.tv https://api.github.com${development ? ' ws: wss:' : ''}`,
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
     "manifest-src 'self'",

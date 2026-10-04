@@ -1,4 +1,5 @@
 import Button from '@app/components/Common/Button';
+import MediaTypeBadge from '@app/components/Common/MediaTypeBadge';
 import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -22,7 +23,7 @@ const messages = defineMessages('components.TitleCard', {
   cleardata: 'Clear Data',
 });
 
-const ErrorCard = ({ id, tmdbId, tvdbId, type, canExpand }: ErrorCardProps) => {
+const ErrorCard = ({ id, tmdbId, tvdbId, type }: ErrorCardProps) => {
   const intl = useIntl();
   const { addToast } = useToasts();
 
@@ -52,36 +53,35 @@ const ErrorCard = ({ id, tmdbId, tvdbId, type, canExpand }: ErrorCardProps) => {
 
   return (
     <div
-      className={`title-card-shell ${
-        canExpand ? 'w-full' : 'w-36 sm:w-36 md:w-44'
-      }`}
+      className="poster-layout title-card-shell"
+      data-media-type={type}
       data-testid="title-card"
     >
-      <div className="app-card-poster relative aspect-[2/3]">
-        <div className="absolute inset-0 h-full w-full overflow-hidden">
-          <div className="absolute right-0 left-0 flex items-center justify-between p-2">
-            <div
-              className={`pointer-events-none z-40 rounded-full shadow ${
-                type === 'movie' ? 'bg-blue-500' : 'bg-purple-600'
-              }`}
-            >
-              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium tracking-wider text-white uppercase sm:h-5">
-                {type === 'movie'
-                  ? intl.formatMessage(globalMessages.movie)
-                  : intl.formatMessage(globalMessages.tvshow)}
+      <div className="app-card-poster" data-poster-region="frame">
+        <div
+          data-poster-region="content"
+          data-poster-detail="full"
+          data-poster-has-action="true"
+        >
+          <div data-poster-region="controls">
+            <div data-poster-region="control-row">
+              <div data-poster-region="type-slot">
+                <MediaTypeBadge mediaType={type} variant="card" />
               </div>
-            </div>
-            <div className="pointer-events-none z-40">
-              <div className="flex h-4 w-4 items-center justify-center rounded-full bg-green-400 text-white shadow sm:h-5 sm:w-5">
-                <CheckIcon className="h-3 w-3 sm:h-4 sm:w-4" />
+              <div data-poster-region="status-slot">
+                <span className="poster-control poster-control-available">
+                  <CheckIcon />
+                </span>
               </div>
             </div>
           </div>
 
-          <div className="flex h-full w-full items-end">
-            <div className="px-2 pb-11 text-white">
+          <div data-poster-region="copy-anchor">
+            <div data-poster-region="copy">
               <h1
-                className="line-clamp-3 text-xl leading-tight font-bold break-words whitespace-normal"
+                className="card-title"
+                data-title-weight="regular"
+                data-poster-region="title"
                 data-testid="title-card-title"
               >
                 {intl.formatMessage(messages.mediaerror, {
@@ -111,7 +111,7 @@ const ErrorCard = ({ id, tmdbId, tvdbId, type, canExpand }: ErrorCardProps) => {
             </div>
           </div>
 
-          <div className="absolute right-0 bottom-0 left-0 flex justify-between px-2 py-2">
+          <div data-poster-region="actions">
             <Button
               buttonType="danger"
               buttonSize="sm"
@@ -119,7 +119,6 @@ const ErrorCard = ({ id, tmdbId, tvdbId, type, canExpand }: ErrorCardProps) => {
                 e.preventDefault();
                 deleteMedia();
               }}
-              className="h-7 w-full"
             >
               <TrashIcon />
               <span>{intl.formatMessage(messages.cleardata)}</span>

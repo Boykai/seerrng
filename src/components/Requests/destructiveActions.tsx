@@ -12,7 +12,7 @@ export const requestActionMessageText = {
   delete: 'Delete',
   deleting: 'Deleting…',
   deleteTooltip: 'Delete this request and its status history.',
-  deleteTitle: 'Delete request entry?',
+  deleteTitle: 'Delete Request Entry?',
   deleteDescription:
     'Seerr will cancel any active work it can identify, clean up temporary request records, and permanently remove this entry and its history.',
   deleteFailed: 'Unable to delete this request entry.',
@@ -21,7 +21,7 @@ export const requestActionMessageText = {
   removing: 'Deleting…',
   removeTooltip: 'The media and the library entry will both be deleted.',
   removeUnavailableTooltip: 'No linked library item is available to delete.',
-  removeTitle: 'Permanently delete {title} from {service}?',
+  removeTitle: 'Permanently Delete {title} from {service}?',
   removeDescription:
     'This will permanently delete its media files and remove its library entry from {service}. This action cannot be undone from Seerr. Other quality versions remain. When the last movie or series copy is confirmed gone, library reconciliation also removes its requests and issues, but preserves blocklists and watchlists.',
   removeFailed: 'Unable to delete this item from its library service.',
@@ -84,7 +84,7 @@ export const RequestActionButton = ({
             )
       }
     >
-      <span className="inline-flex">
+      <span>
         <Button
           type="button"
           buttonType="danger"

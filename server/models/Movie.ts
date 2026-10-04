@@ -5,6 +5,11 @@ import type {
 } from '@server/api/themoviedb/interfaces';
 import type Media from '@server/entity/Media';
 import type {
+  VideoMetadataAttribution,
+  VideoMetadataProvenance,
+  VideoMetadataSupplemental,
+} from './VideoMetadata';
+import type {
   Cast,
   Crew,
   ExternalIds,
@@ -86,6 +91,10 @@ export interface MovieDetails {
   watchProviders?: WatchProviders[];
   keywords: Keyword[];
   onUserWatchlist?: boolean;
+  metadataSources?: VideoMetadataAttribution[];
+  metadataProvenance?: VideoMetadataProvenance['fields'];
+  supplementalMetadata?: VideoMetadataSupplemental;
+  metadataExpiresAt?: string;
 }
 
 export const mapProductionCompany = (

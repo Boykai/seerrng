@@ -3,6 +3,7 @@ import { afterEach, before, describe, it, mock } from 'node:test';
 
 import ExternalAPI from '@server/api/externalapi';
 import ListenBrainzAPI from '@server/api/listenbrainz';
+import TheAudioDb from '@server/api/theaudiodb';
 import TmdbPersonMapper from '@server/api/themoviedb/personMapper';
 import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
@@ -337,6 +338,48 @@ const albumDetails = {
   type: 'Album',
 };
 
+function mockSimilarArtistEnrichment(count: number, requestCount = 1) {
+  const ids = Array.from(
+    { length: count },
+    (_, index) => `similar-${index + 1}`
+  );
+  const people = ids
+    .filter((_, index) => index % 2 === 0)
+    .map((artistId) => ({
+      artistId,
+      artistName: `Similar Artist ${Number(artistId.split('-')[1])}`,
+    }));
+  const images = mock.method(
+    TheAudioDb.prototype,
+    'batchGetArtistImages',
+    async () =>
+      Object.fromEntries(
+        ids.map((id) => [
+          id,
+          {
+            artistThumb: `https://www.theaudiodb.com/${id}.jpg`,
+            artistBackground: null,
+          },
+        ])
+      )
+  );
+  const mappings = mock.method(
+    TmdbPersonMapper.prototype,
+    'batchGetMappings',
+    async () => []
+  );
+  return () => {
+    assert.deepStrictEqual(
+      images.mock.calls.map((call) => call.arguments),
+      Array.from({ length: requestCount }, () => [ids])
+    );
+    assert.deepStrictEqual(
+      mappings.mock.calls.map((call) => call.arguments),
+      Array.from({ length: requestCount }, () => [people])
+    );
+  };
+}
+
 function mockOpenLibraryBook() {
   mockPrivate(ExternalAPI.prototype, 'get', async (endpoint: unknown) => {
     if (endpoint === '/works/OLROOTW.json') {
@@ -524,6 +567,7 @@ describe('GET /association/:mediaType/:id', () => {
   });
 
   it('returns similar artist edges for an artist and respects weak filtering', async () => {
+    const images = mockSimilarArtistEnrichment(12, 2);
     mock.method(ListenBrainzAPI.prototype, 'getArtist', async (mbid: string) =>
       artistDetails(mbid, 'Root Artist', 12)
     );
@@ -539,6 +583,7 @@ describe('GET /association/:mediaType/:id', () => {
     );
 
     assert.strictEqual(defaultRes.status, 200);
+    images();
     assert.strictEqual(defaultRes.body.root.title, 'Root Artist');
     assert.strictEqual(
       defaultRes.body.edges.some(
@@ -554,6 +599,7 @@ describe('GET /association/:mediaType/:id', () => {
   });
 
   it('builds album associations from the root album artist', async () => {
+    const images = mockSimilarArtistEnrichment(2);
     mock.method(
       ListenBrainzAPI.prototype,
       'getAlbum',
@@ -571,6 +617,7 @@ describe('GET /association/:mediaType/:id', () => {
     const res = await agent.get('/association/album/album-root');
 
     assert.strictEqual(res.status, 200);
+    images();
     assert.strictEqual(res.body.root.title, 'Root Album');
     assert.ok(
       res.body.edges.some(

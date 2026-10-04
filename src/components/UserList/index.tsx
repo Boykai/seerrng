@@ -278,8 +278,22 @@ const UserList = () => {
     }
   };
 
+  const pendingHeading = (
+    <>
+      <PageTitle title={intl.formatMessage(messages.users)} />
+      <div className="page-title-row">
+        <h2 className="page-title">{intl.formatMessage(messages.userlist)}</h2>
+      </div>
+    </>
+  );
+
   if (!data && !error) {
-    return <LoadingSpinner />;
+    return (
+      <>
+        {pendingHeading}
+        <LoadingSpinner />
+      </>
+    );
   }
 
   const CreateUserSchema = Yup.object().shape({
@@ -304,7 +318,12 @@ const UserList = () => {
   });
 
   if (!data) {
-    return <LoadingSpinner />;
+    return (
+      <>
+        {pendingHeading}
+        <LoadingSpinner />
+      </>
+    );
   }
 
   const passwordGenerationEnabled =
@@ -352,12 +371,7 @@ const UserList = () => {
       <PageTitle title={intl.formatMessage(messages.users)} />
       <Transition
         as="div"
-        enter="transition-opacity duration-300"
-        enterFrom="opacity-0"
-        enterTo="opacity-100"
-        leave="transition-opacity duration-300"
-        leaveFrom="opacity-100"
-        leaveTo="opacity-0"
+
         show={deleteModal.isOpen}
       >
         <Modal
@@ -382,12 +396,7 @@ const UserList = () => {
 
       <Transition
         as="div"
-        enter="transition-opacity duration-300"
-        enterFrom="opacity-0"
-        enterTo="opacity-100"
-        leave="transition-opacity duration-300"
-        leaveFrom="opacity-100"
-        leaveTo="opacity-0"
+
         show={createModal.isOpen}
       >
         <Formik
@@ -572,12 +581,7 @@ const UserList = () => {
 
       <Transition
         as="div"
-        enter="transition-opacity duration-300"
-        enterFrom="opacity-0"
-        enterTo="opacity-100"
-        leave="transition-opacity duration-300"
-        leaveFrom="opacity-100"
-        leaveTo="opacity-0"
+
         show={showBulkEditModal}
       >
         <BulkEditModal
@@ -593,12 +597,7 @@ const UserList = () => {
 
       <Transition
         as="div"
-        enter="transition-opacity duration-300"
-        enterFrom="opacity-0"
-        enterTo="opacity-100"
-        leave="transition-opacity duration-300"
-        leaveFrom="opacity-100"
-        leaveTo="opacity-0"
+
         show={showImportModal}
       >
         {settings.currentSettings.mediaServerType === MediaServerType.PLEX ? (
@@ -627,13 +626,13 @@ const UserList = () => {
         <div className="text-sm text-gray-300">
           {intl.formatMessage(messages.filters)}
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="app-filter-row">
           <form
-            className="discover-filter-control w-72 max-w-full"
+            className="discover-filter-control app-filter-search-control"
             onSubmit={(event) => event.preventDefault()}
           >
-            <span className="discover-filter-control-label gap-1.5">
-              <MagnifyingGlassIcon className="h-4 w-4" aria-hidden="true" />
+            <span className="discover-filter-control-label">
+              <MagnifyingGlassIcon aria-hidden="true" />
               {intl.formatMessage(messages.keywordSearch)}
             </span>
             <input
@@ -642,7 +641,7 @@ const UserList = () => {
               onChange={(event) => setKeywordSearch(event.target.value)}
               placeholder={intl.formatMessage(messages.searchUsers)}
               aria-label={intl.formatMessage(messages.searchUsers)}
-              className="min-w-0 flex-1 border-0 bg-transparent px-2 py-1 text-xs font-medium text-gray-200 placeholder:text-gray-500 focus:ring-0"
+              className="app-filter-search-input"
             />
           </form>
           <CompactSelect
@@ -662,7 +661,7 @@ const UserList = () => {
         <div className="app-filter-section-heading">
           {intl.formatMessage(messages.sortByHeading)}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="app-filter-row">
           {sortOptions.map((option) => {
             const active = currentSort === option.key;
             const Icon =
@@ -678,7 +677,7 @@ const UserList = () => {
                 className={getFilterToggleButtonClass(active)}
               >
                 {option.label}
-                <Icon className="h-4 w-4" aria-hidden="true" />
+                <Icon aria-hidden="true" />
               </button>
             );
           })}

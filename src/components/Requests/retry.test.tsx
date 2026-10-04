@@ -101,6 +101,7 @@ vi.mock('@app/hooks/useRequestStatusScrollRestoration', () => ({
   default: () => undefined,
 }));
 vi.mock('@app/hooks/useSearchActivity', () => ({
+  default: () => false,
   useSearchActivityReporter: () => undefined,
 }));
 vi.mock('@app/components/Common/PageTitle', () => ({ default: () => null }));
@@ -126,6 +127,14 @@ vi.mock('@app/components/Discover/FilterPanel/CompactFilterSelect', () => ({
 }));
 vi.mock('@app/components/Discover/PinnedFilterSection', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  PinnedFilterSectionGroup: ({
+    sections,
+  }: {
+    sections: { section: string; children: React.ReactNode }[];
+  }) =>
+    sections.map(({ section, children }) => (
+      <React.Fragment key={section}>{children}</React.Fragment>
+    )),
 }));
 vi.mock('@app/components/Discover/MediaFilterOption', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,

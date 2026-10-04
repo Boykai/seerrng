@@ -55,6 +55,7 @@ vi.mock('react-intersection-observer', () => ({
 vi.mock('@app/components/Common/PageTitle', () => ({ default: () => null }));
 vi.mock('@app/components/Common/LoadingSpinner', () => ({
   default: () => null,
+  PageStatus: () => null,
 }));
 vi.mock('@app/components/Common/PaginationFooter', () => ({
   default: () => null,
@@ -80,6 +81,19 @@ vi.mock('@app/components/Discover/PinnedFilterSection', () => ({
   default: ({ children }: { children: React.ReactNode }) => (
     <section data-testid="media-filters">{children}</section>
   ),
+  PinnedFilterSectionGroup: ({
+    sections,
+  }: {
+    sections: { section: string; children: React.ReactNode }[];
+  }) =>
+    sections.map(({ section, children }) => (
+      <section
+        key={section}
+        data-testid={section === 'mediaFilters' ? 'media-filters' : section}
+      >
+        {children}
+      </section>
+    )),
 }));
 vi.mock('@app/components/Discover/MediaFilterOption', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,

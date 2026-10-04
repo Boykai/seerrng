@@ -32,13 +32,22 @@ The local `main` branch tracks `origin/main`. Upstream Seerr's default branch is
 Confidence: high.
 
 The SeerrNG upstream repository is `snapetech/seerrng`; YunoHost-Apps hosts
-only the installable package repository `YunoHost-Apps/seerrng_ynh`. Changes to
-`packaging/yunohost/` on SeerrNG `main` are mirrored by the post-commit hook to
-the sibling `seerrng_ynh` checkout's `testing` branch and pushed to its `origin`.
-The hook requires that checkout to be clean, on `testing`, and pointed at the
-YunoHost-Apps package repository. It preserves the package repository's
-generated root `README.md`, fast-forwards remote updates, and refuses local-only
-or diverged commits. Set `SEERRNG_YNH_REPO` if the package checkout is elsewhere.
+only the installable package repository `YunoHost-Apps/seerrng_ynh`. The
+`Sync YunoHost package` GitHub workflow mirrors `packaging/yunohost/` from
+SeerrNG `main` to the package repository's `testing` branch on every main push.
+After a stable release is published, the release workflow also updates the
+YunoHost manifest version, archive URLs, and checksums from the verified GitHub
+release assets, commits that manifest update to SeerrNG `main`, and syncs it to
+`testing`.
+
+The workflow uses the `YUNOHOST_PACKAGE_TOKEN` repository secret for write
+access to the package repository. The local post-commit hook is a convenience:
+it mirrors packaging changes when a local checkout is available, clones a
+temporary checkout when needed, and leaves the commit intact if the sync cannot
+run. GitHub Actions performs the authoritative retry after the commit reaches
+`main`. The synchronizer preserves the package repository's generated root
+`README.md`, fast-forwards remote updates, and refuses dirty or diverged package
+checkouts. Set `SEERRNG_YNH_REPO` to use a specific local checkout.
 Confidence: high.
 
 ### JavaScript runtimes and package managers
