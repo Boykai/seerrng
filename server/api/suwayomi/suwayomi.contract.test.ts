@@ -728,6 +728,139 @@ describe('Suwayomi contract', { skip: !MAIN.url }, () => {
     });
   });
 
+  describe('chapter releases', () => {
+    it('reads released chapters by upload date, in milliseconds (ChapterReleases)', async () => {
+      const { id, url, chapters } = await loadFixtureManga();
+      const client = main();
+      const day = 86_400_000;
+      const now = realNow();
+      const read = await client.getChapterReleases(
+        [id, MISSING_ID],
+        { from: new Date(now - day), before: new Date(now + day) },
+        5
+      );
+      assert.equal(read.complete, true);
+      assert.deepEqual(read.mangas, [{ id, sourceId: LOCAL_SOURCE_ID, url }]);
+      const states = await client.getChapterStates(
+        chapters.map((chapter) => chapter.id)
+      );
+      const byId = (left: { id: string }, right: { id: string }) =>
+        Number(left.id) - Number(right.id);
+      assert.deepEqual(
+        read.chapters
+          .map(({ id: chapterId, mangaId, chapterNumber, isDownloaded }) => ({
+            id: chapterId,
+            mangaId,
+            chapterNumber,
+            isDownloaded,
+          }))
+          .sort(byId),
+        chapters
+          .map((chapter) => ({
+            id: chapter.id,
+            mangaId: id,
+            chapterNumber: chapter.chapterNumber,
+            isDownloaded:
+              states.find((state) => state.id === chapter.id)?.isDownloaded ??
+              false,
+          }))
+          .sort(byId)
+      );
+      // The local source dates a chapter by its files, which the harness
+      // wrote just before the run.
+      for (const chapter of read.chapters) {
+        assert.ok(Math.abs(chapter.releasedAt - now) < day);
+      }
+
+      const past = await client.getChapterReleases(
+        [id],
+        { from: new Date(now - 30 * day), before: new Date(now - 29 * day) },
+        5
+      );
+      assert.deepEqual([past.chapters, past.complete], [[], true]);
+      const unknown = await client.getChapterReleases(
+        [MISSING_ID],
+        { from: new Date(now - day), before: new Date(now + day) },
+        5
+      );
+      assert.deepEqual([unknown.mangas, unknown.chapters], [[], []]);
+    });
+
+    it('stores fetchedAt in seconds and keeps it, and the chapter IDs, on a refetch', async () => {
+      const { id, chapters } = await loadFixtureManga();
+      const client = main();
+      const login = await post(MAIN, SUWAYOMI_OPERATIONS.Login.document, {
+        username: MAIN.username,
+        password: MAIN.password,
+      });
+      const accessToken = (
+        login.data as { data?: { login?: { accessToken?: unknown } } }
+      ).data?.login?.accessToken;
+      assert.equal(typeof accessToken, 'string');
+      interface StoredChapter {
+        id: number;
+        uploadDate: string;
+        fetchedAt: string;
+      }
+      const stored = async (fetchedAt?: { from: number; before: number }) => {
+        const response = await post(
+          MAIN,
+          `query ($id: Int!, $from: LongString!, $before: LongString!) {
+            chapters(
+              filter: {
+                mangaId: { equalTo: $id }
+                fetchedAt: { greaterThanOrEqualTo: $from, lessThan: $before }
+              }
+              order: [{ by: ID }]
+            ) {
+              nodes { id uploadDate fetchedAt }
+            }
+          }`,
+          {
+            id: Number(id),
+            from: String(fetchedAt?.from ?? 0),
+            before: String(fetchedAt?.before ?? Number.MAX_SAFE_INTEGER),
+          },
+          `Bearer ${String(accessToken)}`
+        );
+        return (
+          response.data as { data: { chapters: { nodes: StoredChapter[] } } }
+        ).data.chapters.nodes;
+      };
+
+      const first = await stored();
+      assert.deepEqual(
+        first.map((chapter) => String(chapter.id)),
+        chapters.map((chapter) => chapter.id).sort((a, b) => +a - +b)
+      );
+      const nowSeconds = realNow() / 1_000;
+      for (const chapter of first) {
+        assert.ok(Math.abs(Number(chapter.fetchedAt) - nowSeconds) < 86_400);
+        assert.ok(
+          Math.abs(Number(chapter.uploadDate) - realNow()) < 86_400_000
+        );
+      }
+      // The filter compares fetchedAt in the same unit.
+      const second = Math.floor(nowSeconds);
+      assert.equal(
+        (await stored({ from: second - 86_400, before: second + 86_400 }))
+          .length,
+        first.length
+      );
+      assert.deepEqual(
+        await stored({
+          from: (second - 86_400) * 1_000,
+          before: Number.MAX_SAFE_INTEGER,
+        }),
+        []
+      );
+
+      await sleep(1_100);
+      await client.fetchMangaAndChapters(id);
+      assert.deepEqual(await stored(), first);
+    });
+  });
+
   describe('chapter archives', () => {
     it('streams a downloaded chapter and refuses one that is not downloaded', async () => {
       const fixture = readFixture();

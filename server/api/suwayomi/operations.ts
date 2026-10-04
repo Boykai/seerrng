@@ -171,6 +171,50 @@ export const SUWAYOMI_OPERATIONS = {
       ${QUEUE_FIELDS}
     }`
   ),
+  // Stored chapters only: nothing here makes Suwayomi contact a source.
+  // `uploaded` filters on the source's upload date (epoch milliseconds);
+  // `undated` holds chapters without one, by when Suwayomi stored them
+  // (epoch seconds).
+  ChapterReleases: op(
+    'query',
+    'user',
+    `query ChapterReleases(
+      $ids: [Int!]!
+      $uploadedFrom: LongString!
+      $uploadedBefore: LongString!
+      $fetchedFrom: LongString!
+      $fetchedBefore: LongString!
+      $uploadedAfter: Cursor
+      $undatedAfter: Cursor
+    ) {
+      mangas(filter: { id: { in: $ids } }, first: 100) { nodes { id sourceId url } }
+      uploaded: chapters(
+        filter: {
+          mangaId: { in: $ids }
+          uploadDate: { greaterThanOrEqualTo: $uploadedFrom, lessThan: $uploadedBefore }
+        }
+        order: [{ by: ID }]
+        first: 500
+        after: $uploadedAfter
+      ) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id mangaId chapterNumber uploadDate fetchedAt isDownloaded }
+      }
+      undated: chapters(
+        filter: {
+          mangaId: { in: $ids }
+          uploadDate: { lessThanOrEqualTo: "0" }
+          fetchedAt: { greaterThanOrEqualTo: $fetchedFrom, lessThan: $fetchedBefore }
+        }
+        order: [{ by: ID }]
+        first: 500
+        after: $undatedAfter
+      ) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id mangaId chapterNumber uploadDate fetchedAt isDownloaded }
+      }
+    }`
+  ),
   LibraryPage: op(
     'query',
     'user',
