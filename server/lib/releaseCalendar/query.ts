@@ -15,7 +15,14 @@ export interface CalendarQuery {
   scope: 'mine' | 'all';
   includeUnmonitored: boolean;
   mediaType?:
-    'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'software';
+    | 'movie'
+    | 'tv'
+    | 'music'
+    | 'book'
+    | 'comic'
+    | 'magazine'
+    | 'software'
+    | 'manga';
 }
 function date(value: unknown, fallback: Date): Date {
   if (value === undefined) return fallback;
@@ -104,7 +111,8 @@ export function parseCalendarQuery(
     mediaType !== 'book' &&
     mediaType !== 'comic' &&
     mediaType !== 'magazine' &&
-    mediaType !== 'software'
+    mediaType !== 'software' &&
+    mediaType !== 'manga'
   )
     throw new CalendarQueryError(400, 'Unknown calendar media type.');
   const parsedUnmonitored = parseOptionalQueryBoolean(

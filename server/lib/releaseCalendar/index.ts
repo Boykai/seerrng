@@ -22,6 +22,7 @@ import {
 } from '@server/utils/concurrency';
 import { annotateReleaseCalendarHistory } from './historyStore';
 import { getComicMagazineReleaseCalendar } from './issues';
+import { getMangaReleaseCalendar } from './manga';
 import {
   normalizeCalendarRow,
   type ReleaseCalendarBookFormat,
@@ -36,7 +37,11 @@ export async function getReleaseCalendar(
   query: CalendarQuery,
   userId: number,
   isAdmin: boolean,
-  options: { includeDateHistory?: boolean; includeSoftware?: boolean } = {}
+  options: {
+    includeDateHistory?: boolean;
+    includeSoftware?: boolean;
+    includeManga?: boolean;
+  } = {}
 ) {
   const settings = getSettings();
   const loadedRequests =
@@ -95,6 +100,7 @@ export async function getReleaseCalendar(
   const partialSources: { source: string; serverId?: number }[] = [];
   let softwareResults: ReleaseCalendarItem[] = [];
   let issueResults: ReleaseCalendarItem[] = [];
+  let mangaResults: ReleaseCalendarItem[] = [];
   if (
     options.includeSoftware !== false &&
     (!query.mediaType || query.mediaType === 'software')
@@ -117,6 +123,15 @@ export async function getReleaseCalendar(
     issueResults = issues.results;
     sourceTruncated ||= issues.truncated;
     partialSources.push(...issues.partialSources);
+  }
+  if (
+    options.includeManga !== false &&
+    (!query.mediaType || query.mediaType === 'manga')
+  ) {
+    const manga = await getMangaReleaseCalendar(query, requests, isAdmin);
+    mangaResults = manga.results;
+    sourceTruncated ||= manga.truncated;
+    partialSources.push(...manga.partialSources);
   }
   const batches = await mapWithConcurrency(
     sources.slice(0, 20),
@@ -248,6 +263,7 @@ export async function getReleaseCalendar(
     ...batches.flat(),
     ...softwareResults,
     ...issueResults,
+    ...mangaResults,
   ];
   if (query.scope === 'mine') {
     const tmdbIds = new Set(
@@ -350,6 +366,10 @@ export async function getReleaseCalendar(
       }
       if (item.mediaType === 'comic' || item.mediaType === 'magazine') {
         // Comic and magazine lookups were scoped to the user's requests above.
+        return true;
+      }
+      if (item.mediaType === 'manga') {
+        // Manga lookups were scoped to the user's requests above.
         return true;
       }
       if (item.mediaType === 'music')

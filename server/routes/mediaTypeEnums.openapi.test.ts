@@ -51,8 +51,6 @@ const COLLECTION_CATALOG =
   'TV franchise and artist album collections; manga collections are outside the MVP.';
 const WATCHLIST =
   'L1 refuses manga watchlist items; manga watchlist support is planned follow-up work.';
-const RELEASE_CALENDAR =
-  'Release calendar; manga chapter releases are planned follow-up work.';
 
 // Keyed by the location printed in a failure. Remove an entry when its enum
 // gains manga; the audit fails on entries that no longer match.
@@ -162,14 +160,6 @@ const MANGA_ENUM_EXCLUSIONS: Record<string, Exclusion> = {
   '/collection-catalog/{kind}/{id}/server path kind': {
     owner: 'post-MVP',
     reason: COLLECTION_CATALOG,
-  },
-  'GET /calendar query mediaType': {
-    owner: 'P2',
-    reason: RELEASE_CALENDAR,
-  },
-  'GET /calendar response 200 results[].mediaType': {
-    owner: 'P2',
-    reason: RELEASE_CALENDAR,
   },
 };
 

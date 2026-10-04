@@ -20188,6 +20188,7 @@ paths:
               - comic
               - magazine
               - software
+              - manga
         - name: includeUnmonitored
           in: query
           schema:
@@ -20200,7 +20201,7 @@ paths:
             maxLength: 64
             default: UTC
           description: >-
-            IANA time zone for episode month boundaries; all-day movie, album, book, comic, magazine, and game releases retain their calendar dates.
+            IANA time zone for episode month boundaries; all-day movie, album, book, comic, magazine, game, and manga chapter releases retain their calendar dates.
       responses:
         '200':
           description: Release calendar with unavailable sources indicated
@@ -20243,6 +20244,7 @@ paths:
                             - lazylibrarian
                             - questarr
                             - romarr
+                            - suwayomi
                         mediaType:
                           type: string
                           enum:
@@ -20253,6 +20255,7 @@ paths:
                             - comic
                             - magazine
                             - software
+                            - manga
                         title:
                           type: string
                         startsAt:
@@ -20269,6 +20272,7 @@ paths:
                             - book
                             - issue
                             - game
+                            - chapter
                         allDay:
                           type: boolean
                         tmdbId:
@@ -20326,6 +20330,13 @@ paths:
                           type: integer
                         episodeTitle:
                           type: string
+                        mangaId:
+                          type: integer
+                          description: AniList ID suitable for the manga details route.
+                        chapterCount:
+                          type: integer
+                          minimum: 1
+                          description: Manga chapters released on this day, each chapter number counted once on the first day it appeared.
                         available:
                           type: boolean
                         is4k:

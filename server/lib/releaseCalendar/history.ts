@@ -24,7 +24,7 @@ export async function captureReleaseCalendarHistory(
     },
     0,
     true,
-    { includeDateHistory: false, includeSoftware: false }
+    { includeDateHistory: false, includeSoftware: false, includeManga: false }
   );
   const summary = await recordReleaseCalendarSnapshots(results, now);
   if (partialSources.length || truncated) {
