@@ -39,13 +39,7 @@ const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
 const getSupplementalPosterPath = (
   title: MovieDetails | TvDetails
 ): string | undefined => {
-  const posterUrl = (
-    title as MovieDetails & {
-      supplementalMetadata?: { posterUrl?: unknown };
-    }
-  ).supplementalMetadata?.posterUrl;
-
-  return typeof posterUrl === 'string' ? posterUrl : undefined;
+  return title.supplementalMetadata?.posterUrl;
 };
 
 const TmdbTitleCard = ({
@@ -117,6 +111,7 @@ const TmdbTitleCard = ({
         id={tmdbId}
         title={fallbackTitleText}
         image={fallbackPosterPath}
+        enablePosterFallbackLookup
         summary={cachedSummary || undefined}
         year={fallbackYear}
         status={fallbackStatus}
@@ -184,6 +179,7 @@ const TmdbTitleCard = ({
         title.mediaInfo?.watchlists?.length || isAddedToWatchlist
       }
       image={title.posterPath || getSupplementalPosterPath(title)}
+      fallbackImage={getSupplementalPosterPath(title)}
       status={title.mediaInfo?.status}
       status4k={title.mediaInfo?.status4k}
       summary={
@@ -216,6 +212,7 @@ const TmdbTitleCard = ({
         title.mediaInfo?.watchlists?.length || isAddedToWatchlist
       }
       image={title.posterPath || getSupplementalPosterPath(title)}
+      fallbackImage={getSupplementalPosterPath(title)}
       status={title.mediaInfo?.status}
       status4k={title.mediaInfo?.status4k}
       summary={

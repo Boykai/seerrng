@@ -19,6 +19,8 @@ const imageLoader: ImageLoader = ({ src }) => src;
 
 export type CachedImageProps = ImageProps & {
   src: string;
+  fallbackSrc?: string;
+  errorFallbackSrc?: string;
   type: CacheableImageType;
   variants?: readonly ImageVariant[];
 };
@@ -30,6 +32,8 @@ export type CachedImageProps = ImageProps & {
 const CachedImage = memo(
   ({
     src,
+    fallbackSrc,
+    errorFallbackSrc,
     type,
     variants,
     decoding = 'async',
@@ -50,6 +54,36 @@ const CachedImage = memo(
         }),
       [currentSettings.cacheImages, src, type]
     );
+    const fallbackImageUrl = useMemo(
+      () =>
+        fallbackSrc
+          ? getImageCacheUrl({
+              cacheImages: currentSettings.cacheImages,
+              src: fallbackSrc,
+              type,
+            })
+          : undefined,
+      [currentSettings.cacheImages, fallbackSrc, type]
+    );
+    const errorFallbackImageUrl = useMemo(
+      () =>
+        errorFallbackSrc
+          ? getImageCacheUrl({
+              cacheImages: currentSettings.cacheImages,
+              src: errorFallbackSrc,
+              type,
+            })
+          : undefined,
+      [currentSettings.cacheImages, errorFallbackSrc, type]
+    );
+    const primaryImageKey = `${type}\u0000${imageUrl}`;
+    const [failedPrimaryImageKey, setFailedPrimaryImageKey] =
+      useState<string>();
+    const fallbackImageKey = fallbackImageUrl
+      ? `${type}\u0000${fallbackImageUrl}`
+      : undefined;
+    const [failedFallbackImageKey, setFailedFallbackImageKey] =
+      useState<string>();
     const resolvedVariants = variants?.map((variant) => ({
       ...variant,
       src: getImageCacheUrl({
@@ -126,7 +160,13 @@ const CachedImage = memo(
     }
 
     const displayImageUrl =
-      type === 'avatar' ? activeImageUrl : progressiveImage.src;
+      type === 'avatar'
+        ? activeImageUrl
+        : failedFallbackImageKey === fallbackImageKey && errorFallbackImageUrl
+          ? errorFallbackImageUrl
+          : failedPrimaryImageKey === primaryImageKey && fallbackImageUrl
+            ? fallbackImageUrl
+            : progressiveImage.src;
 
     return (
       <Image
@@ -143,9 +183,27 @@ const CachedImage = memo(
         }}
         onError={(event) => {
           if (type !== 'avatar') progressiveImage.onError(event.currentTarget);
-          const fallbackImage = getImageErrorFallback(type, displayImageUrl);
-          if (fallbackImage) {
-            setActiveImageUrl(fallbackImage);
+          if (
+            type !== 'avatar' &&
+            displayImageUrl === fallbackImageUrl &&
+            fallbackImageKey &&
+            errorFallbackImageUrl &&
+            errorFallbackImageUrl !== fallbackImageUrl &&
+            failedFallbackImageKey !== fallbackImageKey
+          ) {
+            setFailedFallbackImageKey(fallbackImageKey);
+          } else if (
+            type !== 'avatar' &&
+            fallbackImageUrl &&
+            displayImageUrl !== fallbackImageUrl &&
+            failedPrimaryImageKey !== primaryImageKey
+          ) {
+            setFailedPrimaryImageKey(primaryImageKey);
+          } else {
+            const avatarFallback = getImageErrorFallback(type, displayImageUrl);
+            if (avatarFallback) {
+              setActiveImageUrl(avatarFallback);
+            }
           }
           onError?.(event);
         }}

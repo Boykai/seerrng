@@ -14,6 +14,7 @@ import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import { Watchlist } from '@server/entity/Watchlist';
+import { enqueueImageCacheWarm } from '@server/lib/imageCacheWarmer';
 import { upsertMediaSearchMetadata } from '@server/lib/mediaSearchMetadata';
 import {
   getSettings,
@@ -296,6 +297,9 @@ tvRoutes.get('/:id', async (req, res, next) => {
     data.metadataSources = provenance.sources;
     data.metadataProvenance = provenance.fields;
     data.supplementalMetadata = provenance.supplemental;
+    if (provenance.supplemental.posterUrl) {
+      enqueueImageCacheWarm([provenance.supplemental.posterUrl]);
+    }
     data.metadataExpiresAt = provenance.expiresAt;
 
     return res.status(200).json(filterEntityResponse(data, req.user));

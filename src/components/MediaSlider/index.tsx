@@ -461,6 +461,7 @@ const MediaSlider = ({
               inProgress4k={
                 (title.mediaInfo?.downloadStatus4k ?? []).length > 0
               }
+              enablePosterFallbackLookup
               showText={visibility.movie === 'always'}
               priority={prioritizeFirstRow && index < 3}
             />
@@ -485,6 +486,7 @@ const MediaSlider = ({
               inProgress4k={
                 (title.mediaInfo?.downloadStatus4k ?? []).length > 0
               }
+              enablePosterFallbackLookup
               showText={visibility.tv === 'always'}
               priority={prioritizeFirstRow && index < 3}
             />

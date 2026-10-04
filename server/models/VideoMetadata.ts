@@ -10,6 +10,7 @@ export interface VideoMetadataAttribution {
 }
 
 export interface VideoMetadataSupplemental {
+  posterUrl?: string;
   genres: string[];
   studios: string[];
   networks: string[];

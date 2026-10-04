@@ -15,6 +15,7 @@ import {
   getAggregatedMovieMetadata,
   getAggregatedTvMetadata,
   getVideoMetadataExpiry,
+  normalizeVideoArtworkUrl,
   pruneExpiredVideoMetadata,
   VideoMetadataNotFoundError,
 } from './videoMetadataCatalog';
@@ -26,6 +27,7 @@ const tvdbRecord: TvdbVideoMetadataRecord = {
   name: 'Fallback Film',
   type: 'movie',
   overview: 'A summary from TheTVDB.',
+  image: 'https://artworks.thetvdb.com/banners/movies/fallback-film.jpg',
   releaseDate: '2020-06-01',
   genres: [{ name: 'Thriller' }],
   companies: { production: [{ name: 'TVDB Studios' }] },
@@ -54,6 +56,38 @@ describe('video metadata catalog', () => {
 
   afterEach(() => {
     mock.restoreAll();
+  });
+
+  it('accepts artwork only from the configured HTTPS providers', () => {
+    assert.equal(
+      normalizeVideoArtworkUrl('/banners/poster.jpg', 'tvdb'),
+      'https://artworks.thetvdb.com/banners/poster.jpg'
+    );
+    assert.equal(
+      normalizeVideoArtworkUrl(
+        'https://static.tvmaze.com/uploads/poster.jpg',
+        'tvmaze'
+      ),
+      'https://static.tvmaze.com/uploads/poster.jpg'
+    );
+    assert.equal(
+      normalizeVideoArtworkUrl(
+        'http://artworks.thetvdb.com/poster.jpg',
+        'tvdb'
+      ),
+      undefined
+    );
+    assert.equal(
+      normalizeVideoArtworkUrl(
+        'https://artworks.thetvdb.com.attacker.invalid/poster.jpg',
+        'tvdb'
+      ),
+      undefined
+    );
+    assert.equal(
+      normalizeVideoArtworkUrl('https://attacker.invalid/poster.jpg', 'tvmaze'),
+      undefined
+    );
   });
 
   it('caps cached metadata at six calendar months', () => {
@@ -124,6 +158,7 @@ describe('video metadata catalog', () => {
       ['TVDB Studios', 'Wikidata Pictures']
     );
     assert.deepEqual(result.provenance.fields.overview, ['tvdb']);
+    assert.equal(result.provenance.supplemental.posterUrl, tvdbRecord.image);
     assert.deepEqual(
       result.provenance.sources.map(({ source }) => source),
       ['tvdb', 'wikidata']
@@ -370,6 +405,9 @@ describe('video metadata catalog', () => {
         name: 'Series from Wikidata',
         url: 'https://www.tvmaze.com/shows/55/series-from-wikidata',
         summary: '<p>TVmaze summary &amp; sound and &amp;lt;script&amp;gt;</p>',
+        image: {
+          original: 'https://static.tvmaze.com/uploads/poster.jpg',
+        },
         premiered: '2018-04-01',
         genres: ['Comedy'],
         network: { name: 'TVmaze Network' },
@@ -417,6 +455,10 @@ describe('video metadata catalog', () => {
       ['tvmaze', 'wikidata']
     );
     assert.deepEqual(result.provenance.fields.overview, ['tvmaze']);
+    assert.equal(
+      result.provenance.supplemental.posterUrl,
+      'https://static.tvmaze.com/uploads/poster.jpg'
+    );
   });
 
   it('tries exact TVmaze title matching when its external-ID lookup fails', async () => {

@@ -33,6 +33,7 @@ export interface VideoMetadataFields {
   title?: string;
   originalTitle?: string;
   overview?: string;
+  posterUrl?: string;
   releaseDate?: string;
   genres: string[];
   runtime?: number;
@@ -147,6 +148,38 @@ const cleanString = (value: unknown, maximum = 4_000): string | undefined =>
   typeof value === 'string'
     ? value.replace(/\s+/g, ' ').trim().slice(0, maximum) || undefined
     : undefined;
+
+const VIDEO_ARTWORK_ORIGINS = {
+  tvdb: 'https://artworks.thetvdb.com',
+  tvmaze: 'https://static.tvmaze.com',
+} as const;
+
+export const normalizeVideoArtworkUrl = (
+  value: unknown,
+  provider: keyof typeof VIDEO_ARTWORK_ORIGINS
+): string | undefined => {
+  if (typeof value !== 'string' || !value.trim() || value.length > 2048) {
+    return undefined;
+  }
+
+  const origin = VIDEO_ARTWORK_ORIGINS[provider];
+  try {
+    const url = new URL(value.trim(), origin);
+    if (
+      url.protocol !== 'https:' ||
+      url.origin !== origin ||
+      url.username ||
+      url.password
+    ) {
+      return undefined;
+    }
+
+    url.hash = '';
+    return url.href;
+  } catch {
+    return undefined;
+  }
+};
 
 const cleanStringList = (value: unknown): string[] =>
   Array.isArray(value)
@@ -422,6 +455,7 @@ const normalizeTvdb = (
     title: cleanString(source.name),
     originalTitle: cleanString(source.name),
     overview: cleanString(source.overview),
+    posterUrl: normalizeVideoArtworkUrl(source.image, 'tvdb'),
     releaseDate: cleanString(firstAired, 32),
     genres: cleanStringList(
       Array.isArray(source.genres)
@@ -455,6 +489,10 @@ const normalizeTvmaze = (source: TvmazeShow): VideoMetadataFields => ({
   title: cleanString(source.name),
   originalTitle: cleanString(source.name),
   overview: htmlToText(source.summary),
+  posterUrl: normalizeVideoArtworkUrl(
+    source.image?.original ?? source.image?.medium,
+    'tvmaze'
+  ),
   releaseDate: cleanString(source.premiered, 32),
   genres: cleanStringList(source.genres),
   runtime:
@@ -1030,6 +1068,7 @@ const SOURCE_VALUE_FIELDS = [
   'title',
   'originalTitle',
   'overview',
+  'posterUrl',
   'releaseDate',
   'runtime',
   'status',
@@ -1732,6 +1771,7 @@ const aggregateVideoMetadata = async ({
     lastUpdatedAt: lastUpdatedAt?.toISOString(),
     expiresAt: (expiresAt ?? getVideoMetadataExpiry(new Date())).toISOString(),
     supplemental: {
+      posterUrl: merged.fields.posterUrl ?? undefined,
       genres: merged.fields.genres,
       studios: merged.fields.studios,
       networks: merged.fields.networks,

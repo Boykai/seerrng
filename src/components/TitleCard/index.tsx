@@ -53,7 +53,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { mutate } from 'swr';
+import useSWR, { mutate } from 'swr';
 
 const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
   ssr: false,
@@ -61,6 +61,8 @@ const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
 interface TitleCardProps {
   id: number | string;
   image?: string;
+  fallbackImage?: string;
+  enablePosterFallbackLookup?: boolean;
   summary?: string;
   year?: string;
   title: string;
@@ -125,6 +127,8 @@ const messages = defineMessages('components.TitleCard', {
 const TitleCard = ({
   id,
   image,
+  fallbackImage,
+  enablePosterFallbackLookup = false,
   summary,
   year,
   title,
@@ -161,6 +165,8 @@ const TitleCard = ({
   const { user, hasPermission } = useUser();
   const canManageBlocklist = hasPermission(Permission.MANAGE_BLOCKLIST);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [posterFallbackLookupKey, setPosterFallbackLookupKey] =
+    useState<string>();
   const [currentStatus, setCurrentStatus] = useState(status);
   const [currentStatus4k, setCurrentStatus4k] = useState(status4k);
   const [showDetail, setShowDetail] = useState(false);
@@ -518,6 +524,32 @@ const TitleCard = ({
     canShowWatchedStatus && watchStatusInView
   );
   const canUseVideoActions = videoMediaType && Number.isFinite(numericId);
+  const posterFallbackIdentity = `${mediaType}:${id}:${image ?? ''}:${fallbackImage ?? ''}`;
+  const posterFallbackRequestUrl =
+    enablePosterFallbackLookup &&
+    !fallbackImage &&
+    posterFallbackLookupKey === posterFallbackIdentity &&
+    Number.isSafeInteger(numericId) &&
+    numericId > 0 &&
+    (mediaType === 'movie' || mediaType === 'tv')
+      ? `/api/v1/${mediaType}/${numericId}`
+      : null;
+  const { data: posterFallbackDetails } = useSWR<{
+    supplementalMetadata?: { posterUrl?: string };
+  }>(
+    posterFallbackRequestUrl,
+    (requestUrl: string) =>
+      axios
+        .get<{ supplementalMetadata?: { posterUrl?: string } }>(requestUrl)
+        .then(({ data }) => data),
+    {
+      dedupingInterval: 60_000,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      shouldRetryOnError: false,
+    }
+  );
   const canUseRequestActions =
     canUseVideoActions || isAlbum || isBook || isComic || isMagazine;
   const canUseWatchlistActions =
@@ -546,13 +578,84 @@ const TitleCard = ({
                   ? `/magazine/${encodeApiPathSegment(canonicalId)}`
                   : `/artist/${encodeApiPathSegment(canonicalId)}`;
   const displayImage = getTmdbPosterImageUrl(artwork);
+  const supplementalPoster = getTmdbPosterImageUrl(
+    fallbackImage ?? posterFallbackDetails?.supplementalMetadata?.posterUrl
+  );
+  const posterImage = displayImage ?? supplementalPoster;
+  const posterPlaceholder = '/images/seerr_poster_not_found_logo_top.png';
+  const posterErrorFallback =
+    displayImage && supplementalPoster && displayImage !== supplementalPoster
+      ? supplementalPoster
+      : posterPlaceholder;
   // Resolved provider artwork is routed by URL when image caching is enabled.
   const imageCacheType =
-    isResolvedImageUrl(displayImage) && isBook
+    isResolvedImageUrl(posterImage) && isBook
       ? 'book'
-      : isResolvedImageUrl(displayImage) && isAlbum
+      : isResolvedImageUrl(posterImage) && isAlbum
         ? 'music'
         : 'tmdb';
+  const requestPosterFallback = useCallback(() => {
+    if (
+      !enablePosterFallbackLookup ||
+      fallbackImage ||
+      posterFallbackLookupKey === posterFallbackIdentity ||
+      !Number.isSafeInteger(numericId) ||
+      numericId <= 0 ||
+      (mediaType !== 'movie' && mediaType !== 'tv')
+    ) {
+      return;
+    }
+
+    setPosterFallbackLookupKey(posterFallbackIdentity);
+  }, [
+    enablePosterFallbackLookup,
+    fallbackImage,
+    mediaType,
+    numericId,
+    posterFallbackIdentity,
+    posterFallbackLookupKey,
+  ]);
+  useEffect(() => {
+    if (
+      !enablePosterFallbackLookup ||
+      displayImage ||
+      supplementalPoster ||
+      posterFallbackLookupKey === posterFallbackIdentity
+    ) {
+      return;
+    }
+    const card = cardRef.current;
+    if (!card) return;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      requestPosterFallback();
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          observer.disconnect();
+          requestPosterFallback();
+        }
+      },
+      { rootMargin: '250px' }
+    );
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [
+    displayImage,
+    enablePosterFallbackLookup,
+    posterFallbackIdentity,
+    posterFallbackLookupKey,
+    requestPosterFallback,
+    supplementalPoster,
+  ]);
+  const handlePosterImageError = useCallback(() => {
+    if (displayImage) {
+      requestPosterFallback();
+    }
+  }, [displayImage, requestPosterFallback]);
 
   const requestPermissions = [
     Permission.REQUEST,
@@ -612,8 +715,8 @@ const TitleCard = ({
     currentStatus !== MediaStatus.UNKNOWN &&
     currentStatus !== MediaStatus.DELETED;
   const showTextOverlay =
-    showText || !artwork || showDetail || showRequestModal;
-  const showFullDetailOverlay = !artwork || showDetail || showRequestModal;
+    showText || !posterImage || showDetail || showRequestModal;
+  const showFullDetailOverlay = !posterImage || showDetail || showRequestModal;
   const requestLabel =
     isBook && preferredBookFormat
       ? intl.formatMessage(messages.requestBookFormat, {
@@ -840,7 +943,10 @@ const TitleCard = ({
             type={imageCacheType}
             data-poster-region="image"
             alt=""
-            src={displayImage ?? '/images/seerr_poster_not_found_logo_top.png'}
+            src={posterImage ?? posterPlaceholder}
+            fallbackSrc={posterErrorFallback}
+            errorFallbackSrc={posterPlaceholder}
+            onError={handlePosterImageError}
             fill
             priority={priority}
           />
