@@ -166,6 +166,25 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.48.2](https://github.com/snapetech/seerrng/compare/v3.48.1..v3.48.2) - 2026-10-04
+
+### User-facing changes
+
+#### Fixed
+
+- **Metadata:** Movie and series cards can now use TVDB or TVmaze posters when TMDB artwork is missing or unavailable. SeerrNG saves verified backup artwork in its image cache so posters keep loading through later provider outages.
+
+### 🐛 Bug Fixes
+- *(media)* Cache fallback video posters - ([68d780e](https://github.com/snapetech/seerrng/commit/68d780ebd90216863788b74c96b4147d81f85e4d))
+
+### 🧪 Testing
+- *(e2e)* Stub discovery detail responses - ([1042f14](https://github.com/snapetech/seerrng/commit/1042f1429008315b2f8abccf1c4cc4c56a7a7a94))
+
+### ⚙️ Miscellaneous Tasks
+- *(yunohost)* Align package with v3.48.1 - ([277d76f](https://github.com/snapetech/seerrng/commit/277d76f9dc1328264b7d77f5097178af65b0174f))
+
 ## [3.48.1](https://github.com/snapetech/seerrng/compare/v3.48.0..v3.48.1) - 2026-10-03
 
 ### User-facing changes
