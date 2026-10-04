@@ -5,6 +5,7 @@ import Sidebar from '@app/components/Layout/Sidebar';
 import ThemePicker from '@app/components/Layout/ThemePicker';
 import UserDropdown from '@app/components/Layout/UserDropdown';
 import UserWarnings from '@app/components/Layout/UserWarnings';
+import useRequestCount from '@app/components/Layout/useRequestCount';
 import useLocale from '@app/hooks/useLocale';
 import useSettings from '@app/hooks/useSettings';
 import { Permission, useUser } from '@app/hooks/useUser';
@@ -33,14 +34,8 @@ const Layout = ({ children }: LayoutProps) => {
   const { currentSettings } = useSettings();
   const { setLocale } = useLocale();
   const [countsEnabled, setCountsEnabled] = useState(false);
-  const { data: requestResponse, mutate: revalidateRequestsCount } = useSWR(
-    countsEnabled ? '/api/v1/request/count' : null,
-    {
-      revalidateOnMount: true,
-      revalidateOnFocus: false,
-      dedupingInterval: 30000,
-    }
-  );
+  const { data: requestResponse, mutate: revalidateRequestsCount } =
+    useRequestCount(countsEnabled);
   const { data: issueResponse, mutate: revalidateIssueCount } = useSWR(
     countsEnabled ? '/api/v1/issue/count' : null,
     {
