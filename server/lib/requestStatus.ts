@@ -1486,6 +1486,8 @@ const isLatestObservation = (
   );
 };
 
+const RETRY_FINGERPRINT = /^retry:\d+:\d+$/;
+
 // Skips only a row whose fingerprint the request already has. Any other
 // conflict, such as on the primary key, still fails the insert.
 export const withStatusEventConflictTarget = <Entity extends ObjectLiteral>(
@@ -1540,6 +1542,16 @@ export const insertRequestStatusEvent = async (
         select: { id: true },
         where: { requestId: event.requestId, fingerprint },
       });
+      // A retry entry stays the latest event while the request waits: an
+      // observation already recorded at its stage and attempt adds nothing.
+      if (
+        earlier &&
+        RETRY_FINGERPRINT.test(latestEvent.fingerprint) &&
+        latestEvent.stage === event.stage &&
+        latestEvent.attempt === event.attempt
+      ) {
+        return;
+      }
       if (earlier && earlier.id < latestEvent.id) {
         fingerprint = makeReentryFingerprint(fingerprint, latestEvent.id);
       }
