@@ -7348,6 +7348,7 @@
   }
 
   .pagination-footer {
+    container: pagination-footer / inline-size;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
@@ -7372,6 +7373,39 @@
     display: flex;
     justify-self: end;
     gap: 5px;
+  }
+
+  /* Narrow footers move the page counter to its own row, then every part. */
+  @container pagination-footer (max-width: 28rem) {
+    .pagination-footer-page-size {
+      grid-row: 1;
+      grid-column: 1 / 3;
+    }
+
+    .pagination-footer-page {
+      grid-row: 2;
+      grid-column: 1 / -1;
+    }
+
+    .pagination-footer-actions {
+      grid-row: 1;
+      grid-column: 3;
+    }
+  }
+
+  @container pagination-footer (max-width: 20rem) {
+    .pagination-footer-page-size,
+    .pagination-footer-actions {
+      grid-column: 1 / -1;
+    }
+
+    .pagination-footer-actions {
+      grid-row: 2;
+    }
+
+    .pagination-footer-page {
+      grid-row: 3;
+    }
   }
 
   .app-download-menu {
