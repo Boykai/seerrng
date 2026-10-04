@@ -271,6 +271,7 @@ const messages = defineMessages('components.Requests', {
   unknownTitle: 'Unknown Title',
   downloadCopy: 'Download copy',
   downloadCopies: 'Download copies',
+  downloadCopiesHeading: 'Download Copies',
   downloadCopyFor: 'Download {name}',
 });
 
@@ -1266,7 +1267,7 @@ export const RequestDownloadAction = ({
           className="request-download-copy-panel app-card-inset refreshed-inset-surface"
         >
           <h4 id={`${listId}-heading`} className="media-inset-heading">
-            {intl.formatMessage(messages.downloadCopies)}
+            {intl.formatMessage(messages.downloadCopiesHeading)}
           </h4>
           <ol className="request-download-copy-list scrollable-card">
             {assets.map((asset) => (

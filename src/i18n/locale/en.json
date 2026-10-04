@@ -2111,6 +2111,7 @@
   "components.Requests.deleting": "Deleting…",
   "components.Requests.director": "Director",
   "components.Requests.downloadCopies": "Download copies",
+  "components.Requests.downloadCopiesHeading": "Download Copies",
   "components.Requests.downloadCopy": "Download copy",
   "components.Requests.downloadCopyFor": "Download {name}",
   "components.Requests.downloading": "Downloading",
