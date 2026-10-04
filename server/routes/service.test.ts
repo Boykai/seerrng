@@ -246,7 +246,7 @@ function makeReadarr(
 // ServarrBase#getTags), not a prototype method, so it can't be replaced with
 // `mock.method(SomeAPI.prototype, 'getTags', ...)`. Instead, intercept the
 // underlying `/tag` HTTP call on the real axios instance each Servarr client
-// creates, leaving everything else (e.g. `defaults.params.apikey`) untouched.
+// creates, leaving everything else (e.g. `defaults.headers['X-Api-Key']`) untouched.
 function mockServarrTagsEndpoint(tags: { id: number; label: string }[]) {
   const realCreate = axios.create.bind(axios);
   mock.method(
@@ -876,9 +876,9 @@ describe('Radarr settings routes', () => {
       'getSystemStatus',
       async function (this: RadarrAPI) {
         const client = Reflect.get(this, 'axios') as {
-          defaults: { params?: Record<string, string> };
+          defaults: { headers?: Record<string, string> };
         };
-        apiKeyUsed = client.defaults.params?.apikey;
+        apiKeyUsed = client.defaults.headers?.['X-Api-Key'];
         return { appName: 'Radarr', version: '5.0.0.0', urlBase: '' };
       }
     );
@@ -1022,9 +1022,9 @@ describe('Sonarr settings routes', () => {
       'getSystemStatus',
       async function (this: SonarrAPI) {
         const client = Reflect.get(this, 'axios') as {
-          defaults: { params?: Record<string, string> };
+          defaults: { headers?: Record<string, string> };
         };
-        apiKeyUsed = client.defaults.params?.apikey;
+        apiKeyUsed = client.defaults.headers?.['X-Api-Key'];
         return { appName: 'Sonarr', version: '4.0.0.0', urlBase: '' };
       }
     );
@@ -1247,9 +1247,9 @@ describe('Lidarr settings routes', () => {
       'getSystemStatus',
       async function (this: LidarrAPI) {
         const client = Reflect.get(this, 'axios') as {
-          defaults: { params?: Record<string, string> };
+          defaults: { headers?: Record<string, string> };
         };
-        apiKeyUsed = client.defaults.params?.apikey;
+        apiKeyUsed = client.defaults.headers?.['X-Api-Key'];
         return { appName: 'Lidarr', version: '2.0.0.0', urlBase: '' };
       }
     );
@@ -1358,9 +1358,9 @@ describe('Bookshelf settings routes', () => {
       'getSystemStatus',
       async function (this: ReadarrAPI) {
         const client = Reflect.get(this, 'axios') as {
-          defaults: { params?: Record<string, string> };
+          defaults: { headers?: Record<string, string> };
         };
-        apiKeyUsed = client.defaults.params?.apikey;
+        apiKeyUsed = client.defaults.headers?.['X-Api-Key'];
         return {
           appName: 'Bookshelf',
           version: '0.4.20.129',

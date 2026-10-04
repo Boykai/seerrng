@@ -74,6 +74,48 @@ describe('ReadarrAPI.getReleaseCalendar', () => {
   });
 });
 
+describe('Readarr API key authentication', () => {
+  it('authenticates Bookshelf with X-Api-Key instead of a query parameter', async () => {
+    let receivedApiKey: string | undefined;
+    let receivedQueryApiKey: string | null = null;
+    const server = createServer((request, response) => {
+      const requestUrl = new URL(request.url ?? '/', 'http://localhost');
+      const apiKeyHeader = request.headers['x-api-key'];
+      receivedApiKey = Array.isArray(apiKeyHeader)
+        ? apiKeyHeader[0]
+        : apiKeyHeader;
+      receivedQueryApiKey = requestUrl.searchParams.get('apikey');
+
+      if (receivedApiKey !== 'test-bookshelf-key' || receivedQueryApiKey) {
+        writeJson(response, 401, { message: 'Unauthorized' });
+        return;
+      }
+
+      writeJson(response, 200, [{ id: 1, name: 'Standard' }]);
+    });
+
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+
+    try {
+      const api = new ReadarrAPI({
+        url: `http://127.0.0.1:${address.port}/api/v1`,
+        apiKey: 'test-bookshelf-key',
+      });
+
+      assert.deepEqual(await api.getProfiles(), [{ id: 1, name: 'Standard' }]);
+      assert.equal(receivedApiKey, 'test-bookshelf-key');
+      assert.equal(receivedQueryApiKey, null);
+    } finally {
+      server.closeAllConnections();
+      server.close();
+      await once(server, 'close');
+    }
+  });
+});
+
 const bookOptions: ReadarrBookOptions = {
   title: 'Test Book',
   foreignBookId: 'book-foreign-id',

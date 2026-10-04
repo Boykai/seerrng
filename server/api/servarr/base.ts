@@ -426,13 +426,12 @@ class ServarrBase<QueueItemAppendT> extends ExternalAPI {
 
     super(
       normalizedUrl,
-      {
-        apikey: apiKey,
-      },
+      {},
       {
         allowPrivateAddresses: true,
         nodeCache: cacheManager.getCache(cacheName).data,
         timeout,
+        headers: { 'X-Api-Key': apiKey },
       }
     );
 
