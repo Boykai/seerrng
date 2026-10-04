@@ -81,6 +81,7 @@ export async function saveDiscoveryAccount(
     allowWrites: false,
     importMangaPlanning: false,
     mangaPlanningCursor: null,
+    mangaPlanningCursorId: null,
     linkedAt: new Date(),
     ...(previous ? { id: previous.id } : {}),
   });

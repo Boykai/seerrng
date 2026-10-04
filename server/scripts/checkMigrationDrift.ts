@@ -260,13 +260,15 @@ const MANGA_SCHEMA_OBJECTS: readonly SchemaObject[] = [
   },
   // Manga watchlist: the request setting and the AniList Planning import.
   { kind: 'column', table: 'user_settings', name: 'watchlistSyncManga' },
-  ...['importMangaPlanning', 'mangaPlanningCursor'].map(
-    (name): SchemaObject => ({
-      kind: 'column',
-      table: 'discovery_account',
-      name,
-    })
-  ),
+  ...[
+    'importMangaPlanning',
+    'mangaPlanningCursor',
+    'mangaPlanningCursorId',
+  ].map((name): SchemaObject => ({
+    kind: 'column',
+    table: 'discovery_account',
+    name,
+  })),
 ];
 
 const driver = isPgsql ? 'postgres' : 'sqlite';

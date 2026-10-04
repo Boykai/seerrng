@@ -45,6 +45,8 @@ test('PostgreSQL AniList Planning import migration only adds and drops account c
     [
       `ALTER TABLE "discovery_account" ADD "importMangaPlanning" boolean NOT NULL DEFAULT false`,
       `ALTER TABLE "discovery_account" ADD "mangaPlanningCursor" integer`,
+      `ALTER TABLE "discovery_account" ADD "mangaPlanningCursorId" integer`,
+      `ALTER TABLE "discovery_account" DROP COLUMN "mangaPlanningCursorId"`,
       `ALTER TABLE "discovery_account" DROP COLUMN "mangaPlanningCursor"`,
       `ALTER TABLE "discovery_account" DROP COLUMN "importMangaPlanning"`,
     ]

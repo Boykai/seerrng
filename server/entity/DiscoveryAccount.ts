@@ -54,10 +54,13 @@ export default class DiscoveryAccount {
   @Column({ type: 'boolean', default: false })
   public importMangaPlanning: boolean;
 
-  // The newest Planning entry change (AniList updatedAt, in seconds) that the
-  // import has fully handled.
+  // The last Planning entry the import has handled, in the list's order: its
+  // change time (AniList updatedAt, in seconds) and its AniList media ID.
   @Column({ type: 'int', nullable: true })
   public mangaPlanningCursor: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  public mangaPlanningCursorId: number | null;
 
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public linkedAt: Date;

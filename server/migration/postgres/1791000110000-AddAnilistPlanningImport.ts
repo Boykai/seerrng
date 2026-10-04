@@ -10,9 +10,15 @@ export class AddAnilistPlanningImport1791000110000 implements MigrationInterface
     await queryRunner.query(
       `ALTER TABLE "discovery_account" ADD "mangaPlanningCursor" integer`
     );
+    await queryRunner.query(
+      `ALTER TABLE "discovery_account" ADD "mangaPlanningCursorId" integer`
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE "discovery_account" DROP COLUMN "mangaPlanningCursorId"`
+    );
     await queryRunner.query(
       `ALTER TABLE "discovery_account" DROP COLUMN "mangaPlanningCursor"`
     );

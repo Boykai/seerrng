@@ -95,14 +95,21 @@ const parseAnilistUserId = (value: string): number | undefined => {
     : undefined;
 };
 
+type Cursor = { updatedAt: number; anilistId: number };
+
+/** The list query's order, reversed: by change time, then by AniList ID. */
+const compareEntries = (left: Cursor, right: Cursor): number =>
+  left.updatedAt - right.updatedAt || left.anilistId - right.anilistId;
+
 /**
- * The user's Planning entries changed after `cursor`, newest first, up to
- * the page cap. Undefined when the run budget ran out before the read ended.
+ * The user's Planning entries after `cursor`, the last entry handled, newest
+ * first, up to the page cap. Undefined when the run budget ran out before the
+ * read ended.
  */
 const readPlanning = async (
   client: AnilistAPI,
   anilistUserId: number,
-  cursor: number | null,
+  cursor: Cursor,
   run: Run
 ): Promise<AnilistMangaPlanningEntry[] | undefined> => {
   const entries = new Map<number, AnilistMangaPlanningEntry>();
@@ -113,36 +120,13 @@ const readPlanning = async (
       signal: run.signal,
     });
     for (const entry of result.entries) {
-      if (cursor !== null && entry.updatedAt <= cursor) {
-        return [...entries.values()];
-      }
+      if (compareEntries(entry, cursor) <= 0) return [...entries.values()];
       // A list that changes while it is read can repeat an entry.
       if (!entries.has(entry.anilistId)) entries.set(entry.anilistId, entry);
     }
     if (!result.hasNextPage) break;
   }
   return [...entries.values()];
-};
-
-/**
- * The cursor after handling the first `processed` entries (sorted oldest
- * first): every entry at or below it is handled. It never splits entries
- * that share one change time.
- */
-export const nextPlanningCursor = (
-  entries: readonly AnilistMangaPlanningEntry[],
-  processed: number,
-  cursor: number | null
-): number | null => {
-  if (processed === 0) return cursor;
-  const limit =
-    processed < entries.length ? entries[processed].updatedAt : Infinity;
-  for (let index = processed - 1; index >= 0; index--) {
-    if (entries[index].updatedAt < limit) {
-      return Math.max(cursor ?? 0, entries[index].updatedAt);
-    }
-  }
-  return cursor;
 };
 
 /** Titles the import leaves alone without asking AniList about them. */
@@ -185,10 +169,14 @@ const findSkippedTitles = async (
  * watchlist path, so validation and the auto-request rule apply as for an
  * add in the app. Reads only; nothing is written to AniList.
  */
-const importUser = async (
-  account: DiscoveryAccount,
-  run: Run
-): Promise<Turn> => {
+const importUser = async (accountId: number, run: Run): Promise<Turn> => {
+  // Read when the turn begins: since the run began, the user may have turned
+  // the import off or reconnected AniList.
+  const account = await getRepository(DiscoveryAccount).findOneBy({
+    id: accountId,
+    importMangaPlanning: true,
+  });
+  if (!account) return 'done';
   const { userId } = account;
   let client: AnilistAPI;
   let read: AnilistMangaPlanningEntry[] | undefined;
@@ -199,10 +187,14 @@ const importUser = async (
       run.budget -= 1;
       anilistUserId = (await client.getViewer()).id;
     }
+    // Without a cursor, every entry comes after it.
     read = await readPlanning(
       client,
       anilistUserId,
-      account.mangaPlanningCursor,
+      {
+        updatedAt: account.mangaPlanningCursor ?? -1,
+        anilistId: account.mangaPlanningCursorId ?? 0,
+      },
       run
     );
   } catch (error) {
@@ -231,10 +223,7 @@ const importUser = async (
   if (read === undefined) return 'deferred';
   run.counts.users += 1;
 
-  const entries = read.sort(
-    (left, right) =>
-      left.updatedAt - right.updatedAt || left.anilistId - right.anilistId
-  );
+  const entries = read.sort(compareEntries);
   const user = await getRepository(User).findOneBy({ id: userId });
   if (!entries.length || !user) return 'done';
   const skipped = await findSkippedTitles(
@@ -300,16 +289,19 @@ const importUser = async (
     processed += 1;
   }
 
-  const cursor = nextPlanningCursor(
-    entries,
-    processed,
-    account.mangaPlanningCursor
-  );
-  if (cursor !== account.mangaPlanningCursor) {
-    // Not after a relink, which turns the import off and resets the cursor.
+  if (processed > 0) {
+    // Handled up to here. Not after a relink, which turns the import off and
+    // resets the cursor, or once the account is linked to another AniList user.
     await getRepository(DiscoveryAccount).update(
-      { id: account.id, importMangaPlanning: true },
-      { mangaPlanningCursor: cursor }
+      {
+        id: account.id,
+        importMangaPlanning: true,
+        providerUserId: account.providerUserId,
+      },
+      {
+        mangaPlanningCursor: entries[processed - 1].updatedAt,
+        mangaPlanningCursorId: entries[processed - 1].anilistId,
+      }
     );
   }
   return turn;
@@ -330,6 +322,7 @@ export const runMangaPlanningImport = async (
   };
   if (!isMediaCategoryEnabled('manga')) return run.counts;
   const accounts = await getRepository(DiscoveryAccount).find({
+    select: { id: true, userId: true },
     where: { provider: 'anilist', importMangaPlanning: true },
     order: { userId: 'ASC' },
   });
@@ -337,12 +330,12 @@ export const runMangaPlanningImport = async (
     ...accounts.filter(({ userId }) => userId > rotation.lastUserId),
     ...accounts.filter(({ userId }) => userId <= rotation.lastUserId),
   ];
-  for (const account of ordered) {
+  for (const { id, userId } of ordered) {
     // A turn needs one list page and one add at least.
     if (run.signal?.aborted || run.budget < 2) break;
     if (!isMediaCategoryEnabled('manga')) break;
-    if ((await importUser(account, run)) === 'deferred') break;
-    rotation.lastUserId = account.userId;
+    if ((await importUser(id, run)) === 'deferred') break;
+    rotation.lastUserId = userId;
   }
   return run.counts;
 };

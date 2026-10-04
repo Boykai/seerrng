@@ -33,10 +33,10 @@ import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { UserSettings } from '@server/entity/UserSettings';
 import { Watchlist } from '@server/entity/Watchlist';
+import { saveDiscoveryAccount } from '@server/lib/discoveryIntegrations/accounts';
 import { createMangaMedia } from '@server/lib/mangaMedia';
 import {
   mangaPlanningImporter,
-  nextPlanningCursor,
   PLANNING_IMPORT_MAX_ADDS,
   PLANNING_IMPORT_RUN_BUDGET,
   runMangaPlanningImport,
@@ -347,6 +347,7 @@ const link = async (
     allowWrites: false,
     importMangaPlanning: true,
     mangaPlanningCursor: null,
+    mangaPlanningCursorId: null,
     ...overrides,
   });
 };
@@ -360,13 +361,14 @@ const watchlisted = async (user: User): Promise<number[]> =>
     })
   ).map(({ externalId }) => Number(externalId));
 
-const cursorOf = async (user: User): Promise<number | null> =>
-  (
-    await getRepository(DiscoveryAccount).findOneByOrFail({
-      userId: user.id,
-      provider: 'anilist',
-    })
-  ).mangaPlanningCursor;
+/** The last entry the import handled: its change time and AniList ID. */
+const cursorOf = async (user: User): Promise<(number | null)[]> => {
+  const account = await getRepository(DiscoveryAccount).findOneByOrFail({
+    userId: user.id,
+    provider: 'anilist',
+  });
+  return [account.mangaPlanningCursor, account.mangaPlanningCursorId];
+};
 
 const mangaRequests = () =>
   getRepository(MediaRequest).find({
@@ -403,7 +405,7 @@ describe('AniList Planning import', () => {
     assert.deepStrictEqual(await watchlisted(admin), [30001, 30002]);
     assert.deepStrictEqual(await watchlisted(friend), []);
     assert.deepStrictEqual(await watchlisted(demo), []);
-    assert.strictEqual(await cursorOf(admin), 1001);
+    assert.deepStrictEqual(await cursorOf(admin), [1001, 30002]);
     // The administrator has not turned on manga watchlist requests.
     assert.deepStrictEqual(await mangaRequests(), []);
   });
@@ -460,7 +462,7 @@ describe('AniList Planning import', () => {
     // AniList no longer knows 30108, which is skipped like the others.
     assert.deepStrictEqual(anilistCalls, [30107, 30108]);
     assert.deepStrictEqual(await watchlisted(admin), [30106, 30107]);
-    assert.strictEqual(await cursorOf(admin), 1008);
+    assert.deepStrictEqual(await cursorOf(admin), [1008, 30108]);
   });
 
   it('requests imported manga only for users who turned on manga watchlist requests', async () => {
@@ -530,7 +532,7 @@ describe('AniList Planning import', () => {
     assert.deepStrictEqual(await watchlisted(admin), [30301, 30302]);
     // The oldest changes in the window go first, until the budget runs out.
     assert.deepStrictEqual(await watchlisted(friend), range(100060, 8));
-    assert.strictEqual(await cursorOf(friend), 1067);
+    assert.deepStrictEqual(await cursorOf(friend), [1067, 100067]);
     // The friend's turn was cut short, so the next run starts with them.
     assert.strictEqual(rotation.lastUserId, admin.id);
 
@@ -551,11 +553,11 @@ describe('AniList Planning import', () => {
     ]);
     // Entries older than the first window are never imported.
     assert.deepStrictEqual(await watchlisted(friend), range(100060, 18));
-    assert.strictEqual(await cursorOf(friend), 1077);
+    assert.deepStrictEqual(await cursorOf(friend), [1077, 100077]);
     assert.strictEqual(rotation.lastUserId, friend.id);
   });
 
-  it('never splits entries that changed in the same second', async () => {
+  it('resumes after the last handled entry when entries changed in the same second', async () => {
     const admin = await findUser('admin@seerr.dev');
     await link(admin, 7001);
     lists.set(
@@ -569,15 +571,23 @@ describe('AniList Planning import', () => {
       added: 10,
       skipped: 0,
     });
-    assert.strictEqual(await cursorOf(admin), null);
+    assert.deepStrictEqual(await cursorOf(admin), [5000, 30410]);
 
+    // A title removed from the watchlist stays removed.
+    await getRepository(Watchlist).delete({
+      mediaType: MediaType.MANGA,
+      externalId: '30403',
+    });
     assert.deepStrictEqual(await runMangaPlanningImport(rotation), {
       users: 1,
       added: 2,
-      skipped: 10,
+      skipped: 0,
     });
-    assert.deepStrictEqual(await watchlisted(admin), range(30401, 12));
-    assert.strictEqual(await cursorOf(admin), 5000);
+    assert.deepStrictEqual(await watchlisted(admin), [
+      ...range(30401, 2),
+      ...range(30404, 9),
+    ]);
+    assert.deepStrictEqual(await cursorOf(admin), [5000, 30412]);
 
     reads = [];
     assert.deepStrictEqual(await runMangaPlanningImport(rotation), {
@@ -588,20 +598,79 @@ describe('AniList Planning import', () => {
     assert.strictEqual(reads.length, 1);
   });
 
-  it('moves the cursor to the newest change it has fully handled', () => {
-    const entries = [entry(1, 10), entry(2, 20), entry(3, 20), entry(4, 30)];
+  it('reads each account again when its turn begins', async () => {
+    const admin = await findUser('admin@seerr.dev');
+    const friend = await findUser('friend@seerr.dev');
+    const demo = await findUser('demo@seerr.dev');
+    assert.ok(admin.id < friend.id && friend.id < demo.id);
+    await link(admin, 7001);
+    await link(friend, 7002);
+    await link(demo, 7003);
+    lists.set(7001, [entry(31401, 1000)]);
+    lists.set(7002, [entry(31402, 1000)]);
+    lists.set(7003, [entry(31403, 1000)]);
+    lists.set(7013, [entry(31413, 1000)]);
+    const relinked = randomUUID();
+    // While the run reads the first list, one user turns the import off and
+    // another reconnects another AniList account and turns it on again.
+    onRead = async () => {
+      if (reads.length > 1) return;
+      await getRepository(DiscoveryAccount).update(
+        { userId: friend.id, provider: 'anilist' },
+        { importMangaPlanning: false }
+      );
+      tokens.set(demo.id, relinked);
+      await saveDiscoveryAccount(
+        demo.id,
+        'anilist',
+        { accessToken: relinked },
+        { username: 'relinked', providerUserId: '7013' }
+      );
+      await getRepository(DiscoveryAccount).update(
+        { userId: demo.id, provider: 'anilist' },
+        { importMangaPlanning: true }
+      );
+    };
 
-    assert.deepStrictEqual(
-      range(0, 5).map((processed) => nextPlanningCursor(entries, processed, 5)),
-      [5, 10, 10, 20, 30]
-    );
-    assert.strictEqual(nextPlanningCursor(entries, 1, null), 10);
-    assert.strictEqual(
-      nextPlanningCursor([entry(1, 20), entry(2, 20)], 1, null),
-      null
-    );
-    assert.strictEqual(nextPlanningCursor(entries, 1, 15), 15);
-    assert.strictEqual(nextPlanningCursor([], 0, null), null);
+    assert.deepStrictEqual(await runMangaPlanningImport({ lastUserId: 0 }), {
+      users: 2,
+      added: 2,
+      skipped: 0,
+    });
+    assert.deepStrictEqual(reads, [
+      { anilistUserId: 7001, page: 1, token: tokens.get(admin.id) },
+      { anilistUserId: 7013, page: 1, token: relinked },
+    ]);
+    assert.deepStrictEqual(await watchlisted(friend), []);
+    assert.deepStrictEqual(await watchlisted(demo), [31413]);
+    assert.deepStrictEqual(await cursorOf(demo), [1000, 31413]);
+  });
+
+  it('keeps no cursor for an AniList account replaced during the turn', async () => {
+    const admin = await findUser('admin@seerr.dev');
+    await link(admin, 7001);
+    lists.set(7001, [entry(31501, 1000)]);
+    onRead = async () => {
+      await saveDiscoveryAccount(
+        admin.id,
+        'anilist',
+        { accessToken: tokens.get(admin.id)! },
+        { username: 'relinked', providerUserId: '7011' }
+      );
+      await getRepository(DiscoveryAccount).update(
+        { userId: admin.id, provider: 'anilist' },
+        { importMangaPlanning: true }
+      );
+    };
+
+    assert.deepStrictEqual(await runMangaPlanningImport({ lastUserId: 0 }), {
+      users: 1,
+      added: 1,
+      skipped: 0,
+    });
+    assert.deepStrictEqual(await watchlisted(admin), [31501]);
+    // The entry came from the earlier account's list.
+    assert.deepStrictEqual(await cursorOf(admin), [null, null]);
   });
 
   it('leaves removed items and requests alone and imports an entry again once it changes', async () => {
@@ -638,7 +707,7 @@ describe('AniList Planning import', () => {
     });
     assert.deepStrictEqual(await watchlisted(admin), [30502, 30501]);
     assert.deepStrictEqual(await requestStates(), requested);
-    assert.strictEqual(await cursorOf(admin), 3100);
+    assert.deepStrictEqual(await cursorOf(admin), [3100, 30501]);
   });
 
   it('stops without moving on while AniList is rate limited', async () => {
@@ -687,7 +756,7 @@ describe('AniList Planning import', () => {
       skipped: 0,
     });
     assert.deepStrictEqual(await watchlisted(admin), [30701]);
-    assert.strictEqual(await cursorOf(admin), 1000);
+    assert.deepStrictEqual(await cursorOf(admin), [1000, 30701]);
     assert.strictEqual(rotation.lastUserId, 0);
     assert.deepStrictEqual(await watchlisted(friend), []);
     assert.deepStrictEqual(
@@ -722,7 +791,7 @@ describe('AniList Planning import', () => {
       skipped: 0,
     });
     assert.deepStrictEqual(await watchlisted(admin), []);
-    assert.strictEqual(await cursorOf(admin), null);
+    assert.deepStrictEqual(await cursorOf(admin), [null, null]);
     assert.deepStrictEqual(await watchlisted(friend), [30803]);
     assert.strictEqual(rotation.lastUserId, friend.id);
     assert.deepStrictEqual(
@@ -745,7 +814,7 @@ describe('AniList Planning import', () => {
     catalog.delete(30801);
     await runMangaPlanningImport(rotation);
     assert.deepStrictEqual(await watchlisted(admin), [30801, 30802]);
-    assert.strictEqual(await cursorOf(admin), 1001);
+    assert.deepStrictEqual(await cursorOf(admin), [1001, 30802]);
   });
 
   it('skips users whose AniList link cannot be used', async () => {
@@ -823,7 +892,7 @@ describe('AniList Planning import', () => {
     const rotation = { lastUserId: 0 };
     await runMangaPlanningImport(rotation);
     assert.deepStrictEqual(await watchlisted(admin), []);
-    assert.strictEqual(await cursorOf(admin), null);
+    assert.deepStrictEqual(await cursorOf(admin), [null, null]);
     assert.strictEqual(rotation.lastUserId, 0);
   });
 

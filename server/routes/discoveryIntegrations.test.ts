@@ -452,6 +452,7 @@ describe('personal discovery account boundaries', () => {
     assert.equal(accounts.anilist.importMangaPlanning, true);
     assert.equal(accounts.anilist.allowWrites, false);
     assert.equal('mangaPlanningCursor' in accounts.anilist, false);
+    assert.equal('mangaPlanningCursorId' in accounts.anilist, false);
     assert.equal('importMangaPlanning' in accounts.trakt, false);
 
     // Each preference changes on its own.
@@ -465,7 +466,7 @@ describe('personal discovery account boundaries', () => {
 
     await repository.update(
       { userId: admin.id, provider: 'anilist' },
-      { mangaPlanningCursor: 1234 }
+      { mangaPlanningCursor: 1234, mangaPlanningCursorId: 5678 }
     );
     await saveDiscoveryAccount(
       admin.id,
@@ -479,6 +480,7 @@ describe('personal discovery account boundaries', () => {
     });
     assert.equal(relinked.importMangaPlanning, false);
     assert.equal(relinked.mangaPlanningCursor, null);
+    assert.equal(relinked.mangaPlanningCursorId, null);
     assert.equal(relinked.allowWrites, false);
   });
   it('rejects repeated MDBList list query parameters', async () => {

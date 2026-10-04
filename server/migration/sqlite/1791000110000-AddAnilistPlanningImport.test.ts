@@ -51,12 +51,25 @@ test('SQLite AniList Planning import migration adds account columns reversibly',
         notnull: 0,
         dflt_value: null,
       },
+      {
+        name: 'mangaPlanningCursorId',
+        type: 'integer',
+        notnull: 0,
+        dflt_value: null,
+      },
     ]);
     assert.deepEqual(
       await queryRunner.query(
-        `SELECT "allowWrites", "importMangaPlanning", "mangaPlanningCursor" FROM "discovery_account"`
+        `SELECT "allowWrites", "importMangaPlanning", "mangaPlanningCursor", "mangaPlanningCursorId" FROM "discovery_account"`
       ),
-      [{ allowWrites: 1, importMangaPlanning: 0, mangaPlanningCursor: null }]
+      [
+        {
+          allowWrites: 1,
+          importMangaPlanning: 0,
+          mangaPlanningCursor: null,
+          mangaPlanningCursorId: null,
+        },
+      ]
     );
 
     await migration.down(queryRunner);
