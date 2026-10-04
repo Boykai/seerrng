@@ -69,6 +69,7 @@ vi.mock('@headlessui/react', () => ({
   }) => (show ? children : null),
 }));
 vi.mock('@app/components/Common/CachedImage', () => ({
+  // eslint-disable-next-line @next/next/no-img-element
   default: ({ src }: { src: string }) => <img alt="" src={src} />,
 }));
 vi.mock('@app/components/Association/AssociationBadge', () => ({
@@ -297,4 +298,34 @@ it('opens the manga request modal with the AniList id', async () => {
   const modal = host.querySelector('[data-testid="request-modal"]');
   expect(modal?.getAttribute('data-type')).toBe('manga');
   expect(modal?.getAttribute('data-manga-id')).toBe('30013');
+});
+
+const watchlistButton = () =>
+  host.querySelector('[data-poster-region="hover-actions"] button');
+
+it('adds a manga card to the watchlist by its AniList id and removes it again', async () => {
+  state.post.mockResolvedValue({ status: 201, data: { id: 1 } });
+  state.remove.mockResolvedValue({ status: 204 });
+  await renderManga();
+  await openDetails();
+  await click(watchlistButton());
+
+  expect(state.post).toHaveBeenCalledWith('/api/v1/watchlist', {
+    externalId: '30013',
+    mediaType: 'manga',
+    title: 'Sample Manga',
+  });
+
+  await click(watchlistButton());
+
+  expect(state.remove).toHaveBeenCalledWith(
+    '/api/v1/watchlist/30013?mediaType=manga'
+  );
+});
+
+it('offers no watchlist action on a blocklisted manga card', async () => {
+  await renderManga(MediaStatus.BLOCKLISTED);
+  await openDetails();
+
+  expect(watchlistButton()).toBeNull();
 });

@@ -4,6 +4,8 @@ import Button from '@app/components/Common/Button';
 import PersonCard from '@app/components/PersonCard';
 import TitleCard from '@app/components/TitleCard';
 import LibraryTitleCard from '@app/components/TitleCard/LibraryTitleCard';
+import MangaTitleCard from '@app/components/TitleCard/MangaTitleCard';
+import { getMangaWatchlistBatch } from '@app/components/TitleCard/mangaWatchlistBatches';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import useCardTextVisibility from '@app/hooks/useCardTextVisibility';
 import useSettings from '@app/hooks/useSettings';
@@ -118,7 +120,7 @@ const ListView = ({
   });
   const plexCards = useMemo(
     () =>
-      plexItems?.flatMap((title, index) => {
+      plexItems?.flatMap((title, index, items) => {
         const card =
           title.mediaType === 'music' && title.mbId ? (
             <LibraryTitleCard
@@ -145,6 +147,13 @@ const ListView = ({
               type={title.mediaType}
               title={title.title}
               isAddedToWatchlist={true}
+              canExpand
+              mutateParent={mutateParent}
+            />
+          ) : title.mediaType === 'manga' && title.externalId ? (
+            <MangaTitleCard
+              id={Number(title.externalId)}
+              batchIds={getMangaWatchlistBatch(items, index)}
               canExpand
               mutateParent={mutateParent}
             />
@@ -365,6 +374,7 @@ const ListView = ({
                 titleWeight={posterTitleWeight}
                 key={title.id}
                 id={title.id}
+                isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
                 image={getMangaImageUrl(title.posterPath)}
                 status={title.mediaInfo?.status}
                 title={title.title}

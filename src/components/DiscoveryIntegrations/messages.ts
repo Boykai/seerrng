@@ -14,6 +14,10 @@ export default defineMessages('discovery', {
     'Allow SeerrNG to make tracking changes to my {provider} account',
   'accounts.writesdescription':
     'Only changes you choose in My Library are sent. Turn this off to keep this connection read-only.',
+  'accounts.importmangaplanning':
+    'Add manga from my AniList Planning list to my SeerrNG watchlist',
+  'accounts.importmangaplanningdescription':
+    'SeerrNG checks your list on a schedule and never changes it. Removing a title on AniList keeps it on your watchlist and keeps any request.',
   'accounts.connect': 'Connect',
   'accounts.authorize': 'Authorize SeerrNG on {provider}.',
   'accounts.open': 'Open authorization page',

@@ -53,7 +53,7 @@ const render = async (currentPermission: number, onUpdate = vi.fn()) => {
 const checkbox = (id: string) =>
   host.querySelector<HTMLInputElement>(`input[id="${id}"]`);
 
-it('offers manga request and auto-approve permissions but no manga auto-request', async () => {
+it('offers manga request, auto-approve and auto-request permissions', async () => {
   await render(0);
 
   expect(host.textContent).toContain('Request Manga');
@@ -61,10 +61,31 @@ it('offers manga request and auto-approve permissions but no manga auto-request'
     'Grant permission to submit manga requests.'
   );
   expect(host.textContent).toContain('Auto-Approve Manga');
-  expect(host.textContent).not.toContain('Auto-Request Manga');
+  expect(host.textContent).toContain('Auto-Request Manga');
+  expect(host.textContent).toContain(
+    'Grant permission to automatically submit manga requests via watchlists.'
+  );
   expect(checkbox('request-manga')).toBeTruthy();
   expect(checkbox('autoapprovemanga')).toBeTruthy();
-  expect(host.querySelector('input[id*="autorequestmanga"]')).toBeNull();
+  expect(checkbox('autorequestmanga')).toBeTruthy();
+});
+
+it('lets auto-request manga follow the request or manga request permission', async () => {
+  await render(0);
+  expect(checkbox('autorequestmanga')?.disabled).toBe(true);
+
+  const onUpdate = await render(Permission.REQUEST_MANGA);
+  expect(checkbox('autorequestmanga')?.disabled).toBe(false);
+  await act(async () => {
+    checkbox('autorequestmanga')!.click();
+  });
+  expect(onUpdate).toHaveBeenCalledWith(
+    Permission.REQUEST_MANGA + Permission.AUTO_REQUEST_MANGA
+  );
+
+  await render(Permission.REQUEST + Permission.AUTO_REQUEST);
+  expect(checkbox('autorequestmanga')?.checked).toBe(true);
+  expect(checkbox('autorequestmanga')?.disabled).toBe(true);
 });
 
 it('lets auto-approve manga follow the request or manga request permission', async () => {

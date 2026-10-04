@@ -1,4 +1,5 @@
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+import { UserType } from '@server/constants/user';
 import { Permission } from '@server/lib/permissions';
 import type { MangaDetails as MangaDetailsType } from '@server/models/Manga';
 import { JSDOM } from 'jsdom';
@@ -13,10 +14,11 @@ const state = vi.hoisted(() => ({
   byKey: {} as Record<string, { data?: unknown; error?: unknown }>,
   keys: [] as unknown[],
   post: vi.fn(),
+  remove: vi.fn(),
   revalidate: vi.fn(),
   addToast: vi.fn(),
   granted: [] as number[],
-  user: undefined as { id: number } | undefined,
+  user: undefined as { id: number; userType?: UserType } | undefined,
   settings: {} as { suwayomiEnabled?: boolean },
 }));
 vi.mock('swr', () => ({
@@ -29,7 +31,10 @@ vi.mock('swr', () => ({
     return { ...response, mutate: state.revalidate };
   },
 }));
-vi.mock('axios', () => ({ default: { post: state.post } }));
+vi.mock('axios', () => ({
+  default: { post: state.post, delete: state.remove },
+}));
+vi.mock('@app/assets/spinner.svg', () => ({ default: () => null }));
 vi.mock('next/router', () => ({
   useRouter: () => ({ query: { mangaId: '30013' } }),
 }));
@@ -205,6 +210,7 @@ beforeEach(() => {
   state.byKey = {};
   state.keys = [];
   state.post.mockReset();
+  state.remove.mockReset();
   state.revalidate.mockReset();
   state.addToast.mockReset();
   state.granted = [Permission.REQUEST, Permission.MANAGE_BLOCKLIST];
@@ -350,7 +356,7 @@ it('renders no request action', async () => {
     [...host.querySelectorAll('button')].map((button) =>
       button.getAttribute('aria-label')
     )
-  ).toEqual(['Add to Blocklist']);
+  ).toEqual(['Add to Blocklist', 'Add To Watchlist']);
 });
 
 it('blocklists the manga by its AniList id for blocklist managers', async () => {
@@ -502,7 +508,7 @@ it('hides the issue report from users who cannot report issues', async () => {
   expect(reportIssueButton()).toBeNull();
 });
 
-it('orders the issue report after the blocklist action', async () => {
+it('orders the issue report after the blocklist and watchlist actions', async () => {
   state.granted = [Permission.MANAGE_BLOCKLIST, Permission.CREATE_ISSUES];
   state.swr = {
     data: details({
@@ -518,7 +524,93 @@ it('orders the issue report after the blocklist action', async () => {
     [...host.querySelectorAll('button')].map((button) =>
       button.getAttribute('aria-label')
     )
-  ).toEqual(['Add to Blocklist', 'Report an Issue']);
+  ).toEqual(['Add to Blocklist', 'Add To Watchlist', 'Report an Issue']);
+});
+
+const watchlistButton = (label: 'Add To Watchlist' | 'Remove From Watchlist') =>
+  host.querySelector(`button[aria-label="${label}"]`);
+
+it('adds the manga to the watchlist by its AniList id', async () => {
+  state.post.mockResolvedValue({ status: 201, data: { id: 1 } });
+  await render();
+
+  expect(host.querySelector('span[title="Add To Watchlist"]')).toBeTruthy();
+  await act(async () => {
+    watchlistButton('Add To Watchlist')!.dispatchEvent(
+      new dom.window.MouseEvent('click', { bubbles: true })
+    );
+  });
+
+  expect(state.post).toHaveBeenCalledWith('/api/v1/watchlist', {
+    externalId: '30013',
+    mediaType: 'manga',
+    title: 'Sample Manga',
+  });
+  expect(state.addToast).toHaveBeenCalledWith(expect.anything(), {
+    appearance: 'success',
+    autoDismiss: true,
+  });
+  expect(state.revalidate).toHaveBeenCalled();
+  expect(watchlistButton('Remove From Watchlist')).toBeTruthy();
+});
+
+it('removes a watchlisted manga from the manga watchlist', async () => {
+  state.remove.mockResolvedValue({ status: 204 });
+  state.swr = { data: details({ onUserWatchlist: true }) };
+  await render();
+
+  expect(watchlistButton('Add To Watchlist')).toBeNull();
+  await act(async () => {
+    watchlistButton('Remove From Watchlist')!.dispatchEvent(
+      new dom.window.MouseEvent('click', { bubbles: true })
+    );
+  });
+
+  expect(state.remove).toHaveBeenCalledWith(
+    '/api/v1/watchlist/30013?mediaType=manga'
+  );
+  expect(state.addToast).toHaveBeenCalledWith(expect.anything(), {
+    appearance: 'info',
+    autoDismiss: true,
+  });
+  expect(watchlistButton('Add To Watchlist')).toBeTruthy();
+});
+
+it('keeps the watchlist action unchanged and explains a failed update', async () => {
+  state.post.mockRejectedValue(new Error('Manga not found.'));
+  await render();
+
+  await act(async () => {
+    watchlistButton('Add To Watchlist')!.dispatchEvent(
+      new dom.window.MouseEvent('click', { bubbles: true })
+    );
+  });
+
+  expect(state.addToast).toHaveBeenCalledWith(
+    'Something went wrong. Please try again.',
+    { appearance: 'error', autoDismiss: true }
+  );
+  expect(watchlistButton('Add To Watchlist')).toBeTruthy();
+});
+
+it.each([
+  [
+    'a Plex user',
+    { id: 7, userType: UserType.PLEX },
+    undefined as MangaDetailsType['mediaInfo'],
+  ],
+  [
+    'a blocklisted manga',
+    { id: 7, userType: UserType.LOCAL },
+    { status: MediaStatus.BLOCKLISTED } as MangaDetailsType['mediaInfo'],
+  ],
+])('hides the watchlist action for %s', async (_case, user, mediaInfo) => {
+  state.user = user;
+  state.swr = { data: details({ mediaInfo }) };
+  await render();
+
+  expect(watchlistButton('Add To Watchlist')).toBeNull();
+  expect(watchlistButton('Remove From Watchlist')).toBeNull();
 });
 
 const availabilityCell = () =>

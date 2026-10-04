@@ -1,4 +1,5 @@
 import { MediaServerType } from '@server/constants/server';
+import { Permission } from '@server/lib/permissions';
 import { JSDOM } from 'jsdom';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -10,6 +11,8 @@ const state = vi.hoisted(() => ({
   data: {} as Record<string, unknown>,
   post: vi.fn(),
   revalidate: vi.fn(),
+  permissions: [] as number[],
+  enabledMediaCategories: undefined as Record<string, boolean> | undefined,
 }));
 vi.mock('swr', () => ({
   default: (key: string | null) =>
@@ -31,7 +34,10 @@ vi.mock('@app/hooks/useUser', async () => {
       options?.id
         ? {
             user: { id: 9, userType: user.UserType.LOCAL, warnings: [] },
-            hasPermission: () => false,
+            hasPermission: (permission: number | number[]) =>
+              [permission]
+                .flat()
+                .some((value) => state.permissions.includes(value)),
             revalidate: vi.fn(),
           }
         : {
@@ -47,6 +53,7 @@ vi.mock('@app/hooks/useSettings', () => ({
       locale: 'en',
       originalLanguage: '',
       mediaServerType: MediaServerType.PLEX,
+      enabledMediaCategories: state.enabledMediaCategories,
     },
   }),
 }));
@@ -89,6 +96,8 @@ beforeEach(() => {
   };
   state.post.mockReset().mockResolvedValue({ status: 200 });
   state.revalidate.mockReset();
+  state.permissions = [];
+  state.enabledMediaCategories = undefined;
 });
 
 afterEach(async () => {
@@ -191,5 +200,40 @@ it('clears the per-user manga limit when the override is turned off', async () =
   expect(state.post.mock.calls[0][1]).toMatchObject({
     mangaQuotaLimit: null,
     mangaQuotaDays: null,
+  });
+});
+
+const mangaWatchlistToggle = () =>
+  host.querySelector<HTMLInputElement>('#watchlistSyncManga');
+
+it('offers manga auto-request only with the manga category and permission', async () => {
+  state.permissions = [Permission.AUTO_REQUEST_MANGA];
+  await render();
+  expect(mangaWatchlistToggle()).toBeNull();
+
+  state.enabledMediaCategories = { manga: true };
+  state.permissions = [Permission.AUTO_REQUEST_COMIC];
+  await render();
+  expect(mangaWatchlistToggle()).toBeNull();
+
+  state.permissions = [Permission.AUTO_REQUEST];
+  await render();
+  expect(mangaWatchlistToggle()).not.toBeNull();
+});
+
+it('saves the manga auto-request preference', async () => {
+  state.enabledMediaCategories = { manga: true };
+  state.permissions = [Permission.AUTO_REQUEST_MANGA];
+  state.data = { ...state.data, watchlistSyncManga: false };
+  await render();
+  expect(mangaWatchlistToggle()!.checked).toBe(false);
+
+  await act(async () => {
+    mangaWatchlistToggle()!.click();
+  });
+  await submit();
+
+  expect(state.post.mock.calls[0][1]).toMatchObject({
+    watchlistSyncManga: true,
   });
 });

@@ -246,9 +246,10 @@ const TitleCard = ({
             }
           : mediaType === 'book' ||
               mediaType === 'comic' ||
-              mediaType === 'magazine'
+              mediaType === 'magazine' ||
+              mediaType === 'manga'
             ? {
-                externalId: actionId,
+                externalId: mediaType === 'manga' ? String(actionId) : actionId,
                 mediaType,
                 title,
               }
@@ -569,7 +570,12 @@ const TitleCard = ({
     isMagazine ||
     mangaRequestId !== undefined;
   const canUseWatchlistActions =
-    canUseVideoActions || isAlbum || isBook || isComic || isMagazine;
+    canUseVideoActions ||
+    isAlbum ||
+    isBook ||
+    isComic ||
+    isMagazine ||
+    (isManga && Number.isSafeInteger(numericId) && numericId > 0);
   const detailHref =
     mediaType === 'movie'
       ? `/movie/${id}`

@@ -1,3 +1,4 @@
+import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
@@ -28,17 +29,20 @@ import {
   ExclamationTriangleIcon,
   EyeSlashIcon,
   InformationCircleIcon,
+  MinusCircleIcon,
+  StarIcon,
 } from '@heroicons/react/24/solid';
 import {
   MediaRequestStatus,
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
+import { UserType } from '@server/constants/user';
 import type { MangaDetails as MangaDetailsType } from '@server/models/Manga';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import type { IntlShape } from 'react-intl';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
@@ -83,6 +87,12 @@ const messages = defineMessages('components.MangaDetails', {
   statusNotYetReleased: 'Not Yet Released',
   statusCancelled: 'Cancelled',
   statusHiatus: 'Hiatus',
+  watchlistSuccess: '<strong>{title}</strong> added to watchlist successfully!',
+  watchlistDeleted:
+    '<strong>{title}</strong> Removed from watchlist successfully!',
+  watchlistError: 'Something went wrong. Please try again.',
+  removefromwatchlist: 'Remove From Watchlist',
+  addtowatchlist: 'Add To Watchlist',
 });
 
 type MessageKey = keyof typeof messages;
@@ -148,6 +158,8 @@ const MangaDetails = () => {
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [editRequest, setEditRequest] = useState<MangaScopedRequest>();
   const [showIssueModal, setShowIssueModal] = useState(false);
+  const [isWatchlistUpdating, setIsWatchlistUpdating] = useState(false);
+  const [toggleWatchlist, setToggleWatchlist] = useState(true);
   const mangaId =
     typeof router.query.mangaId === 'string' ? router.query.mangaId : '';
 
@@ -180,6 +192,10 @@ const MangaDetails = () => {
       : null
   );
 
+  useEffect(() => {
+    setToggleWatchlist(!data?.onUserWatchlist);
+  }, [data?.onUserWatchlist]);
+
   if (!data && !error) {
     return <LoadingSpinner />;
   }
@@ -196,6 +212,10 @@ const MangaDetails = () => {
   const canUseBlocklist = hasPermission(Permission.MANAGE_BLOCKLIST);
   const isBlocklistAvailable =
     data.mediaInfo?.status !== MediaStatus.BLOCKLISTED;
+  const canWatchlist =
+    aniListId !== undefined &&
+    data.mediaInfo?.status !== MediaStatus.BLOCKLISTED &&
+    user?.userType !== UserType.PLEX;
   const mediaStatus = data.mediaInfo?.status;
   const canShowRequestButton =
     !!settings.currentSettings.suwayomiEnabled &&
@@ -292,6 +312,51 @@ const MangaDetails = () => {
       setShowBlocklistModal(false);
     }
   };
+
+  const updateWatchlist = async (): Promise<void> => {
+    const adding = toggleWatchlist;
+    setIsWatchlistUpdating(true);
+
+    try {
+      if (adding) {
+        await axios.post('/api/v1/watchlist', {
+          externalId: String(data.id),
+          mediaType: MediaType.MANGA,
+          title: data.title,
+        });
+      } else {
+        await axios.delete(
+          `/api/v1/watchlist/${encodeApiPathSegment(String(data.id))}?mediaType=manga`
+        );
+      }
+      addToast(
+        <span>
+          {intl.formatMessage(
+            adding ? messages.watchlistSuccess : messages.watchlistDeleted,
+            {
+              title: data.title,
+              strong: (message: React.ReactNode) => (
+                <strong key="strong">{message}</strong>
+              ),
+            }
+          )}
+        </span>,
+        { appearance: adding ? 'success' : 'info', autoDismiss: true }
+      );
+      setToggleWatchlist(!adding);
+    } catch {
+      addToast(intl.formatMessage(messages.watchlistError), {
+        appearance: 'error',
+        autoDismiss: true,
+      });
+    } finally {
+      setIsWatchlistUpdating(false);
+      void revalidate();
+    }
+  };
+  const watchlistLabel = intl.formatMessage(
+    toggleWatchlist ? messages.addtowatchlist : messages.removefromwatchlist
+  );
 
   return (
     <>
@@ -430,6 +495,24 @@ const MangaDetails = () => {
                     )}
                   >
                     <EyeSlashIcon />
+                  </Button>
+                </Tooltip>
+              )}
+              {canWatchlist && (
+                <Tooltip content={watchlistLabel}>
+                  <Button
+                    buttonType={toggleWatchlist ? 'ghost' : 'default'}
+                    buttonSize="sm"
+                    onClick={updateWatchlist}
+                    aria-label={watchlistLabel}
+                  >
+                    {isWatchlistUpdating ? (
+                      <Spinner />
+                    ) : toggleWatchlist ? (
+                      <StarIcon data-icon-tone="accent" />
+                    ) : (
+                      <MinusCircleIcon />
+                    )}
                   </Button>
                 </Tooltip>
               )}

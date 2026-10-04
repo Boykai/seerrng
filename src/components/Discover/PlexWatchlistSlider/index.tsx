@@ -1,5 +1,7 @@
 import Slider from '@app/components/Slider';
 import LibraryTitleCard from '@app/components/TitleCard/LibraryTitleCard';
+import MangaTitleCard from '@app/components/TitleCard/MangaTitleCard';
+import { getMangaWatchlistBatch } from '@app/components/TitleCard/mangaWatchlistBatches';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import useDiscoverRowSnapshot from '@app/hooks/useDiscoverRowSnapshot';
 import useSettings from '@app/hooks/useSettings';
@@ -50,7 +52,7 @@ const PlexWatchlistSlider = () => {
         .filter((item) =>
           isDiscoverWatchlistTypeEnabled(item.mediaType, currentSettings)
         )
-        .flatMap((item) => {
+        .flatMap((item, index, items) => {
           const card =
             item.mediaType === 'music' && item.mbId ? (
               <LibraryTitleCard
@@ -73,6 +75,11 @@ const PlexWatchlistSlider = () => {
                 type={item.mediaType}
                 title={item.title}
                 isAddedToWatchlist={true}
+              />
+            ) : item.mediaType === 'manga' && item.externalId ? (
+              <MangaTitleCard
+                id={Number(item.externalId)}
+                batchIds={getMangaWatchlistBatch(items, index)}
               />
             ) : item.tmdbId ? (
               <TmdbTitleCard
@@ -103,7 +110,8 @@ const PlexWatchlistSlider = () => {
       !user?.settings?.watchlistSyncMusic &&
       !user?.settings?.watchlistSyncBooks &&
       !user?.settings?.watchlistSyncComics &&
-      !user?.settings?.watchlistSyncMagazines) ||
+      !user?.settings?.watchlistSyncMagazines &&
+      !user?.settings?.watchlistSyncManga) ||
     watchlistError
   ) {
     return null;

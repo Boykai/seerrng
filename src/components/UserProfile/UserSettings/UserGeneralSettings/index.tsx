@@ -15,6 +15,7 @@ import { Permission, UserType, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
+import { isConfiguredMediaCategoryEnabled } from '@app/utils/serviceAvailability';
 import { ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
 import type { TmdbLanguage } from '@server/api/themoviedb/interfaces';
 import { ApiErrorCode } from '@server/constants/error';
@@ -99,6 +100,9 @@ const messages = defineMessages(
     magazinewatchlistsync: 'Auto-Request Magazines',
     magazinewatchlistsynctip:
       'Automatically request magazines added to your SeerrNG magazine watchlist.',
+    mangawatchlistsync: 'Auto-Request Manga',
+    mangawatchlistsynctip:
+      'Automatically request manga added to your SeerrNG manga watchlist.',
     cardTextVisibility: 'Card Titles',
     cardTextVisibilityTip:
       'Choose when each media type shows title text on poster cards.',
@@ -301,6 +305,7 @@ const UserGeneralSettings = () => {
           watchlistSyncBooks: data?.watchlistSyncBooks,
           watchlistSyncComics: data?.watchlistSyncComics,
           watchlistSyncMagazines: data?.watchlistSyncMagazines,
+          watchlistSyncManga: data?.watchlistSyncManga,
           cardTextVisibilityMovie: data?.cardTextVisibility?.movie ?? 'hover',
           cardTextVisibilityTv: data?.cardTextVisibility?.tv ?? 'hover',
           cardTextVisibilityAlbum: data?.cardTextVisibility?.album ?? 'always',
@@ -383,6 +388,7 @@ const UserGeneralSettings = () => {
               watchlistSyncBooks: values.watchlistSyncBooks,
               watchlistSyncComics: values.watchlistSyncComics,
               watchlistSyncMagazines: values.watchlistSyncMagazines,
+              watchlistSyncManga: values.watchlistSyncManga,
               cardTextVisibility: {
                 movie: values.cardTextVisibilityMovie,
                 tv: values.cardTextVisibilityTv,
@@ -1245,6 +1251,38 @@ const UserGeneralSettings = () => {
                   </div>
                 </div>
               )}
+              {isConfiguredMediaCategoryEnabled('manga', currentSettings) &&
+                hasPermission(
+                  [Permission.AUTO_REQUEST, Permission.AUTO_REQUEST_MANGA],
+                  { type: 'or' }
+                ) && (
+                  <div className="form-row">
+                    <label
+                      htmlFor="watchlistSyncManga"
+                      className="checkbox-label"
+                    >
+                      <span>
+                        {intl.formatMessage(messages.mangawatchlistsync)}
+                      </span>
+                      <span className="label-tip">
+                        {intl.formatMessage(messages.mangawatchlistsynctip)}
+                      </span>
+                    </label>
+                    <div className="form-input-area">
+                      <Field
+                        type="checkbox"
+                        id="watchlistSyncManga"
+                        name="watchlistSyncManga"
+                        onChange={() => {
+                          setFieldValue(
+                            'watchlistSyncManga',
+                            !values.watchlistSyncManga
+                          );
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               <div className="form-row">
                 <label htmlFor="cardTextVisibilityMovie" className="text-label">
                   <span>{intl.formatMessage(messages.cardTextVisibility)}</span>
