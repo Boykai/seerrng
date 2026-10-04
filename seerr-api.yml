@@ -938,10 +938,11 @@ components:
               isbn,
               comicvine,
               lazylibrarian,
+              anilist,
             ]
         mediaType:
           type: string
-          enum: [movie, tv, music, book, comic, magazine]
+          enum: [movie, tv, music, book, comic, magazine, manga]
         media:
           $ref: '#/components/schemas/MediaInfo'
         userId:
@@ -1294,6 +1295,14 @@ components:
         includeAdult:
           type: boolean
           example: false
+        mangaIncludeAdult:
+          type: boolean
+          example: false
+          description: Include adult titles in the AniList manga catalog. Off by default.
+        mangaIncludeNovels:
+          type: boolean
+          example: false
+          description: Include light novels in the AniList manga catalog. Off by default.
         openIdProviders:
           type: array
           items:
@@ -1949,6 +1958,270 @@ components:
         - useSsl
         - isDefault
         - syncEnabled
+    SuwayomiSettings:
+      type: object
+      description: >-
+        A Suwayomi server. The server assigns `id` and `isDefault`, so requests
+        must omit them.
+      properties:
+        id:
+          type: number
+          example: 0
+          readOnly: true
+        name:
+          type: string
+          example: 'Suwayomi'
+        hostname:
+          type: string
+          example: '127.0.0.1'
+        port:
+          type: number
+          example: 4567
+        useSsl:
+          type: boolean
+          example: false
+        baseUrl:
+          type: string
+        isDefault:
+          type: boolean
+          readOnly: true
+        authMode:
+          type: string
+          enum: [UI_LOGIN, BASIC_AUTH, NONE]
+          description: >-
+            How SeerrNG signs in to Suwayomi. Save the mode that the
+            connection test detected.
+        username:
+          type: string
+        password:
+          type: string
+          description: >-
+            Write-only. Responses return `[REDACTED]` when a password is stored
+            and an empty string when not. Sending `[REDACTED]` keeps the stored
+            password, but only while `useSsl`, `hostname`, `port`, `baseUrl` and
+            `username` are unchanged; otherwise the request fails with
+            `SUWAYOMI_PASSWORD_REQUIRED`.
+        sourceAllowlist:
+          type: array
+          description: >-
+            Suwayomi source IDs as decimal strings, in order of preference. The
+            local source (`0`) is not allowed.
+          items:
+            type: string
+            example: '4000000000000000001'
+        preferredLanguages:
+          type: array
+          description: Language codes, in order of preference.
+          items:
+            type: string
+            example: 'en'
+        scanlatorPreference:
+          type: array
+          description: Scanlation group names, in order of preference.
+          items:
+            type: string
+            example: 'Group A'
+        requireCbz:
+          type: boolean
+          description: Require Suwayomi to save downloads as CBZ files.
+          example: true
+      required:
+        - name
+        - hostname
+        - port
+        - authMode
+    SuwayomiConnectionTestRequest:
+      type: object
+      description: >-
+        A Suwayomi server to test. The test detects the authentication mode
+        itself. With `id`, a `[REDACTED]` password stands for that instance's
+        stored password under the same rule as an update.
+      properties:
+        id:
+          type: number
+        hostname:
+          type: string
+          example: '127.0.0.1'
+        port:
+          type: number
+          example: 4567
+        useSsl:
+          type: boolean
+        baseUrl:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+          description: Write-only. `[REDACTED]` stands for the stored password.
+        requireCbz:
+          type: boolean
+        sourceAllowlist:
+          type: array
+          items:
+            type: string
+      required:
+        - hostname
+        - port
+    SuwayomiConnectionTestWarning:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - AUTH_DISABLED
+            - BASIC_AUTH_IN_USE
+            - EMPTY_CREDENTIALS
+            - CBZ_DISABLED
+            - QUEUE_ERRORS
+            - BELOW_PINNED_REVISION
+            - UNKNOWN_VERSION
+            - INTROSPECTION_UNAVAILABLE
+            - PER_USER_SCHEMA
+            - SOURCE_UPDATE_AVAILABLE
+            - SOURCE_OBSOLETE
+            - SOURCE_MISSING
+        count:
+          type: number
+          description: Queue items in the error state, for `QUEUE_ERRORS`.
+        sourceIds:
+          type: array
+          description: Allowlisted sources the warning applies to.
+          items:
+            type: string
+      required:
+        - code
+    SuwayomiConnectionTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        authMode:
+          type: string
+          enum: [UI_LOGIN, BASIC_AUTH, NONE]
+        version:
+          type: string
+          example: 'v2.4.2366'
+        capabilities:
+          type: object
+          properties:
+            revision:
+              type: number
+            buildType:
+              type: string
+            supported:
+              type: boolean
+            missingFields:
+              type: array
+              items:
+                type: string
+        health:
+          type: object
+          properties:
+            downloaderState:
+              type: string
+            queueLength:
+              type: number
+            queueErrors:
+              type: number
+            sourceCount:
+              type: number
+              description: Installed sources, excluding the local source.
+            downloadAsCbz:
+              type: boolean
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuwayomiConnectionTestWarning'
+        sources:
+          type: array
+          description: Installed sources, excluding the local source.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              displayName:
+                type: string
+              lang:
+                type: string
+              contentWarning:
+                type: string
+                enum: [SAFE, MIXED, NSFW, UNKNOWN]
+              hasUpdate:
+                type: boolean
+              isObsolete:
+                type: boolean
+      required:
+        - success
+        - authMode
+        - capabilities
+        - health
+        - warnings
+        - sources
+    SuwayomiConnectionTestFailure:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        code:
+          type: string
+          enum:
+            - SUWAYOMI_UNREACHABLE
+            - SUWAYOMI_TIMEOUT
+            - SUWAYOMI_NOT_SUWAYOMI
+            - SUWAYOMI_AUTH_FAILED
+            - SUWAYOMI_CREDENTIALS_REQUIRED
+            - SUWAYOMI_SIMPLE_LOGIN_UNSUPPORTED
+            - SUWAYOMI_UNSUPPORTED_SERVER
+            - SUWAYOMI_NO_SOURCES
+            - SUWAYOMI_CBZ_REQUIRED
+            - SUWAYOMI_UPSTREAM_ERROR
+        message:
+          type: string
+        authMode:
+          type: string
+          description: The detected mode, once detection finished.
+          enum: [UI_LOGIN, BASIC_AUTH, NONE, SIMPLE_LOGIN, LOGIN_REQUIRED]
+        version:
+          type: string
+        missingFields:
+          type: array
+          description: >-
+            Present for `SUWAYOMI_UNSUPPORTED_SERVER`: the GraphQL fields
+            SeerrNG needs that the server lacks. Empty when the schema could
+            not be read and the version is older than v2.3.2223.
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuwayomiConnectionTestWarning'
+      required:
+        - success
+        - code
+        - message
+        - warnings
+    SuwayomiError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - SUWAYOMI_INVALID_SETTINGS
+            - SUWAYOMI_CREDENTIALS_REQUIRED
+            - SUWAYOMI_PASSWORD_REQUIRED
+            - SUWAYOMI_INSTANCE_LIMIT
+            - SUWAYOMI_IN_USE
+        message:
+          type: string
+      required:
+        - code
+        - message
     SonarrSettings:
       type: object
       properties:
@@ -2549,6 +2822,10 @@ components:
           type: boolean
           description: Whether a ROMarrNG instance is configured.
           example: true
+        suwayomiEnabled:
+          type: boolean
+          description: Whether a Suwayomi instance is configured.
+          example: false
         enabledMediaCategories:
           type: object
           description: Administrator-controlled visibility and request availability for each media category.
@@ -2573,6 +2850,8 @@ components:
             modern:
               type: boolean
             game:
+              type: boolean
+            manga:
               type: boolean
     MovieResult:
       type: object
@@ -2950,6 +3229,631 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/MagazineIssueReference'
+    MangaTitles:
+      type: object
+      properties:
+        romaji:
+          type: string
+        english:
+          type: string
+        native:
+          type: string
+    MangaCredit:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+          description: AniList staff ID.
+        name:
+          type: string
+    MangaResult:
+      type: object
+      required:
+        - id
+        - mediaType
+        - provider
+        - title
+        - titles
+        - synonyms
+        - isAdult
+        - genres
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          example: 30013
+          description: AniList media ID.
+        mediaType:
+          type: string
+          enum: [manga]
+        provider:
+          type: string
+          enum: [anilist]
+        title:
+          type: string
+          description: English title when AniList has one, otherwise the romanized or native title.
+        titles:
+          $ref: '#/components/schemas/MangaTitles'
+        synonyms:
+          type: array
+          items:
+            type: string
+        format:
+          type: string
+          enum: [MANGA, ONE_SHOT, NOVEL]
+        status:
+          type: string
+          enum: [FINISHED, RELEASING, NOT_YET_RELEASED, CANCELLED, HIATUS]
+        chapters:
+          type: integer
+        volumes:
+          type: integer
+        isAdult:
+          type: boolean
+        idMal:
+          type: integer
+          description: MyAnimeList ID, when AniList links one.
+        posterPath:
+          type: string
+          description: AniList cover image URL.
+        backdropPath:
+          type: string
+          description: AniList banner image URL.
+        genres:
+          type: array
+          items:
+            type: string
+        startYear:
+          type: integer
+        countryOfOrigin:
+          type: string
+          example: JP
+        averageScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+        mediaInfo:
+          $ref: '#/components/schemas/MediaInfo'
+    MangaDetails:
+      allOf:
+        - $ref: '#/components/schemas/MangaResult'
+        - type: object
+          required:
+            - tags
+            - story
+            - art
+            - inSuwayomiLibrary
+          properties:
+            description:
+              type: string
+              description: Synopsis as sanitized HTML limited to paragraphs, line breaks and emphasis. Spoilers are removed.
+            tags:
+              type: array
+              description: Non-spoiler tags. Adult tags appear only when adult manga is enabled.
+              items:
+                type: object
+                required:
+                  - name
+                properties:
+                  name:
+                    type: string
+                  rank:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+            story:
+              type: array
+              items:
+                $ref: '#/components/schemas/MangaCredit'
+            art:
+              type: array
+              items:
+                $ref: '#/components/schemas/MangaCredit'
+            siteUrl:
+              type: string
+              description: AniList page for this title.
+            startDate:
+              type: string
+              description: Publication start as YYYY, YYYY-MM or YYYY-MM-DD.
+              example: '1997-07-22'
+            endDate:
+              type: string
+              description: Publication end as YYYY, YYYY-MM or YYYY-MM-DD.
+            inSuwayomiLibrary:
+              type: boolean
+              description: True when a library scan found this title in a Suwayomi library (an active binding that the latest listing contained). It carries no server, source or chapter details.
+    MangaSummariesResponse:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          description: The requested titles in request order. Unknown titles and titles excluded by the adult or light novel settings are left out.
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/MangaResult'
+    MangaLibraryError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - MANGA_INVALID_REQUEST
+            - MANGA_INSTANCE_NOT_FOUND
+            - MANGA_CANDIDATE_NOT_FOUND
+            - MANGA_ITEM_NOT_FOUND
+            - MANGA_PROPOSAL_CHANGED
+            - MANGA_NOT_IN_LIBRARY
+            - MANGA_UNSUPPORTED_SERVER
+            - MANGA_INSTANCE_CHANGED
+            - MANGA_ITEM_CHANGED
+            - MANGA_UNIQUE_CONFLICT
+            - MANGA_SUWAYOMI_LOOKUP_FAILED
+        message:
+          type: string
+        suwayomiCode:
+          type: string
+          description: Why the Suwayomi lookup failed. Present only with `MANGA_SUWAYOMI_LOOKUP_FAILED`.
+          enum:
+            - UNREACHABLE
+            - TIMEOUT
+            - ABORTED
+            - REQUEST_REFUSED
+            - AUTH_REQUIRED
+            - AUTH_FAILED
+            - AUTH_MODE_UNSUPPORTED
+            - AUTH_MODE_MISMATCH
+            - NOT_FOUND
+            - NOT_DOWNLOADED
+            - UPSTREAM_ERROR
+            - BAD_RESPONSE
+            - HTTP_ERROR
+            - RESPONSE_TOO_LARGE
+            - UNSUPPORTED_SERVER
+            - INVALID_ARGUMENT
+      required: [code, message]
+    MangaLibraryCandidate:
+      type: object
+      description: A manga in a Suwayomi library that has no live binding yet.
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        instanceId:
+          type: integer
+          minimum: 0
+        suwayomiMangaId:
+          type: integer
+          minimum: 1
+        sourceId:
+          type: string
+          pattern: '^\d{1,19}$'
+        url:
+          type: string
+          description: The source-relative URL, part of the item's key. Never shown as a link.
+        title:
+          type: string
+        proposal:
+          type: object
+          nullable: true
+          description: The best AniList title match. Never bound until an admin confirms it.
+          properties:
+            anilistId:
+              type: integer
+              minimum: 1
+            confidence:
+              type: string
+              enum: [HIGH, MEDIUM, LOW]
+              description: How closely the titles match. LOW is a weak guess.
+            score:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: Title similarity, from 0 to 1.
+          required: [anilistId, confidence, score]
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - instanceId
+        - suwayomiMangaId
+        - sourceId
+        - url
+        - title
+        - proposal
+        - updatedAt
+    MangaLibraryBinding:
+      type: object
+      description: >-
+        One decision about a (library manga, AniList title) pair. At most one
+        binding per manga is live (ACTIVE or ORPHANED). Every live binding is
+        either an exact link or an admin's decision; HIGH, MEDIUM and LOW
+        record the strength of the title proposal an admin confirmed.
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        instanceId:
+          type: integer
+          minimum: 0
+        sourceId:
+          type: string
+          pattern: '^\d{1,19}$'
+        url:
+          type: string
+          description: The source-relative URL, part of the item's key. Never shown as a link.
+        suwayomiMangaId:
+          type: integer
+          minimum: 1
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        anilistId:
+          type: integer
+          minimum: 1
+        confidence:
+          type: string
+          enum: [EXACT_LINK, TRACKER_LINK, MANUAL, HIGH, MEDIUM, LOW]
+        matchedBy:
+          type: string
+          description: >-
+            How the pair was found. `mangadex-link` comes from MangaDex data,
+            which must be credited wherever it is shown.
+          enum: [anilist-tracker, mal-tracker, mangadex-link, title, manual]
+        origin:
+          type: string
+          enum: [library-scan, admin, resolver]
+        state:
+          type: string
+          enum: [ACTIVE, ORPHANED, REJECTED]
+        inLibrary:
+          type: boolean
+        availability:
+          type: integer
+          description: Media status from this binding (1 unknown, 4 partially available, 5 available).
+          enum: [1, 4, 5]
+        chapterCount:
+          type: integer
+          minimum: 0
+          nullable: true
+        downloadCount:
+          type: integer
+          minimum: 0
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - instanceId
+        - sourceId
+        - url
+        - suwayomiMangaId
+        - title
+        - anilistId
+        - confidence
+        - matchedBy
+        - origin
+        - state
+        - inLibrary
+        - availability
+        - chapterCount
+        - downloadCount
+        - updatedAt
+    MangaLibraryItemState:
+      type: object
+      description: One library manga after a review decision.
+      properties:
+        binding:
+          description: The manga's live binding, or null when it has none.
+          anyOf:
+            - $ref: '#/components/schemas/MangaLibraryBinding'
+            - type: object
+              nullable: true
+              enum: [null]
+        candidate:
+          description: The manga's review entry, or null when it has none.
+          anyOf:
+            - $ref: '#/components/schemas/MangaLibraryCandidate'
+            - type: object
+              nullable: true
+              enum: [null]
+      required: [binding, candidate]
+    MangaLibraryCandidatesResponse:
+      type: object
+      properties:
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MangaLibraryCandidate'
+      required: [pageInfo, results]
+    MangaLibraryBindingsResponse:
+      type: object
+      properties:
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MangaLibraryBinding'
+      required: [pageInfo, results]
+    MangaResolveError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - MANGA_INVALID_REQUEST
+            - MANGA_SOURCE_NOT_ALLOWED
+            - MANGA_RESOLVE_TITLE_NOT_FOUND
+            - MANGA_INSTANCE_NOT_FOUND
+            - MANGA_CANDIDATE_NOT_FOUND
+            - MANGA_ITEM_NOT_FOUND
+            - MANGA_ALREADY_BOUND
+            - MANGA_CANDIDATE_GONE
+            - MANGA_ITEM_BOUND_ELSEWHERE
+            - MANGA_UNSUPPORTED_SERVER
+            - MANGA_INSTANCE_CHANGED
+            - MANGA_ITEM_CHANGED
+            - MANGA_UNIQUE_CONFLICT
+            - MANGA_SUWAYOMI_LOOKUP_FAILED
+        message:
+          type: string
+        suwayomiCode:
+          type: string
+          description: Why the Suwayomi lookup failed. Present only with `MANGA_SUWAYOMI_LOOKUP_FAILED`.
+          enum:
+            - UNREACHABLE
+            - TIMEOUT
+            - ABORTED
+            - REQUEST_REFUSED
+            - AUTH_REQUIRED
+            - AUTH_FAILED
+            - AUTH_MODE_UNSUPPORTED
+            - AUTH_MODE_MISMATCH
+            - NOT_FOUND
+            - NOT_DOWNLOADED
+            - UPSTREAM_ERROR
+            - BAD_RESPONSE
+            - HTTP_ERROR
+            - RESPONSE_TOO_LARGE
+            - UNSUPPORTED_SERVER
+            - INVALID_ARGUMENT
+      required: [code, message]
+    MangaResolveTitle:
+      type: object
+      description: >-
+        A requested manga title that waits for a source binding on one
+        Suwayomi instance, with the source resolver's progress.
+      properties:
+        anilistId:
+          type: integer
+          minimum: 1
+        instanceId:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          description: >-
+            `QUEUED` waits for a run. `NEEDS_PICK` has candidates for an
+            admin. `NO_MATCH` found none and retries on a backoff. `EXCLUDED`
+            is outside the content policy and is not searched. `BOUND` has an
+            ACTIVE binding on the instance. `AWAITING_APPROVAL` has only
+            pending requests, which are searched only when an admin asks.
+          enum:
+            - QUEUED
+            - NEEDS_PICK
+            - NO_MATCH
+            - EXCLUDED
+            - BOUND
+            - AWAITING_APPROVAL
+        reason:
+          type: string
+          nullable: true
+          description: Why the title has its status.
+          enum:
+            - EXACT_LINK
+            - EXISTING_BINDING
+            - ADMIN_BIND
+            - MANGADEX_AMBIGUOUS
+            - EXACT_IN_LIBRARY
+            - EXACT_BOUND_ELSEWHERE
+            - EXACT_REJECTED
+            - EXACT_NOT_PREFERRED
+            - EXACT_BY_TITLE
+            - TITLE_MATCHES
+            - NO_CANDIDATES
+            - NO_ELIGIBLE_SOURCES
+            - MANGADEX_FAILED
+            - CONTENT_POLICY
+            - ANILIST_NOT_FOUND
+            - null
+        mangadexUuid:
+          type: string
+          nullable: true
+          description: >-
+            The MangaDex manga whose AniList link names this title; the first
+            of several with `MANGADEX_AMBIGUOUS`. Data from MangaDex, which
+            must be credited wherever it is shown.
+          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        approved:
+          type: boolean
+          description: Whether an approved request waits. Pending requests are searched only when an admin asks.
+        requestId:
+          type: integer
+          minimum: 1
+          description: The oldest open request for the title on the instance.
+        candidateCount:
+          type: integer
+          minimum: 0
+        attempts:
+          type: integer
+          minimum: 0
+          description: Runs in a row that found nothing, or that no source answered.
+        checkedAt:
+          type: string
+          format: date-time
+          nullable: true
+        searchedAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextAttemptAt:
+          type: string
+          format: date-time
+          nullable: true
+        searchRequestedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When an admin asked for a search that no run has finished yet.
+        lastError:
+          type: string
+          nullable: true
+          description: What went wrong in the last run. Never upstream text.
+          enum:
+            - ANILIST_FAILED
+            - ANILIST_RATE_LIMITED
+            - MANGADEX_COOLDOWN
+            - MANGADEX_FAILED
+            - SOURCE_SEARCH_FAILED
+            - SUWAYOMI_UNAVAILABLE
+            - BIND_FAILED
+            - null
+      required:
+        - anilistId
+        - instanceId
+        - status
+        - reason
+        - mangadexUuid
+        - approved
+        - requestId
+        - candidateCount
+        - attempts
+        - checkedAt
+        - searchedAt
+        - nextAttemptAt
+        - searchRequestedAt
+        - lastError
+    MangaResolveCandidate:
+      type: object
+      description: >-
+        A source manga the resolver found for a title. Only an admin binds a
+        candidate.
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        sourceId:
+          type: string
+          pattern: '^\d{1,19}$'
+        sourceName:
+          type: string
+          maxLength: 256
+          description: >-
+            The source's name as Suwayomi listed it when the resolver searched
+            it; empty when Suwayomi gave none.
+        sourceLang:
+          type: string
+          maxLength: 32
+          description: The source's language as Suwayomi listed it, or empty.
+        url:
+          type: string
+          description: The source-relative URL, part of the item's key. Never shown as a link.
+        suwayomiMangaId:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+        inLibrary:
+          type: boolean
+          description: Whether the manga is in the Suwayomi library.
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Title similarity from 0 to 1; 1 for an exact link.
+        confidence:
+          type: string
+          enum: [EXACT_LINK, HIGH, MEDIUM, LOW]
+        matchedBy:
+          type: string
+          description: >-
+            `mangadex-link` when the manga carries the MangaDex ID that links
+            to the title; MangaDex must be credited wherever it is shown.
+            `title` for a title match.
+          enum: [mangadex-link, title]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sourceId
+        - sourceName
+        - sourceLang
+        - url
+        - suwayomiMangaId
+        - title
+        - inLibrary
+        - score
+        - confidence
+        - matchedBy
+        - createdAt
+    MangaResolveDetail:
+      allOf:
+        - $ref: '#/components/schemas/MangaResolveTitle'
+        - type: object
+          properties:
+            candidates:
+              type: array
+              description: Exact links first, then by score.
+              items:
+                $ref: '#/components/schemas/MangaResolveCandidate'
+            bindings:
+              type: array
+              description: The title's live bindings on the instance.
+              items:
+                $ref: '#/components/schemas/MangaLibraryBinding'
+          required: [candidates, bindings]
+    MangaResolveTitlesResponse:
+      type: object
+      properties:
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MangaResolveTitle'
+      required: [pageInfo, results]
+    MangaResolveSearchResponse:
+      type: object
+      properties:
+        title:
+          $ref: '#/components/schemas/MangaResolveTitle'
+        runStarted:
+          type: boolean
+          description: False when a run is already going; that run or the next one takes the title.
+      required: [title, runStarted]
+    MangaResolveBindResponse:
+      type: object
+      properties:
+        outcome:
+          type: string
+          description: '`unchanged` when the manga was already bound to the title.'
+          enum: [bound, unchanged]
+        binding:
+          $ref: '#/components/schemas/MangaLibraryBinding'
+        title:
+          $ref: '#/components/schemas/MangaResolveTitle'
+      required: [outcome, binding, title]
     AuthorResult:
       type: object
       properties:
@@ -3659,7 +4563,7 @@ components:
           type: integer
         mediaType:
           type: string
-          enum: [movie, tv, music, book, comic, magazine]
+          enum: [movie, tv, music, book, comic, magazine, manga]
         stage:
           type: string
         attempt:
@@ -3840,9 +4744,100 @@ components:
           type: boolean
           example: false
           description: If true, this request will not count against the user's quota. Requires MANAGE_REQUESTS permission.
+        mangaScope:
+          $ref: '#/components/schemas/MangaRequestScopeSummary'
       required:
         - id
         - status
+    MangaRequestScopeInput:
+      type: object
+      description: Which chapters a manga request asks for. Omit it to request every chapter the source lists when the request is dispatched.
+      additionalProperties: false
+      properties:
+        scope:
+          type: string
+          enum: [ALL_AT_DISPATCH, LATEST_N, RANGE]
+          description: ALL_AT_DISPATCH when omitted.
+        latestCount:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          nullable: true
+          description: LATEST_N only. How many of the highest-numbered chapters to request.
+        rangeStart:
+          type: number
+          minimum: 0
+          maximum: 1000000
+          nullable: true
+          description: RANGE only, and required there. The first chapter number, inclusive.
+        rangeEnd:
+          type: number
+          minimum: 0
+          maximum: 1000000
+          nullable: true
+          description: RANGE only. The last chapter number, inclusive. Every later chapter too when omitted.
+    MangaRequestScopeSummary:
+      type: object
+      description: A manga request's chapter scope. Present on manga requests only.
+      properties:
+        scope:
+          type: string
+          enum: [ALL_AT_DISPATCH, LATEST_N, RANGE]
+        latestCount:
+          type: integer
+          nullable: true
+        rangeStart:
+          type: number
+          nullable: true
+        rangeEnd:
+          type: number
+          nullable: true
+        awaitingBinding:
+          type: boolean
+          description: True while the title has no source on the request's Suwayomi server. A library scan or an administrator's match review provides one.
+        follow:
+          $ref: '#/components/schemas/MangaRequestFollowSummary'
+      required:
+        - scope
+        - latestCount
+        - rangeStart
+        - rangeEnd
+        - awaitingBinding
+        - follow
+    MangaRequestFollowSummary:
+      type: object
+      description: Whether the request follows new chapters, adding them as its source lists them. Change it with `PUT /request/{requestId}/follow`.
+      properties:
+        enabled:
+          type: boolean
+        stopReason:
+          type: string
+          nullable: true
+          enum:
+            - OWNER_NOT_PERMITTED
+            - REQUEST_DECLINED
+            - REQUEST_FAILED
+            - RANGE_COMPLETE
+            - MANIFEST_LIMIT
+            - BINDING_INACTIVE
+            - INSTANCE_MISSING
+            - BINDING_CHANGED
+            - MANGA_NOT_FOUND
+          description: Why following stopped (enabled is false) or paused (enabled is true). BINDING_INACTIVE, INSTANCE_MISSING, BINDING_CHANGED and MANGA_NOT_FOUND are pauses, which clear on their own once the cause is resolved.
+        lastCheckAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextCheckAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: While following is on, null means the next run of the Manga Follow job checks the request.
+      required:
+        - enabled
+        - stopReason
+        - lastCheckAt
+        - nextCheckAt
     MediaInfo:
       type: object
       properties:
@@ -3863,7 +4858,7 @@ components:
           nullable: true
         mediaType:
           type: string
-          enum: [movie, tv, music, book, comic, magazine]
+          enum: [movie, tv, music, book, comic, magazine, manga]
         serviceId:
           type: number
           nullable: true
@@ -5151,7 +6146,7 @@ components:
                 type: string
               mediaType:
                 type: string
-                enum: [movie, tv, music, book]
+                enum: [movie, tv, music, book, manga]
               id:
                 oneOf:
                   - type: integer
@@ -9121,6 +10116,8 @@ paths:
                     $ref: '#/components/schemas/QuotaStatus'
                   magazine:
                     $ref: '#/components/schemas/QuotaStatus'
+                  manga:
+                    $ref: '#/components/schemas/QuotaStatus'
                   software:
                     $ref: '#/components/schemas/QuotaStatus'
   /blocklist:
@@ -9164,7 +10161,7 @@ paths:
           name: mediaType
           schema:
             type: string
-            enum: [all, movie, tv, music, book, comic, magazine]
+            enum: [all, movie, tv, music, book, comic, magazine, manga]
             default: all
         - in: query
           name: sort
@@ -9260,6 +10257,7 @@ paths:
               - book
               - comic
               - magazine
+              - manga
       responses:
         '200':
           description: Blocklist details in JSON
@@ -9287,6 +10285,7 @@ paths:
               - book
               - comic
               - magazine
+              - manga
       responses:
         '204':
           description: Succesfully removed media item
@@ -9762,7 +10761,7 @@ paths:
   /user/{userId}/settings/detail-disclosures/{mediaType}:
     get:
       summary: Get pinned detail disclosure settings for one media category
-      description: Returns persistent disclosure pins scoped independently to Movie, Series, Music, or Book details. Requires `MANAGE_USERS` permission if viewing another user.
+      description: Returns persistent disclosure pins scoped independently to Movie, Series, Music, Book, or Manga details. Requires `MANAGE_USERS` permission if viewing another user.
       tags:
         - users
       parameters:
@@ -9776,7 +10775,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [movie, tv, music, book, comic]
+            enum: [movie, tv, music, book, comic, manga]
       responses:
         '200':
           description: Category-scoped detail disclosure settings returned
@@ -9800,7 +10799,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [movie, tv, music, book, comic]
+            enum: [movie, tv, music, book, comic, manga]
       requestBody:
         required: true
         content:
@@ -9853,6 +10852,7 @@ paths:
                       audiobook,
                       comic,
                       magazine,
+                      manga,
                       author,
                       software,
                       null,
@@ -10272,8 +11272,8 @@ paths:
                     type: number
   /search:
     get:
-      summary: Search for movies, TV shows, people, music, books, authors, comics, and magazines
-      description: Returns movies, TV shows, people, music albums, artists, books, authors, and comics from TMDB, MusicBrainz, ListenBrainz, Open Library, configured Bookshelf services, and ComicVine, plus magazine titles from configured LazyLibrarian catalogs.
+      summary: Search for movies, TV shows, people, music, books, authors, comics, magazines, and manga
+      description: Returns movies, TV shows, people, music albums, artists, books, authors, and comics from TMDB, MusicBrainz, ListenBrainz, Open Library, configured Bookshelf services, and ComicVine, plus magazine titles from configured LazyLibrarian catalogs and, when the manga category is enabled, manga from AniList. A manga-only search returns 429 with Retry-After when AniList is rate limited and 503 when it is unavailable.
       tags:
         - search
       parameters:
@@ -10309,6 +11309,7 @@ paths:
               - music
               - comic
               - magazine
+              - manga
             description: Filter results by media type. When omitted, all types are returned.
         - in: query
           name: format
@@ -10373,6 +11374,17 @@ paths:
                         - $ref: '#/components/schemas/AuthorResult'
                         - $ref: '#/components/schemas/ComicResult'
                         - $ref: '#/components/schemas/MagazineResult'
+                        - $ref: '#/components/schemas/MangaResult'
+        '429':
+          description: AniList rate limit reached for a manga-only search. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+        '503':
+          description: A search provider required by the selected type is unavailable
   /search/keyword:
     get:
       summary: Search for keywords
@@ -10506,7 +11518,7 @@ paths:
                         properties:
                           mediaType:
                             type: string
-                            enum: [music, book]
+                            enum: [music, book, manga]
                           id:
                             type: string
                             minLength: 1
@@ -11618,6 +12630,100 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/MagazineResult'
+  /discover/manga:
+    get:
+      summary: Discover manga
+      description: Returns manga from AniList. Requires the manga category; returns 404 while it is disabled. Adult titles and light novels are excluded unless an administrator enables them. Without sortBy, a query sorts by best match and no query sorts by trending.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 1
+        - in: query
+          name: query
+          schema:
+            type: string
+            maxLength: 256
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum:
+              - trending
+              - popular
+              - top_rated
+        - in: query
+          name: genre
+          schema:
+            type: string
+            maxLength: 64
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum:
+              - MANGA
+              - ONE_SHOT
+              - NOVEL
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum:
+              - FINISHED
+              - RELEASING
+              - NOT_YET_RELEASED
+              - CANCELLED
+              - HIATUS
+        - in: query
+          name: countryOfOrigin
+          schema:
+            type: string
+            enum:
+              - JP
+              - KR
+              - CN
+              - TW
+      responses:
+        '200':
+          description: Manga discovery results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: integer
+                    example: 1
+                  totalPages:
+                    type: integer
+                    example: 20
+                  totalResults:
+                    type: integer
+                    example: 400
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MangaResult'
+        '400':
+          description: A query parameter is invalid
+        '404':
+          description: The manga category is disabled
+        '429':
+          description: AniList rate limit reached. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+        '503':
+          description: AniList is unavailable
   /discover/keyword/{keywordId}/movies:
     get:
       summary: Get movies from keyword
@@ -12112,6 +13218,777 @@ paths:
           description: Magazine not found
         '503':
           description: LazyLibrarian is unavailable
+  /manga:
+    get:
+      summary: Get several manga at once
+      description: Returns AniList catalog cards for up to 50 AniList IDs with one AniList request, merged with local media state. Unknown titles and titles excluded by the adult or light novel settings are left out without notice. Returns 404 while the manga category is disabled.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: ids
+          description: Comma-separated AniList media IDs, 1 to 50 of them. Duplicates are ignored.
+          required: true
+          schema:
+            type: string
+            maxLength: 549
+            pattern: '^[1-9][0-9]{0,9}(,[1-9][0-9]{0,9}){0,49}$'
+            example: '30013,30002'
+      responses:
+        '200':
+          description: The titles that could be shown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaSummariesResponse'
+        '400':
+          description: The ID list is invalid
+        '404':
+          description: The manga category is disabled
+        '429':
+          description: AniList rate limit reached. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+        '503':
+          description: AniList is unavailable
+  /manga/{mangaId}:
+    get:
+      summary: Get manga details
+      description: Returns AniList manga details, merged with local media state when the title is tracked. Returns 404 while the manga category is disabled, and for unknown titles and titles excluded by the adult or light novel settings.
+      tags:
+        - search
+      parameters:
+        - in: path
+          name: mangaId
+          description: AniList media ID.
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            example: 30013
+      responses:
+        '200':
+          description: Manga details returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaDetails'
+        '400':
+          description: The manga ID is invalid
+        '404':
+          description: Manga not found, excluded, or the manga category is disabled
+        '429':
+          description: AniList rate limit reached. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+        '503':
+          description: AniList is unavailable
+  /manga/library/candidates:
+    get:
+      summary: List manga library match candidates
+      description: >-
+        Lists manga in the Suwayomi libraries that have no live AniList
+        binding, with any title proposal waiting for review. Proposals are
+        never bound until an admin confirms them. Requires the `ADMIN`
+        permission; returns 404 while the manga category is disabled.
+      tags:
+        - admin
+      parameters:
+        - in: query
+          name: take
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: skip
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
+            default: 0
+        - in: query
+          name: instanceId
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 2147483647
+        - in: query
+          name: confidence
+          description: Only candidates whose proposal has this confidence; `NONE` for candidates without a proposal.
+          schema:
+            type: string
+            enum: [HIGH, MEDIUM, LOW, NONE]
+      responses:
+        '200':
+          description: Candidates returned, oldest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryCandidatesResponse'
+        '400':
+          description: >-
+            Invalid query (`MANGA_INVALID_REQUEST`). A value outside this
+            schema gets the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+        '403':
+          description: The user is not an admin
+        '404':
+          description: The manga category is disabled
+  /manga/library/bindings:
+    get:
+      summary: List manga library bindings
+      description: >-
+        Lists the stored decisions linking library manga to AniList titles,
+        including rejected pairs. Requires the `ADMIN` permission; returns 404
+        while the manga category is disabled.
+      tags:
+        - admin
+      parameters:
+        - in: query
+          name: take
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: skip
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
+            default: 0
+        - in: query
+          name: instanceId
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 2147483647
+        - in: query
+          name: anilistId
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+        - in: query
+          name: state
+          schema:
+            type: string
+            enum: [ACTIVE, ORPHANED, REJECTED]
+      responses:
+        '200':
+          description: Bindings returned, oldest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryBindingsResponse'
+        '400':
+          description: >-
+            Invalid query (`MANGA_INVALID_REQUEST`). A value outside this
+            schema gets the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+        '403':
+          description: The user is not an admin
+        '404':
+          description: The manga category is disabled
+  /manga/library/candidates/{candidateId}/confirm:
+    post:
+      summary: Confirm a manga title proposal
+      description: >-
+        Binds the candidate to its proposed AniList title after re-reading the
+        manga from Suwayomi with read-only queries. `anilistId` must equal the
+        current proposal. Any other live binding of the manga is rejected, and
+        the affected media statuses are updated. Requires the `ADMIN`
+        permission.
+      tags:
+        - admin
+      parameters:
+        - in: path
+          name: candidateId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                anilistId:
+                  type: integer
+                  minimum: 1
+                  maximum: 2147483647
+              required: [anilistId]
+      responses:
+        '200':
+          description: The manga is bound
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryItemState'
+        '400':
+          description: >-
+            Invalid request (`MANGA_INVALID_REQUEST`), such as a source ID
+            above the 64-bit range or a URL with control characters. A value
+            outside this schema gets the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+        '403':
+          description: The user is not an admin
+        '404':
+          description: >-
+            The candidate, instance or manga was not found
+            (`MANGA_CANDIDATE_NOT_FOUND`, `MANGA_INSTANCE_NOT_FOUND`,
+            `MANGA_ITEM_NOT_FOUND`). While the manga category is disabled,
+            every route returns 404 with the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+        '409':
+          description: >-
+            The proposal, the manga or the instance changed, the manga left
+            the library, or the server is not supported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+        '502':
+          description: The Suwayomi lookup failed; nothing was written
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+  /manga/library/bind:
+    post:
+      summary: Bind a library manga to an AniList title
+      description: >-
+        Binds a manga, found by its Suwayomi ID or by its source ID and URL,
+        to an AniList title as a manual decision. The manga is read from
+        Suwayomi with read-only queries and must be in the library. Any other
+        live binding of the manga is rejected, a rejected pair is restored,
+        and the affected media statuses are updated. Requires the `ADMIN`
+        permission.
+      tags:
+        - admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  additionalProperties: false
+                  properties:
+                    instanceId:
+                      type: integer
+                      minimum: 0
+                      maximum: 2147483647
+                    anilistId:
+                      type: integer
+                      minimum: 1
+                      maximum: 2147483647
+                    suwayomiMangaId:
+                      type: integer
+                      minimum: 1
+                      maximum: 2147483647
+                  required: [instanceId, anilistId, suwayomiMangaId]
+                - type: object
+                  additionalProperties: false
+                  properties:
+                    instanceId:
+                      type: integer
+                      minimum: 0
+                      maximum: 2147483647
+                    anilistId:
+                      type: integer
+                      minimum: 1
+                      maximum: 2147483647
+                    sourceId:
+                      type: string
+                      pattern: '^\d{1,19}$'
+                    url:
+                      type: string
+                      minLength: 1
+                      maxLength: 2048
+                  required: [instanceId, anilistId, sourceId, url]
+      responses:
+        '200':
+          description: The manga is bound
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryItemState'
+        '400':
+          description: >-
+            Invalid request (`MANGA_INVALID_REQUEST`), such as a source ID
+            above the 64-bit range or a URL with control characters. A value
+            outside this schema gets the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+        '403':
+          description: The user is not an admin
+        '404':
+          description: >-
+            The instance or manga was not found (`MANGA_INSTANCE_NOT_FOUND`,
+            `MANGA_ITEM_NOT_FOUND`). While the manga category is disabled,
+            every route returns 404 with the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+        '409':
+          description: >-
+            The manga or the instance changed, the manga is not in the
+            library, or the server is not supported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+        '502':
+          description: The Suwayomi lookup failed; nothing was written
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+  /manga/library/reject:
+    post:
+      summary: Reject a manga and AniList title pair
+      description: >-
+        Records that the library manga is not the AniList title. The pair is
+        never proposed or linked automatically again; a manual bind can still
+        restore it. Rejecting the live binding returns the manga to review.
+        Changes only SeerrNG's database. Requires the `ADMIN` permission.
+      tags:
+        - admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                instanceId:
+                  type: integer
+                  minimum: 0
+                  maximum: 2147483647
+                sourceId:
+                  type: string
+                  pattern: '^\d{1,19}$'
+                url:
+                  type: string
+                  minLength: 1
+                  maxLength: 2048
+                anilistId:
+                  type: integer
+                  minimum: 1
+                  maximum: 2147483647
+              required: [instanceId, sourceId, url, anilistId]
+      responses:
+        '200':
+          description: The pair is rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryItemState'
+        '400':
+          description: >-
+            Invalid request (`MANGA_INVALID_REQUEST`), such as a source ID
+            above the 64-bit range or a URL with control characters. A value
+            outside this schema gets the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+        '403':
+          description: The user is not an admin
+        '404':
+          description: >-
+            The instance or manga was not found (`MANGA_INSTANCE_NOT_FOUND`,
+            `MANGA_ITEM_NOT_FOUND`). While the manga category is disabled,
+            every route returns 404 with the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+        '409':
+          description: The instance changed, or a concurrent change won
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaLibraryError'
+  /manga/resolve:
+    get:
+      summary: List manga titles waiting for a source
+      description: >-
+        Lists requested manga titles whose requests wait for a Suwayomi source
+        binding, with the source resolver's progress, oldest request first.
+        Requires the `ADMIN` permission; returns 404 while the manga category
+        is disabled.
+      tags:
+        - admin
+      parameters:
+        - in: query
+          name: take
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: skip
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
+            default: 0
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [QUEUED, NEEDS_PICK, NO_MATCH, EXCLUDED, AWAITING_APPROVAL]
+      responses:
+        '200':
+          description: Titles returned, oldest request first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveTitlesResponse'
+        '400':
+          description: >-
+            Invalid query (`MANGA_INVALID_REQUEST`). A value outside this
+            schema gets the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '403':
+          description: The user is not an admin
+        '404':
+          description: The manga category is disabled
+  /manga/resolve/{anilistId}:
+    get:
+      summary: Get a requested manga title's source candidates
+      description: >-
+        Returns the source resolver's status for a requested title on one
+        instance, the source manga it found and the title's live bindings on
+        that instance. Requires the `ADMIN` permission.
+      tags:
+        - admin
+      parameters:
+        - in: path
+          name: anilistId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+        - in: query
+          name: instanceId
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 2147483647
+      responses:
+        '200':
+          description: The title's status and candidates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveDetail'
+        '400':
+          description: >-
+            Invalid request (`MANGA_INVALID_REQUEST`). A value outside this
+            schema gets the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '403':
+          description: The user is not an admin
+        '404':
+          description: >-
+            No open manga request for the title on the instance
+            (`MANGA_RESOLVE_TITLE_NOT_FOUND`). While the manga category is
+            disabled, every route returns 404 with the generic error body
+            instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+  /manga/resolve/{anilistId}/search:
+    post:
+      summary: Search sources for a requested manga title
+      description: >-
+        Makes the title due at once with a fresh backoff and starts the
+        source resolver unless it is running, in which case the running or
+        the next run takes the title. Pending requests are searched too: the
+        admin's search is the approval to search. The search runs even when
+        the job's schedule is off. Suwayomi stores what its sources return.
+        Requires the `ADMIN` permission.
+      tags:
+        - admin
+      parameters:
+        - in: path
+          name: anilistId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                instanceId:
+                  type: integer
+                  minimum: 0
+                  maximum: 2147483647
+              required: [instanceId]
+      responses:
+        '202':
+          description: The search is queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveSearchResponse'
+        '400':
+          description: >-
+            Invalid request (`MANGA_INVALID_REQUEST`). A value outside this
+            schema gets the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '403':
+          description: The user is not an admin
+        '404':
+          description: >-
+            No open manga request for the title on the instance, or no such
+            instance (`MANGA_RESOLVE_TITLE_NOT_FOUND`,
+            `MANGA_INSTANCE_NOT_FOUND`). While the manga category is
+            disabled, every route returns 404 with the generic error body
+            instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '409':
+          description: The title already has an ACTIVE binding on the instance (`MANGA_ALREADY_BOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+  /manga/resolve/{anilistId}/select:
+    post:
+      summary: Bind a requested manga title to a found source manga
+      description: >-
+        Binds the title to one of its candidates after re-reading the manga
+        from Suwayomi with read-only queries. An exact-link candidate keeps
+        its MangaDex credit; a title match becomes a manual binding. A manga
+        in the Suwayomi library is linked as the library review does. The
+        title's waiting requests then move on. Requires the `ADMIN`
+        permission.
+      tags:
+        - admin
+      parameters:
+        - in: path
+          name: anilistId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                instanceId:
+                  type: integer
+                  minimum: 0
+                  maximum: 2147483647
+                candidateId:
+                  type: integer
+                  minimum: 1
+                  maximum: 2147483647
+              required: [instanceId, candidateId]
+      responses:
+        '200':
+          description: The title is bound
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveBindResponse'
+        '400':
+          description: >-
+            Invalid request (`MANGA_INVALID_REQUEST`), or the candidate's
+            source is no longer on the instance allowlist
+            (`MANGA_SOURCE_NOT_ALLOWED`). A value outside this schema gets
+            the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '403':
+          description: The user is not an admin
+        '404':
+          description: >-
+            The title, instance or candidate was not found
+            (`MANGA_RESOLVE_TITLE_NOT_FOUND`, `MANGA_INSTANCE_NOT_FOUND`,
+            `MANGA_CANDIDATE_NOT_FOUND`). While the manga category is
+            disabled, every route returns 404 with the generic error body
+            instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '409':
+          description: >-
+            Suwayomi no longer has the candidate, the manga is bound to
+            another title, the manga or the instance changed, or the server
+            is not supported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '502':
+          description: The Suwayomi lookup failed; nothing was written
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+  /manga/resolve/{anilistId}/bind:
+    post:
+      summary: Bind a requested manga title to a source manga by hand
+      description: >-
+        Binds the title to a source manga that Suwayomi already knows, found
+        by its Suwayomi ID or by its source ID and URL, as a manual decision.
+        The manga is read from Suwayomi with read-only queries; its source
+        must be on the instance allowlist. A manga in the Suwayomi library is
+        linked as the library review does. The title's waiting requests then
+        move on. Requires the `ADMIN` permission.
+      tags:
+        - admin
+      parameters:
+        - in: path
+          name: anilistId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  additionalProperties: false
+                  properties:
+                    instanceId:
+                      type: integer
+                      minimum: 0
+                      maximum: 2147483647
+                    suwayomiMangaId:
+                      type: integer
+                      minimum: 1
+                      maximum: 2147483647
+                  required: [instanceId, suwayomiMangaId]
+                - type: object
+                  additionalProperties: false
+                  properties:
+                    instanceId:
+                      type: integer
+                      minimum: 0
+                      maximum: 2147483647
+                    sourceId:
+                      type: string
+                      pattern: '^\d{1,19}$'
+                    url:
+                      type: string
+                      minLength: 1
+                      maxLength: 2048
+                  required: [instanceId, sourceId, url]
+      responses:
+        '200':
+          description: The title is bound
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveBindResponse'
+        '400':
+          description: >-
+            Invalid request (`MANGA_INVALID_REQUEST`), such as a source ID
+            above the 64-bit range or a URL with control characters, or a
+            source that is local or not on the instance allowlist
+            (`MANGA_SOURCE_NOT_ALLOWED`). A value outside this schema gets
+            the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '403':
+          description: The user is not an admin
+        '404':
+          description: >-
+            The title, instance or manga was not found
+            (`MANGA_RESOLVE_TITLE_NOT_FOUND`, `MANGA_INSTANCE_NOT_FOUND`,
+            `MANGA_ITEM_NOT_FOUND`). A search makes Suwayomi store the manga
+            it finds. While the manga category is disabled, every route
+            returns 404 with the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '409':
+          description: >-
+            The manga is bound to another title, the manga or the instance
+            changed, or the server is not supported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '502':
+          description: The Suwayomi lookup failed; nothing was written
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
   /book/{bookId}:
     get:
       summary: Get book details
@@ -13181,6 +15058,146 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LazyLibrarianSettings'
+  /settings/suwayomi:
+    get:
+      summary: Get Suwayomi settings
+      description: >-
+        Returns all Suwayomi settings in a JSON array. Passwords are returned
+        as `[REDACTED]` when stored and as an empty string when not.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Values were returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SuwayomiSettings'
+    post:
+      summary: Create Suwayomi instance
+      description: >-
+        Creates a Suwayomi instance from the request body. Only one instance
+        can exist.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuwayomiSettings'
+      responses:
+        '201':
+          description: New Suwayomi instance created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiSettings'
+        '400':
+          description: Invalid settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiError'
+        '409':
+          description: A Suwayomi instance already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiError'
+  /settings/suwayomi/test:
+    post:
+      summary: Test Suwayomi configuration
+      description: >-
+        Detects the Suwayomi authentication mode, checks the credentials, the
+        server version and capabilities, and lists the installed sources.
+        Sends only read-only queries plus login and token refresh.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuwayomiConnectionTestRequest'
+      responses:
+        '200':
+          description: The test passed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiConnectionTestResult'
+        '400':
+          description: Invalid request, or a required password is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiError'
+        '502':
+          description: The test failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiConnectionTestFailure'
+  /settings/suwayomi/{suwayomiId}:
+    put:
+      summary: Update Suwayomi instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: suwayomiId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuwayomiSettings'
+      responses:
+        '200':
+          description: Suwayomi instance updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiSettings'
+        '400':
+          description: Invalid settings, or a required password is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiError'
+        '404':
+          description: Suwayomi instance not found
+    delete:
+      summary: Delete Suwayomi instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: suwayomiId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Suwayomi instance deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiSettings'
+        '404':
+          description: Suwayomi instance not found
+        '409':
+          description: Active requests still use this instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuwayomiError'
   /request:
     get:
       summary: Get all requests
@@ -13244,7 +15261,7 @@ paths:
           name: mediaType
           schema:
             type: string
-            enum: [movie, tv, music, book, comic, magazine, all]
+            enum: [movie, tv, music, book, comic, magazine, manga, all]
             nullable: true
             default: all
       responses:
@@ -13278,7 +15295,7 @@ paths:
               properties:
                 mediaType:
                   type: string
-                  enum: [movie, tv, music, book, comic, magazine]
+                  enum: [movie, tv, music, book, comic, magazine, manga]
                   example: movie
                 mediaId:
                   oneOf:
@@ -13345,6 +15362,11 @@ paths:
                   type: boolean
                   example: false
                   description: If true, this request will not count against the user's quota. Requires MANAGE_REQUESTS permission.
+                mangaScope:
+                  $ref: '#/components/schemas/MangaRequestScopeInput'
+                mangaFollow:
+                  type: boolean
+                  description: Manga only. When true, the request follows new chapters, adding them as its source lists them; omitted or false leaves following off. Only the user the request is for can turn this on, so true is refused on a request made for someone else and on other media types. Change it later with `PUT /request/{requestId}/follow`.
               required:
                 - mediaType
                 - mediaId
@@ -13399,6 +15421,8 @@ paths:
                   music:
                     type: number
                   book:
+                    type: number
+                  manga:
                     type: number
                   pending:
                     type: number
@@ -14048,7 +16072,7 @@ paths:
           name: mediaType
           schema:
             type: string
-            enum: [movie, tv, music, book, comic, magazine, all]
+            enum: [movie, tv, music, book, comic, magazine, manga, all]
             default: all
         - in: query
           name: filter
@@ -14158,7 +16182,7 @@ paths:
   /request/status/{requestId}/downloads:
     get:
       summary: List downloadable copies for a request
-      description: Returns verified imported files only when the caller may view the request and its current lifecycle stage is available. Filesystem paths and provider credentials are never returned.
+      description: Returns verified copies only when the caller may view the request. A manga request offers its verified chapters while it is downloading, has failed, or is available; any other request offers its verified imported files only when available. In every other stage the list is empty. Filesystem paths, provider URLs, and credentials are never returned.
       tags:
         - request
       parameters:
@@ -14190,6 +16214,7 @@ paths:
                         size:
                           type: integer
                           minimum: 0
+                          description: Size in bytes when known. Manga chapters omit it.
                       required: [id, name]
                 required: [results]
         '403':
@@ -14199,7 +16224,7 @@ paths:
   /request/status/{requestId}/downloads/{assetId}:
     get:
       summary: Download a request asset through SeerrNG
-      description: Streams one verified request asset after rechecking request access and availability. Provider URLs, credentials, and filesystem paths stay server-side.
+      description: Streams one verified request asset after rechecking request access and the request's stage. A manga chapter streams from Suwayomi as a CBZ archive, whole and without byte ranges; each user may run two chapter downloads at once and each Suwayomi server four. Provider URLs, credentials, and filesystem paths stay server-side.
       tags:
         - request
       parameters:
@@ -14230,6 +16255,15 @@ paths:
           description: Caller may not view this request
         '404':
           description: Request or asset not found or no longer available
+        '429':
+          description: Too many manga chapter downloads are running for this user or Suwayomi server. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+        '502':
+          description: Suwayomi could not provide the manga chapter, or the chapter is larger than the download size limit
   /request/{requestId}:
     get:
       summary: Get MediaRequest
@@ -14273,7 +16307,7 @@ paths:
               properties:
                 mediaType:
                   type: string
-                  enum: [movie, tv, music, book, comic, magazine]
+                  enum: [movie, tv, music, book, comic, magazine, manga]
                 seasons:
                   type: array
                   items:
@@ -14308,6 +16342,8 @@ paths:
                 userId:
                   type: number
                   nullable: true
+                mangaScope:
+                  $ref: '#/components/schemas/MangaRequestScopeInput'
               required:
                 - mediaType
       responses:
@@ -14378,6 +16414,47 @@ paths:
           description: Request not found
         '409':
           description: Jellyfin or Sonarr is not configured, the series has no TVDB identity, or the request cannot be enrolled
+  /request/{requestId}/follow:
+    put:
+      summary: Turn following new chapters on or off
+      description: |
+        Turns following new chapters on or off for a manga request. Only the request owner can turn it on, while the request is pending, approved or completed and the owner may still request manga. The owner or a user with `MANAGE_REQUESTS` can turn it off at any time; turning it off again does nothing. Turning it on clears the last stop reason and makes the request due for a check. Turning it off only stops future additions: chapters already added still download.
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: requestId
+          description: Manga request ID
+          required: true
+          schema:
+            type: string
+            example: '1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated manga request; `mangaScope.follow` holds the new state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaRequest'
+        '400':
+          description: The body is invalid, or the request is not a manga request
+        '403':
+          description: Only the request owner can turn following on, and only while they may request manga; turning it off for another user requires MANAGE_REQUESTS
+        '404':
+          description: Request not found
+        '409':
+          description: The request is declined or failed, or cannot follow new chapters
   /request/{requestId}/fail-download:
     post:
       summary: Fail an active request download and search again
@@ -14437,6 +16514,8 @@ paths:
       description: |
         Retries a failed or unavailable request by returning it to the normal dispatch/search flow. The request owner may retry their own request when they still have permission to request that media; users with `MANAGE_REQUESTS` or `ADMIN` may retry any request.
 
+        An approved manga request whose chapters are already queued on its manga service is not dispatched again. When its status reports chapters whose download failed or that left the service's queue (`retryable` is true), a user with `MANAGE_REQUESTS` or `ADMIN` may queue those chapters once more. The request stays approved, its chapter scope is unchanged, and nothing is deleted or downloaded again from the start. The request owner cannot retry it from this state.
+
       tags:
         - request
       parameters:
@@ -14454,6 +16533,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MediaRequest'
+        '403':
+          description: The user may not retry this request. Only `MANAGE_REQUESTS` or `ADMIN` may retry a manga request whose chapters are already queued.
+        '409':
+          description: The request cannot be retried from its current state. For a manga request whose chapters are already queued, also returned when its manga service is no longer configured, no longer has the manga, or changed during the retry.
+        '502':
+          description: The manga service could not queue the chapters, and trying again will not help until it is fixed.
+        '503':
+          description: The manga service is unavailable. Try again later.
   /request/{requestId}/status:
     delete:
       summary: Delete request status entry
@@ -15145,6 +17232,7 @@ paths:
             default: added
         - in: query
           name: mediaType
+          description: Comma-separated media types. Manga is listed only when named here, and only while the manga category is enabled.
           schema:
             type: string
             nullable: true
@@ -15162,7 +17250,14 @@ paths:
                   results:
                     type: array
                     items:
-                      $ref: '#/components/schemas/MediaInfo'
+                      allOf:
+                        - $ref: '#/components/schemas/MediaInfo'
+                        - type: object
+                          properties:
+                            anilistId:
+                              type: integer
+                              minimum: 1
+                              description: Manga only. The canonical AniList ID.
   /media/{mediaId}:
     delete:
       summary: Delete media item
@@ -16049,7 +18144,7 @@ paths:
           name: mediaType
           schema:
             type: string
-            enum: [all, movie, tv, music, book, comic, magazine]
+            enum: [all, movie, tv, music, book, comic, magazine, manga]
             default: all
         - in: query
           name: issueType

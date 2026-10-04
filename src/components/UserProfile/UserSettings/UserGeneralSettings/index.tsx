@@ -65,6 +65,7 @@ const messages = defineMessages(
     bookrequestlimit: 'Book Request Limit',
     comicrequestlimit: 'Comic Request Limit',
     magazinerequestlimit: 'Magazine Request Limit',
+    mangarequestlimit: 'Manga Request Limit',
     softwarerequestlimit: 'Software Request Limit',
     enableOverride: 'Override Global Limit',
     applanguage: 'Display Language',
@@ -120,6 +121,7 @@ const UserGeneralSettings = () => {
   const [bookQuotaEnabled, setBookQuotaEnabled] = useState(false);
   const [comicQuotaEnabled, setComicQuotaEnabled] = useState(false);
   const [magazineQuotaEnabled, setMagazineQuotaEnabled] = useState(false);
+  const [mangaQuotaEnabled, setMangaQuotaEnabled] = useState(false);
   const [softwareQuotaEnabled, setSoftwareQuotaEnabled] = useState(false);
   const router = useRouter();
   const userId = getPositiveQueryParamNumber(router.query.userId);
@@ -200,6 +202,9 @@ const UserGeneralSettings = () => {
     setMagazineQuotaEnabled(
       data?.magazineQuotaLimit != undefined &&
         data?.magazineQuotaDays != undefined
+    );
+    setMangaQuotaEnabled(
+      data?.mangaQuotaLimit != undefined && data?.mangaQuotaDays != undefined
     );
     setSoftwareQuotaEnabled(
       data?.softwareQuotaLimit != undefined &&
@@ -286,6 +291,8 @@ const UserGeneralSettings = () => {
           comicQuotaDays: data?.comicQuotaDays,
           magazineQuotaLimit: data?.magazineQuotaLimit,
           magazineQuotaDays: data?.magazineQuotaDays,
+          mangaQuotaLimit: data?.mangaQuotaLimit,
+          mangaQuotaDays: data?.mangaQuotaDays,
           softwareQuotaLimit: data?.softwareQuotaLimit,
           softwareQuotaDays: data?.softwareQuotaDays,
           watchlistSyncMovies: data?.watchlistSyncMovies,
@@ -360,6 +367,10 @@ const UserGeneralSettings = () => {
               magazineQuotaDays: magazineQuotaEnabled
                 ? values.magazineQuotaDays
                 : null,
+              mangaQuotaLimit: mangaQuotaEnabled
+                ? values.mangaQuotaLimit
+                : null,
+              mangaQuotaDays: mangaQuotaEnabled ? values.mangaQuotaDays : null,
               softwareQuotaLimit: softwareQuotaEnabled
                 ? values.softwareQuotaLimit
                 : null,
@@ -920,6 +931,53 @@ const UserGeneralSettings = () => {
                             limitOverride={
                               !magazineQuotaEnabled
                                 ? data?.globalMagazineQuotaLimit
+                                : undefined
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="text-label">
+                        <span id="mangaQuotaLabel">
+                          {intl.formatMessage(messages.mangarequestlimit)}
+                        </span>
+                      </div>
+                      <div className="form-input-area">
+                        <div className="flex flex-col">
+                          <div className="mb-4 flex items-center">
+                            <input
+                              type="checkbox"
+                              aria-labelledby="mangaQuotaLabel mangaQuotaOverride"
+                              checked={mangaQuotaEnabled}
+                              onChange={() =>
+                                setMangaQuotaEnabled((enabled) => !enabled)
+                              }
+                            />
+                            <span
+                              id="mangaQuotaOverride"
+                              className="ml-2 text-gray-300"
+                            >
+                              {intl.formatMessage(messages.enableOverride)}
+                            </span>
+                          </div>
+                          <QuotaSelector
+                            isDisabled={!mangaQuotaEnabled}
+                            labelId="mangaQuotaLabel"
+                            dayFieldName="mangaQuotaDays"
+                            limitFieldName="mangaQuotaLimit"
+                            mediaType="manga"
+                            onChange={setFieldValue}
+                            defaultDays={values.mangaQuotaDays}
+                            defaultLimit={values.mangaQuotaLimit}
+                            dayOverride={
+                              !mangaQuotaEnabled
+                                ? data?.globalMangaQuotaDays
+                                : undefined
+                            }
+                            limitOverride={
+                              !mangaQuotaEnabled
+                                ? data?.globalMangaQuotaLimit
                                 : undefined
                             }
                           />

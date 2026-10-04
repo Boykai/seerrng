@@ -91,7 +91,7 @@ const isMovie = (movie: IssueMediaDetails): movie is MovieDetails => {
 };
 
 interface CreateIssueModalProps {
-  mediaType: 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine';
+  mediaType: 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'manga';
   tmdbId?: number;
   mediaId?: number;
   title?: string;

@@ -7,6 +7,7 @@ import {
   BoundedTaskQueue,
   BoundedTaskQueueFullError,
 } from '@server/utils/concurrency';
+import { TransactionDeferrals } from '@server/utils/transactionDeferrals';
 import type { QueryRunner } from 'typeorm';
 import type { NotificationAgent, NotificationPayload } from './agents/agent';
 import type { NotificationOutboxIntent } from './outbox';
@@ -127,10 +128,8 @@ export class NotificationManager {
   private activeAgents: { key: string; agent: NotificationAgent }[] = [];
   private activeOutboxDeliveries = new Set<number>();
   private deferredOutboxDeliveries = new Set<number>();
-  private deferredNotifications = new WeakMap<
-    QueryRunner,
-    DeferredNotification[]
-  >();
+  private deferredNotifications =
+    new TransactionDeferrals<DeferredNotification>();
   private transactionalEnqueuesInProgress = 0;
   private outboxRetryTimer?: NodeJS.Timeout;
   private outboxScan?: Promise<void>;
@@ -375,9 +374,7 @@ export class NotificationManager {
   };
 
   public commitDeferredNotifications = (queryRunner: QueryRunner): void => {
-    const deferred = this.deferredNotifications.get(queryRunner) ?? [];
-    this.deferredNotifications.delete(queryRunner);
-    for (const notification of deferred) {
+    for (const notification of this.deferredNotifications.commit(queryRunner)) {
       this.deferredOutboxDeliveries.delete(notification.record.id);
       this.dispatchOutboxRecord(
         notification.record,
@@ -388,10 +385,27 @@ export class NotificationManager {
   };
 
   public rollbackDeferredNotifications = (queryRunner: QueryRunner): void => {
-    const deferred = this.deferredNotifications.get(queryRunner) ?? [];
-    this.deferredNotifications.delete(queryRunner);
-    for (const notification of deferred) {
+    for (const notification of this.deferredNotifications.rollback(
+      queryRunner
+    )) {
       this.deferredOutboxDeliveries.delete(notification.record.id);
+    }
+  };
+
+  // Outbox rows left by a transaction that never reported its end are
+  // delivered by the retry scan if they were committed.
+  public discardStaleDeferredNotifications = (
+    queryRunner: QueryRunner
+  ): void => {
+    const stale = this.deferredNotifications.discard(queryRunner);
+    for (const notification of stale) {
+      this.deferredOutboxDeliveries.delete(notification.record.id);
+    }
+    if (stale.length > 0) {
+      logger.warn('Discarded deferred notifications of an ended transaction', {
+        label: 'Notifications',
+        count: stale.length,
+      });
     }
   };
 
@@ -475,9 +489,7 @@ export class NotificationManager {
           );
       if (deferUntilCommit && queryRunner) {
         this.deferredOutboxDeliveries.add(record.id);
-        const deferred = this.deferredNotifications.get(queryRunner) ?? [];
-        deferred.push({ record, type, payload });
-        this.deferredNotifications.set(queryRunner, deferred);
+        this.deferredNotifications.add(queryRunner, { record, type, payload });
         return;
       }
     } finally {

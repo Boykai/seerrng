@@ -1,3 +1,4 @@
+import AnilistAPI from '@server/api/anilist';
 import ListenBrainzAPI from '@server/api/listenbrainz/index';
 import OpenLibraryAPI from '@server/api/openlibrary/index';
 import TheMovieDb from '@server/api/themoviedb/index';
@@ -21,6 +22,63 @@ import { sortBy, truncate } from 'lodash';
 import { Notification } from '.';
 import type { NotificationPayload } from './agents/agent';
 import type { NotificationOutboxIntent } from './outbox';
+
+// Manga details stay network-free, except a delivered request's (below): the
+// AniList identifier names the series. Issue intents load media without its
+// identifiers, so they stay on the media for the webhook's media_externalid.
+const getMangaDetails = async (
+  media: Media
+): Promise<{ anilistId?: string; title: string }> => {
+  media.identifiers ??= await getRepository(MediaIdentifier).find({
+    where: { media: { id: media.id } },
+  });
+  const anilistId = media.identifiers.find(
+    ({ provider }) => provider === MediaIdentifierProvider.ANILIST
+  )?.value;
+  return { anilistId, title: anilistId ? `AniList ${anilistId}` : 'Manga' };
+};
+
+/**
+ * The AniList title and cover of a delivered manga, from the shared cached
+ * client. The payload is built when the outbox sends it, outside every lock
+ * and transaction. Any failure keeps the network-free subject.
+ */
+const getAnilistMangaCard = async (
+  anilistId: string | undefined
+): Promise<{ title: string; image?: string } | undefined> => {
+  if (!anilistId || !/^\d{1,9}$/.test(anilistId)) return undefined;
+  try {
+    const manga = await new AnilistAPI().getMangaDetails(Number(anilistId));
+    const title =
+      manga?.titles.english ?? manga?.titles.romaji ?? manga?.titles.native;
+    if (!manga || !title) return undefined;
+    return {
+      title: `${title}${manga.startYear ? ` (${manga.startYear})` : ''}`,
+      image: manga.coverImage,
+    };
+  } catch {
+    return undefined;
+  }
+};
+
+const getRequestMediaTypeLabel = (type: MediaType): string => {
+  switch (type) {
+    case MediaType.MOVIE:
+      return 'Movie';
+    case MediaType.TV:
+      return 'Series';
+    case MediaType.MUSIC:
+      return 'Music';
+    case MediaType.BOOK:
+      return 'Book';
+    case MediaType.COMIC:
+      return 'Comic';
+    case MediaType.MAGAZINE:
+      return 'Magazine';
+    case MediaType.MANGA:
+      return 'Manga';
+  }
+};
 
 const getMediaDetails = async (
   media: Media
@@ -109,6 +167,10 @@ const getMediaDetails = async (
       image: '',
     };
   }
+  if (media.mediaType === MediaType.MANGA) {
+    const { title } = await getMangaDetails(media);
+    return { title, image: '' };
+  }
   return { title: media.mbId ?? String(media.tmdbId), image: '' };
 };
 
@@ -117,18 +179,7 @@ export const buildMediaRequestNotificationPayload = async (
   media: Media,
   type: Notification
 ): Promise<NotificationPayload> => {
-  const mediaType =
-    entity.type === MediaType.MOVIE
-      ? 'Movie'
-      : entity.type === MediaType.TV
-        ? 'Series'
-        : entity.type === MediaType.MUSIC
-          ? 'Music'
-          : entity.type === MediaType.COMIC
-            ? 'Comic'
-            : entity.type === MediaType.MAGAZINE
-              ? 'Magazine'
-              : 'Book';
+  const mediaType = getRequestMediaTypeLabel(entity.type);
   let event: string | undefined;
   let notifyAdmin = true;
   let notifySystem = true;
@@ -302,6 +353,25 @@ export const buildMediaRequestNotificationPayload = async (
       subject: title,
       message: `${mediaType} request details are available in SeerrNG.`,
       image,
+    };
+  }
+  if (entity.type === MediaType.MANGA) {
+    const { anilistId, title } = await getMangaDetails(media);
+    const card =
+      type === Notification.MEDIA_AVAILABLE
+        ? await getAnilistMangaCard(anilistId)
+        : undefined;
+    return {
+      ...base,
+      mediaUrl:
+        notificationMediaUrl(
+          anilistId && /^\d+$/.test(anilistId)
+            ? `/manga/${encodeURIComponent(anilistId)}`
+            : ''
+        ) || undefined,
+      subject: card?.title ?? title,
+      message: `${mediaType} request details are available in SeerrNG.`,
+      image: card?.image,
     };
   }
   throw new Error(`Unsupported media notification request ${entity.id}.`);

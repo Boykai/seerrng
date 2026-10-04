@@ -18,6 +18,10 @@ const MagazineRequestModal = dynamic(
   () => import('@app/components/RequestModal/MagazineRequestModal'),
   { ssr: false }
 );
+const MangaRequestModal = dynamic(
+  () => import('@app/components/RequestModal/MangaRequestModal'),
+  { ssr: false }
+);
 const CollectionRequestModal = dynamic(
   () => import('@app/components/RequestModal/CollectionRequestModal'),
   { ssr: false }
@@ -37,12 +41,21 @@ const TvRequestModal = dynamic(
 
 interface RequestModalProps {
   show: boolean;
-  type: 'movie' | 'tv' | 'collection' | 'music' | 'book' | 'comic' | 'magazine';
+  type:
+    | 'movie'
+    | 'tv'
+    | 'collection'
+    | 'music'
+    | 'book'
+    | 'comic'
+    | 'magazine'
+    | 'manga';
   tmdbId?: number;
   mbId?: string;
   bookId?: string;
   comicId?: string;
   magazineTitle?: string;
+  mangaId?: number;
   initialBookFormat?: 'ebook' | 'audiobook' | 'both';
   initialMusicServerId?: number;
   initialIs4k?: boolean;
@@ -62,6 +75,7 @@ const RequestModal = ({
   bookId,
   comicId,
   magazineTitle,
+  mangaId,
   initialBookFormat,
   initialMusicServerId,
   initialIs4k,
@@ -144,6 +158,14 @@ const RequestModal = ({
       ) : type === 'magazine' && magazineTitle ? (
         <MagazineRequestModal
           magazineTitle={magazineTitle}
+          onComplete={onComplete}
+          onCancel={onCancel}
+          onUpdating={onUpdating}
+          editRequest={editRequest}
+        />
+      ) : type === 'manga' && mangaId ? (
+        <MangaRequestModal
+          mangaId={mangaId}
           onComplete={onComplete}
           onCancel={onCancel}
           onUpdating={onUpdating}

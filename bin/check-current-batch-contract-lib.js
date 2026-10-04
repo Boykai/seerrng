@@ -914,6 +914,22 @@ const validateCurrentBatchContract = (files) => {
     ],
     'available quality badges must use the shared poster opacity and green palette'
   );
+  requireCssRule(
+    '.poster-control.poster-control-type-manga',
+    [
+      'border-color: color-mix(in srgb, var(--palette-orange) 90%, transparent);',
+      'var(--poster-control-background-opacity)',
+    ],
+    'manga poster badges must use the shared poster opacity and orange palette'
+  );
+  requireCssRule(
+    '.app-button-media-type-manga',
+    [
+      'border-color: color-mix(in srgb, var(--palette-orange) 90%, transparent);',
+      'background-color: hsl(25 95% 10% / 0.35);',
+    ],
+    'manga media-type badges must use the shared badge transparency and orange palette'
+  );
   rejectText(
     'src/components/Common/StatusBadgeMini/index.tsx',
     'bg-green-700/70',
@@ -4006,6 +4022,102 @@ const validateCurrentBatchContract = (files) => {
       'Jobs must use the compact standard table and action geometry'
     );
   }
+  for (const token of [
+    '.settings-manga-library-table .app-data-table-cell {',
+    '.settings-manga-library-candidate-actions-column {',
+    '.settings-manga-library-binding-actions-column {',
+    '.settings-manga-library-stack {',
+    '.settings-manga-library-link {',
+  ]) {
+    requireText(
+      globals,
+      token,
+      'Manga Library table geometry and title links must resolve through shared global classes'
+    );
+  }
+  for (const token of [
+    '<Table className="settings-manga-library-table">',
+    'className="settings-log-toolbar"',
+    'className="settings-table-action-row"',
+    'buttonSize="standard"',
+    '<PaginationFooter',
+  ]) {
+    requireText(
+      'src/components/Settings/MangaLibrary/index.tsx',
+      token,
+      'Manga Library must use the shared compact table, filter, action, and pagination layout'
+    );
+  }
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'Manga Library is an admin-only route that appears only while the Manga category is enabled and Suwayomi is configured',
+    'the style standard must govern the Manga Library review page'
+  );
+  for (const [selector, declarations] of [
+    [
+      '.settings-manga-sources-table .app-data-table-cell',
+      ['padding-right: 5px;', 'padding-left: 5px;'],
+    ],
+    ['.settings-manga-sources-stack', ['gap: 5px;']],
+    ['.settings-manga-sources-link', ['text-indigo-300']],
+    ['.settings-manga-sources-list', ['gap: 5px;']],
+    ['.settings-manga-sources-cover', ['width: 1.75rem;', 'height: 2.625rem;']],
+  ]) {
+    requireCssRule(
+      selector,
+      declarations,
+      'Manga Sources table geometry, title links, and detail lists must resolve through shared global classes'
+    );
+  }
+  for (const token of [
+    '<Table className="settings-manga-sources-table">',
+    'className="settings-log-toolbar"',
+    'className="settings-table-action-row"',
+    'buttonSize="standard"',
+    '<PaginationFooter',
+  ]) {
+    requireText(
+      'src/components/Settings/MangaSources/index.tsx',
+      token,
+      'Manga Sources must use the shared compact table, filter, action, and pagination layout'
+    );
+  }
+  for (const token of [
+    'className="settings-group-card"',
+    'className="settings-manga-sources-list"',
+    'className="settings-library-card settings-manga-sources-confirm"',
+  ]) {
+    requireText(
+      'src/components/Settings/MangaSources/TitleDetail.tsx',
+      token,
+      'the Manga Sources detail must use shared group cards, inset entries, and inline confirmations'
+    );
+  }
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'Manga Sources follows the same route gate.',
+    'the style standard must govern the Manga Sources page'
+  );
+  requireCssRule(
+    '.request-manga-source-link',
+    ['text-indigo-300'],
+    'the Choose Source text link must resolve through the shared indigo link class'
+  );
+  for (const token of [
+    'className="request-manga-source-link"',
+    'className="app-button app-button-manage button-sm"',
+  ]) {
+    requireText(
+      'src/components/Settings/MangaSources/ChooseSourceLink.tsx',
+      token,
+      'Choose Source must use the shared indigo text link and the small Manage button'
+    );
+  }
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'administrators reach a title waiting for a source through Choose Source',
+    'the style standard must govern the Choose Source link'
+  );
   requireText(
     'src/components/Settings/SettingsNetwork/index.tsx',
     'className="settings-http-warning"',
@@ -4089,6 +4201,31 @@ const validateCurrentBatchContract = (files) => {
     'src/components/Requests/index.tsx',
     'className="request-status-action-row"',
     'request cards must resolve wrapping action alignment through the shared global style'
+  );
+  requireText(
+    'src/components/Requests/index.tsx',
+    'className="request-download-copy-panel app-card-inset refreshed-inset-surface"',
+    'request download copies must open as an inset list inside the request card'
+  );
+  rejectText(
+    'src/components/Requests/index.tsx',
+    '<details',
+    'request download copies must not open as a floating menu that the request card clips'
+  );
+  requireCssRule(
+    '.request-download-copy-panel',
+    ['order: 1;', 'flex-basis: 100%;'],
+    'request download copies must open on their own line at the end of the request action row'
+  );
+  requireCssRule(
+    '.request-download-copy-list',
+    ['max-height:', 'overflow-y: auto;'],
+    'request download copies must scroll inside their inset list'
+  );
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'Never open it as a floating menu that the card would clip.',
+    'the style standard must govern request download copies'
   );
   for (const filterPage of [
     'src/components/Requests/index.tsx',

@@ -2,6 +2,7 @@ import Tooltip from '@app/components/Common/Tooltip';
 import globalMessages from '@app/i18n/globalMessages';
 import {
   BookOpenIcon,
+  ChatBubbleBottomCenterTextIcon,
   FilmIcon,
   MusicalNoteIcon,
   NewspaperIcon,
@@ -21,7 +22,8 @@ export type MediaTypeBadgeType =
   | 'artist'
   | 'book'
   | 'comic'
-  | 'magazine';
+  | 'magazine'
+  | 'manga';
 
 export const mediaTypeBadgeTone: Record<MediaTypeBadgeType, string> = {
   movie: 'border-blue-500/70 bg-blue-700/35 text-blue-50',
@@ -32,6 +34,7 @@ export const mediaTypeBadgeTone: Record<MediaTypeBadgeType, string> = {
   book: 'border-amber-500/70 bg-amber-700/35 text-amber-50',
   comic: 'border-rose-500/70 bg-rose-700/35 text-rose-50',
   magazine: 'border-cyan-400/70 bg-cyan-700/35 text-cyan-50',
+  manga: 'border-orange-500/70 bg-orange-700/35 text-orange-50',
 };
 
 export const getMediaTypeBadgeType = (
@@ -49,7 +52,8 @@ export const getMediaTypeBadgeType = (
     mediaType === 'artist' ||
     mediaType === 'book' ||
     mediaType === 'comic' ||
-    mediaType === 'magazine'
+    mediaType === 'magazine' ||
+    mediaType === 'manga'
   ) {
     return mediaType;
   }
@@ -112,6 +116,11 @@ const badgeConfig = {
     icon: NewspaperIcon,
     tone: mediaTypeBadgeTone.magazine,
   },
+  manga: {
+    message: globalMessages.manga,
+    icon: ChatBubbleBottomCenterTextIcon,
+    tone: mediaTypeBadgeTone.manga,
+  },
 } as const satisfies Record<
   MediaTypeBadgeType,
   {
@@ -137,6 +146,7 @@ const posterToneClass: Record<MediaTypeBadgeType, string> = {
   book: 'poster-control-type-book',
   comic: 'poster-control-type-comic',
   magazine: 'poster-control-type-magazine',
+  manga: 'poster-control-type-manga',
 };
 
 const buttonToneClass: Record<MediaTypeBadgeType, string> = {
@@ -148,6 +158,7 @@ const buttonToneClass: Record<MediaTypeBadgeType, string> = {
   book: 'app-button-media-type-book',
   comic: 'app-button-media-type-comic',
   magazine: 'app-button-media-type-magazine',
+  manga: 'app-button-media-type-manga',
 };
 
 const MediaTypeBadge = ({

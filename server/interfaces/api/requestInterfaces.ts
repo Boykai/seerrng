@@ -49,6 +49,17 @@ export type MediaRequestBody = {
   userId?: number;
   tags?: number[];
   ignoreQuota?: boolean;
+  /** Manga only: which chapters to fetch; every chapter when omitted. */
+  mangaScope?: MangaRequestScopeInput;
+  /** Manga only: the owner's consent to fetch new chapters as they appear. */
+  mangaFollow?: boolean;
+};
+
+export type MangaRequestScopeInput = {
+  scope?: 'ALL_AT_DISPATCH' | 'LATEST_N' | 'RANGE';
+  latestCount?: number | null;
+  rangeStart?: number | null;
+  rangeEnd?: number | null;
 };
 
 export type BulkMediaRequestItem = {

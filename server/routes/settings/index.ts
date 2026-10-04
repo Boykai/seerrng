@@ -12,9 +12,9 @@ import {
 } from '@server/constants/blocklist';
 import { ApiErrorCode } from '@server/constants/error';
 import {
-  MEDIA_CATEGORY_KEYS,
+  MEDIA_AVAILABILITY_CATEGORY_KEYS,
   type EnabledMediaCategories,
-  type MediaCategoryKey,
+  type MediaAvailabilityCategoryKey,
 } from '@server/constants/mediaCategories';
 import { MediaServerType } from '@server/constants/server';
 import {
@@ -123,6 +123,7 @@ import radarrRoutes from './radarr';
 import readarrRoutes from './readarr';
 import softwareAcquisitionRoutes from './softwareAcquisition';
 import sonarrRoutes from './sonarr';
+import suwayomiRoutes from './suwayomi';
 
 const settingsRoutes = Router();
 settingsRoutes.use(authorizedRouteAccess(Permission.ADMIN));
@@ -1070,13 +1071,15 @@ const parseMainSettingsBody = (
     for (const [key, enabled] of Object.entries(
       categories as Record<string, unknown>
     )) {
-      if (!(MEDIA_CATEGORY_KEYS as readonly string[]).includes(key)) {
+      if (
+        !(MEDIA_AVAILABILITY_CATEGORY_KEYS as readonly string[]).includes(key)
+      ) {
         return { error: `Unknown media category: ${key}.` };
       }
       if (typeof enabled !== 'boolean') {
         return { error: `enabledMediaCategories.${key} must be a boolean.` };
       }
-      parsedCategories[key as MediaCategoryKey] = enabled;
+      parsedCategories[key as MediaAvailabilityCategoryKey] = enabled;
     }
     value.enabledMediaCategories = parsedCategories;
   }
@@ -1092,6 +1095,8 @@ const parseMainSettingsBody = (
     ['enableSpecialEpisodes', 'enableSpecialEpisodes'],
     ['cacheImages', 'cacheImages'],
     ['includeAdult', 'includeAdult'],
+    ['mangaIncludeAdult', 'mangaIncludeAdult'],
+    ['mangaIncludeNovels', 'mangaIncludeNovels'],
   ] as const) {
     const parsed = parseOptionalBooleanSetting(body[key], fieldName);
     if ('error' in parsed) {
@@ -1149,6 +1154,7 @@ const parseMainSettingsBody = (
       'book',
       'comic',
       'magazine',
+      'manga',
       'software',
     ] as const) {
       if (incomingDefaultQuotas[mediaType] === undefined) {
@@ -1423,6 +1429,7 @@ settingsRoutes.use('/mylar', mylarRoutes);
 settingsRoutes.use('/kapowarr', kapowarrRoutes);
 settingsRoutes.use('/backissue', backissueRoutes);
 settingsRoutes.use('/lazylibrarian', lazyLibrarianRoutes);
+settingsRoutes.use('/suwayomi', suwayomiRoutes);
 settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 settingsRoutes.use('/software-acquisition', softwareAcquisitionRoutes);

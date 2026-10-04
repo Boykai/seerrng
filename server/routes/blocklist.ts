@@ -1,7 +1,10 @@
 import TheMovieDb from '@server/api/themoviedb';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
-import { Blocklist } from '@server/entity/Blocklist';
+import {
+  Blocklist,
+  BlocklistIdentityConflictError,
+} from '@server/entity/Blocklist';
 import Media from '@server/entity/Media';
 import { MediaIdentifierProvider } from '@server/entity/MediaIdentifier';
 import { runWithRequestAdmission } from '@server/entity/MediaRequest';
@@ -83,7 +86,7 @@ const blocklistGet = z.object({
   filter: z.enum(['all', 'manual', 'blocklistedTags']).optional(),
   timeFrame: z.enum(['all', '7d', '14d', '30d', '6m']).default('all'),
   mediaType: z
-    .enum(['all', 'movie', 'tv', 'music', 'book', 'comic', 'magazine'])
+    .enum(['all', 'movie', 'tv', 'music', 'book', 'comic', 'magazine', 'manga'])
     .default('all'),
   sort: z.enum(['date', 'title', 'mediaType']).default('date'),
   sortDirection: z.enum(['asc', 'desc']).default('desc'),
@@ -130,7 +133,8 @@ const isSupportedBlocklistType = (mediaType: unknown): mediaType is MediaType =>
   mediaType === MediaType.MUSIC ||
   mediaType === MediaType.BOOK ||
   mediaType === MediaType.COMIC ||
-  mediaType === MediaType.MAGAZINE;
+  mediaType === MediaType.MAGAZINE ||
+  mediaType === MediaType.MANGA;
 
 const getBlocklistAdmissionKey = (item: {
   mediaType: MediaType;
@@ -151,6 +155,9 @@ const getBlocklistAdmissionKey = (item: {
   }
   if (item.mediaType === MediaType.MAGAZINE) {
     return `request-canonical:magazine:${MediaIdentifierProvider.LAZYLIBRARIAN}:${item.externalId ?? ''}`;
+  }
+  if (item.mediaType === MediaType.MANGA) {
+    return `request-canonical:manga:${MediaIdentifierProvider.ANILIST}:${item.externalId ?? ''}`;
   }
   return `request-media:${item.mediaType}:${item.tmdbId}`;
 };
@@ -446,6 +453,18 @@ blocklistRoutes.post(
       ) {
         return next({ status: 400, message: 'Invalid magazine identity.' });
       }
+      if (
+        values.mediaType === MediaType.MANGA &&
+        (!values.externalId ||
+          !isValidExternalMediaId(
+            values.externalId,
+            values.mediaType,
+            values.externalProvider
+          ) ||
+          values.tmdbId !== undefined)
+      ) {
+        return next({ status: 400, message: 'Invalid manga identity.' });
+      }
 
       await runAuthorizedUserSecurityMutation(
         req.user!.id,
@@ -486,6 +505,10 @@ blocklistRoutes.post(
 
       if (error instanceof z.ZodError) {
         return next({ status: 400, message: 'Invalid blocklist payload.' });
+      }
+
+      if (error instanceof BlocklistIdentityConflictError) {
+        return next({ status: 409, message: error.message });
       }
 
       if (error instanceof QueryFailedError) {

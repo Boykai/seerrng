@@ -64,3 +64,54 @@ describe('comic external id validation', () => {
     );
   });
 });
+
+describe('manga external id validation', () => {
+  it('accepts a positive AniList id with no provider or an explicit ANILIST provider', () => {
+    assert.strictEqual(isValidExternalMediaId('30013', MediaType.MANGA), true);
+    assert.strictEqual(
+      isValidExternalMediaId(
+        ' 30013 ',
+        MediaType.MANGA,
+        MediaIdentifierProvider.ANILIST
+      ),
+      true
+    );
+  });
+
+  it('rejects zero, non-numeric, oversized ids and other providers', () => {
+    for (const id of ['0', '', 'abc', '-1', '1.5', '1e3', '1000000001']) {
+      assert.strictEqual(
+        isValidExternalMediaId(id, MediaType.MANGA),
+        false,
+        id
+      );
+    }
+    assert.strictEqual(
+      isValidExternalMediaId(
+        '30013',
+        MediaType.MANGA,
+        MediaIdentifierProvider.COMICVINE
+      ),
+      false
+    );
+  });
+
+  it('canonicalizes a manga id to the String(n) catalog form', () => {
+    assert.strictEqual(
+      normalizeExternalMediaId(' 0030013 ', MediaType.MANGA),
+      '30013'
+    );
+    assert.strictEqual(
+      normalizeExternalMediaId(
+        '30013',
+        MediaType.MANGA,
+        MediaIdentifierProvider.ANILIST
+      ),
+      '30013'
+    );
+    assert.strictEqual(
+      normalizeExternalMediaId(' abc ', MediaType.MANGA),
+      'abc'
+    );
+  });
+});

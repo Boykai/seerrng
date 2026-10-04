@@ -9,6 +9,7 @@ import versionedAsset from '@app/utils/versionedAsset';
 import { Transition, TransitionChild } from '@headlessui/react';
 import {
   BookOpenIcon,
+  ChatBubbleBottomCenterTextIcon,
   ClockIcon,
   CogIcon,
   CommandLineIcon,
@@ -44,6 +45,7 @@ export const menuMessages = defineMessages('components.Layout.Sidebar', {
   browsesoftware: 'Software',
   browsecomics: 'Comics',
   browsemagazines: 'Magazines',
+  browsemanga: 'Manga',
   browsetv: 'Series',
   requests: 'Requests',
   blocklist: 'Blocklist',
@@ -146,6 +148,12 @@ const SidebarLinks: SidebarLinkProps[] = [
     messagesKey: 'browsemagazines',
     svgIcon: <NewspaperIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/(?:discover\/magazines(?:\/.*)?|magazine\/)/,
+  },
+  {
+    href: '/discover/manga',
+    messagesKey: 'browsemanga',
+    svgIcon: <ChatBubbleBottomCenterTextIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/(?:discover\/manga(?:\/.*)?|manga\/)/,
   },
   {
     href: '/software',

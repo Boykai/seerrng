@@ -7,6 +7,7 @@ import SonarrAPI from '@server/api/servarr/sonarr';
 import TheMovieDb from '@server/api/themoviedb';
 import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
 import type { TmdbKeyword } from '@server/api/themoviedb/interfaces';
+import { MangaRequestBindingState } from '@server/constants/mangaRequest';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -14,6 +15,7 @@ import {
 } from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
 import { Blocklist } from '@server/entity/Blocklist';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import MediaIdentifier, {
   MediaIdentifierProvider,
 } from '@server/entity/MediaIdentifier';
@@ -32,6 +34,20 @@ import {
   normalizeMagazineTitle,
 } from '@server/lib/magazineIdentity';
 import {
+  createMangaMedia,
+  findMangaMedia,
+  getMangaAdmissionKey,
+} from '@server/lib/mangaMedia';
+import { hasActiveMangaBinding } from '@server/lib/mangaRequestBindings';
+import {
+  MangaRequestNotFoundError,
+  MangaRequestScopeError,
+  assertMangaRequestable,
+  parseMangaRequestId,
+  parseMangaRequestScope,
+  selectMangaRequestInstance,
+} from '@server/lib/mangaRequests';
+import {
   MediaServerUserAuthorityChangedError,
   assertMediaServerUserAuthorityCurrent,
   type MediaServerUserAuthoritySnapshot,
@@ -48,9 +64,12 @@ import { Permission, hasAutoApprovePermission } from '@server/lib/permissions';
 import requestAdmissionCoordinator from '@server/lib/requestAdmission';
 import {
   hasTrackedAvailableDestination,
+  isActiveRequestStatus,
   isDestinationAvailableInTargets,
   isDestinationCoveredByActiveRequest,
   type RequestDestination,
+  type RequestServiceType,
+  type RequestTargetFormat,
 } from '@server/lib/requestDestination';
 import {
   runWithServarrServiceAdmission,
@@ -63,6 +82,7 @@ import {
   type RadarrSettings,
   type ReadarrSettings,
   type SonarrSettings,
+  type SuwayomiSettings,
 } from '@server/lib/settings';
 import {
   isUserCredentialVersionCurrent,
@@ -103,9 +123,8 @@ export class BlocklistedMediaError extends Error {}
 export class ServiceConfigurationError extends Error {}
 
 export type MediaRequestServiceTarget = {
-  serviceType: ServarrServiceType;
-  format:
-    'standard' | '4k' | 'music' | 'ebook' | 'audiobook' | 'comic' | 'magazine';
+  serviceType: RequestServiceType;
+  format: RequestTargetFormat;
   serverId: number;
   profileId?: number | null;
   metadataProfileId?: number | null;
@@ -137,6 +156,10 @@ type ResolvedBookRequest = {
 type InternalMediaRequestOptions = MediaRequestOptions & {
   resolvedMusicMbId?: string;
   resolvedBook?: ResolvedBookRequest;
+  /** The AniList ID, once its title passed the content policy. */
+  resolvedMangaId?: number;
+  /** The Suwayomi instance whose admission the request holds. */
+  admittedSuwayomiId?: number;
   serviceAdmissionGranted?: boolean;
 };
 export const MAX_BOOK_REQUEST_IDENTIFIER_CANDIDATES = 200;
@@ -190,6 +213,29 @@ const canUseAdvancedRequestOptions = (user: User): boolean =>
     }
   );
 
+/**
+ * The Suwayomi instance a manga request targets: an advanced requester's
+ * choice, else the default instance, else the first.
+ */
+export const getMangaRequestInstance = (
+  instances: readonly SuwayomiSettings[],
+  user: User,
+  serverId: number | null | undefined
+): SuwayomiSettings => {
+  const requestedServerId = canUseAdvancedRequestOptions(user)
+    ? serverId
+    : undefined;
+  const instance = selectMangaRequestInstance(instances, requestedServerId);
+  if (!instance) {
+    throw new ServiceConfigurationError(
+      requestedServerId != null
+        ? 'Selected Suwayomi server does not exist.'
+        : 'No Suwayomi server is configured for manga requests.'
+    );
+  }
+  return instance;
+};
+
 export const hasMediaRequestPermission = (
   user: User,
   mediaType: MediaType,
@@ -227,6 +273,11 @@ export const hasMediaRequestPermission = (
     case MediaType.MAGAZINE:
       return user.hasPermission(
         [Permission.REQUEST, Permission.REQUEST_MAGAZINE],
+        { type: 'or' }
+      );
+    case MediaType.MANGA:
+      return user.hasPermission(
+        [Permission.REQUEST, Permission.REQUEST_MANGA],
         { type: 'or' }
       );
   }
@@ -378,7 +429,14 @@ export class MediaRequest {
     user: User,
     options: InternalMediaRequestOptions = {}
   ): Promise<MediaRequest> {
-    requestBody = { ...requestBody, is4k: requestBody.is4k ?? false };
+    // Manga, like the other non-video types, has no 4K variant.
+    requestBody = {
+      ...requestBody,
+      is4k:
+        requestBody.mediaType === MediaType.MANGA
+          ? false
+          : (requestBody.is4k ?? false),
+    };
 
     // Lock the requested target even when the actor's loaded permission snapshot
     // says they cannot select it. Permissions are reloaded under the security
@@ -421,6 +479,136 @@ export class MediaRequest {
       return runWithRequestAdmission([userLockKey, mediaLockKey], () =>
         this.requestUnlocked(requestBody, user, options)
       );
+    });
+  }
+
+  /**
+   * Records a manga request. The caller holds the title's canonical admission
+   * and the target instance's admission. An approved request is queued for
+   * dispatch when it is saved; while its title has no ACTIVE source binding
+   * on the instance it stays parked, and the binding sync queues it again.
+   */
+  private static async requestManga(
+    requestBody: MediaRequestBody,
+    user: User,
+    requestUser: User,
+    options: InternalMediaRequestOptions,
+    ignoreQuota: boolean
+  ): Promise<MediaRequest> {
+    const anilistId = options.resolvedMangaId;
+    const instance = getExternalRuntimeConfig().suwayomi.find(
+      ({ id }) => id === options.admittedSuwayomiId
+    );
+    if (anilistId === undefined || !instance) {
+      throw new ServiceConfigurationError(
+        'No Suwayomi server is configured for manga requests.'
+      );
+    }
+    const scope = parseMangaRequestScope(requestBody.mangaScope);
+    if ('error' in scope) {
+      throw new MangaRequestScopeError(scope.error);
+    }
+
+    const blocklisted = await getRepository(Blocklist).exists({
+      where: { externalId: String(anilistId), mediaType: MediaType.MANGA },
+    });
+    const media = (await findMangaMedia(dataSource.manager, [anilistId])).get(
+      anilistId
+    );
+    if (media === null) {
+      // The AniList ID already belongs to media of another type.
+      throw new DuplicateMediaRequestError('This manga cannot be requested.');
+    }
+    if (blocklisted || media?.status === MediaStatus.BLOCKLISTED) {
+      throw new BlocklistedMediaError('This manga is blocklisted.');
+    }
+    if (media?.status === MediaStatus.AVAILABLE) {
+      throw new DuplicateMediaRequestError('This manga is already available.');
+    }
+
+    const destination: RequestDestination = {
+      serviceType: 'suwayomi',
+      format: 'manga',
+      serverId: instance.id,
+      rootFolder: null,
+    };
+    const existingRequests = media
+      ? await getRepository(MediaRequest)
+          .createQueryBuilder('request')
+          .leftJoinAndSelect('request.requestedBy', 'requestedBy')
+          .where('request.media = :mediaId', { mediaId: media.id })
+          .getMany()
+      : [];
+    // One active request per title, whichever instance it targets.
+    if (existingRequests.some(({ status }) => isActiveRequestStatus(status))) {
+      const promotablePendingRequest = findPromotablePendingRequest(
+        existingRequests,
+        [destination],
+        user,
+        MediaType.MANGA
+      );
+      if (promotablePendingRequest) {
+        return promotePendingRequest(promotablePendingRequest, user);
+      }
+      throw new DuplicateMediaRequestError(
+        'A request for this manga already exists.'
+      );
+    }
+
+    const autoApproved = hasAutoApprovePermission(
+      requestUser.permissions,
+      'manga'
+    );
+    const request = new MediaRequest({
+      type: MediaType.MANGA,
+      requestedBy: requestUser,
+      status: autoApproved
+        ? MediaRequestStatus.APPROVED
+        : MediaRequestStatus.PENDING,
+      modifiedBy: autoApproved ? user : undefined,
+      is4k: false,
+      serverId: instance.id,
+      serviceTargets: [
+        { ...destination, serverId: instance.id, status: MediaStatus.PENDING },
+      ],
+      isAutoRequest: options.isAutoRequest ?? false,
+      ignoreQuota,
+    });
+
+    return dataSource.transaction(async (manager) => {
+      let savedMedia = media;
+      if (!savedMedia) {
+        savedMedia = await createMangaMedia(
+          manager,
+          anilistId,
+          MediaStatus.PENDING
+        );
+      } else if (
+        savedMedia.status === MediaStatus.UNKNOWN ||
+        savedMedia.status === MediaStatus.DELETED
+      ) {
+        savedMedia.status = MediaStatus.PENDING;
+        savedMedia = await manager.getRepository(Media).save(savedMedia);
+      }
+      request.media = savedMedia;
+      const savedRequest = await saveRequestWithFreshMedia(manager, request);
+      const bound = await hasActiveMangaBinding(
+        manager,
+        anilistId,
+        instance.id
+      );
+      await manager.getRepository(MangaRequestManifest).insert({
+        requestId: savedRequest.id,
+        anilistId,
+        instanceId: instance.id,
+        ...scope.value,
+        bindingState: bound
+          ? MangaRequestBindingState.BOUND
+          : MangaRequestBindingState.AWAITING_BINDING,
+        boundAt: bound ? new Date() : null,
+        followEnabled: requestBody.mangaFollow === true,
+      });
+      return savedRequest;
     });
   }
 
@@ -500,6 +688,16 @@ export class MediaRequest {
         );
       }
     }
+    // Following, like watch-ahead, is consent for future acquisition: nobody
+    // may give it on the owner's behalf.
+    if (
+      requestBody.mangaFollow === true &&
+      (requestBody.mediaType !== MediaType.MANGA || requestUser.id !== user.id)
+    ) {
+      throw new RequestPermissionError(
+        'Following new chapters can only be turned on by the owner of a manga request.'
+      );
+    }
 
     const isManagedRequestForAnotherUser =
       canSelectRequestUser && requestUser.id !== user.id;
@@ -564,6 +762,14 @@ export class MediaRequest {
       throw new RequestPermissionError(
         'You do not have permission to make magazine requests.'
       );
+    } else if (
+      requestBody.mediaType === MediaType.MANGA &&
+      !isManagedRequestForAnotherUser &&
+      !hasMediaRequestPermission(requestUser, requestBody.mediaType)
+    ) {
+      throw new RequestPermissionError(
+        'You do not have permission to make manga requests.'
+      );
     }
 
     if (requestBody.mediaType === MediaType.MAGAZINE) {
@@ -578,7 +784,8 @@ export class MediaRequest {
       canUseAdvancedRequestOptions(user) &&
       requestBody.serverId != null &&
       requestBody.mediaType !== MediaType.COMIC &&
-      requestBody.mediaType !== MediaType.MAGAZINE
+      requestBody.mediaType !== MediaType.MAGAZINE &&
+      requestBody.mediaType !== MediaType.MANGA
     ) {
       const serviceName =
         requestBody.mediaType === MediaType.MOVIE
@@ -642,6 +849,8 @@ export class MediaRequest {
           return quotas.comic;
         case MediaType.MAGAZINE:
           return quotas.magazine;
+        case MediaType.MANGA:
+          return quotas.manga;
         default:
           return undefined;
       }
@@ -686,6 +895,11 @@ export class MediaRequest {
         quotas.magazine.restricted
       ) {
         throw new QuotaRestrictedError('Magazine Quota exceeded.');
+      } else if (
+        requestBody.mediaType === MediaType.MANGA &&
+        quotas.manga.restricted
+      ) {
+        throw new QuotaRestrictedError('Manga Quota exceeded.');
       }
     }
 
@@ -798,6 +1012,31 @@ export class MediaRequest {
       );
     }
 
+    // The catalog lookup runs before the title's canonical admission, the
+    // instance admission and any transaction, like the music lookup above.
+    if (
+      requestBody.mediaType === MediaType.MANGA &&
+      options.resolvedMangaId === undefined
+    ) {
+      const scope = parseMangaRequestScope(requestBody.mangaScope);
+      if ('error' in scope) {
+        throw new MangaRequestScopeError(scope.error);
+      }
+      const anilistId = parseMangaRequestId(requestBody.mediaId);
+      if (anilistId === undefined) {
+        throw new MangaRequestNotFoundError();
+      }
+      getMangaRequestInstance(settings.suwayomi, user, requestBody.serverId);
+      await assertMangaRequestable(anilistId);
+
+      return runWithRequestAdmission([getMangaAdmissionKey(anilistId)], () =>
+        this.requestUnlocked(requestBody, user, {
+          ...options,
+          resolvedMangaId: anilistId,
+        })
+      );
+    }
+
     if (!options.serviceAdmissionGranted) {
       const useAdvancedOptions = canUseAdvancedRequestOptions(user);
       const bookshelfCatalogServiceId = parseBookshelfBookId(
@@ -824,6 +1063,7 @@ export class MediaRequest {
       ) => {
         if (serviceId != null) services.push({ serviceType, serviceId });
       };
+      let admittedSuwayomiId: number | undefined;
 
       if (requestBody.mediaType === MediaType.MOVIE) {
         addService(
@@ -890,6 +1130,13 @@ export class MediaRequest {
         }
         // A requested serverId matching neither array locks nothing here;
         // the creation block below raises the real ServiceConfigurationError.
+      } else if (requestBody.mediaType === MediaType.MANGA) {
+        admittedSuwayomiId = getMangaRequestInstance(
+          settings.suwayomi,
+          user,
+          requestBody.serverId
+        ).id;
+        addService('suwayomi', admittedSuwayomiId);
       } else {
         const format = requestBody.format ?? 'ebook';
         if (format === 'both') {
@@ -917,6 +1164,7 @@ export class MediaRequest {
           this.requestUnlocked(requestBody, user, {
             ...options,
             serviceAdmissionGranted: true,
+            admittedSuwayomiId,
           })
         );
       }
@@ -1886,6 +2134,16 @@ export class MediaRequest {
         request.media = savedMedia;
         return saveRequestWithFreshMedia(manager, request);
       });
+    }
+
+    if (requestBody.mediaType === MediaType.MANGA) {
+      return this.requestManga(
+        requestBody,
+        user,
+        requestUser,
+        options,
+        ignoreQuota
+      );
     }
 
     const tmdbMedia =

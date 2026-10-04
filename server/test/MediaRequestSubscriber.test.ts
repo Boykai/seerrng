@@ -141,6 +141,45 @@ describe('MediaRequestSubscriber service dispatch', () => {
     );
   });
 
+  it('sends approved manga requests to the manga dispatcher, never a Servarr service', async () => {
+    const sendCalls: string[] = [];
+    const recordSend = (name: string) => async () => {
+      sendCalls.push(name);
+      return undefined;
+    };
+    const prototype = MediaRequestSubscriber.prototype;
+    mock.method(prototype, 'sendToRadarr', recordSend('radarr'));
+    mock.method(prototype, 'sendToSonarr', recordSend('sonarr'));
+    mock.method(prototype, 'sendToLidarr', recordSend('lidarr'));
+    mock.method(prototype, 'sendToReadarr', recordSend('readarr'));
+    mock.method(prototype, 'sendToComicBackend', recordSend('comic'));
+    mock.method(prototype, 'sendToMagazineBackend', recordSend('magazine'));
+    const media = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.UNKNOWN,
+        status4k: MediaStatus.UNKNOWN,
+      })
+    );
+    const request = await createApprovedRequest(media, await getRequester());
+    await getRepository(MediaRequest).save(request);
+
+    // Manga skips Servarr service selection, which throws for manga. With
+    // no manifest there is nothing to send, so the request leaves the outbox.
+    const outcome = await new MediaRequestSubscriber().dispatchRequestById(
+      request.id
+    );
+
+    assert.deepStrictEqual(outcome, { delivered: true });
+    assert.deepStrictEqual(sendCalls, []);
+    assert.strictEqual(
+      (await getRepository(MediaRequest).findOneByOrFail({ id: request.id }))
+        .status,
+      MediaRequestStatus.APPROVED
+    );
+  });
+
   it('holds request, media, and service authority while dispatching to Radarr', async () => {
     const settings = getSettings();
     settings.radarr = [

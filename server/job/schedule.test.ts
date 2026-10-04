@@ -1,11 +1,17 @@
 import { MediaServerType } from '@server/constants/server';
+import downloadRecovery from '@server/lib/downloadRecovery';
 import episodeWatchAhead from '@server/lib/episodeWatchAhead';
+import requestAdmissionCoordinator, {
+  RequestAdmissionCoordinator,
+} from '@server/lib/requestAdmission';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
 import schedule from 'node-schedule';
 import assert from 'node:assert/strict';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { afterEach, describe, it, mock } from 'node:test';
+import type { DataSource, QueryRunner } from 'typeorm';
 import { runTrackedJob, scheduledJobs, startJobs, stopJobs } from './schedule';
 
 setupTestDb();
@@ -113,6 +119,82 @@ describe('scheduled job lifecycle', () => {
     assert.equal(typeof backissueJob.cancelFn, 'function');
   });
 
+  it('registers the manga library scan as a scheduled process task', () => {
+    startJobs();
+
+    const mangaJob = scheduledJobs.find(
+      (job) => job.id === 'manga-library-scan'
+    );
+
+    assert.ok(mangaJob);
+    assert.equal(mangaJob.name, 'Manga Library Scan');
+    assert.equal(mangaJob.type, 'process');
+    assert.equal(mangaJob.interval, 'hours');
+    assert.equal(mangaJob.cronSchedule, '0 45 5 * * *');
+    assert.equal(typeof mangaJob.cancelFn, 'function');
+    assert.equal(mangaJob.running?.(), false);
+  });
+
+  it('registers the manga source resolver as a scheduled process task', () => {
+    startJobs();
+
+    const resolveJob = scheduledJobs.find(
+      (job) => job.id === 'manga-source-resolve'
+    );
+
+    assert.ok(resolveJob);
+    assert.equal(resolveJob.name, 'Manga Source Resolve');
+    assert.equal(resolveJob.type, 'process');
+    assert.equal(resolveJob.interval, 'minutes');
+    assert.equal(resolveJob.cronSchedule, '0 */10 * * * *');
+    assert.equal(typeof resolveJob.cancelFn, 'function');
+    assert.equal(resolveJob.running?.(), false);
+  });
+
+  it('registers the manga dispatch sweep as a five-minute process task', () => {
+    startJobs();
+
+    const sweepJob = scheduledJobs.find(
+      (job) => job.id === 'manga-dispatch-sweep'
+    );
+
+    assert.ok(sweepJob);
+    assert.equal(sweepJob.name, 'Manga Dispatch Sweep');
+    assert.equal(sweepJob.type, 'process');
+    assert.equal(sweepJob.interval, 'minutes');
+    assert.equal(sweepJob.cronSchedule, '0 */5 * * * *');
+  });
+
+  it('registers the manga progress poll as a two-minute process task', () => {
+    startJobs();
+
+    const progressJob = scheduledJobs.find(
+      (job) => job.id === 'manga-progress'
+    );
+
+    assert.ok(progressJob);
+    assert.equal(progressJob.name, 'Manga Progress');
+    assert.equal(progressJob.type, 'process');
+    assert.equal(progressJob.interval, 'minutes');
+    assert.equal(progressJob.cronSchedule, '0 */2 * * * *');
+    assert.equal(typeof progressJob.cancelFn, 'function');
+    assert.equal(progressJob.running?.(), false);
+  });
+
+  it('registers the manga follow loop as a half-hourly process task', () => {
+    startJobs();
+
+    const followJob = scheduledJobs.find((job) => job.id === 'manga-follow');
+
+    assert.ok(followJob);
+    assert.equal(followJob.name, 'Manga Follow');
+    assert.equal(followJob.type, 'process');
+    assert.equal(followJob.interval, 'minutes');
+    assert.equal(followJob.cronSchedule, '0 7,37 * * * *');
+    assert.equal(typeof followJob.cancelFn, 'function');
+    assert.equal(followJob.running?.(), false);
+  });
+
   it('cancels future invocations and waits for active work', async () => {
     let cancelCalled = false;
     let release: (() => void) | undefined;
@@ -216,5 +298,80 @@ describe('scheduled job lifecycle', () => {
 
     release();
     await first;
+  });
+
+  it('runs a job in its own async context, so it takes its own admission', async (t) => {
+    const locks: string[] = [];
+    let connections = 0;
+    const source: Pick<DataSource, 'createQueryRunner'> = {
+      createQueryRunner: () => {
+        let connection = 0;
+        const runner = {
+          isTransactionActive: false,
+          connect: async () => {
+            connections += 1;
+            connection = connections;
+          },
+          startTransaction: async () => {
+            runner.isTransactionActive = true;
+          },
+          commitTransaction: async () => {
+            runner.isTransactionActive = false;
+          },
+          rollbackTransaction: async () => {
+            runner.isTransactionActive = false;
+          },
+          release: async () => undefined,
+          query: async (_sql: string, parameters?: unknown[]) => {
+            locks.push(`${connection}:${String(parameters?.[0])}`);
+            return [];
+          },
+        };
+        return runner as unknown as QueryRunner;
+      },
+    };
+    const coordinator = new RequestAdmissionCoordinator(source, true, 2);
+    const run: typeof requestAdmissionCoordinator.run = (keys, callback) =>
+      coordinator.run(keys, callback);
+    t.mock.method(requestAdmissionCoordinator, 'run', run);
+    const caller = new AsyncLocalStorage<string>();
+    let job: Promise<void> | undefined;
+    let seen: string | undefined = 'not run';
+
+    // Like the Run Now route: a handler inside an admission starts a job.
+    await caller.run('route', () =>
+      requestAdmissionCoordinator.run(['user-security:user:1'], async () => {
+        job = runTrackedJob(
+          'Detached Job',
+          () =>
+            requestAdmissionCoordinator.run(['job:detached'], async () => {
+              seen = caller.getStore();
+            }),
+          { scope: 'instance' }
+        );
+      })
+    );
+    await job;
+
+    assert.equal(seen, undefined);
+    assert.deepEqual(locks, ['1:user-security:user:1', '2:job:detached']);
+  });
+
+  it('runs download recovery outside the context of the caller that starts it', async (t) => {
+    const caller = new AsyncLocalStorage<string>();
+    let seen: string | undefined = 'not run';
+    t.mock.method(downloadRecovery, 'run', async () => {
+      seen = caller.getStore();
+    });
+    startJobs();
+    const recovery = scheduledJobs.find(
+      (job) => job.id === 'download-recovery'
+    );
+    assert.ok(recovery);
+
+    caller.run('route', () => recovery.job.invoke());
+    await waitFor(() => seen !== 'not run');
+
+    assert.equal(seen, undefined);
   });
 });

@@ -20,9 +20,11 @@ import { normalizeMusicBrainzId } from '@server/lib/externalIds';
 import type { AuthorResult, BookResult } from '@server/models/Book';
 import type { ComicResult } from '@server/models/Comic';
 import type { MagazineResult } from '@server/models/Magazine';
+import type { MangaResult } from '@server/models/Manga';
 export type { AuthorResult, BookResult } from '@server/models/Book';
 export type { ComicResult } from '@server/models/Comic';
 export type { MagazineResult } from '@server/models/Magazine';
+export type { MangaResult } from '@server/models/Manga';
 export type MediaType =
   | 'tv'
   | 'movie'
@@ -33,7 +35,8 @@ export type MediaType =
   | 'book'
   | 'author'
   | 'comic'
-  | 'magazine';
+  | 'magazine'
+  | 'manga';
 
 interface TmdbSearchResult {
   id: number;
@@ -147,7 +150,8 @@ export type Results =
   | BookResult
   | AuthorResult
   | ComicResult
-  | MagazineResult;
+  | MagazineResult
+  | MangaResult;
 
 type SearchProviderResult =
   | TmdbMovieResult
@@ -159,7 +163,8 @@ type SearchProviderResult =
   | BookResult
   | AuthorResult
   | ComicResult
-  | MagazineResult;
+  | MagazineResult
+  | MangaResult;
 
 export const mapMovieResult = (
   movieResult: TmdbMovieResult,
@@ -319,6 +324,9 @@ const isMagazineResult = (
 ): result is MagazineResult =>
   'mediaType' in result && result.mediaType === 'magazine';
 
+const isMangaResult = (result: SearchProviderResult): result is MangaResult =>
+  'mediaType' in result && result.mediaType === 'manga';
+
 export const mapSearchResults = async (
   results: SearchProviderResult[],
   media?: Media[]
@@ -362,6 +370,8 @@ export const mapSearchResults = async (
       } else if (isComicResult(result)) {
         return result;
       } else if (isMagazineResult(result)) {
+        return result;
+      } else if (isMangaResult(result)) {
         return result;
       }
 

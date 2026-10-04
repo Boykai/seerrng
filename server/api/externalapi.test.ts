@@ -68,6 +68,10 @@ class TestExternalAPI extends ExternalAPI {
     return this.post<T>(endpoint, data, undefined, ttl);
   }
 
+  public headForTest(endpoint: string, config?: AxiosRequestConfig) {
+    return this.request<void>('HEAD', endpoint, undefined, config);
+  }
+
   public removeForTest(
     endpoint: string,
     options?: Record<string, unknown>
@@ -434,6 +438,50 @@ describe('ExternalAPI transient GET handling', () => {
       /upstream unavailable/
     );
     assert.equal(calls, 2);
+  });
+});
+
+describe('ExternalAPI HEAD requests', () => {
+  it('sends HEAD through the guarded instance and retries one transient failure', async () => {
+    const api = new TestExternalAPI('https://service.example/base/', {});
+    const seen: { method?: string; url?: string }[] = [];
+    api.setAdapter(async (config) => {
+      seen.push({ method: config.method, url: config.url });
+      if (seen.length === 1) {
+        throw new axios.AxiosError('socket reset', 'ECONNRESET', config);
+      }
+
+      return {
+        config,
+        data: '',
+        headers: { 'content-length': '42' },
+        status: 200,
+        statusText: 'OK',
+      };
+    });
+
+    const response = await api.headForTest('files/1');
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers['content-length'], '42');
+    assert.deepStrictEqual(seen, [
+      { method: 'head', url: 'https://service.example/base/files/1' },
+      { method: 'head', url: 'https://service.example/base/files/1' },
+    ]);
+  });
+
+  it('rejects HEAD targets outside the configured origin', async () => {
+    const api = new TestExternalAPI('https://service.example', {});
+    let calls = 0;
+    api.setAdapter(async (config) => {
+      calls += 1;
+      return { config, data: '', headers: {}, status: 200, statusText: 'OK' };
+    });
+
+    await assert.rejects(() =>
+      api.headForTest('https://other.example/files/1')
+    );
+    assert.equal(calls, 0);
   });
 });
 

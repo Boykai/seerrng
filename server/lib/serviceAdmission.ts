@@ -10,6 +10,7 @@ import {
   type RadarrSettings,
   type ReadarrSettings,
   type SonarrSettings,
+  type SuwayomiSettings,
 } from '@server/lib/settings';
 import AsyncLock from '@server/utils/asyncLock';
 
@@ -21,7 +22,10 @@ export type ServarrServiceType =
   | 'mylar'
   | 'kapowarr'
   | 'backissue'
-  | 'lazylibrarian';
+  | 'lazylibrarian'
+  | 'suwayomi';
+// Services authenticated by an API key; Suwayomi uses a login instead.
+export type KeyedServarrServiceType = Exclude<ServarrServiceType, 'suwayomi'>;
 export interface ServarrServiceSettingsByType {
   radarr: RadarrSettings;
   sonarr: SonarrSettings;
@@ -31,32 +35,67 @@ export interface ServarrServiceSettingsByType {
   kapowarr: KapowarrSettings;
   backissue: BackIssueSettings;
   lazylibrarian: LazyLibrarianSettings;
+  suwayomi: SuwayomiSettings;
 }
 // Picked down to the fields Servarr-family services (which fully satisfy
 // DVRSettings) share with the non-Servarr comics backends (Mylar/Kapowarr/BackIssue,
 // which only satisfy the smaller CollectorServiceSettings) - is4k and
 // serviceType stay Partial so services with no such concept (comics have
 // neither) still satisfy this type.
-export type ServarrServiceAuthority = Pick<
+export type KeyedServarrServiceAuthority = Pick<
   DVRSettings,
   'id' | 'hostname' | 'port' | 'useSsl' | 'baseUrl' | 'apiKey' | 'syncEnabled'
 > &
   Partial<Pick<DVRSettings, 'is4k'>> &
   Partial<Pick<ReadarrSettings, 'serviceType'>>;
+// Suwayomi has no API key, so the stored login is part of its authority.
+export type SuwayomiServiceAuthority = Pick<
+  SuwayomiSettings,
+  | 'id'
+  | 'hostname'
+  | 'port'
+  | 'useSsl'
+  | 'baseUrl'
+  | 'authMode'
+  | 'username'
+  | 'password'
+>;
+export type ServarrServiceAuthority =
+  KeyedServarrServiceAuthority | SuwayomiServiceAuthority;
+
+const isSuwayomiServiceAuthority = (
+  authority: ServarrServiceAuthority
+): authority is SuwayomiServiceAuthority => 'authMode' in authority;
 
 export const hasSameServarrServiceAuthority = (
   current: ServarrServiceAuthority,
   snapshot: ServarrServiceAuthority
-): boolean =>
-  current.id === snapshot.id &&
-  current.hostname === snapshot.hostname &&
-  current.port === snapshot.port &&
-  current.useSsl === snapshot.useSsl &&
-  current.baseUrl === snapshot.baseUrl &&
-  current.apiKey === snapshot.apiKey &&
-  current.syncEnabled === snapshot.syncEnabled &&
-  Boolean(current.is4k) === Boolean(snapshot.is4k) &&
-  (current.serviceType ?? 'ebook') === (snapshot.serviceType ?? 'ebook');
+): boolean => {
+  if (
+    current.id !== snapshot.id ||
+    current.hostname !== snapshot.hostname ||
+    current.port !== snapshot.port ||
+    current.useSsl !== snapshot.useSsl ||
+    current.baseUrl !== snapshot.baseUrl
+  ) {
+    return false;
+  }
+  if (isSuwayomiServiceAuthority(current)) {
+    return (
+      isSuwayomiServiceAuthority(snapshot) &&
+      current.authMode === snapshot.authMode &&
+      current.username === snapshot.username &&
+      current.password === snapshot.password
+    );
+  }
+  return (
+    !isSuwayomiServiceAuthority(snapshot) &&
+    current.apiKey === snapshot.apiKey &&
+    current.syncEnabled === snapshot.syncEnabled &&
+    Boolean(current.is4k) === Boolean(snapshot.is4k) &&
+    (current.serviceType ?? 'ebook') === (snapshot.serviceType ?? 'ebook')
+  );
+};
 
 export class ServarrServiceAuthorityChangedError extends Error {}
 export const MAX_SERVARR_SERVICE_ID = 1_000_000_000;
@@ -80,6 +119,11 @@ export const getServarrServiceAdmissionResource = (
   return `service-config:${serviceType}:${serviceId}`;
 };
 
+// Same order as runMediaMutation: coordinator slot, then PostgreSQL advisory
+// locks, then in-process locks. A service lock taken before the slot could
+// wait forever on a request writer that holds that slot and is entering the
+// service. Nested calls reuse the caller's slot. With the coordinator disabled
+// (SQLite) only the in-process locks run, as before.
 const runWithServarrAdmissionResources = <Result>(
   resources: string[],
   callback: () => Promise<Result>
@@ -91,11 +135,11 @@ const runWithServarrAdmissionResources = <Result>(
 
   const dispatch = (index: number): Promise<Result> =>
     index === orderedResources.length
-      ? requestAdmissionCoordinator.run(orderedResources, callback)
+      ? callback()
       : serviceAdmissionLock.dispatch(orderedResources[index], () =>
           dispatch(index + 1)
         );
-  return dispatch(0);
+  return requestAdmissionCoordinator.run(orderedResources, () => dispatch(0));
 };
 
 export const runWithServarrServiceAdmission = <Result>(

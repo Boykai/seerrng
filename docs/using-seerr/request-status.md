@@ -38,6 +38,45 @@ available and the other is still requested or missing. See
 [Books, Authors, and Series](./books-and-series.md) for book discovery and
 series requests.
 
+## Manga requests
+
+Manga requests show a **Manga** badge, and the **Manga** media filter lists
+them on their own. Each card's **Chapters** row shows the requested chapters,
+for example "All", "Latest 25", "10–20", or "10 onward". An
+approved manga request whose title has no current match on the Suwayomi server
+shows **Waiting for a source** instead of **Approved**; see
+[Manga Backend](./manga-backend.md#waiting-for-a-source). Administrators
+choose its source on the
+[Manga Sources page](./manga-backend.md#resolve-sources-by-hand), which the
+**Choose Source** button beside the status opens. SeerrNG sends approved manga
+requests to Suwayomi; see [Dispatch](./manga-backend.md#dispatch).
+
+## Follow new chapters
+
+A manga request gets the matching chapters that its source lists when SeerrNG
+sends it. To also get matching chapters that the source adds later, the
+requester can set **Follow New Chapters** to **On** when requesting, on the
+request's card, or in the request's window, which **View Request** on the
+title's page opens. It is **Off** by default. SeerrNG then checks for new
+chapters from time to time and queues them for download. A completed request
+shows **Downloading** again while new chapters arrive, and SeerrNG sends the
+**Request Available** notification again once they are delivered. New chapters
+use the request's approval and do not count against your request quota.
+
+Only the requester can turn following on, while the request is pending,
+approved, or complete. The requester or a user with the **Manage Requests**
+permission can turn it off. Turning it off stops further additions; chapters
+already added still download.
+
+When following stops or pauses, the request card and the request's window say
+why. It stops when the request is declined or fails, when the requester can no
+longer request manga, when the request has the last chapter of its range, or
+when it reaches 10,000 chapters. A paused request keeps following: SeerrNG checks again every day,
+and an administrator can fix the cause, for example by reviewing the title's
+match under **Settings → Manga Library**. See
+[Follow new chapters](./manga-backend.md#follow-new-chapters) for how often
+SeerrNG checks and which chapters it adds.
+
 ## Download an available copy
 
 When an imported file is available to SeerrNG, its request card shows a
@@ -45,6 +84,13 @@ When an imported file is available to SeerrNG, its request card shows a
 copies** and choose the episode, book format, comic issue, or magazine issue to
 save. The browser handles transfer progress after the download starts; SeerrNG
 keeps the request's availability and history on this page.
+
+Manga chapters become downloadable one at a time, as soon as SeerrNG verifies
+each one in Suwayomi, while the rest of the request is still downloading and
+also after the request failed. Each chapter downloads as its own CBZ file, and
+newly verified chapters join the list without reloading the page. There is no
+**Download all**. Manga chapters need no path mapping; see
+[Download copy](./manga-backend.md#download-copy) for the limits.
 
 ROM and PC game requests also appear in Request Status with their provider
 confirmed lifecycle states and download actions. See

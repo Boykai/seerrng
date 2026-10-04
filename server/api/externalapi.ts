@@ -26,7 +26,7 @@ export const DEFAULT_EXTERNAL_API_MAX_BODY_LENGTH = 1024 * 1024;
 export const MAX_PENDING_EXTERNAL_API_REQUESTS = 256;
 
 export type ExternalAPIRequestFailure = {
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'DELETE';
   hostname: string;
   path: string;
   error: unknown;
@@ -443,7 +443,7 @@ class ExternalAPI {
   }
 
   protected async request<T>(
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'DELETE',
     endpoint: string,
     data?: unknown,
     config?: AxiosRequestConfig
@@ -480,6 +480,11 @@ class ExternalAPI {
           // failure before the caller turns it into a user-facing error.
           return await withTransientHttpRetry(() =>
             this.axios.get<T>(requestTarget, config)
+          );
+        case 'HEAD':
+          // HEAD is a read like GET, so it gets the same single retry.
+          return await withTransientHttpRetry(() =>
+            this.axios.head<T>(requestTarget, config)
           );
         case 'POST':
           // requestTarget is restricted to the constructor's allowed origins;

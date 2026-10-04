@@ -34,6 +34,7 @@ export const mediaFilterValues = [
   'audiobook',
   'comic',
   'magazine',
+  'manga',
   'author',
   'software',
 ] as const;
@@ -63,7 +64,8 @@ export type DetailDisclosurePin =
   | 'mediaFilters'
   | 'sortBy';
 
-export type DetailDisclosureMediaType = 'movie' | 'tv' | 'music' | 'book';
+export type DetailDisclosureMediaType =
+  'movie' | 'tv' | 'music' | 'book' | 'manga';
 
 export interface UserSettingsDetailDisclosureResponse {
   details?: boolean;
@@ -103,6 +105,8 @@ export interface UserSettingsGeneralResponse {
   comicQuotaDays?: number;
   magazineQuotaLimit?: number;
   magazineQuotaDays?: number;
+  mangaQuotaLimit?: number;
+  mangaQuotaDays?: number;
   softwareQuotaLimit?: number;
   softwareQuotaDays?: number;
   globalMovieQuotaDays?: number;
@@ -117,6 +121,8 @@ export interface UserSettingsGeneralResponse {
   globalComicQuotaLimit?: number;
   globalMagazineQuotaDays?: number;
   globalMagazineQuotaLimit?: number;
+  globalMangaQuotaDays?: number;
+  globalMangaQuotaLimit?: number;
   globalSoftwareQuotaDays?: number;
   globalSoftwareQuotaLimit?: number;
   watchlistSyncMovies?: boolean;

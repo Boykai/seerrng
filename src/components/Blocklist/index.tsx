@@ -21,6 +21,7 @@ import PinnedFilterSection from '@app/components/Discover/PinnedFilterSection';
 import useDebouncedState from '@app/hooks/useDebouncedState';
 import useMediaFilterPin from '@app/hooks/useMediaFilterPin';
 import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
+import useSettings from '@app/hooks/useSettings';
 import useToasts from '@app/hooks/useToasts';
 import {
   getPositiveQueryParamNumber,
@@ -35,6 +36,8 @@ import {
 } from '@app/utils/apiPath';
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
+import { getMangaImageUrl } from '@app/utils/mangaImages';
+import { isConfiguredMediaCategoryEnabled } from '@app/utils/serviceAvailability';
 import {
   ArchiveBoxXMarkIcon,
   BarsArrowDownIcon,
@@ -49,6 +52,7 @@ import type {
 import type { BookDetails } from '@server/models/Book';
 import type { ComicDetails } from '@server/models/Comic';
 import type { MagazineDetails } from '@server/models/Magazine';
+import type { MangaDetails } from '@server/models/Manga';
 import type { MovieDetails } from '@server/models/Movie';
 import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
@@ -88,6 +92,7 @@ const messages = defineMessages('components.Blocklist', {
   firstPublished: 'First Published',
   runtime: 'Runtime',
   pages: 'Pages',
+  chapters: 'Chapters',
   issueCount: 'Issue Count',
   latestIssue: 'Latest Issue',
   genres: 'Genres',
@@ -127,10 +132,11 @@ type BlocklistTitle =
   | MusicDetails
   | BookDetails
   | ComicDetails
-  | MagazineDetails;
+  | MagazineDetails
+  | MangaDetails;
 type TimeFrame = 'all' | '7d' | '14d' | '30d' | '6m';
 type MediaFilter =
-  'all' | 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine';
+  'all' | 'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'manga';
 type LinkedDetailValue = {
   name: string;
   href?: string;
@@ -141,7 +147,7 @@ type LinkedDetail = {
 };
 type GenreLink = {
   name: string;
-  href: string;
+  href?: string;
 };
 
 const isMusic = (title: BlocklistTitle): title is MusicDetails =>
@@ -156,11 +162,15 @@ const isComic = (title: BlocklistTitle): title is ComicDetails =>
 const isMagazine = (title: BlocklistTitle): title is MagazineDetails =>
   (title as MagazineDetails).mediaType === 'magazine';
 
+const isManga = (title: BlocklistTitle): title is MangaDetails =>
+  (title as MangaDetails).mediaType === 'manga';
+
 const isMovie = (title: BlocklistTitle): title is MovieDetails =>
   !isMusic(title) &&
   !isBook(title) &&
   !isComic(title) &&
   !isMagazine(title) &&
+  !isManga(title) &&
   'releaseDate' in title;
 
 const getTitle = (title: BlocklistTitle): string =>
@@ -168,7 +178,8 @@ const getTitle = (title: BlocklistTitle): string =>
   isMusic(title) ||
   isBook(title) ||
   isComic(title) ||
-  isMagazine(title)
+  isMagazine(title) ||
+  isManga(title)
     ? title.title
     : title.name;
 
@@ -183,7 +194,9 @@ const getYear = (title: BlocklistTitle): string | undefined => {
           ? title.startYear
           : isMagazine(title)
             ? title.latestIssue
-            : title.firstAirDate;
+            : isManga(title)
+              ? title.startYear?.toString()
+              : title.firstAirDate;
   return value?.slice(0, 4);
 };
 
@@ -193,6 +206,9 @@ const getRuntime = (title: BlocklistTitle, unavailable: string): string => {
   }
   if (isComic(title) || isMagazine(title)) {
     return title.issueCount?.toLocaleString() ?? unavailable;
+  }
+  if (isManga(title)) {
+    return title.chapters?.toLocaleString() ?? unavailable;
   }
   const minutes = isMovie(title)
     ? title.runtime
@@ -226,6 +242,9 @@ const getGenres = (title: BlocklistTitle): GenreLink[] => {
   }
   if (isComic(title) || isMagazine(title)) {
     return [];
+  }
+  if (isManga(title)) {
+    return title.genres.slice(0, 3).map((genre) => ({ name: genre }));
   }
   return title.genres.slice(0, 3).map((genre) => ({
     name: genre.name,
@@ -289,6 +308,29 @@ const getSecondaryDetails = (
       {
         label: intl.formatMessage(messages.issueCount),
         values: [{ name: title.issueCount?.toLocaleString() ?? unavailable }],
+      },
+    ];
+  }
+  if (isManga(title)) {
+    return [
+      {
+        label: intl.formatMessage(messages.author),
+        values: [
+          {
+            name:
+              title.story.map((credit) => credit.name).join(', ') ||
+              unavailable,
+          },
+        ],
+      },
+      {
+        label: intl.formatMessage(messages.artist),
+        values: [
+          {
+            name:
+              title.art.map((credit) => credit.name).join(', ') || unavailable,
+          },
+        ],
       },
     ];
   }
@@ -365,10 +407,17 @@ const Blocklist = () => {
   const [currentFilter, setCurrentFilter] = useState<Filter>(Filter.ALL);
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('all');
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
+  const { currentSettings } = useSettings();
+  const mangaEnabled = isConfiguredMediaCategoryEnabled(
+    'manga',
+    currentSettings
+  );
   const mediaPin = useMediaFilterPin<MediaFilter>({
     scope: 'blocklist',
     selected: mediaFilter,
-    values: ['all', 'movie', 'tv', 'music', 'book'],
+    values: mangaEnabled
+      ? ['all', 'movie', 'tv', 'music', 'book', 'manga']
+      : ['all', 'movie', 'tv', 'music', 'book'],
     restore: setMediaFilter,
   });
   const [sort, setSort] = useState<'date' | 'title' | 'mediaType'>('date');
@@ -527,6 +576,9 @@ const Blocklist = () => {
               ['book', messages.books],
               ['comic', messages.comics],
               ['magazine', messages.magazines],
+              ...(mangaEnabled
+                ? ([['manga', globalMessages.manga]] as const)
+                : []),
             ] as const
           ).map(([value, label]) => (
             <MediaFilterOption
@@ -673,7 +725,7 @@ const BlocklistedItem = ({ item, revalidateList }: BlocklistedItemProps) => {
   const { hasPermission } = useUser();
   const externalTitleId =
     item.externalId &&
-    ['music', 'book', 'comic', 'magazine'].includes(item.mediaType)
+    ['music', 'book', 'comic', 'magazine', 'manga'].includes(item.mediaType)
       ? normalizeExternalTitleId(item.mediaType, item.externalId)
       : item.externalId;
   const url =
@@ -689,7 +741,9 @@ const BlocklistedItem = ({ item, revalidateList }: BlocklistedItemProps) => {
               ? `/api/v1/comic/${encodeApiPathSegment(externalTitleId)}`
               : item.mediaType === 'magazine' && externalTitleId
                 ? `/api/v1/magazine/${encodeApiPathSegment(externalTitleId)}`
-                : null;
+                : item.mediaType === 'manga' && externalTitleId
+                  ? `/api/v1/manga/${encodeApiPathSegment(externalTitleId)}`
+                  : null;
   const mediaHref =
     item.mediaType === 'movie'
       ? `/movie/${item.tmdbId}`
@@ -703,7 +757,9 @@ const BlocklistedItem = ({ item, revalidateList }: BlocklistedItemProps) => {
               ? `/comic/${encodeApiPathSegment(externalTitleId)}`
               : item.mediaType === 'magazine' && externalTitleId
                 ? `/magazine/${encodeApiPathSegment(externalTitleId)}`
-                : '/';
+                : item.mediaType === 'manga' && externalTitleId
+                  ? `/manga/${encodeApiPathSegment(externalTitleId)}`
+                  : '/';
   const { data: title, error } = useSWR<BlocklistTitle>(inView ? url : null);
 
   if (!title && !error) {
@@ -722,11 +778,13 @@ const BlocklistedItem = ({ item, revalidateList }: BlocklistedItemProps) => {
   const unavailable = intl.formatMessage(messages.unavailable);
   const posterPath = title?.posterPath;
   const posterSrc =
-    title && (isBook(title) || isMusic(title) || isComic(title))
-      ? posterPath
-      : posterPath
-        ? getTmdbPosterImageUrl(posterPath)
-        : undefined;
+    title && isManga(title)
+      ? getMangaImageUrl(title.posterPath)
+      : title && (isBook(title) || isMusic(title) || isComic(title))
+        ? posterPath
+        : posterPath
+          ? getTmdbPosterImageUrl(posterPath)
+          : undefined;
   const posterType =
     title && isBook(title)
       ? 'book'
@@ -740,9 +798,11 @@ const BlocklistedItem = ({ item, revalidateList }: BlocklistedItemProps) => {
         ? title.posterPath
         : isComic(title) || isMagazine(title)
           ? title.posterPath
-          : title.backdropPath
-            ? `https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${title.backdropPath}`
-            : posterSrc
+          : isManga(title)
+            ? (getMangaImageUrl(title.backdropPath) ?? posterSrc)
+            : title.backdropPath
+              ? `https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${title.backdropPath}`
+              : posterSrc
     : undefined;
   const backdropType =
     title && isBook(title)
@@ -763,7 +823,9 @@ const BlocklistedItem = ({ item, revalidateList }: BlocklistedItemProps) => {
             ? title.startYear
             : isMagazine(title)
               ? title.latestIssue
-              : title.firstAirDate
+              : isManga(title)
+                ? title.startDate
+                : title.firstAirDate
     : undefined;
 
   const removeFromBlocklist = async () => {
@@ -774,7 +836,8 @@ const BlocklistedItem = ({ item, revalidateList }: BlocklistedItemProps) => {
           item.mediaType === 'music' ||
           item.mediaType === 'book' ||
           item.mediaType === 'comic' ||
-          item.mediaType === 'magazine'
+          item.mediaType === 'magazine' ||
+          item.mediaType === 'manga'
             ? encodeApiPathSegment(externalTitleId ?? '')
             : item.tmdbId
         }?mediaType=${item.mediaType}`
@@ -865,13 +928,15 @@ const BlocklistedItem = ({ item, revalidateList }: BlocklistedItemProps) => {
                           ? 'Comic'
                           : item.mediaType === 'magazine'
                             ? 'Magazine'
-                            : item.mediaType === 'movie'
-                              ? 'Movie'
-                              : item.mediaType}
+                            : item.mediaType === 'manga'
+                              ? intl.formatMessage(globalMessages.manga)
+                              : item.mediaType === 'movie'
+                                ? 'Movie'
+                                : item.mediaType}
                 </dd>
                 <dt className="card:col-start-1 card:row-start-2 font-medium text-gray-100">
                   {intl.formatMessage(
-                    title && isBook(title)
+                    title && (isBook(title) || isManga(title))
                       ? messages.firstPublished
                       : title && isMagazine(title)
                         ? messages.latestIssue
@@ -888,7 +953,9 @@ const BlocklistedItem = ({ item, revalidateList }: BlocklistedItemProps) => {
                       ? messages.issueCount
                       : title && isBook(title)
                         ? messages.pages
-                        : messages.runtime
+                        : title && isManga(title)
+                          ? messages.chapters
+                          : messages.runtime
                   )}
                   :
                 </dt>
@@ -927,14 +994,18 @@ const BlocklistedItem = ({ item, revalidateList }: BlocklistedItemProps) => {
                 <dd className="card:col-span-3 card:col-start-3 card:row-start-4 m-0 line-clamp-2 min-w-0 break-words">
                   {genres.length > 0
                     ? genres.map((genre, index) => (
-                        <span key={`${genre.href}-${genre.name}`}>
+                        <span key={`${genre.href ?? ''}-${genre.name}`}>
                           {index > 0 && ', '}
-                          <Link
-                            href={genre.href}
-                            className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                          >
-                            {genre.name}
-                          </Link>
+                          {genre.href ? (
+                            <Link
+                              href={genre.href}
+                              className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                            >
+                              {genre.name}
+                            </Link>
+                          ) : (
+                            genre.name
+                          )}
                         </span>
                       ))
                     : unavailable}

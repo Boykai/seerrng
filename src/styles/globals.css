@@ -1740,6 +1740,39 @@
     padding-top: var(--card-spacing);
   }
 
+  .request-download-copy-panel {
+    /* Its own line at the end of the action row, inside the card, which clips
+       anything that floats. */
+    order: 1;
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .request-download-copy-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+    gap: var(--card-spacing);
+    /* About ten single-line rows before scrolling. */
+    max-height: calc(10 * 1.25rem + 9 * var(--card-spacing));
+    margin-top: var(--card-spacing);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .request-download-copy-list > li {
+    min-width: 0;
+  }
+
+  .request-download-copy-link {
+    @apply block text-xs leading-5 text-indigo-300 hover:text-indigo-200 focus:ring-2 focus:ring-indigo-400 focus:outline-none focus:ring-inset;
+    overflow-wrap: anywhere;
+  }
+
+  .request-status-note {
+    @apply relative z-10 text-xs;
+    padding-top: var(--card-spacing);
+  }
+
   .app-control-standard-radius {
     border-radius: var(--control-corner-radius);
   }
@@ -3240,6 +3273,14 @@
     color: hsl(191 77% 75%);
   }
 
+  .poster-control.poster-control-type-manga {
+    border-color: color-mix(in srgb, var(--palette-orange) 90%, transparent);
+    background-color: hsl(
+      25 95% 10% / var(--poster-control-background-opacity)
+    );
+    color: hsl(25 95% 77%);
+  }
+
   .app-button-media-type-movie,
   .app-button-media-type-collection {
     border-color: color-mix(in srgb, var(--palette-blue) 90%, transparent);
@@ -3281,6 +3322,12 @@
     border-color: color-mix(in srgb, var(--palette-aqua) 90%, transparent);
     background-color: hsl(191 77% 10% / 0.35);
     color: hsl(191 77% 75%);
+  }
+
+  .app-button-media-type-manga {
+    border-color: color-mix(in srgb, var(--palette-orange) 90%, transparent);
+    background-color: hsl(25 95% 10% / 0.35);
+    color: hsl(25 95% 77%);
   }
 
   .poster-control.poster-control-available {
@@ -4175,6 +4222,104 @@
     padding-left: 5px;
   }
 
+  .settings-manga-sources-table .app-data-table-heading,
+  .settings-manga-sources-table .app-data-table-cell,
+  .settings-manga-library-table .app-data-table-heading,
+  .settings-manga-library-table .app-data-table-cell {
+    padding-right: 5px;
+    padding-left: 5px;
+  }
+
+  .settings-manga-library-match-column {
+    width: 11rem;
+  }
+
+  .settings-manga-library-status-column {
+    width: 8rem;
+  }
+
+  .settings-manga-library-candidate-actions-column {
+    width: 20rem;
+  }
+
+  .settings-manga-library-binding-actions-column {
+    width: 14rem;
+  }
+
+  .settings-manga-sources-stack,
+  .settings-manga-library-stack {
+    @apply flex flex-col items-start;
+    gap: 5px;
+  }
+
+  .request-manga-source-link,
+  .settings-manga-sources-link,
+  .settings-manga-library-link {
+    @apply text-indigo-300 transition duration-300 hover:text-indigo-200 hover:underline;
+  }
+
+  .settings-manga-sources-status-column {
+    width: 14rem;
+  }
+
+  .settings-manga-sources-check-column {
+    width: 9rem;
+  }
+
+  .settings-manga-sources-actions-column {
+    width: 13rem;
+  }
+
+  .settings-manga-sources-title {
+    @apply flex min-w-0 items-center;
+    gap: 5px;
+  }
+
+  .settings-manga-sources-title-body {
+    @apply flex min-w-0 flex-col items-start;
+    gap: 5px;
+    overflow-wrap: anywhere;
+  }
+
+  .settings-manga-sources-cover {
+    @apply relative flex-none overflow-hidden rounded;
+    width: 1.75rem;
+    height: 2.625rem;
+  }
+
+  .settings-manga-sources-cover img {
+    object-fit: cover;
+  }
+
+  .settings-manga-sources-badges {
+    @apply flex flex-wrap items-center;
+    gap: 5px;
+  }
+
+  .settings-manga-sources-list {
+    @apply m-0 grid min-w-0 list-none grid-cols-1 p-0;
+    margin-top: 5px;
+    gap: 5px;
+  }
+
+  .settings-manga-sources-item {
+    @apply flex min-w-0 flex-wrap items-start justify-between;
+    gap: 5px;
+  }
+
+  .settings-manga-sources-item-body {
+    @apply min-w-0 flex-1;
+  }
+
+  .settings-manga-sources-item-title {
+    @apply block text-sm leading-5 font-semibold break-words;
+    color: rgb(var(--theme-heading-text));
+  }
+
+  .settings-manga-sources-confirm {
+    margin-top: 5px;
+  }
+
   .app-data-table {
     @apply w-full min-w-[52rem] table-fixed text-xs;
   }
@@ -4753,7 +4898,12 @@
     --john-accent-dark: var(--palette-blue-dark, #002b70);
   }
 
-  :root[data-theme-preset='john-redesign'] :is(.app-button-trailer) {
+  :root[data-theme-preset='john-redesign']
+    :is(
+      .app-button-trailer,
+      .poster-control-type-manga,
+      .app-button-media-type-manga
+    ) {
     --john-accent: var(--palette-orange, #f97316);
     --john-accent-light: var(--palette-orange-light, #fb923c);
     --john-accent-dark: var(--palette-orange-dark, #c2410c);
@@ -4791,6 +4941,7 @@
       .poster-control-book-format,
       .poster-control-type-comic,
       .poster-control-type-magazine,
+      .poster-control-type-manga,
       .poster-control-available,
       .poster-control-pending,
       .poster-control-processing,
@@ -4803,7 +4954,8 @@
       .app-button-media-type-artist,
       .app-button-media-type-book,
       .app-button-media-type-comic,
-      .app-button-media-type-magazine
+      .app-button-media-type-magazine,
+      .app-button-media-type-manga
     ) {
     border-color: color-mix(in srgb, var(--john-accent) 90%, transparent);
     background-color: color-mix(
@@ -4839,6 +4991,7 @@
       .poster-control-book-format,
       .poster-control-type-comic,
       .poster-control-type-magazine,
+      .poster-control-type-manga,
       .poster-control-available,
       .poster-control-pending,
       .poster-control-processing,
@@ -4851,7 +5004,8 @@
       .app-button-media-type-artist,
       .app-button-media-type-book,
       .app-button-media-type-comic,
-      .app-button-media-type-magazine
+      .app-button-media-type-magazine,
+      .app-button-media-type-manga
     ):hover {
     border-color: color-mix(in srgb, var(--john-accent) 65%, white);
     background-color: color-mix(in srgb, var(--john-accent) 70%, transparent);
@@ -4883,6 +5037,7 @@
       .poster-control-book-format,
       .poster-control-type-comic,
       .poster-control-type-magazine,
+      .poster-control-type-manga,
       .poster-control-available,
       .poster-control-pending,
       .poster-control-processing,
@@ -4895,7 +5050,8 @@
       .app-button-media-type-artist,
       .app-button-media-type-book,
       .app-button-media-type-comic,
-      .app-button-media-type-magazine
+      .app-button-media-type-magazine,
+      .app-button-media-type-manga
     ):focus {
     border-color: color-mix(in srgb, var(--john-accent) 65%, white);
     --tw-ring-color: var(--john-accent);
@@ -4926,6 +5082,7 @@
       .poster-control-book-format,
       .poster-control-type-comic,
       .poster-control-type-magazine,
+      .poster-control-type-manga,
       .poster-control-available,
       .poster-control-pending,
       .poster-control-processing,
@@ -4938,7 +5095,8 @@
       .app-button-media-type-artist,
       .app-button-media-type-book,
       .app-button-media-type-comic,
-      .app-button-media-type-magazine
+      .app-button-media-type-magazine,
+      .app-button-media-type-manga
     ):active {
     border-color: color-mix(in srgb, var(--john-accent) 80%, white);
     background-color: color-mix(in srgb, var(--john-accent) 85%, transparent);

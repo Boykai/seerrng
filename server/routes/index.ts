@@ -5,7 +5,7 @@ import type {
   TmdbMovieResult,
   TmdbTvResult,
 } from '@server/api/themoviedb/interfaces';
-import type { MediaCategoryKey } from '@server/constants/mediaCategories';
+import type { MediaAvailabilityCategoryKey } from '@server/constants/mediaCategories';
 import dataSource, { getRepository } from '@server/datasource';
 import DiscoverSlider from '@server/entity/DiscoverSlider';
 import { User } from '@server/entity/User';
@@ -69,6 +69,9 @@ import indexerSearchRoutes from './indexerSearch';
 import issueRoutes from './issue';
 import issueCommentRoutes from './issueComment';
 import magazineRoutes from './magazine';
+import mangaRoutes, { mangaDiscoverRoutes } from './manga';
+import mangaLibraryRoutes from './mangaLibrary';
+import mangaResolveRoutes from './mangaResolve';
 import mediaRoutes from './media';
 import movieRoutes from './movie';
 import musicRoutes from './music';
@@ -89,9 +92,10 @@ const maxTmdbId = 1_000_000_000;
 const MAX_PUSHOVER_TOKEN_LENGTH = 256;
 const MAX_WATCH_REGION_LENGTH = 16;
 
-const categoryAvailabilityGuard =
+// Exported so later category-gated route groups reuse the same 404 behavior.
+export const categoryAvailabilityGuard =
   (
-    categories: readonly MediaCategoryKey[],
+    categories: readonly MediaAvailabilityCategoryKey[],
     mode: 'all' | 'any' = 'all'
   ): RequestHandler =>
   (_req, res, next) => {
@@ -439,6 +443,14 @@ router.use(
   indexerSearchRoutes
 );
 router.use('/search', isAuthenticated(), searchRoutes);
+// Mounted ahead of /discover so the manga category guard owns this subtree.
+router.use(
+  '/discover/manga',
+  isAuthenticated(),
+  categoryAvailabilityGuard(['manga']),
+  externalMetadataRateLimit,
+  mangaDiscoverRoutes
+);
 router.use('/discover', isAuthenticated(), discoverRoutes);
 router.use('/request', isAuthenticated(), requestRoutes);
 router.use('/request/software', softwareRoutes);
@@ -507,6 +519,27 @@ router.use(
   categoryAvailabilityGuard(['magazine']),
   externalMetadataRateLimit,
   magazineRoutes
+);
+// Mounted ahead of /manga: admin-only, and it calls no metadata service.
+router.use(
+  '/manga/library',
+  isAuthenticated(Permission.ADMIN),
+  categoryAvailabilityGuard(['manga']),
+  mangaLibraryRoutes
+);
+// Mounted ahead of /manga: admin-only; its searches run in the resolver job.
+router.use(
+  '/manga/resolve',
+  isAuthenticated(Permission.ADMIN),
+  categoryAvailabilityGuard(['manga']),
+  mangaResolveRoutes
+);
+router.use(
+  '/manga',
+  isAuthenticated(),
+  categoryAvailabilityGuard(['manga']),
+  externalMetadataRateLimit,
+  mangaRoutes
 );
 router.use(
   '/artist',

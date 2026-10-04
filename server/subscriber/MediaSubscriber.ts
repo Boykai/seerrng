@@ -85,6 +85,12 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
     event: Media,
     is4k: boolean
   ) {
+    if (event.mediaType === MediaType.MANGA) {
+      // Availability never approves a manga request: approval is an admin's
+      // or an auto-approve decision.
+      return;
+    }
+
     const requestRepository = manager.getRepository(MediaRequest);
 
     await this.forEachRequestBatch(
@@ -96,6 +102,10 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
       },
       async (requests) => {
         for (const request of requests) {
+          // A partial event may omit the media type.
+          if (request.type === MediaType.MANGA) {
+            continue;
+          }
           if (
             event.mediaType !== MediaType.BOOK ||
             this.isBookRequestSatisfied(event, request)
@@ -114,6 +124,13 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
     databaseEvent: Media,
     is4k: boolean
   ) {
+    if (event.mediaType === MediaType.MANGA) {
+      // A manga request completes when its own chapters are delivered
+      // (`completeMangaRequest` in mangaProgress), never from the title's
+      // library status.
+      return;
+    }
+
     const requestRepository = manager.getRepository(MediaRequest);
     const seasonRequestRepository = manager.getRepository(SeasonRequest);
 

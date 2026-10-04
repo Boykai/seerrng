@@ -636,9 +636,65 @@ describe('GET /media', () => {
       settings.main.enabledMediaCategories = originalCategories;
     }
   });
+
+  for (const disabled of [undefined, 'movie'] as const) {
+    it(`keeps manga out of unfiltered listings with ${disabled ?? 'no'} category disabled`, async () => {
+      const settings = getSettings();
+      const originalCategories = { ...settings.main.enabledMediaCategories };
+      settings.main.enabledMediaCategories = {
+        ...originalCategories,
+        manga: true,
+        ...(disabled ? { [disabled]: false } : {}),
+      };
+      const [manga, movie, tv] = await getRepository(Media).save(
+        [MediaType.MANGA, MediaType.MOVIE, MediaType.TV].map(
+          (mediaType, index) =>
+            new Media({
+              tmdbId: mediaType === MediaType.MANGA ? 0 : 880 + index,
+              mediaType,
+              status: MediaStatus.AVAILABLE,
+              mediaAddedAt: new Date(`2026-03-0${index + 1}T00:00:00.000Z`),
+            })
+        )
+      );
+
+      try {
+        const agent = await loginAs('admin@seerr.dev', 'test1234');
+        const res = await agent.get(
+          '/media?filter=allavailable&sort=mediaAdded'
+        );
+
+        assert.strictEqual(res.status, 200);
+        const ids = res.body.results.map((item: { id: number }) => item.id);
+        assert.ok(!ids.includes(manga.id));
+        assert.strictEqual(ids.includes(movie.id), disabled === undefined);
+        assert.ok(ids.includes(tv.id));
+      } finally {
+        settings.main.enabledMediaCategories = originalCategories;
+      }
+    });
+  }
 });
 
 describe('GET /media/:id/watch_data', () => {
+  it('hides manga media while the manga category is off by default', async () => {
+    const media = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.AVAILABLE,
+      })
+    );
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const response = await agent.get(`/media/${media.id}/watch_data`);
+
+    assert.strictEqual(response.status, 404);
+    assert.match(response.body.message, /Media does not exist/);
+    assert.strictEqual(getMediaWatchStatsMock.mock.callCount(), 0);
+    assert.strictEqual(getMediaWatchUsersMock.mock.callCount(), 0);
+  });
+
   it('hides media from an administrator-disabled category', async () => {
     const settings = getSettings();
     const originalCategories = { ...settings.main.enabledMediaCategories };

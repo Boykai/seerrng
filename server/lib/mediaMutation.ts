@@ -26,6 +26,12 @@ export const getMediaAdmissionResources = (media: Media): string[] => {
         `request-canonical:comic:${identifier.provider}:${identifier.value}`
     );
   }
+  if (media.mediaType === MediaType.MANGA) {
+    return (media.identifiers ?? []).map(
+      (identifier) =>
+        `request-canonical:manga:${identifier.provider}:${identifier.value}`
+    );
+  }
   if (
     (media.mediaType === MediaType.MOVIE || media.mediaType === MediaType.TV) &&
     Number.isSafeInteger(media.tmdbId) &&

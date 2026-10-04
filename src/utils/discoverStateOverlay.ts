@@ -24,10 +24,16 @@ const getStateMediaType = (mediaType: string): MediaType | undefined => {
       return MediaType.MUSIC;
     case 'book':
       return MediaType.BOOK;
+    case 'manga':
+      return MediaType.MANGA;
     default:
       return undefined;
   }
 };
+
+// The state route accepts manga by its canonical AniList id string.
+const getStateId = (mediaType: MediaType, id: number | string) =>
+  mediaType === MediaType.MANGA ? String(id) : id;
 
 export const getDiscoverStateInputs = (pages: CatalogPage[]) => {
   const inputs = new Map<
@@ -44,7 +50,7 @@ export const getDiscoverStateInputs = (pages: CatalogPage[]) => {
       }
 
       const key = `${mediaType}:${item.id}`;
-      inputs.set(key, { mediaType, id: item.id });
+      inputs.set(key, { mediaType, id: getStateId(mediaType, item.id) });
 
       if (inputs.size === 100) {
         return [...inputs.values()];

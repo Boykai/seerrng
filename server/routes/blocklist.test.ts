@@ -243,6 +243,174 @@ describe('POST /blocklist', () => {
     assert.strictEqual(await getRepository(Blocklist).count(), 0);
   });
 
+  it('creates, finds, and removes manga entries by canonical AniList id', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const created = await agent.post('/blocklist').send({
+      mediaType: MediaType.MANGA,
+      externalId: ' 0030013 ',
+      externalProvider: MediaIdentifierProvider.ANILIST,
+      title: 'Manga Series',
+    });
+    const duplicate = await agent.post('/blocklist').send({
+      mediaType: MediaType.MANGA,
+      externalId: '30013',
+      title: 'Manga Series',
+    });
+
+    assert.strictEqual(created.status, 201);
+    assert.strictEqual(duplicate.status, 412);
+
+    const list = await agent
+      .get('/blocklist')
+      .query({ mediaType: MediaType.MANGA });
+    const detail = await agent
+      .get('/blocklist/030013')
+      .query({ mediaType: MediaType.MANGA });
+    assert.strictEqual(list.status, 200);
+    assert.deepStrictEqual(
+      list.body.results.map((item: Blocklist) => item.title),
+      ['Manga Series']
+    );
+    assert.strictEqual(detail.status, 200);
+    assert.strictEqual(detail.body.externalId, '30013');
+    assert.strictEqual(detail.body.externalProvider, 'anilist');
+
+    const saved = await getRepository(Blocklist).findOneOrFail({
+      where: { mediaType: MediaType.MANGA, externalId: '30013' },
+      relations: { media: { identifiers: true } },
+    });
+    assert.strictEqual(saved.isMediaPlaceholder, true);
+    assert.strictEqual(saved.media.mediaType, MediaType.MANGA);
+    assert.strictEqual(saved.media.status, MediaStatus.BLOCKLISTED);
+    assert.deepStrictEqual(
+      saved.media.identifiers.map(({ provider, value, canonical }) => ({
+        provider,
+        value,
+        canonical,
+      })),
+      [
+        {
+          provider: MediaIdentifierProvider.ANILIST,
+          value: '30013',
+          canonical: true,
+        },
+      ]
+    );
+
+    const removed = await agent
+      .delete('/blocklist/30013')
+      .query({ mediaType: MediaType.MANGA });
+    assert.strictEqual(removed.status, 204);
+    assert.strictEqual(await getRepository(Blocklist).count(), 0);
+    assert.strictEqual(await getRepository(Media).count(), 0);
+    assert.strictEqual(await getRepository(MediaIdentifier).count(), 0);
+  });
+
+  it('rejects malformed manga identities before persistence', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const malformedIdentities = [
+      { externalId: 'abc' },
+      { externalId: '0' },
+      { externalId: '1000000001' },
+      {},
+      { externalId: '30013', tmdbId: 30013 },
+      {
+        externalId: '30013',
+        externalProvider: MediaIdentifierProvider.COMICVINE,
+      },
+    ];
+
+    // One request at a time: supertest closes the agent's server when the
+    // request that started it finishes, which can reset concurrent requests.
+    for (const identity of malformedIdentities) {
+      const response = await agent
+        .post('/blocklist')
+        .send({ mediaType: MediaType.MANGA, ...identity });
+      assert.strictEqual(response.status, 400, JSON.stringify(identity));
+      assert.strictEqual(response.body.message, 'Invalid manga identity.');
+    }
+    assert.strictEqual(await getRepository(Blocklist).count(), 0);
+    assert.strictEqual(await getRepository(Media).count(), 0);
+    await assert.rejects(
+      Blocklist.addToBlocklist({
+        blocklistRequest: { mediaType: MediaType.MANGA, externalId: 'abc' },
+      }),
+      /identity is invalid/
+    );
+  });
+
+  it('links an existing manga media row through its AniList identifier', async () => {
+    const media = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.UNKNOWN,
+        status4k: MediaStatus.UNKNOWN,
+        identifiers: [
+          new MediaIdentifier({
+            provider: MediaIdentifierProvider.ANILIST,
+            value: '30013',
+            canonical: true,
+          }),
+        ],
+      })
+    );
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/blocklist').send({
+      mediaType: MediaType.MANGA,
+      externalId: '30013',
+      title: 'Existing Manga',
+    });
+
+    assert.strictEqual(res.status, 201);
+    const savedMedia = await getRepository(Media).findOneOrFail({
+      where: { id: media.id },
+      relations: { blocklist: true },
+    });
+    const blocklist = await savedMedia.blocklist;
+    assert.strictEqual(savedMedia.status, MediaStatus.BLOCKLISTED);
+    assert.strictEqual(blocklist.externalId, '30013');
+    assert.strictEqual(blocklist.isMediaPlaceholder, false);
+    assert.strictEqual(await getRepository(Media).count(), 1);
+    assert.strictEqual(await getRepository(MediaIdentifier).count(), 1);
+  });
+
+  it('refuses an AniList id that already belongs to media of another type', async () => {
+    await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.BOOK,
+        status: MediaStatus.UNKNOWN,
+        status4k: MediaStatus.UNKNOWN,
+        identifiers: [
+          new MediaIdentifier({
+            provider: MediaIdentifierProvider.ANILIST,
+            value: '30013',
+            canonical: false,
+          }),
+        ],
+      })
+    );
+
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/blocklist').send({
+      mediaType: MediaType.MANGA,
+      externalId: '30013',
+      title: 'Conflicting Manga',
+    });
+
+    assert.strictEqual(res.status, 409);
+    assert.strictEqual(await getRepository(Blocklist).count(), 0);
+    assert.strictEqual(await getRepository(Media).count(), 1);
+    assert.strictEqual(
+      await getRepository(MediaIdentifier).countBy({
+        provider: MediaIdentifierProvider.ANILIST,
+      }),
+      1
+    );
+  });
+
   it('rejects oversized external blocklist identifiers', async () => {
     const agent = await loginAs('admin@seerr.dev', 'test1234');
     const res = await agent.post('/blocklist').send({

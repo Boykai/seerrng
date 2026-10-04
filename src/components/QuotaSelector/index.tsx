@@ -15,6 +15,8 @@ const messages = defineMessages('components.QuotaSelector', {
     '{quotaLimit} <quotaUnits>{comics} per {quotaDays} {days}</quotaUnits>',
   magazineRequests:
     '{quotaLimit} <quotaUnits>{magazines} per {quotaDays} {days}</quotaUnits>',
+  mangaRequests:
+    '{quotaLimit} <quotaUnits>{manga} per {quotaDays} {days}</quotaUnits>',
   softwareRequests:
     '{quotaLimit} <quotaUnits>{software} per {quotaDays} {days}</quotaUnits>',
   movies: '{count, plural, one {movie} other {movies}}',
@@ -23,6 +25,7 @@ const messages = defineMessages('components.QuotaSelector', {
   books: '{count, plural, one {book} other {books}}',
   comics: '{count, plural, one {comic} other {comics}}',
   magazines: '{count, plural, one {magazine} other {magazines}}',
+  manga: '{count, plural, one {manga} other {manga}}',
   software: '{count, plural, one {software request} other {software requests}}',
   days: '{count, plural, one {day} other {days}}',
   unlimited: 'Unlimited',
@@ -30,7 +33,14 @@ const messages = defineMessages('components.QuotaSelector', {
 
 interface QuotaSelectorProps {
   mediaType:
-    'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'software';
+    | 'movie'
+    | 'tv'
+    | 'music'
+    | 'book'
+    | 'comic'
+    | 'magazine'
+    | 'manga'
+    | 'software';
   defaultDays?: number;
   defaultLimit?: number;
   dayOverride?: number;
@@ -38,6 +48,8 @@ interface QuotaSelectorProps {
   dayFieldName: string;
   limitFieldName: string;
   isDisabled?: boolean;
+  /** Names both selects after the row's visible label with this id. */
+  labelId?: string;
   onChange: (fieldName: string, value: number) => void;
 }
 
@@ -50,6 +62,7 @@ const QuotaSelector = ({
   dayOverride,
   limitOverride,
   isDisabled = false,
+  labelId,
   onChange,
 }: QuotaSelectorProps) => {
   const initialDays = defaultDays ?? 7;
@@ -57,6 +70,7 @@ const QuotaSelector = ({
   const [quotaDays, setQuotaDays] = useState(initialDays);
   const [quotaLimit, setQuotaLimit] = useState(initialLimit);
   const intl = useIntl();
+  const daysText = intl.formatMessage(messages.days, { count: quotaDays });
 
   useEffect(() => {
     onChange(dayFieldName, quotaDays);
@@ -81,10 +95,14 @@ const QuotaSelector = ({
                   ? messages.softwareRequests
                   : mediaType === 'magazine'
                     ? messages.magazineRequests
-                    : messages.tvRequests,
+                    : mediaType === 'manga'
+                      ? messages.mangaRequests
+                      : messages.tvRequests,
         {
           quotaLimit: (
             <select
+              id={labelId && `${labelId}-limit`}
+              aria-labelledby={labelId}
               className="short inline"
               value={limitOverride ?? quotaLimit}
               onChange={(e) => setQuotaLimit(Number(e.target.value))}
@@ -102,6 +120,7 @@ const QuotaSelector = ({
           ),
           quotaDays: (
             <select
+              aria-labelledby={labelId && `${labelId} ${labelId}-days`}
               className="short inline"
               value={dayOverride ?? quotaDays}
               onChange={(e) => setQuotaDays(Number(e.target.value))}
@@ -125,10 +144,15 @@ const QuotaSelector = ({
           magazines: intl.formatMessage(messages.magazines, {
             count: quotaLimit,
           }),
+          manga: intl.formatMessage(messages.manga, { count: quotaLimit }),
           software: intl.formatMessage(messages.software, {
             count: quotaLimit,
           }),
-          days: intl.formatMessage(messages.days, { count: quotaDays }),
+          days: labelId ? (
+            <span id={`${labelId}-days`}>{daysText}</span>
+          ) : (
+            daysText
+          ),
           quotaUnits: function quotaUnits(msg) {
             return (
               <span className={limitOverride || quotaLimit ? '' : 'hidden'}>

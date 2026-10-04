@@ -365,6 +365,7 @@ const detailDisclosureMediaTypes: DetailDisclosureMediaType[] = [
   'tv',
   'music',
   'book',
+  'manga',
 ];
 
 const isDetailDisclosureMediaType = (
@@ -675,6 +676,8 @@ const parseGeneralSettingsBody = (
     'comicQuotaDays',
     'magazineQuotaLimit',
     'magazineQuotaDays',
+    'mangaQuotaLimit',
+    'mangaQuotaDays',
     'softwareQuotaLimit',
     'softwareQuotaDays',
   ] as const) {
@@ -1080,6 +1083,8 @@ userSettingsRoutes.get<{ id: string }, UserSettingsGeneralResponse>(
             comicQuotaDays: user.comicQuotaDays,
             magazineQuotaLimit: user.magazineQuotaLimit,
             magazineQuotaDays: user.magazineQuotaDays,
+            mangaQuotaLimit: user.mangaQuotaLimit,
+            mangaQuotaDays: user.mangaQuotaDays,
             softwareQuotaLimit: user.softwareQuotaLimit,
             softwareQuotaDays: user.softwareQuotaDays,
             globalMovieQuotaDays: defaultQuotas.movie.quotaDays,
@@ -1094,6 +1099,8 @@ userSettingsRoutes.get<{ id: string }, UserSettingsGeneralResponse>(
             globalComicQuotaLimit: defaultQuotas.comic.quotaLimit,
             globalMagazineQuotaDays: defaultQuotas.magazine.quotaDays,
             globalMagazineQuotaLimit: defaultQuotas.magazine.quotaLimit,
+            globalMangaQuotaDays: defaultQuotas.manga.quotaDays,
+            globalMangaQuotaLimit: defaultQuotas.manga.quotaLimit,
             globalSoftwareQuotaDays: defaultQuotas.software.quotaDays,
             globalSoftwareQuotaLimit: defaultQuotas.software.quotaLimit,
             watchlistSyncMovies: user.settings?.watchlistSyncMovies,
@@ -1206,6 +1213,8 @@ userSettingsRoutes.post<
               'comicQuotaLimit',
               'magazineQuotaDays',
               'magazineQuotaLimit',
+              'mangaQuotaDays',
+              'mangaQuotaLimit',
               'softwareQuotaDays',
               'softwareQuotaLimit',
             ] as const) {
@@ -1422,6 +1431,9 @@ userSettingsRoutes.post<
               break;
             case 'book':
               nextPins.book = updatedPins;
+              break;
+            case 'manga':
+              nextPins.manga = updatedPins;
               break;
           }
           user.settings.detailDisclosurePins = nextPins;

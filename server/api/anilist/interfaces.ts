@@ -11,6 +11,8 @@ export type AnilistMediaFormat =
 
 export type AnilistMediaSeason = 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL';
 
+export type AnilistMediaType = 'ANIME' | 'MANGA';
+
 export type AnilistMediaListStatus =
   'CURRENT' | 'PLANNING' | 'COMPLETED' | 'DROPPED' | 'PAUSED' | 'REPEATING';
 

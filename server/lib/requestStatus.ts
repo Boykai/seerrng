@@ -1,10 +1,17 @@
 import {
+  MangaAttentionCode,
+  MangaDispatchError,
+  MangaRequestBindingState,
+  MangaRequestCheckpoint,
+} from '@server/constants/mangaRequest';
+import {
   MediaRequestStatus,
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import { BookRequestSearch } from '@server/entity/BookRequestSearch';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import {
   MediaRequest,
   type MediaRequestServiceTarget,
@@ -17,12 +24,18 @@ import type {
 } from '@server/lib/downloadtracker';
 import downloadTracker from '@server/lib/downloadtracker';
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
+import { MANGA_REQUEST_CHECKPOINTS } from '@server/lib/mangaRequests';
 import {
   getRequestedMusicSearchTime,
   reconcileRequestedMusicAvailability,
 } from '@server/lib/musicAvailability';
 import logger from '@server/logger';
-import type { EntityManager, Repository } from 'typeorm';
+import type {
+  EntityManager,
+  InsertQueryBuilder,
+  ObjectLiteral,
+  Repository,
+} from 'typeorm';
 import { In, MoreThan } from 'typeorm';
 import { isIncompleteRequestStatus } from './requestStatusIncomplete';
 import {
@@ -186,6 +199,22 @@ type StatusEventLike = Pick<
   | 'createdAt'
 >;
 
+/** The manifest fields a manga request's stage comes from; never Suwayomi. */
+export type MangaProgressLike = Pick<
+  MangaRequestManifest,
+  | 'instanceId'
+  | 'anilistId'
+  | 'bindingState'
+  | 'checkpoint'
+  | 'lastError'
+  | 'attentionCode'
+  | 'chaptersTotal'
+  | 'chaptersVerified'
+  | 'chaptersQueued'
+  | 'chaptersDownloading'
+  | 'chaptersErrored'
+>;
+
 type StatusOptions = {
   downloads?: DownloadingItem[];
   dispatchPending?: boolean;
@@ -194,6 +223,20 @@ type StatusOptions = {
   servarrHistory?: ServarrHistoryEvidence;
   resetTerminalOverride?: boolean;
   latestEvent?: StatusEventLike;
+  /** A manga request's manifest; null or absent when it has none. */
+  mangaProgress?: MangaProgressLike | null;
+};
+
+type StageResult = {
+  stage: RequestStatusStage;
+  queueFailure: boolean;
+  downloads: DownloadingItem[];
+  message?: string;
+  // Manga reads these from its manifest instead of the download queue.
+  percent?: number | null;
+  downloadCount?: number;
+  needsAttention?: boolean;
+  retryable?: boolean;
 };
 
 const ACTIVE_STAGES = [
@@ -273,7 +316,110 @@ const getMusicTarget = (
     : undefined;
 };
 
-const hasRequestedServiceLink = (request: RequestLike): boolean => {
+const MANGA_PARKED_MESSAGE =
+  "Downloads start once this title is matched on the connected manga service. You don't need to do anything.";
+
+/**
+ * One fixed message per dispatch error and attention code: what happened,
+ * whether SeerrNG tries again by itself, and what an administrator can do.
+ */
+const MANGA_CODE_MESSAGES: Readonly<Record<string, string>> = {
+  [MangaDispatchError.BINDING_MISSING]:
+    'This title has no active match on the connected manga service, or the service no longer has the matched manga. SeerrNG tries again by itself; an administrator can review the match under Settings → Manga Library.',
+  [MangaDispatchError.BINDING_UNCONFIRMED]:
+    'This title has no confirmed match on the connected manga service yet. SeerrNG tries again by itself; an administrator can confirm or choose a match under Settings → Manga Library.',
+  [MangaDispatchError.INSTANCE_MISSING]:
+    'The manga service this request was made for is no longer configured, or its settings are incomplete. SeerrNG tries again by itself; an administrator can check it under Settings → Services.',
+  [MangaDispatchError.INSTANCE_MISMATCH]:
+    'The connected manga service is marked as belonging to another SeerrNG server entry, so SeerrNG changes nothing on it. SeerrNG tries again by itself; an administrator can check the server address under Settings → Services.',
+  [MangaDispatchError.INSTANCE_CHANGED]:
+    "The manga service's address or login changed while this request was being sent. SeerrNG tries again by itself; no action is needed.",
+  [MangaDispatchError.SUWAYOMI_UNAVAILABLE]:
+    'The connected manga service could not be reached or did not answer in time. SeerrNG tries again by itself; an administrator can check that the service is running.',
+  [MangaDispatchError.SUWAYOMI_AUTH]:
+    "The connected manga service did not accept SeerrNG's login. SeerrNG tries again by itself; an administrator can update the login under Settings → Services.",
+  [MangaDispatchError.SUWAYOMI_UNSUPPORTED]:
+    'The connected manga service lacks a feature SeerrNG needs. SeerrNG tries again by itself; an administrator can update the service, then test it under Settings → Services.',
+  [MangaDispatchError.SUWAYOMI_ERROR]:
+    'The connected manga service sent an answer SeerrNG could not use. SeerrNG tries again by itself; an administrator can check the service logs.',
+  [MangaDispatchError.SOURCE_FETCH_FAILED]:
+    "The manga's source could not list its chapters. SeerrNG tries again by itself; no action is needed yet.",
+  [MangaDispatchError.SOURCE_UNAVAILABLE]:
+    "The manga's source failed to list its chapters several times in a row. SeerrNG tries again by itself, less often; an administrator can check the source on the connected manga service.",
+  [MangaDispatchError.NO_MATCHING_CHAPTERS]:
+    'No chapter on the connected manga service matches this request yet. SeerrNG checks again by itself every day; no action is needed.',
+  [MangaDispatchError.DISPATCH_ERROR]:
+    'An unexpected error interrupted this request. SeerrNG tries again by itself; an administrator can check the SeerrNG logs.',
+  [MangaAttentionCode.CHAPTER_ERROR]:
+    'The connected manga service could not download some chapters. SeerrNG does not retry them by itself; an administrator can check the service download queue, fix the cause, then retry here.',
+  [MangaAttentionCode.CHAPTER_NOT_QUEUED]:
+    'Some chapters are neither downloaded nor queued on the connected manga service. SeerrNG does not queue them again by itself; an administrator can retry here to queue them.',
+  [MangaAttentionCode.CHAPTER_MISSING]:
+    "The manga's source no longer lists some chapters of this request. SeerrNG keeps checking by itself; an administrator can check the source on the connected manga service.",
+  [MangaAttentionCode.CHAPTER_FILE_MISSING]:
+    'The connected manga service lists some chapters as downloaded, but their files are missing or empty. SeerrNG checks them again by itself; an administrator can delete those downloads on the service, then retry here once this request reports chapters that are not queued.',
+  [MangaAttentionCode.CHAPTER_LENGTH_UNKNOWN]:
+    'The connected manga service sent no file size for some downloaded chapters, so SeerrNG cannot confirm them. SeerrNG checks again by itself; an administrator can check whether a proxy in front of the service removes the Content-Length header.',
+  [MangaAttentionCode.NOT_IN_LIBRARY]:
+    "The manga left the connected manga service's library. SeerrNG does not add it back by itself; an administrator can add it to the library again on the service.",
+  [MangaAttentionCode.INSTANCE_REMOVED]:
+    'The manga service this request was sent to was removed from SeerrNG, so SeerrNG stopped checking its progress. An administrator can delete this request so the title can be requested again.',
+  [MangaAttentionCode.BINDING_ORPHANED]:
+    'The connected manga service no longer has the manga this request was sent to, or its match was rejected. SeerrNG keeps checking by itself; an administrator can review the match under Settings → Manga Library.',
+};
+
+const MANGA_ATTENTION_MESSAGE =
+  'This request needs an administrator. Check the connected manga service and the SeerrNG logs.';
+
+const getMangaCodeMessage = (code: string): string =>
+  MANGA_CODE_MESSAGES[code] ?? MANGA_ATTENTION_MESSAGE;
+
+const hasReachedMangaCheckpoint = (
+  progress: MangaProgressLike | null | undefined,
+  checkpoint: MangaRequestCheckpoint
+): boolean =>
+  !!progress?.checkpoint &&
+  MANGA_REQUEST_CHECKPOINTS.indexOf(progress.checkpoint) >=
+    MANGA_REQUEST_CHECKPOINTS.indexOf(checkpoint);
+
+/**
+ * Every chapter of the manifest has a verified file, and no attention code
+ * holds back its completion, which `completeMangaRequest` requires too.
+ */
+const isMangaProgressComplete = (
+  progress: MangaProgressLike | null | undefined
+): boolean =>
+  progress?.checkpoint === MangaRequestCheckpoint.CHAPTERS_ENQUEUED &&
+  progress.attentionCode == null &&
+  progress.chaptersTotal > 0 &&
+  progress.chaptersVerified >= progress.chaptersTotal;
+
+/**
+ * Whether an administrator's retry can queue an enqueued manga request's
+ * chapters again: some failed to download or dropped out of the queue, and
+ * no graver problem, such as a lost match, comes first.
+ */
+export const isMangaChapterRetryable = (
+  progress: Pick<MangaProgressLike, 'checkpoint' | 'attentionCode'>
+): boolean =>
+  progress.checkpoint === MangaRequestCheckpoint.CHAPTERS_ENQUEUED &&
+  (progress.attentionCode === MangaAttentionCode.CHAPTER_ERROR ||
+    progress.attentionCode === MangaAttentionCode.CHAPTER_NOT_QUEUED);
+
+const hasRequestedServiceLink = (
+  request: RequestLike,
+  mangaProgress?: MangaProgressLike | null
+): boolean => {
+  // A manga request reaches its service once dispatch added the manga to the
+  // Suwayomi library. Manga stages come from the manifest, before any branch
+  // that reads this.
+  if (request.type === MediaType.MANGA) {
+    return hasReachedMangaCheckpoint(
+      mangaProgress,
+      MangaRequestCheckpoint.LIBRARY_ADDED
+    );
+  }
+
   if (request.type === MediaType.BOOK) {
     if (request.bookFormat === 'audiobook') {
       return hasRequestedBookFormat(request.media, 'audiobook');
@@ -310,7 +456,19 @@ const getRequestedMediaStatus = (request: RequestLike): MediaStatus =>
         ? request.media.status4k
         : request.media.status;
 
-const isRequestSatisfied = (request: RequestLike): boolean => {
+const isRequestSatisfied = (
+  request: RequestLike,
+  mangaProgress?: MangaProgressLike | null
+): boolean => {
+  // A library-wide status says nothing about the chapters a manga request
+  // asked for; only their delivery or a completed request does.
+  if (request.type === MediaType.MANGA) {
+    return (
+      request.status === MediaRequestStatus.COMPLETED ||
+      isMangaProgressComplete(mangaProgress)
+    );
+  }
+
   const mediaStatus = getRequestedMediaStatus(request);
   if (isDeletedStatus(mediaStatus)) {
     return false;
@@ -451,7 +609,10 @@ const calculateDownloadMetrics = (downloads: DownloadingItem[]) => {
   };
 };
 
-const getDownloadItems = (request: RequestLike): DownloadingItem[] => {
+const getDownloadItems = (
+  request: RequestLike,
+  mangaProgress?: MangaProgressLike | null
+): DownloadingItem[] => {
   const media = request.media;
   if (request.type === MediaType.MOVIE) {
     return request.is4k &&
@@ -530,6 +691,17 @@ const getDownloadItems = (request: RequestLike): DownloadingItem[] => {
       ? downloadTracker.getComicProgress(
           media.serviceId,
           media.externalServiceId
+        )
+      : [];
+  }
+  if (request.type === MediaType.MANGA) {
+    // The progress poll lists the queued chapters of the title's active
+    // requests; a request that left APPROVED shows none.
+    return request.status === MediaRequestStatus.APPROVED &&
+      mangaProgress?.checkpoint === MangaRequestCheckpoint.CHAPTERS_ENQUEUED
+      ? downloadTracker.getMangaProgress(
+          mangaProgress.instanceId,
+          mangaProgress.anilistId
         )
       : [];
   }
@@ -618,6 +790,10 @@ const getServarrHistoryEvidence = (
 };
 
 const getServiceName = (request: RequestLike): string | null => {
+  if (request.type === MediaType.MANGA) {
+    return null;
+  }
+
   const settings = getExternalRuntimeConfig();
   const names = new Set<string>();
   const add = (name: string | undefined) => {
@@ -707,6 +883,26 @@ const getMessage = (
     }
   }
 
+  if (mediaType === MediaType.MANGA) {
+    if (stage === RequestStatusStage.APPROVED) {
+      return 'Your request was approved and is waiting to be sent to the connected manga service.';
+    }
+    if (stage === RequestStatusStage.SEARCHING) {
+      return 'SeerrNG is setting up this title and its chapters on the connected manga service.';
+    }
+    if (stage === RequestStatusStage.DOWNLOADING) {
+      return 'The connected manga service is downloading the requested chapters.';
+    }
+    if (stage === RequestStatusStage.UNAVAILABLE) {
+      return 'No usable chapters are available from the connected manga service. Check the requested title and its source on the service, then retry when they are ready.';
+    }
+    if (stage === RequestStatusStage.FAILED) {
+      return queueFailure
+        ? 'The connected manga service reported a download failure. Check its download queue or logs for the cause, fix it there, then retry here.'
+        : 'The connected manga service could not accept this request. Check its connection and settings, then retry.';
+    }
+  }
+
   switch (stage) {
     case RequestStatusStage.REQUESTED:
       return 'Your request is waiting for approval.';
@@ -735,15 +931,92 @@ const getMessage = (
   }
 };
 
+/**
+ * A manga request's stage comes from its manifest alone: the dispatch step it
+ * reached, the codes dispatch and the progress poll recorded, and the chapter
+ * counts. A library-wide media status never decides it.
+ */
+const getMangaStage = (
+  request: RequestLike,
+  options: StatusOptions
+): StageResult => {
+  const progress = options.mangaProgress ?? null;
+  const settled = {
+    queueFailure: false,
+    downloads: [],
+    needsAttention: false,
+    retryable: false,
+  };
+  if (request.status === MediaRequestStatus.PENDING) {
+    return { ...settled, stage: RequestStatusStage.REQUESTED };
+  }
+  if (isRequestSatisfied(request, progress)) {
+    return { ...settled, stage: RequestStatusStage.AVAILABLE };
+  }
+  if (!progress) {
+    return { ...settled, stage: RequestStatusStage.APPROVED };
+  }
+  if (progress.bindingState === MangaRequestBindingState.AWAITING_BINDING) {
+    return {
+      ...settled,
+      stage: RequestStatusStage.APPROVED,
+      message: MANGA_PARKED_MESSAGE,
+    };
+  }
+
+  const enqueued =
+    progress.checkpoint === MangaRequestCheckpoint.CHAPTERS_ENQUEUED;
+  // The poll owns the attention code, dispatch owns lastError.
+  const code = (enqueued ? progress.attentionCode : null) ?? progress.lastError;
+  const flagged = code
+    ? { needsAttention: true, message: getMangaCodeMessage(code) }
+    : {};
+  if (!enqueued) {
+    return {
+      ...settled,
+      ...flagged,
+      stage: hasReachedMangaCheckpoint(
+        progress,
+        MangaRequestCheckpoint.BINDING_VERIFIED
+      )
+        ? RequestStatusStage.SEARCHING
+        : RequestStatusStage.APPROVED,
+    };
+  }
+
+  const progressed = {
+    downloads: options.downloads ?? getDownloadItems(request, progress),
+    percent:
+      progress.chaptersTotal > 0
+        ? Math.round(
+            (progress.chaptersVerified / progress.chaptersTotal) * 1000
+          ) / 10
+        : null,
+    downloadCount: progress.chaptersQueued + progress.chaptersDownloading,
+  };
+  if (isMangaChapterRetryable(progress)) {
+    return {
+      ...settled,
+      ...progressed,
+      ...flagged,
+      stage: RequestStatusStage.FAILED,
+      queueFailure: true,
+      needsAttention: true,
+      retryable: true,
+    };
+  }
+  return {
+    ...settled,
+    ...progressed,
+    ...flagged,
+    stage: RequestStatusStage.DOWNLOADING,
+  };
+};
+
 const getStageFromRequest = (
   request: RequestLike,
   options: StatusOptions
-): {
-  stage: RequestStatusStage;
-  queueFailure: boolean;
-  downloads: DownloadingItem[];
-  message?: string;
-} => {
+): StageResult => {
   if (request.status === MediaRequestStatus.DECLINED) {
     return {
       stage: RequestStatusStage.DECLINED,
@@ -757,6 +1030,9 @@ const getStageFromRequest = (
       queueFailure: false,
       downloads: [],
     };
+  }
+  if (request.type === MediaType.MANGA) {
+    return getMangaStage(request, options);
   }
 
   const downloads = options.downloads ?? getDownloadItems(request);
@@ -1023,11 +1299,11 @@ export const getRequestStatus = (
   return {
     stage,
     attempt: latestEvent?.attempt ?? 0,
-    percent: metrics.percent,
+    percent: result.percent !== undefined ? result.percent : metrics.percent,
     size: metrics.size,
     sizeLeft: metrics.sizeLeft,
     estimatedCompletionTime: metrics.estimatedCompletionTime,
-    downloadCount: result.downloads.length,
+    downloadCount: result.downloadCount ?? result.downloads.length,
     downloadId: metrics.downloadId,
     service: getServiceName(request) ?? latestEvent?.service ?? null,
     message,
@@ -1036,15 +1312,17 @@ export const getRequestStatus = (
       stage
     ),
     needsAttention:
-      stage === RequestStatusStage.UNAVAILABLE ||
-      stage === RequestStatusStage.FAILED ||
-      stage === RequestStatusStage.DECLINED ||
-      stage === RequestStatusStage.CANCELLED,
+      result.needsAttention ??
+      (stage === RequestStatusStage.UNAVAILABLE ||
+        stage === RequestStatusStage.FAILED ||
+        stage === RequestStatusStage.DECLINED ||
+        stage === RequestStatusStage.CANCELLED),
     retryable:
-      request.status === MediaRequestStatus.FAILED ||
-      (stage === RequestStatusStage.UNAVAILABLE &&
-        request.status === MediaRequestStatus.APPROVED &&
-        !hasRequestedServiceLink(request)),
+      result.retryable ??
+      (request.status === MediaRequestStatus.FAILED ||
+        (stage === RequestStatusStage.UNAVAILABLE &&
+          request.status === MediaRequestStatus.APPROVED &&
+          !hasRequestedServiceLink(request, options.mangaProgress))),
   };
 };
 
@@ -1071,6 +1349,35 @@ const getDispatchPending = async (
     manager?.getRepository(RequestDispatchOutbox) ??
     getRepository(RequestDispatchOutbox)
   ).exists({ where: { requestId } });
+
+const MANGA_PROGRESS_SELECT = {
+  requestId: true,
+  instanceId: true,
+  anilistId: true,
+  bindingState: true,
+  checkpoint: true,
+  lastError: true,
+  attentionCode: true,
+  chaptersTotal: true,
+  chaptersVerified: true,
+  chaptersQueued: true,
+  chaptersDownloading: true,
+  chaptersErrored: true,
+} as const;
+
+const getMangaProgress = async (
+  request: RequestLike & { id: number },
+  manager?: EntityManager
+): Promise<MangaProgressLike | null> =>
+  request.type === MediaType.MANGA
+    ? (
+        manager?.getRepository(MangaRequestManifest) ??
+        getRepository(MangaRequestManifest)
+      ).findOne({
+        where: { requestId: request.id },
+        select: MANGA_PROGRESS_SELECT,
+      })
+    : null;
 
 const getBookSearchState = async (
   requestId: number,
@@ -1149,58 +1456,158 @@ const getAttempt = (
     ? 1
     : 0);
 
+// A request that returns to an observation recorded before its latest event
+// gets a row whose fingerprint names that latest event. The history keeps the
+// return, and writers that saw the same latest event still write one row.
+const makeReentryFingerprint = (
+  fingerprint: string,
+  latestEventId: number
+): string => {
+  const suffix = `:after:${latestEventId}`;
+  return `${fingerprint.slice(0, 255 - suffix.length)}${suffix}`;
+};
+
+const isLatestObservation = (
+  latestEvent: StatusEventLike,
+  event: Pick<MediaRequestStatusEvent, 'stage' | 'attempt' | 'fingerprint'>
+): boolean => {
+  if (
+    latestEvent.stage !== event.stage ||
+    latestEvent.attempt !== event.attempt
+  ) {
+    return false;
+  }
+  const followedEventId = /:after:(\d+)$/.exec(latestEvent.fingerprint)?.[1];
+  return (
+    latestEvent.fingerprint === event.fingerprint ||
+    (followedEventId !== undefined &&
+      latestEvent.fingerprint ===
+        makeReentryFingerprint(event.fingerprint, Number(followedEventId)))
+  );
+};
+
+// Skips only a row whose fingerprint the request already has. Any other
+// conflict, such as on the primary key, still fails the insert.
+export const withStatusEventConflictTarget = <Entity extends ObjectLiteral>(
+  query: InsertQueryBuilder<Entity>
+): InsertQueryBuilder<Entity> =>
+  query.orUpdate([], ['requestId', 'fingerprint']);
+
+const clampText = (
+  value: string | null | undefined,
+  length: number
+): string | null | undefined =>
+  typeof value === 'string'
+    ? Array.from(value).slice(0, length).join('')
+    : value;
+
+// Values are cut to their column lengths on every driver, so a long message
+// from a download client cannot fail the save that records it.
+const toStoredStatusEvent = (
+  event: MediaRequestStatusEvent,
+  fingerprint: string
+): MediaRequestStatusEvent =>
+  new MediaRequestStatusEvent({
+    ...event,
+    service: clampText(event.service, 128),
+    message: clampText(event.message, 512),
+    downloadId: clampText(event.downloadId, 512),
+    estimatedCompletionTime:
+      event.estimatedCompletionTime instanceof Date &&
+      Number.isNaN(event.estimatedCompletionTime.getTime())
+        ? null
+        : event.estimatedCompletionTime,
+    fingerprint,
+  });
+
+export const insertRequestStatusEvent = async (
+  event: MediaRequestStatusEvent,
+  options: {
+    latestEvent?: StatusEventLike;
+    manager?: EntityManager;
+    failureMessage?: string;
+  } = {}
+): Promise<void> => {
+  const { latestEvent, manager } = options;
+  if (latestEvent && isLatestObservation(latestEvent, event)) {
+    return;
+  }
+  const repository = getStatusEventRepository(manager);
+  try {
+    let fingerprint = event.fingerprint;
+    if (latestEvent) {
+      const earlier = await repository.findOne({
+        select: { id: true },
+        where: { requestId: event.requestId, fingerprint },
+      });
+      if (earlier && earlier.id < latestEvent.id) {
+        fingerprint = makeReentryFingerprint(fingerprint, latestEvent.id);
+      }
+    }
+    await withStatusEventConflictTarget(
+      repository
+        .createQueryBuilder()
+        .insert()
+        .into(MediaRequestStatusEvent)
+        .values(toStoredStatusEvent(event, fingerprint))
+    )
+      .updateEntity(false)
+      .execute();
+  } catch (error) {
+    // A failed statement aborts a PostgreSQL transaction, so a caller inside
+    // one fails with it instead of committing nothing.
+    if (manager?.queryRunner?.isTransactionActive) {
+      throw error;
+    }
+    logger.warn(
+      options.failureMessage ?? 'Unable to persist request status event',
+      {
+        label: 'Request Status',
+        requestId: event.requestId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      }
+    );
+  }
+};
+
 const persistStatusEvent = async (
   request: RequestLike,
   status: RequestStatusSnapshot,
   latestEvent: StatusEventLike | undefined,
   manager?: EntityManager
 ): Promise<void> => {
-  const repository = getStatusEventRepository(manager);
   const attempt = getAttempt(status.stage, latestEvent);
   status.attempt = attempt;
-  const fingerprint = makeFingerprint(status);
-  if (
-    latestEvent &&
-    latestEvent.stage === status.stage &&
-    latestEvent.attempt === attempt &&
-    latestEvent.fingerprint === fingerprint
-  ) {
+  if (!request.requestedBy || !request.media) {
+    logger.warn('Skipping request status event without request relations', {
+      label: 'Request Status',
+      requestId: request.id,
+      hasRequestedBy: !!request.requestedBy,
+      hasMedia: !!request.media,
+    });
     return;
   }
-
-  try {
-    await repository.insert(
-      new MediaRequestStatusEvent({
-        requestId: request.id,
-        requestedById: request.requestedBy.id,
-        mediaId: request.media.id,
-        mediaType: request.type,
-        stage: status.stage,
-        attempt,
-        format: request.bookFormat ?? null,
-        service: status.service,
-        message: status.message,
-        percent: status.percent,
-        size: status.size,
-        sizeLeft: status.sizeLeft,
-        estimatedCompletionTime: status.estimatedCompletionTime,
-        downloadCount: status.downloadCount,
-        downloadId: status.downloadId,
-        fingerprint,
-      })
-    );
-  } catch (error) {
-    // Two application instances can observe the same queue poll. The unique
-    // fingerprint makes that race harmless; surface other failures to logs.
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.toLocaleLowerCase().includes('unique')) {
-      logger.warn('Unable to persist request status event', {
-        label: 'Request Status',
-        requestId: request.id,
-        errorMessage: message,
-      });
-    }
-  }
+  await insertRequestStatusEvent(
+    new MediaRequestStatusEvent({
+      requestId: request.id,
+      requestedById: request.requestedBy.id,
+      mediaId: request.media.id,
+      mediaType: request.type,
+      stage: status.stage,
+      attempt,
+      format: request.bookFormat ?? null,
+      service: status.service,
+      message: status.message,
+      percent: status.percent,
+      size: status.size,
+      sizeLeft: status.sizeLeft,
+      estimatedCompletionTime: status.estimatedCompletionTime,
+      downloadCount: status.downloadCount,
+      downloadId: status.downloadId,
+      fingerprint: makeFingerprint(status),
+    }),
+    { latestEvent, manager }
+  );
 };
 
 const loadRequest = async (
@@ -1230,14 +1637,16 @@ export const recordRequestStatus = async (
     return undefined;
   }
   const latestEvent = await getLatestStatusEvent(requestId, options.manager);
-  const [dispatchPending, bookSearchState] = await Promise.all([
+  const [dispatchPending, bookSearchState, mangaProgress] = await Promise.all([
     getDispatchPending(requestId, options.manager),
     getBookSearchState(requestId, options.manager),
+    getMangaProgress(request, options.manager),
   ]);
   const status = getRequestStatus(request, {
     latestEvent: latestEvent ?? undefined,
     dispatchPending,
     bookSearchState,
+    mangaProgress,
     resetTerminalOverride: options.resetTerminalOverride,
   });
   await persistStatusEvent(
@@ -1292,7 +1701,6 @@ export const recordRequestCancellation = async (
     );
     return;
   }
-  const repository = getStatusEventRepository(options.manager);
   const existing = await getLatestStatusEvent(request.id, options.manager);
   const status: RequestStatusSnapshot = {
     stage: RequestStatusStage.CANCELLED,
@@ -1310,34 +1718,24 @@ export const recordRequestCancellation = async (
     needsAttention: true,
     retryable: false,
   };
-  const fingerprint = makeFingerprint(status);
-  try {
-    await repository.insert(
-      new MediaRequestStatusEvent({
-        requestId: request.id,
-        requestedById: request.requestedBy.id,
-        mediaId: request.media.id,
-        mediaType: request.type,
-        stage: status.stage,
-        attempt: status.attempt,
-        format: request.bookFormat ?? null,
-        message: status.message,
-        downloadCount: 0,
-        fingerprint,
-      })
-    );
-  } catch (error) {
-    // A duplicate cancellation event is harmless; surface other persistence
-    // failures so operators can repair the history table or migration.
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.toLocaleLowerCase().includes('unique')) {
-      logger.warn('Unable to persist request cancellation event', {
-        label: 'Request Status',
-        requestId: request.id,
-        errorMessage: message,
-      });
+  await insertRequestStatusEvent(
+    new MediaRequestStatusEvent({
+      requestId: request.id,
+      requestedById: request.requestedBy.id,
+      mediaId: request.media.id,
+      mediaType: request.type,
+      stage: status.stage,
+      attempt: status.attempt,
+      format: request.bookFormat ?? null,
+      message: status.message,
+      downloadCount: 0,
+      fingerprint: makeFingerprint(status),
+    }),
+    {
+      manager: options.manager,
+      failureMessage: 'Unable to persist request cancellation event',
     }
-  }
+  );
 };
 
 export const getRequestStatusHistory = async (
@@ -1419,6 +1817,36 @@ const getPendingDispatchRequestIds = async (
   return new Set(records.map((record) => record.requestId));
 };
 
+const getMangaProgresses = async (
+  requests: readonly MediaRequest[]
+): Promise<Map<number, MangaProgressLike>> => {
+  const requestIds = requests
+    .filter((request) => request.type === MediaType.MANGA)
+    .map((request) => request.id);
+  const progresses = new Map<number, MangaProgressLike>();
+  for (
+    let index = 0;
+    index < requestIds.length;
+    index += REQUEST_STATUS_RECONCILIATION_BATCH_SIZE
+  ) {
+    const manifests = await getRepository(MangaRequestManifest).find({
+      where: {
+        requestId: In(
+          requestIds.slice(
+            index,
+            index + REQUEST_STATUS_RECONCILIATION_BATCH_SIZE
+          )
+        ),
+      },
+      select: MANGA_PROGRESS_SELECT,
+    });
+    for (const manifest of manifests) {
+      progresses.set(manifest.requestId, manifest);
+    }
+  }
+  return progresses;
+};
+
 const getBookSearchStates = async (
   requestIds: number[]
 ): Promise<Map<number, BookRequestSearch['state']>> => {
@@ -1467,12 +1895,14 @@ const mapRequestStatusItem = async (
   latestEvent: MediaRequestStatusEvent | undefined,
   dispatchPending: boolean,
   bookSearchState: BookRequestSearch['state'] | undefined,
+  mangaProgress: MangaProgressLike | null,
   persist: boolean
 ): Promise<RequestStatusPageItem> => {
   const status = getRequestStatus(request, {
     latestEvent,
     dispatchPending,
     bookSearchState,
+    mangaProgress,
   });
   if (persist) {
     await persistStatusEvent(request, status, latestEvent);
@@ -1540,12 +1970,12 @@ const getRequestStatusCounts = async (options: {
     .leftJoin(
       `(${latestEventQuery.getQuery()})`,
       'latestStatusCountId',
-      'latestStatusCountId.requestId = requestCount.id'
+      '"latestStatusCountId"."requestId" = requestCount.id'
     )
     .leftJoin(
       MediaRequestStatusEvent,
       'latestStatusCount',
-      'latestStatusCount.id = latestStatusCountId.eventId'
+      'latestStatusCount.id = "latestStatusCountId"."eventId"'
     )
     .select('requestCount.status', 'requestStatus')
     .addSelect('latestStatusCount.stage', 'stage')
@@ -1769,13 +2199,13 @@ export const getRequestStatusPage = async (options: {
   }
 
   const requestIds = requests.map((request) => request.id);
-  const [latestEvents, pendingRequestIds, bookSearchStates] = await Promise.all(
-    [
+  const [latestEvents, pendingRequestIds, bookSearchStates, mangaProgresses] =
+    await Promise.all([
       getLatestEvents(requestIds),
       getPendingDispatchRequestIds(requestIds),
       getBookSearchStates(requestIds),
-    ]
-  );
+      getMangaProgresses(requests),
+    ]);
 
   let resultItems: RequestStatusPageItem[] = [];
   for (const request of requests) {
@@ -1785,6 +2215,7 @@ export const getRequestStatusPage = async (options: {
         latestEvents.get(request.id),
         pendingRequestIds.has(request.id),
         bookSearchStates.get(request.id),
+        mangaProgresses.get(request.id) ?? null,
         !requiresFullProjection
       )
     );

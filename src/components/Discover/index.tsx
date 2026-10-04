@@ -81,12 +81,17 @@ const messages = defineMessages('components.Discover', {
   createnewslider: 'Create New Slider',
 });
 
-const isDiscoverSliderEnabled = (
+export const isDiscoverSliderEnabled = (
   type: number,
   availability: ReturnType<typeof useSettings>['currentSettings']
 ): boolean => {
   switch (type) {
     case DiscoverSliderType.RECENTLY_ADDED:
+      return (
+        isConfiguredMediaCategoryEnabled('movie', availability) ||
+        isConfiguredMediaCategoryEnabled('tv', availability) ||
+        isConfiguredMediaCategoryEnabled('manga', availability)
+      );
     case DiscoverSliderType.TRENDING:
       return (
         isConfiguredMediaCategoryEnabled('movie', availability) ||

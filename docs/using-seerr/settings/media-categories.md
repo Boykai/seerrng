@@ -15,6 +15,7 @@ The switches cover:
 - Music
 - Books and Audiobooks
 - Comics and Magazines
+- Manga
 - Emulation (Retro) and Emulation (Modern)
 - PC Games
 
@@ -33,9 +34,13 @@ catalog and ROMarrNG for supported systems; PC Games need QuestarrNG.
 Existing requests, status history, and available download copies remain in
 **Requests → Request Status** after a category is turned off. Users can still
 follow previously submitted work and download files that SeerrNG has already
-verified. Turning the category back on restores its browse and request entry
-points without deleting its saved request history.
+verified. Manga is the exception: while it is off, manga requests stay in
+Request Status but offer no chapters to download. Turning the category back on
+restores its browse and request entry points without deleting its saved request
+history.
 
-All categories are enabled by default, including for existing installations.
-General desktop applications are not included; they remain a future wishlist
-item.
+All categories except Manga are enabled by default, including for existing
+installations. Manga stays off until an administrator turns it on; see
+[Manga Backend](../manga-backend.md) for what it adds and for its content
+switches. General desktop applications are not included; they remain a future
+wishlist item.

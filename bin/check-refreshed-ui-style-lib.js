@@ -85,6 +85,7 @@ const validateGlobalStylesheet = (fileName, source) => {
     '.refreshed-inset-surface',
     '.refreshed-artwork-scrim',
     '.request-card-artwork-gradient',
+    '.request-status-note',
   ];
 
   requiredSharedSelectors.forEach((selector) => {

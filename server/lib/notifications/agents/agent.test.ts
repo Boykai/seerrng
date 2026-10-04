@@ -120,6 +120,40 @@ describe('getNotificationMediaUrl', () => {
       undefined
     );
   });
+
+  it('links manga only through a numeric AniList identifier', () => {
+    assert.equal(
+      getNotificationMediaUrl({
+        media: {
+          mediaType: MediaType.MANGA,
+          tmdbId: 0,
+          identifiers: [
+            {
+              provider: MediaIdentifierProvider.ANILIST,
+              value: '30013',
+            },
+          ],
+        } as Media,
+      }),
+      '/manga/30013'
+    );
+
+    for (const identifiers of [
+      [],
+      [{ provider: MediaIdentifierProvider.ANILIST, value: 'not-a-number' }],
+    ]) {
+      assert.equal(
+        getNotificationMediaUrl({
+          media: {
+            mediaType: MediaType.MANGA,
+            tmdbId: 0,
+            identifiers,
+          } as unknown as Media,
+        }),
+        undefined
+      );
+    }
+  });
 });
 
 describe('getMediaTypeLabel', () => {
@@ -130,6 +164,8 @@ describe('getMediaTypeLabel', () => {
     assert.equal(getMediaTypeLabel(intl, MediaType.MUSIC), 'music');
     assert.equal(getMediaTypeLabel(intl, MediaType.BOOK), 'book');
     assert.equal(getMediaTypeLabel(intl, MediaType.COMIC), 'comic');
+    assert.equal(getMediaTypeLabel(intl, MediaType.MAGAZINE), 'magazine');
+    assert.equal(getMediaTypeLabel(intl, MediaType.MANGA), 'manga');
   });
 });
 

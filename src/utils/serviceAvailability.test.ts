@@ -1,10 +1,54 @@
+import { MEDIA_CATEGORY_KEYS } from '@server/constants/mediaCategories';
 import { strictEqual } from 'node:assert';
 import { describe, it } from 'node:test';
 import {
+  isConfiguredMediaCategoryEnabled,
   isDiscoverMediaTypeEnabled,
   isDiscoverWatchlistTypeEnabled,
   isOptionalCatalogPathEnabled,
 } from './serviceAvailability';
+
+describe('isConfiguredMediaCategoryEnabled', () => {
+  it('keeps manga off and existing categories on when the server omits them', () => {
+    strictEqual(isConfiguredMediaCategoryEnabled('manga', {}), false);
+    strictEqual(
+      isConfiguredMediaCategoryEnabled('manga', {
+        enabledMediaCategories: { movie: true },
+      }),
+      false
+    );
+    for (const category of MEDIA_CATEGORY_KEYS) {
+      strictEqual(isConfiguredMediaCategoryEnabled(category, {}), true);
+      strictEqual(
+        isConfiguredMediaCategoryEnabled(category, {
+          enabledMediaCategories: {},
+        }),
+        true
+      );
+    }
+  });
+
+  it('honours an explicit category setting', () => {
+    strictEqual(
+      isConfiguredMediaCategoryEnabled('manga', {
+        enabledMediaCategories: { manga: true },
+      }),
+      true
+    );
+    strictEqual(
+      isConfiguredMediaCategoryEnabled('manga', {
+        enabledMediaCategories: { manga: false },
+      }),
+      false
+    );
+    strictEqual(
+      isConfiguredMediaCategoryEnabled('comic', {
+        enabledMediaCategories: { comic: false, manga: true },
+      }),
+      false
+    );
+  });
+});
 
 describe('isOptionalCatalogPathEnabled', () => {
   it('hides optional catalogs without a configured backend service', () => {
@@ -244,6 +288,63 @@ describe('isOptionalCatalogPathEnabled', () => {
     strictEqual(isDiscoverMediaTypeEnabled('music', availability), true);
     strictEqual(isDiscoverMediaTypeEnabled('book', availability), false);
     strictEqual(isDiscoverMediaTypeEnabled('audiobook', availability), true);
+  });
+
+  it('shows manga pages only while the manga category is enabled', () => {
+    const availability = {
+      musicEnabled: true,
+      booksEnabled: true,
+      comicsEnabled: true,
+    };
+
+    for (const path of [
+      '/discover/manga',
+      '/discover/manga/trending',
+      '/manga/30013',
+      '/manga/[mangaId]',
+    ]) {
+      strictEqual(isOptionalCatalogPathEnabled(path, availability), false);
+      strictEqual(
+        isOptionalCatalogPathEnabled(path, {
+          ...availability,
+          enabledMediaCategories: { manga: false },
+        }),
+        false
+      );
+      strictEqual(
+        isOptionalCatalogPathEnabled(path, {
+          ...availability,
+          enabledMediaCategories: { manga: true },
+        }),
+        true
+      );
+      // The catalog uses only AniList, so a Suwayomi server changes nothing.
+      for (const suwayomiEnabled of [false, true]) {
+        strictEqual(
+          isOptionalCatalogPathEnabled(path, {
+            ...availability,
+            suwayomiEnabled,
+            enabledMediaCategories: { manga: true },
+          }),
+          true
+        );
+        strictEqual(
+          isOptionalCatalogPathEnabled(path, {
+            ...availability,
+            suwayomiEnabled,
+            enabledMediaCategories: { manga: false },
+          }),
+          false
+        );
+      }
+    }
+    strictEqual(
+      isOptionalCatalogPathEnabled('/discover/comics', {
+        ...availability,
+        enabledMediaCategories: { manga: true, comic: false },
+      }),
+      false
+    );
   });
 });
 

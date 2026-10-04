@@ -11,9 +11,12 @@ import SonarrAPI from '@server/api/servarr/sonarr';
 import TautulliAPI, { isTautulliNoDataError } from '@server/api/tautulli';
 import TheMovieDb from '@server/api/themoviedb';
 import { MediaStatus, MediaType } from '@server/constants/media';
-import type { MediaCategoryKey } from '@server/constants/mediaCategories';
+import type { MediaAvailabilityCategoryKey } from '@server/constants/mediaCategories';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
+import MediaIdentifier, {
+  MediaIdentifierProvider,
+} from '@server/entity/MediaIdentifier';
 import Season from '@server/entity/Season';
 import { User } from '@server/entity/User';
 import type {
@@ -80,6 +83,9 @@ const mediaListTypes: MediaType[] = [
   MediaType.COMIC,
   MediaType.MAGAZINE,
 ];
+// Manga is listed only when asked for by name, so unfiltered lists keep
+// their existing contents.
+const mediaListFilterTypes: MediaType[] = [...mediaListTypes, MediaType.MANGA];
 const mediaFileFormats = ['ebook', 'audiobook', 'both'] as const;
 const mediaListPermissions: Permission[] = [
   Permission.MANAGE_REQUESTS,
@@ -87,7 +93,7 @@ const mediaListPermissions: Permission[] = [
 ];
 const mediaTypeCategories: Record<
   MediaType,
-  { categories: MediaCategoryKey[]; mode?: 'all' | 'any' }
+  { categories: MediaAvailabilityCategoryKey[]; mode?: 'all' | 'any' }
 > = {
   [MediaType.MOVIE]: { categories: ['movie'] },
   [MediaType.TV]: { categories: ['tv'] },
@@ -95,6 +101,7 @@ const mediaTypeCategories: Record<
   [MediaType.BOOK]: { categories: ['ebook', 'audiobook'], mode: 'any' },
   [MediaType.COMIC]: { categories: ['comic'] },
   [MediaType.MAGAZINE]: { categories: ['magazine'] },
+  [MediaType.MANGA]: { categories: ['manga'] },
 };
 const isMediaTypeCategoryEnabled = (mediaType: MediaType): boolean => {
   const config = mediaTypeCategories[mediaType];
@@ -107,7 +114,10 @@ const areAllMediaTypeCategoriesEnabled = (mediaType: MediaType): boolean => {
   return config ? areMediaCategoriesEnabled(config.categories) : true;
 };
 
-const projectMediaListItem = (media: Media): MediaListItem => ({
+const projectMediaListItem = (
+  media: Media,
+  anilistId?: number
+): MediaListItem => ({
   id: media.id,
   mediaType: media.mediaType,
   tmdbId: media.tmdbId,
@@ -117,7 +127,40 @@ const projectMediaListItem = (media: Media): MediaListItem => ({
   ...(media.imdbId != null ? { imdbId: media.imdbId } : {}),
   ...(media.mbId != null ? { mbId: media.mbId } : {}),
   ...(media.mediaAddedAt != null ? { mediaAddedAt: media.mediaAddedAt } : {}),
+  ...(anilistId !== undefined ? { anilistId } : {}),
 });
+
+/** The AniList ID of each manga item, which carries no TMDB ID. */
+const findMangaAnilistIds = async (
+  media: Media[]
+): Promise<Map<number, number>> => {
+  const mangaIds = media
+    .filter((item) => item.mediaType === MediaType.MANGA)
+    .map((item) => item.id);
+  if (!mangaIds.length) {
+    return new Map();
+  }
+  const identifiers = await getRepository(MediaIdentifier).find({
+    where: {
+      provider: MediaIdentifierProvider.ANILIST,
+      media: { id: In(mangaIds) },
+    },
+    relations: { media: true },
+    order: { canonical: 'DESC', id: 'ASC' },
+  });
+  const anilistIds = new Map<number, number>();
+  for (const identifier of identifiers) {
+    const anilistId = Number(identifier.value);
+    if (
+      !anilistIds.has(identifier.media.id) &&
+      Number.isSafeInteger(anilistId) &&
+      anilistId > 0
+    ) {
+      anilistIds.set(identifier.media.id, anilistId);
+    }
+  }
+  return anilistIds;
+};
 
 export const parseTautulliPlexUserIds = (value: unknown): number[] => {
   if (!Array.isArray(value)) {
@@ -197,7 +240,7 @@ const parseMediaTypes = (
   }
 
   const invalidType = types.find(
-    (type): type is string => !mediaListTypes.includes(type as MediaType)
+    (type): type is string => !mediaListFilterTypes.includes(type as MediaType)
   );
 
   if (invalidType) {
@@ -363,7 +406,9 @@ mediaRoutes.get(
         parsedMediaTypes.value.length === 1
           ? parsedMediaTypes.value[0]
           : In(parsedMediaTypes.value);
-    } else if (enabledMediaTypes.length < mediaListTypes.length) {
+    } else {
+      // Always name the listed types so manga, which is listed only when
+      // asked for by name, stays out of an unfiltered list.
       if (enabledMediaTypes.length === 0) {
         return res.status(200).json({
           pageInfo: {
@@ -386,6 +431,7 @@ mediaRoutes.get(
         take: pageSize,
         skip,
       });
+      const anilistIds = await findMangaAnilistIds(media);
       return res.status(200).json({
         pageInfo: {
           pages: Math.ceil(mediaCount / pageSize),
@@ -393,7 +439,9 @@ mediaRoutes.get(
           results: mediaCount,
           page: Math.ceil(skip / pageSize) + 1,
         },
-        results: media.map(projectMediaListItem),
+        results: media.map((item) =>
+          projectMediaListItem(item, anilistIds.get(item.id))
+        ),
       } as MediaResultsResponse);
     } catch (e) {
       next({ status: 500, message: e.message });

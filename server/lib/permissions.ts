@@ -42,6 +42,9 @@ export enum Permission {
   REQUEST_MAGAZINE = 2199023255552,
   AUTO_REQUEST_MAGAZINE = 4398046511104,
   MANAGE_DOWNLOADS = 8796093022208,
+  AUTO_APPROVE_MANGA = 17592186044416,
+  REQUEST_MANGA = 35184372088832,
+  AUTO_REQUEST_MANGA = 70368744177664,
 }
 
 export const MAX_PERMISSION_VALUE = Object.values(Permission)
@@ -111,35 +114,53 @@ export const hasPermission = (
 };
 
 export type RequestApprovalMediaType =
-  'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine';
+  'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'manga';
+
+const getAutoApproveMediaPermission = (
+  mediaType: RequestApprovalMediaType,
+  is4k: boolean
+): Permission | undefined => {
+  switch (mediaType) {
+    case 'movie':
+      return is4k
+        ? Permission.AUTO_APPROVE_4K_MOVIE
+        : Permission.AUTO_APPROVE_MOVIE;
+    case 'tv':
+      return is4k ? Permission.AUTO_APPROVE_4K_TV : Permission.AUTO_APPROVE_TV;
+    case 'music':
+      return Permission.AUTO_APPROVE_MUSIC;
+    case 'book':
+      return Permission.AUTO_APPROVE_BOOK;
+    case 'comic':
+      return Permission.AUTO_APPROVE_COMIC;
+    case 'magazine':
+      return Permission.AUTO_APPROVE_MAGAZINE;
+    case 'manga':
+      return Permission.AUTO_APPROVE_MANGA;
+    default: {
+      // Typed callers cannot reach this. An unknown runtime value gets no
+      // media-specific bit, so only the general permissions can approve it.
+      const unsupportedMediaType: never = mediaType;
+      void unsupportedMediaType;
+      return undefined;
+    }
+  }
+};
 
 export const hasAutoApprovePermission = (
   permissions: number,
   mediaType: RequestApprovalMediaType,
   is4k = false
 ): boolean => {
-  const mediaPermission =
-    mediaType === 'movie'
-      ? is4k
-        ? Permission.AUTO_APPROVE_4K_MOVIE
-        : Permission.AUTO_APPROVE_MOVIE
-      : mediaType === 'tv'
-        ? is4k
-          ? Permission.AUTO_APPROVE_4K_TV
-          : Permission.AUTO_APPROVE_TV
-        : mediaType === 'music'
-          ? Permission.AUTO_APPROVE_MUSIC
-          : mediaType === 'comic'
-            ? Permission.AUTO_APPROVE_COMIC
-            : mediaType === 'magazine'
-              ? Permission.AUTO_APPROVE_MAGAZINE
-              : Permission.AUTO_APPROVE_BOOK;
+  const mediaPermission = getAutoApproveMediaPermission(mediaType, is4k);
   const generalPermission = is4k
     ? Permission.AUTO_APPROVE_4K
     : Permission.AUTO_APPROVE;
 
   return hasPermission(
-    [Permission.MANAGE_REQUESTS, generalPermission, mediaPermission],
+    mediaPermission === undefined
+      ? [Permission.MANAGE_REQUESTS, generalPermission]
+      : [Permission.MANAGE_REQUESTS, generalPermission, mediaPermission],
     permissions,
     { type: 'or' }
   );

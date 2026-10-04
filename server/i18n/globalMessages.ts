@@ -37,6 +37,7 @@ const globalMessages = defineMessages('notifications.common', {
   book: 'book',
   comic: 'comic',
   magazine: 'magazine',
+  manga: 'manga',
   issue: 'issue',
   issueTypeName: '{type} issue',
 });

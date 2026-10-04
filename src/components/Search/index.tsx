@@ -26,6 +26,7 @@ import {
 import { stableSearchResults } from '@app/utils/stableSearchResults';
 import { BarsArrowDownIcon, BarsArrowUpIcon } from '@heroicons/react/24/solid';
 import type { DetailDisclosureMediaType } from '@server/interfaces/api/userSettingsInterfaces';
+import type { MangaResult } from '@server/models/Manga';
 import type {
   AlbumResult,
   ArtistResult,
@@ -70,6 +71,7 @@ const messages = defineMessages('components.Search', {
   music: 'Music',
   comics: 'Comics',
   magazines: 'Magazines',
+  manga: 'Manga',
   software: 'Software',
   filter: 'Filters',
   mediaFilters: 'Media Filters',
@@ -114,6 +116,7 @@ const searchCategories = [
   { key: 'music', type: 'music', message: messages.music },
   { key: 'comic', type: 'comic', message: messages.comics },
   { key: 'magazine', type: 'magazine', message: messages.magazines },
+  { key: 'manga', type: 'manga', message: messages.manga },
   { key: 'software', type: 'software', message: messages.software },
   { key: 'author', type: 'author', message: messages.authors },
 ] as const;
@@ -129,7 +132,8 @@ type SearchResult =
   | BookResult
   | AuthorResult
   | ComicResult
-  | MagazineResult;
+  | MagazineResult
+  | MangaResult;
 
 const getSearchResultKey = (result: SearchResult) =>
   `${result.mediaType}:${result.id}`;
@@ -177,6 +181,7 @@ const sortFieldsByCategory: Record<
   author: ['title'],
   comic: ['date', 'title'],
   magazine: ['date', 'title'],
+  manga: ['date', 'title'],
   software: [],
 };
 
@@ -266,7 +271,9 @@ const getResultDate = (result: SearchResult): number | undefined => {
             ? result.firstPublishYear
             : result.mediaType === 'comic'
               ? result.startYear
-              : undefined;
+              : result.mediaType === 'manga'
+                ? result.startYear
+                : undefined;
   const year =
     typeof value === 'number'
       ? value
@@ -349,6 +356,8 @@ const Search = () => {
           '/discover/magazines',
           currentSettings
         );
+      case 'manga':
+        return isConfiguredMediaCategoryEnabled('manga', currentSettings);
       case 'software':
         return isAnySoftwareCategoryEnabled(currentSettings);
       default:
@@ -554,6 +563,14 @@ const Search = () => {
                 ? [title.publisher, title.startYear, ...(title.aliases ?? [])]
                 : []),
               title.mediaType === 'magazine' ? title.latestIssue : undefined,
+              ...(title.mediaType === 'manga'
+                ? [
+                    title.titles.romaji,
+                    title.titles.english,
+                    title.titles.native,
+                    ...title.synonyms,
+                  ]
+                : []),
             ],
             resultFilter
           )

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
+import AnilistAPI from '@server/api/anilist';
 import ListenBrainzAPI from '@server/api/listenbrainz';
 import MusicBrainz from '@server/api/musicbrainz';
 import OpenLibraryAPI from '@server/api/openlibrary';
@@ -52,6 +54,7 @@ import { checkUser } from '@server/middleware/auth';
 import { setupTestDb } from '@server/test/db';
 import type { Express } from 'express';
 import express from 'express';
+import * as OpenApiValidator from 'express-openapi-validator';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import request from 'supertest';
@@ -3293,6 +3296,109 @@ describe('POST /request', () => {
     }
   });
 
+  it('gates manga requests on their category and records them when it is on', async () => {
+    const settings = getSettings();
+    const originalCategories = { ...settings.main.enabledMediaCategories };
+    const originalSuwayomi = settings.suwayomi;
+    const categoriesWithoutManga: Partial<typeof originalCategories> = {
+      ...originalCategories,
+    };
+    delete categoriesWithoutManga.manga;
+    settings.suwayomi = [
+      {
+        id: 1,
+        name: 'Suwayomi',
+        hostname: 'localhost',
+        port: 4567,
+        useSsl: false,
+        baseUrl: '',
+        isDefault: true,
+        authMode: 'NONE',
+        username: '',
+        password: '',
+        sourceAllowlist: [],
+        preferredLanguages: [],
+        scanlatorPreference: [],
+        requireCbz: true,
+      },
+    ];
+    const getMangaDetails = mock.method(
+      AnilistAPI.prototype,
+      'getMangaDetails',
+      async (id: number) => ({
+        id,
+        titles: { english: 'Sample Manga' },
+        synonyms: [],
+        format: 'MANGA',
+        isAdult: false,
+        genres: [],
+        tags: [],
+        staff: [],
+      })
+    );
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const requestManga = () =>
+      agent
+        .post('/request')
+        .send({ mediaType: MediaType.MANGA, mediaId: 30013 });
+
+    try {
+      settings.main.enabledMediaCategories = {
+        ...originalCategories,
+        manga: false,
+      };
+      const disabled = await requestManga();
+
+      // An older settings file has no manga key; manga must stay off.
+      settings.main.enabledMediaCategories =
+        categoriesWithoutManga as typeof originalCategories;
+      const missing = await requestManga();
+
+      for (const response of [disabled, missing]) {
+        assert.strictEqual(response.status, 403);
+        assert.strictEqual(
+          response.body.message,
+          'Manga requests are disabled by the administrator.'
+        );
+      }
+      assert.strictEqual(getMangaDetails.mock.callCount(), 0);
+      assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+
+      settings.main.enabledMediaCategories = {
+        ...originalCategories,
+        manga: true,
+      };
+      const enabled = await requestManga();
+
+      assert.strictEqual(enabled.status, 201);
+      assert.strictEqual(enabled.body.type, MediaType.MANGA);
+      assert.strictEqual(enabled.body.status, MediaRequestStatus.PENDING);
+      assert.deepStrictEqual(enabled.body.mangaScope, {
+        scope: 'ALL_AT_DISPATCH',
+        latestCount: null,
+        rangeStart: null,
+        rangeEnd: null,
+        awaitingBinding: true,
+        follow: {
+          enabled: false,
+          stopReason: null,
+          lastCheckAt: null,
+          nextCheckAt: null,
+        },
+      });
+      assert.strictEqual(await getRepository(MediaRequest).count(), 1);
+      assert.strictEqual(
+        await getRepository(Media).count({
+          where: { mediaType: MediaType.MANGA },
+        }),
+        1
+      );
+    } finally {
+      settings.main.enabledMediaCategories = originalCategories;
+      settings.suwayomi = originalSuwayomi;
+    }
+  });
+
   it('rejects Open Library path-control IDs before request processing', async () => {
     const getWork = mock.method(OpenLibraryAPI.prototype, 'getWork');
     const agent = await loginAs('friend@seerr.dev', 'test1234');
@@ -5266,6 +5372,81 @@ describe('POST /request', () => {
     assert.strictEqual(res.status, 403);
     assert.match(res.body.message, /book is blocklisted/i);
     assert.strictEqual(await getRepository(MediaRequest).count(), 0);
+  });
+
+  it('creates a movie request through the production OpenAPI boundary', async () => {
+    const validatedApp = express();
+    validatedApp.use(express.json());
+    validatedApp.use(
+      session({
+        secret: 'test-secret',
+        cookie: { secure: 'auto' },
+        resave: false,
+        saveUninitialized: false,
+      })
+    );
+    validatedApp.use(rateLimit({ windowMs: 60_000, limit: 10_000 }), checkUser);
+    validatedApp.use('/api/v1/auth', authRoutes);
+    validatedApp.use(
+      OpenApiValidator.middleware({
+        apiSpec: path.join(process.cwd(), 'seerr-api.yml'),
+        validateRequests: true,
+        validateSecurity: false,
+      })
+    );
+    validatedApp.use('/api/v1/request', requestRoutes);
+    validatedApp.use(
+      (
+        err: { status?: number; message?: string },
+        _req: express.Request,
+        res: express.Response,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        _next: express.NextFunction
+      ) => {
+        res
+          .status(err.status ?? 500)
+          .json({ status: err.status ?? 500, message: err.message });
+      }
+    );
+    const settings = getSettings();
+    const priorLocalLogin = settings.main.localLogin;
+    settings.main.localLogin = true;
+
+    try {
+      const agent = request.agent(validatedApp);
+      const login = await agent
+        .post('/api/v1/auth/local')
+        .send({ email: 'friend@seerr.dev', password: 'test1234' });
+      assert.strictEqual(login.status, 200);
+
+      // The validator fills in schema defaults, so a default on a manga-only
+      // field would reach this handler as if the client had sent it.
+      const response = await agent
+        .post('/api/v1/request')
+        .send({ mediaType: MediaType.MOVIE, mediaId: 987_650 });
+      const declined = await agent.post('/api/v1/request').send({
+        mediaType: MediaType.MOVIE,
+        mediaId: 987_651,
+        mangaFollow: false,
+      });
+      const followed = await agent.post('/api/v1/request').send({
+        mediaType: MediaType.MOVIE,
+        mediaId: 987_652,
+        mangaFollow: true,
+      });
+
+      assert.strictEqual(response.status, 201, JSON.stringify(response.body));
+      assert.strictEqual(response.body.type, MediaType.MOVIE);
+      assert.strictEqual(declined.status, 201, JSON.stringify(declined.body));
+      assert.strictEqual(followed.status, 400);
+      assert.strictEqual(
+        followed.body.message,
+        'mangaFollow is only valid for manga requests.'
+      );
+      assert.strictEqual(await getRepository(MediaRequest).count(), 2);
+    } finally {
+      settings.main.localLogin = priorLocalLogin;
+    }
   });
 });
 

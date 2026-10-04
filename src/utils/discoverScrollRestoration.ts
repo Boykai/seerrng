@@ -1,4 +1,5 @@
-export type RestorableDiscoverMediaType = 'movie' | 'tv' | 'book' | 'comic';
+export type RestorableDiscoverMediaType =
+  'movie' | 'tv' | 'book' | 'comic' | 'manga';
 
 export type DiscoverScrollEntry = {
   path: string;
@@ -17,6 +18,7 @@ const detailPathPatterns: Record<RestorableDiscoverMediaType, RegExp> = {
   tv: /^\/tv\/[^/?#]+(?:[/?#]|$)/,
   book: /^\/book\/[^/?#]+(?:[/?#]|$)/,
   comic: /^\/comic\/[^/?#]+(?:[/?#]|$)/,
+  manga: /^\/manga\/[^/?#]+(?:[/?#]|$)/,
 };
 
 export const isMediaDetailPath = (

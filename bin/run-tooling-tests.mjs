@@ -16,6 +16,8 @@ const portableTests = [
   'scripts/backissue-service.test.mjs',
   'scripts/check-helm-security.test.mjs',
   'scripts/check-workflow-boundaries.test.mjs',
+  'scripts/export-external-config.test.mjs',
+  'scripts/manga-migration-checks.test.mjs',
   'scripts/sync-yunohost-package.test.mjs',
   'scripts/release-notes.test.mjs',
   'scripts/release-workflow.test.mjs',
@@ -24,6 +26,7 @@ const portableTests = [
   'scripts/replace-server-import-aliases.test.mjs',
   'scripts/verify-container-manifest.test.mjs',
   'packaging/unraid/unraid-template.test.mjs',
+  'scripts/suwayomi-contract-checks.test.mjs',
 ];
 
 const posixOnlyTests = [

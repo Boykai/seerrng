@@ -7,6 +7,10 @@ import BookFormatBadge, {
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import {
+  formatMangaScope,
+  mangaScopeMessages,
+} from '@app/components/Common/MangaRequestScope';
 import MediaTypeBadge, {
   type MediaTypeBadgeType,
 } from '@app/components/Common/MediaTypeBadge';
@@ -23,6 +27,7 @@ import MediaFilterOption from '@app/components/Discover/MediaFilterOption';
 import PinnedFilterSection from '@app/components/Discover/PinnedFilterSection';
 import { RequestListboxControl } from '@app/components/RequestModal/AdvancedRequester';
 import SoftwareRequests from '@app/components/RequestStatus/SoftwareRequests';
+import ChooseSourceLink from '@app/components/Settings/MangaSources/ChooseSourceLink';
 import useDebouncedState from '@app/hooks/useDebouncedState';
 import useMediaFilterPin from '@app/hooks/useMediaFilterPin';
 import useRequestStatusScrollRestoration from '@app/hooks/useRequestStatusScrollRestoration';
@@ -38,6 +43,12 @@ import {
 import { sortCrewPriority } from '@app/utils/creditHelpers';
 import defineMessages from '@app/utils/defineMessages';
 import { getTmdbPosterImageUrl } from '@app/utils/imageCache';
+import { getMangaImageUrl } from '@app/utils/mangaImages';
+import {
+  getMangaAniListId,
+  isAwaitingMangaSource,
+  type MangaScopedRequest,
+} from '@app/utils/mangaRequestScope';
 import { hasLinkedWatchAheadAccount } from '@app/utils/watchAhead';
 import { Transition } from '@headlessui/react';
 import {
@@ -67,6 +78,7 @@ import type { RequestStatusSortField } from '@server/lib/requestStatusSort';
 import type { BookDetails } from '@server/models/Book';
 import type { ComicDetails } from '@server/models/Comic';
 import type { MagazineDetails } from '@server/models/Magazine';
+import type { MangaDetails } from '@server/models/Manga';
 import type { MovieDetails } from '@server/models/Movie';
 import type { MusicDetails } from '@server/models/Music';
 import type { TvDetails } from '@server/models/Tv';
@@ -90,6 +102,7 @@ import {
   RequestActionConfirmation,
   requestActionMessageText,
 } from './destructiveActions';
+import { MangaFollowControl, MangaFollowStatusLine } from './MangaFollow';
 
 const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
   ssr: false,
@@ -131,6 +144,7 @@ const messages = defineMessages('components.Requests', {
   album: 'Album',
   comic: 'Comic',
   magazine: 'Magazine',
+  manga: 'Manga',
   bookAndAudiobook: 'Book + Audiobook',
   book: 'Book',
   fourK: '4K',
@@ -258,7 +272,8 @@ type MediaDetails =
   | MusicDetails
   | BookDetails
   | ComicDetails
-  | MagazineDetails;
+  | MagazineDetails
+  | MangaDetails;
 type StatusStage =
   | 'requested'
   | 'approved'
@@ -280,7 +295,8 @@ type MediaFilter =
   | 'book'
   | 'audiobook'
   | 'comic'
-  | 'magazine';
+  | 'magazine'
+  | 'manga';
 type UserSelection = Exclude<RequestStatusUserSelection, null>;
 type TimeFrame = '7d' | '14d' | '30d' | '6m' | 'all';
 type RemoveSelection = {
@@ -327,6 +343,7 @@ const mediaTypeValues: MediaFilter[] = [
   'audiobook',
   'comic',
   'magazine',
+  'manga',
 ];
 
 const sortDirectionValues = ['asc', 'desc'] as const;
@@ -499,6 +516,9 @@ const isComic = (details: MediaDetails): details is ComicDetails =>
 const isMagazine = (details: MediaDetails): details is MagazineDetails =>
   (details as MagazineDetails).mediaType === 'magazine';
 
+const isManga = (details: MediaDetails): details is MangaDetails =>
+  (details as MangaDetails).mediaType === 'manga';
+
 const getBookId = (item: RequestStatusItem): string | undefined =>
   item.request.media.identifiers?.find(
     (identifier) => identifier.provider === 'openlibrary'
@@ -533,6 +553,10 @@ const getDetailsUrl = (item: RequestStatusItem): string | null => {
       ? `/api/v1/magazine/${encodeApiPathSegment(magazineId)}`
       : null;
   }
+  if (request.type === 'manga') {
+    const mangaId = getMangaAniListId(request.media);
+    return mangaId ? `/api/v1/manga/${mangaId}` : null;
+  }
   const bookId = getBookId(item);
   return bookId
     ? `/api/v1/book/${encodeApiPathSegment(normalizeOpenLibraryWorkId(bookId))}`
@@ -554,6 +578,10 @@ const getDetailHref = (item: RequestStatusItem): string | null => {
   if (request.type === 'magazine') {
     const magazineId = getMagazineId(item);
     return magazineId ? `/magazine/${encodeApiPathSegment(magazineId)}` : null;
+  }
+  if (request.type === 'manga') {
+    const mangaId = getMangaAniListId(request.media);
+    return mangaId ? `/manga/${mangaId}` : null;
   }
   const bookId = getBookId(item);
   const bookFormat = getRequestedBookFormat(item.request.bookFormat);
@@ -589,6 +617,9 @@ const getTitle = (
   if (item.request.type === 'magazine') {
     return getMagazineId(item) ?? intl.formatMessage(messages.unknownTitle);
   }
+  if (item.request.type === 'manga') {
+    return intl.formatMessage(messages.unknownTitle);
+  }
   return `${item.request.type.toUpperCase()} #${item.request.media.tmdbId}`;
 };
 
@@ -603,6 +634,14 @@ const getPoster = (
   }
   if (isBook(details)) {
     return { src: details.posterPath, type: 'book' };
+  }
+  if (isManga(details)) {
+    return {
+      src:
+        getMangaImageUrl(details.posterPath) ??
+        '/images/seerr_poster_not_found.png',
+      type: 'tmdb',
+    };
   }
   return { src: getTmdbPosterImageUrl(details.posterPath), type: 'tmdb' };
 };
@@ -620,6 +659,12 @@ const getBackdrop = (
     return details.posterPath
       ? { src: details.posterPath, type: 'book' }
       : undefined;
+  }
+  if (isManga(details)) {
+    const src =
+      getMangaImageUrl(details.backdropPath) ??
+      getMangaImageUrl(details.posterPath);
+    return src ? { src, type: 'tmdb' } : undefined;
   }
   if (details.backdropPath) {
     return {
@@ -650,6 +695,7 @@ const getMediaBadge = (
   if (item.request.type === 'comic') return intl.formatMessage(messages.comic);
   if (item.request.type === 'magazine')
     return intl.formatMessage(messages.magazine);
+  if (item.request.type === 'manga') return intl.formatMessage(messages.manga);
   return intl.formatMessage(messages.book);
 };
 
@@ -661,6 +707,7 @@ const getMediaBadgeType = (
   if (item.request.type === 'music') return 'album';
   if (item.request.type === 'comic') return 'comic';
   if (item.request.type === 'magazine') return 'magazine';
+  if (item.request.type === 'manga') return 'manga';
   return undefined;
 };
 
@@ -679,6 +726,9 @@ const getMediaFormat = (
   }
   if (item.request.type === 'magazine') {
     return intl.formatMessage(messages.magazine);
+  }
+  if (item.request.type === 'manga') {
+    return intl.formatMessage(messages.manga);
   }
   return intl.formatMessage(
     getBookFormatMessage(getRequestedBookFormat(item.request.bookFormat))
@@ -704,6 +754,10 @@ const getReleaseDate = (
   }
   if (item.request.type === 'magazine') {
     return (details as MagazineDetails).latestIssue;
+  }
+  if (item.request.type === 'manga') {
+    const startYear = (details as MangaDetails).startYear;
+    return startYear ? String(startYear) : undefined;
   }
   const year = (details as BookDetails).firstPublishYear;
   return year ? String(year) : undefined;
@@ -778,7 +832,9 @@ const getRuntimeLabel = (
       ? messages.pages
       : item.request.type === 'magazine' || item.request.type === 'comic'
         ? messages.issues
-        : messages.runtime
+        : item.request.type === 'manga'
+          ? mangaScopeMessages.chapters
+          : messages.runtime
   );
 
 const getRuntimeOrPages = (
@@ -786,6 +842,12 @@ const getRuntimeOrPages = (
   details: MediaDetails | undefined,
   item: RequestStatusItem
 ): string => {
+  if (item.request.type === 'manga') {
+    return formatMangaScope(
+      intl,
+      (item.request as MangaScopedRequest).mangaScope
+    );
+  }
   if (item.request.type !== 'book') {
     return getRuntime(intl, details, item);
   }
@@ -821,7 +883,7 @@ const getFeaturedCredits = (
       ];
     }
 
-    if (item.request.type === 'comic') {
+    if (item.request.type === 'comic' || item.request.type === 'manga') {
       return [];
     }
 
@@ -877,6 +939,10 @@ const getFeaturedCredits = (
 
   if (item.request.type === 'comic') {
     // ComicVine's basic volume data has no creator/writer/artist credit.
+    return [];
+  }
+
+  if (item.request.type === 'manga') {
     return [];
   }
 
@@ -953,6 +1019,10 @@ const getSecondaryDetails = (
     ];
   }
 
+  if (item.request.type === 'manga') {
+    return [];
+  }
+
   const studio = (details as MovieDetails | undefined)
     ?.productionCompanies?.[0];
   return [
@@ -966,7 +1036,7 @@ const getSecondaryDetails = (
 
 type GenreLink = {
   name: string;
-  href: string;
+  href?: string;
 };
 
 const getGenres = (
@@ -1001,6 +1071,12 @@ const getGenres = (
   if (item.request.type === 'comic') {
     // ComicVine has no genre-equivalent field.
     return [];
+  }
+  if (item.request.type === 'manga') {
+    // No discover page filters manga by genre, so these stay plain text.
+    return (details as MangaDetails).genres
+      .slice(0, 3)
+      .map((name) => ({ name }));
   }
   return (
     (details as BookDetails).subjects
@@ -1069,18 +1145,43 @@ interface RequestDownloadAsset {
   size?: number;
 }
 
-const RequestDownloadAction = ({
+/**
+ * Whether a request in this stage offers download copies. A manga request
+ * offers each chapter once SeerrNG verifies it, while the rest still
+ * downloads or after it failed; other media wait until they are available.
+ */
+export const canDownloadRequestCopy = (
+  type: RequestStatusItem['request']['type'],
+  stage: StatusStage
+): boolean =>
+  stage === 'available' ||
+  (type === 'manga' && (stage === 'downloading' || stage === 'failed'));
+
+export const RequestDownloadAction = ({
   requestId,
   enabled,
+  revision,
 }: {
   requestId: number;
   enabled: boolean;
+  /** Changes whenever new copies may exist, such as a chapter verified mid-download. */
+  revision?: string;
 }) => {
   const intl = useIntl();
-  const { data } = useSWR<{ results: RequestDownloadAsset[] }>(
+  const [isListOpen, setIsListOpen] = useState(false);
+  const { data, mutate } = useSWR<{ results: RequestDownloadAsset[] }>(
     enabled ? `/api/v1/request/status/${requestId}/downloads` : null,
     { revalidateOnFocus: false }
   );
+  const seen = useRef({ enabled, revision });
+  useEffect(() => {
+    const previous = seen.current;
+    seen.current = { enabled, revision };
+    // A list that has just been enabled loads by itself.
+    if (enabled && previous.enabled && previous.revision !== revision) {
+      void mutate();
+    }
+  }, [enabled, mutate, revision]);
   const assets = data?.results ?? [];
   if (assets.length === 0) return null;
 
@@ -1107,34 +1208,51 @@ const RequestDownloadAction = ({
     );
   }
 
+  // The list opens in the card's flow: the card clips anything that floats.
+  const listId = `request-${requestId}-download-copies`;
   return (
-    <details className="group relative">
-      <summary className={`${buttonClassName} list-none`}>
+    <>
+      <Button
+        type="button"
+        buttonType="primary"
+        buttonSize="sm"
+        aria-expanded={isListOpen}
+        aria-controls={isListOpen ? listId : undefined}
+        onClick={() => setIsListOpen((open) => !open)}
+      >
         <ArrowDownTrayIcon className="h-3.5 w-3.5" aria-hidden="true" />
         {intl.formatMessage(messages.downloadCopies)}
-        <ChevronDownIcon
-          className="h-3.5 w-3.5 transition-transform group-open:rotate-180 motion-reduce:transition-none"
-          aria-hidden="true"
-        />
-      </summary>
-      <ol className="absolute right-0 z-30 mt-1 max-h-64 max-w-[min(24rem,80vw)] min-w-64 overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 p-1 shadow-xl">
-        {assets.map((asset) => (
-          <li key={asset.id}>
-            <a
-              href={downloadHref(asset)}
-              download
-              className="block truncate rounded-md px-3 py-2 text-xs text-gray-100 hover:bg-gray-700 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-              title={asset.name}
-              aria-label={intl.formatMessage(messages.downloadCopyFor, {
-                name: asset.name,
-              })}
-            >
-              {asset.name}
-            </a>
-          </li>
-        ))}
-      </ol>
-    </details>
+        <ChevronDownIcon className="disclosure-chevron" aria-hidden="true" />
+      </Button>
+      {isListOpen && (
+        <section
+          id={listId}
+          aria-labelledby={`${listId}-heading`}
+          className="request-download-copy-panel app-card-inset refreshed-inset-surface"
+        >
+          <h4 id={`${listId}-heading`} className="media-inset-heading">
+            {intl.formatMessage(messages.downloadCopies)}
+          </h4>
+          <ol className="request-download-copy-list scrollable-card">
+            {assets.map((asset) => (
+              <li key={asset.id}>
+                <a
+                  href={downloadHref(asset)}
+                  download
+                  className="request-download-copy-link"
+                  title={asset.name}
+                  aria-label={intl.formatMessage(messages.downloadCopyFor, {
+                    name: asset.name,
+                  })}
+                >
+                  {asset.name}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+    </>
   );
 };
 
@@ -1151,7 +1269,7 @@ interface RequestStatusCardProps {
   onToggleHistory: (requestId: number) => void;
 }
 
-const RequestStatusCard = ({
+export const RequestStatusCard = ({
   item,
   isAdminView,
   onRetry,
@@ -1266,6 +1384,18 @@ const RequestStatusCard = ({
   );
   const mediaBadgeType = getMediaBadgeType(item) ?? 'movie';
   const StageIcon = stageIcon[currentStage] ?? InformationCircleIcon;
+  // A parked manga request stays APPROVED but reads as waiting for a source.
+  const awaitingSource =
+    currentStage === 'approved' &&
+    isAwaitingMangaSource(item.request as MangaScopedRequest);
+  const StatusIcon = awaitingSource ? ClockIcon : StageIcon;
+  const statusLabel = awaitingSource
+    ? intl.formatMessage(mangaScopeMessages.waitingForSource)
+    : getStageLabel(intl, currentStage);
+  const statusMessage =
+    awaitingSource && hasPermission(Permission.MANAGE_REQUESTS)
+      ? intl.formatMessage(mangaScopeMessages.waitingForSourceHint)
+      : current.message;
   const releaseDate = getReleaseDate(details, item);
   const releaseYear = releaseDate?.match(/\d{4}/)?.[0];
   const displayTitle = releaseYear ? `${title} (${releaseYear})` : title;
@@ -1298,11 +1428,16 @@ const RequestStatusCard = ({
   const genres = getGenres(details, item);
   const canShowDelete =
     isAdminView && hasPermission(Permission.MANAGE_REQUESTS);
+  // An approved manga request fails only once its chapters are queued, and
+  // the route lets request managers alone queue those chapters again.
+  const retryNeedsManager =
+    item.request.type === 'manga' &&
+    item.request.status === MediaRequestStatus.APPROVED;
   const canRetry =
     (observedCurrent.stage === 'failed' ||
       observedCurrent.stage === 'unavailable') &&
     ((isAdminView && hasPermission(Permission.MANAGE_REQUESTS)) ||
-      item.request.requestedBy.id === user?.id);
+      (!retryNeedsManager && item.request.requestedBy.id === user?.id));
   const canShowRemove =
     isAdminView && hasPermission(Permission.MANAGE_REQUESTS);
   const canRemove = canShowRemove && item.canRemove === true;
@@ -1455,6 +1590,10 @@ const RequestStatusCard = ({
           </span>
         </Tooltip>
       )}
+      <MangaFollowControl
+        request={item.request}
+        onUpdated={refreshRequestStatus}
+      />
       {canModeratePending && (
         <>
           <Tooltip content={intl.formatMessage(messages.approveTooltip)}>
@@ -1542,7 +1681,8 @@ const RequestStatusCard = ({
             item.request.type === 'music' ||
             item.request.type === 'book' ||
             item.request.type === 'comic' ||
-            item.request.type === 'magazine'
+            item.request.type === 'magazine' ||
+            item.request.type === 'manga'
               ? undefined
               : item.request.media.tmdbId
           }
@@ -1555,6 +1695,11 @@ const RequestStatusCard = ({
           comicId={item.request.type === 'comic' ? getComicId(item) : undefined}
           magazineTitle={
             item.request.type === 'magazine' ? getMagazineId(item) : undefined
+          }
+          mangaId={
+            item.request.type === 'manga'
+              ? getMangaAniListId(item.request.media)
+              : undefined
           }
           type={item.request.type}
           is4k={item.request.is4k}
@@ -1692,12 +1837,16 @@ const RequestStatusCard = ({
                       {genres.map((genre, index) => (
                         <span key={`${genre.href}-${genre.name}`}>
                           {index > 0 && ', '}
-                          <Link
-                            href={genre.href}
-                            className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                          >
-                            {genre.name}
-                          </Link>
+                          {genre.href ? (
+                            <Link
+                              href={genre.href}
+                              className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                            >
+                              {genre.name}
+                            </Link>
+                          ) : (
+                            genre.name
+                          )}
                         </span>
                       ))}
                     </dd>
@@ -1894,20 +2043,28 @@ const RequestStatusCard = ({
         )}
 
         <div className="request-status-action-row">
-          <Tooltip content={current.message}>
+          <Tooltip content={statusMessage}>
             <span
-              className={`app-button app-control-standard-radius button-sm inline-flex flex-shrink-0 items-center justify-center gap-1.5 text-xs font-semibold whitespace-nowrap ${stageTone[currentStage] ?? stageTone.cancelled}`}
-              aria-label={`${getStageLabel(intl, currentStage)}: ${current.message}`}
+              className={`app-button app-control-standard-radius button-sm inline-flex flex-shrink-0 items-center justify-center gap-1.5 text-xs font-semibold whitespace-nowrap ${awaitingSource ? stageTone.requested : (stageTone[currentStage] ?? stageTone.cancelled)}`}
+              aria-label={`${statusLabel}: ${statusMessage}`}
               tabIndex={0}
             >
-              <StageIcon className="h-3 w-3" aria-hidden="true" />
-              {getStageLabel(intl, currentStage)}
+              <StatusIcon className="h-3 w-3" aria-hidden="true" />
+              {statusLabel}
             </span>
           </Tooltip>
+          {awaitingSource && (
+            <ChooseSourceLink
+              asButton
+              anilistId={getMangaAniListId(item.request.media)}
+              instanceId={item.request.serverId}
+            />
+          )}
           {actionControls}
           <RequestDownloadAction
             requestId={item.request.id}
-            enabled={currentStage === 'available'}
+            enabled={canDownloadRequestCopy(item.request.type, currentStage)}
+            revision={`${currentStage}:${current.percent ?? ''}`}
           />
           <Button
             type="button"
@@ -1926,6 +2083,8 @@ const RequestStatusCard = ({
             />
           </Button>
         </div>
+
+        <MangaFollowStatusLine request={item.request} />
 
         {isHistoryOpen && (
           <section className="app-card-inset refreshed-inset-surface card-spacing-before relative z-10 rounded-lg border border-gray-700 p-3">
@@ -2526,6 +2685,7 @@ const Requests = () => {
     { value: 'audiobook', label: 'audiobooks' },
     { value: 'comic', label: 'comics' },
     { value: 'magazine', label: 'magazines' },
+    { value: 'manga', label: 'manga' },
   ];
   const changePage = (nextPage: number) => {
     pushRouteQuery(routeQuery({ nextPage }));

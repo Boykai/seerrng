@@ -241,6 +241,12 @@ export class User {
   public magazineQuotaDays?: number;
 
   @Column({ nullable: true })
+  public mangaQuotaLimit?: number;
+
+  @Column({ nullable: true })
+  public mangaQuotaDays?: number;
+
+  @Column({ nullable: true })
   public softwareQuotaLimit?: number;
 
   @Column({ nullable: true })
@@ -704,6 +710,28 @@ export class User {
         })
       : 0;
 
+    const mangaQuotaLimit = !canBypass
+      ? (this.mangaQuotaLimit ?? defaultQuotas.manga.quotaLimit)
+      : 0;
+    const mangaQuotaDays = this.mangaQuotaDays ?? defaultQuotas.manga.quotaDays;
+    const mangaDate = new Date();
+    if (mangaQuotaDays) {
+      mangaDate.setDate(mangaDate.getDate() - mangaQuotaDays);
+    }
+    const mangaQuotaUsed = mangaQuotaLimit
+      ? await requestRepository.count({
+          where: {
+            requestedBy: { id: this.id },
+            ...(mangaQuotaDays ? { createdAt: AfterDate(mangaDate) } : {}),
+            type: MediaType.MANGA,
+            status: Not(
+              In([MediaRequestStatus.DECLINED, MediaRequestStatus.FAILED])
+            ),
+            ignoreQuota: false,
+          },
+        })
+      : 0;
+
     const softwareQuotaLimit = !canBypass
       ? (this.softwareQuotaLimit ?? defaultQuotas.software.quotaLimit)
       : 0;
@@ -786,6 +814,17 @@ export class User {
           : undefined,
         restricted: !!(
           magazineQuotaLimit && magazineQuotaLimit - magazineQuotaUsed <= 0
+        ),
+      },
+      manga: {
+        days: mangaQuotaDays,
+        limit: mangaQuotaLimit,
+        used: mangaQuotaUsed,
+        remaining: mangaQuotaLimit
+          ? Math.max(0, mangaQuotaLimit - mangaQuotaUsed)
+          : undefined,
+        restricted: !!(
+          mangaQuotaLimit && mangaQuotaLimit - mangaQuotaUsed <= 0
         ),
       },
       software: {

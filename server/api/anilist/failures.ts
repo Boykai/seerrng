@@ -2,11 +2,15 @@
 // See NOTICE.md for attribution and license terms.
 export class AnilistRateLimitedError extends Error {
   public readonly retryAfterSeconds: number;
+  // False when the shared limiter refused the call before it was sent, so
+  // AniList never received it.
+  public readonly requestSent: boolean;
 
-  constructor(retryAfterSeconds = 60) {
+  constructor(retryAfterSeconds = 60, options: { requestSent?: boolean } = {}) {
     super(`AniList API rate limited; retry after ${retryAfterSeconds}s`);
     this.name = 'AnilistRateLimitedError';
     this.retryAfterSeconds = retryAfterSeconds;
+    this.requestSent = options.requestSent ?? true;
   }
 }
 
@@ -20,9 +24,13 @@ export class AnilistAuthError extends Error {
 }
 
 export class AnilistGraphQLError extends Error {
-  constructor(message: string) {
+  // The GraphQL error status (for example 404 for an unknown id), if any.
+  public readonly status?: number;
+
+  constructor(message: string, status?: number) {
     super(message);
     this.name = 'AnilistGraphQLError';
+    this.status = status;
   }
 }
 
@@ -30,6 +38,14 @@ export class AnilistOutageError extends Error {
   constructor(message = 'AniList is temporarily unavailable') {
     super(message);
     this.name = 'AnilistOutageError';
+  }
+}
+
+/** A reply that answered the request with data in an unexpected shape. */
+export class AnilistBadResponseError extends Error {
+  constructor(message = 'AniList returned a malformed response') {
+    super(message);
+    this.name = 'AnilistBadResponseError';
   }
 }
 

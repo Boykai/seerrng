@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
 
+import AnilistAPI from '@server/api/anilist';
 import ListenBrainzAPI from '@server/api/listenbrainz';
 import OpenLibraryAPI from '@server/api/openlibrary';
 import {
@@ -200,6 +201,137 @@ describe('MediaRequest.sendNotification', () => {
       Notification.MEDIA_AVAILABLE
     );
     assert.strictEqual(savedPayload.mediaUrl, '/requests/status?requestId=21');
+  });
+
+  it('builds manga payloads from the AniList identifier without network lookups', async (t) => {
+    const getWorkMock = mock.method(OpenLibraryAPI.prototype, 'getWork', () => {
+      throw new Error('Manga notifications must not query Open Library.');
+    });
+    t.after(() => getWorkMock.mock.restore());
+
+    const media = new Media({
+      mediaType: MediaType.MANGA,
+      tmdbId: 0,
+      status: MediaStatus.PENDING,
+      status4k: MediaStatus.UNKNOWN,
+      identifiers: [
+        new MediaIdentifier({
+          provider: MediaIdentifierProvider.ANILIST,
+          value: '30013',
+          canonical: true,
+        }),
+      ],
+    });
+    const entity = new MediaRequest({
+      type: MediaType.MANGA,
+      media,
+      requestedBy: createUser(),
+      status: MediaRequestStatus.APPROVED,
+      is4k: false,
+    });
+
+    const payload = await buildMediaRequestNotificationPayload(
+      entity,
+      media,
+      Notification.MEDIA_APPROVED
+    );
+    assert.strictEqual(payload.event, 'Manga Request Approved');
+    assert.strictEqual(payload.subject, 'AniList 30013');
+    assert.strictEqual(
+      payload.message,
+      'Manga request details are available in SeerrNG.'
+    );
+    assert.strictEqual(payload.mediaUrl, '/manga/30013');
+    assert.strictEqual(payload.image, undefined);
+
+    const unresolved = new Media({
+      mediaType: MediaType.MANGA,
+      tmdbId: 0,
+      identifiers: [],
+    });
+    const unresolvedPayload = await buildMediaRequestNotificationPayload(
+      new MediaRequest({
+        type: MediaType.MANGA,
+        media: unresolved,
+        requestedBy: createUser(),
+        status: MediaRequestStatus.PENDING,
+        is4k: false,
+      }),
+      unresolved,
+      Notification.MEDIA_PENDING
+    );
+    assert.strictEqual(unresolvedPayload.event, 'New Manga Request');
+    assert.strictEqual(unresolvedPayload.subject, 'Manga');
+    assert.strictEqual(unresolvedPayload.mediaUrl, undefined);
+    assert.strictEqual(getWorkMock.mock.callCount(), 0);
+  });
+
+  it('names a delivered manga by its AniList title and cover, or falls back', async (t) => {
+    const replies: (() => unknown)[] = [
+      () => ({
+        id: 30013,
+        titles: { romaji: 'Synthetic Romaji', english: 'Synthetic Title' },
+        synonyms: [],
+        isAdult: false,
+        genres: [],
+        tags: [],
+        staff: [],
+        startYear: 2014,
+        coverImage: 'https://img.example/cover-30013.jpg',
+      }),
+      () => null,
+      () => {
+        throw new Error('synthetic AniList outage');
+      },
+    ];
+    const getMangaDetailsMock = mock.method(
+      AnilistAPI.prototype,
+      'getMangaDetails',
+      async () => replies.shift()?.()
+    );
+    t.after(() => getMangaDetailsMock.mock.restore());
+    const media = new Media({
+      mediaType: MediaType.MANGA,
+      tmdbId: 0,
+      status: MediaStatus.PARTIALLY_AVAILABLE,
+      status4k: MediaStatus.UNKNOWN,
+      identifiers: [
+        new MediaIdentifier({
+          provider: MediaIdentifierProvider.ANILIST,
+          value: '30013',
+          canonical: true,
+        }),
+      ],
+    });
+    const entity = new MediaRequest({
+      id: 21,
+      type: MediaType.MANGA,
+      media,
+      requestedBy: createUser(),
+      status: MediaRequestStatus.COMPLETED,
+      is4k: false,
+    });
+    const build = (type: Notification) =>
+      buildMediaRequestNotificationPayload(entity, media, type);
+
+    const delivered = await build(Notification.MEDIA_AVAILABLE);
+    assert.strictEqual(delivered.event, 'Manga Now Available');
+    assert.strictEqual(delivered.subject, 'Synthetic Title (2014)');
+    assert.strictEqual(delivered.image, 'https://img.example/cover-30013.jpg');
+    assert.strictEqual(delivered.mediaUrl, '/requests/status?requestId=21');
+    assert.deepStrictEqual(
+      getMangaDetailsMock.mock.calls[0].arguments,
+      [30013]
+    );
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const fallback = await build(Notification.MEDIA_AVAILABLE);
+      assert.strictEqual(fallback.subject, 'AniList 30013');
+      assert.strictEqual(fallback.image, undefined);
+    }
+    // Only a delivery looks the title up.
+    await build(Notification.MEDIA_APPROVED);
+    assert.strictEqual(getMangaDetailsMock.mock.callCount(), 3);
   });
 });
 

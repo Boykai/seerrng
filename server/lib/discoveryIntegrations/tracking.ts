@@ -1,4 +1,4 @@
-import AnilistAPI from '@server/api/anilist';
+import AnilistAPI, { AnilistRateLimitedError } from '@server/api/anilist';
 import SimklAPI from '@server/api/simkl';
 import TheMovieDb from '@server/api/themoviedb';
 import { ANIME_KEYWORD_ID } from '@server/api/themoviedb/constants';
@@ -439,6 +439,12 @@ export async function applyTrackingIntent(
       await repo.save(action);
       return publicTrackingAction(action);
     } catch (error) {
+      if (error instanceof AnilistRateLimitedError && !error.requestSent) {
+        // The shared AniList limiter refused the write before sending it, so
+        // nothing changed and the same action can be tried again later.
+        await repo.remove(action);
+        throw error;
+      }
       action.state = 'unknown';
       action.completedAt = new Date();
       await repo.save(action);

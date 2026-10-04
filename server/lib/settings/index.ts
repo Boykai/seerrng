@@ -207,6 +207,26 @@ export type BackIssueSettings = CollectorServiceSettings;
 
 export type LazyLibrarianSettings = CollectorServiceSettings;
 
+export type SuwayomiSettingsAuthMode = 'UI_LOGIN' | 'BASIC_AUTH' | 'NONE';
+
+export interface SuwayomiSettings {
+  id: number;
+  name: string;
+  hostname: string;
+  port: number;
+  useSsl: boolean;
+  baseUrl?: string;
+  isDefault: boolean;
+  authMode: SuwayomiSettingsAuthMode;
+  username: string;
+  password: string;
+  // Suwayomi source IDs are 64-bit, so they are kept as decimal strings.
+  sourceAllowlist: string[];
+  preferredLanguages: string[];
+  scanlatorPreference: string[];
+  requireCbz: boolean;
+}
+
 interface Quota {
   quotaLimit?: number;
   quotaDays?: number;
@@ -250,6 +270,9 @@ export interface MainSettings {
   applicationUrl: string;
   cacheImages: boolean;
   includeAdult: boolean;
+  // Manga catalog exclusions; both stay off unless an admin opts in.
+  mangaIncludeAdult: boolean;
+  mangaIncludeNovels: boolean;
   defaultPermissions: number;
   defaultQuotas: {
     movie: Quota;
@@ -258,6 +281,7 @@ export interface MainSettings {
     book: Quota;
     comic: Quota;
     magazine: Quota;
+    manga: Quota;
     software: Quota;
   };
   enabledMediaCategories: EnabledMediaCategories;
@@ -337,6 +361,7 @@ interface FullPublicSettings extends PublicSettings {
   magazinesEnabled: boolean;
   softwareEnabled: boolean;
   romarrEnabled: boolean;
+  suwayomiEnabled: boolean;
   enabledMediaCategories: EnabledMediaCategories;
   discoverRegion: string;
   streamingRegion: string;
@@ -513,6 +538,11 @@ export type JobId =
   | 'kapowarr-scan'
   | 'backissue-scan'
   | 'magazine-scan'
+  | 'manga-library-scan'
+  | 'manga-source-resolve'
+  | 'manga-dispatch-sweep'
+  | 'manga-progress'
+  | 'manga-follow'
   | 'download-sync'
   | 'software-request-reconciliation'
   | 'download-recovery'
@@ -558,6 +588,7 @@ export interface AllSettings {
   kapowarr: KapowarrSettings[];
   backissue: BackIssueSettings[];
   lazylibrarian: LazyLibrarianSettings[];
+  suwayomi: SuwayomiSettings[];
   softwareAcquisition: SoftwareAcquisitionSettings;
   prowlarr: ProwlarrSettings;
   discoveryIntegrations: DiscoveryIntegrationsSettings;
@@ -599,6 +630,8 @@ class Settings {
         applicationUrl: '',
         cacheImages: true,
         includeAdult: false,
+        mangaIncludeAdult: false,
+        mangaIncludeNovels: false,
         defaultPermissions: Permission.REQUEST,
         defaultQuotas: {
           movie: {},
@@ -607,6 +640,7 @@ class Settings {
           book: {},
           comic: {},
           magazine: {},
+          manga: {},
           software: {},
         },
         enabledMediaCategories: { ...DEFAULT_ENABLED_MEDIA_CATEGORIES },
@@ -673,6 +707,7 @@ class Settings {
       kapowarr: [],
       backissue: [],
       lazylibrarian: [],
+      suwayomi: [],
       discoveryIntegrations: defaultDiscoveryIntegrations(),
       softwareAcquisition: {
         romarr: {
@@ -850,6 +885,21 @@ class Settings {
         },
         'magazine-scan': {
           schedule: '0 30 5 * * *',
+        },
+        'manga-library-scan': {
+          schedule: '0 45 5 * * *',
+        },
+        'manga-source-resolve': {
+          schedule: '0 */10 * * * *',
+        },
+        'manga-dispatch-sweep': {
+          schedule: '0 */5 * * * *',
+        },
+        'manga-progress': {
+          schedule: '0 */2 * * * *',
+        },
+        'manga-follow': {
+          schedule: '0 7,37 * * * *',
         },
         'availability-sync': {
           schedule: '0 0 5 * * *',
@@ -1185,6 +1235,14 @@ class Settings {
     this.data.lazylibrarian = data;
   }
 
+  get suwayomi(): SuwayomiSettings[] {
+    return this.data.suwayomi;
+  }
+
+  set suwayomi(data: SuwayomiSettings[]) {
+    this.data.suwayomi = data;
+  }
+
   get discoveryIntegrations(): DiscoveryIntegrationsSettings {
     return this.data.discoveryIntegrations ?? defaultDiscoveryIntegrations();
   }
@@ -1255,6 +1313,7 @@ class Settings {
         this.data.softwareAcquisition.romarr.hostname &&
         this.data.softwareAcquisition.romarr.apiKey
       ),
+      suwayomiEnabled: this.data.suwayomi.length > 0,
       enabledMediaCategories: {
         ...DEFAULT_ENABLED_MEDIA_CATEGORIES,
         ...this.data.main.enabledMediaCategories,
@@ -1477,6 +1536,8 @@ class Settings {
         applicationUrl: '',
         cacheImages: false,
         includeAdult: false,
+        mangaIncludeAdult: false,
+        mangaIncludeNovels: false,
         defaultPermissions: Permission.REQUEST,
         defaultQuotas: {
           movie: {},
@@ -1485,6 +1546,7 @@ class Settings {
           book: {},
           comic: {},
           magazine: {},
+          manga: {},
           software: {},
         },
         enabledMediaCategories: { ...DEFAULT_ENABLED_MEDIA_CATEGORIES },
@@ -1546,6 +1608,7 @@ class Settings {
       kapowarr: [],
       backissue: [],
       lazylibrarian: [],
+      suwayomi: [],
       discoveryIntegrations: defaultDiscoveryIntegrations(),
       softwareAcquisition: {
         romarr: {
@@ -1722,6 +1785,21 @@ class Settings {
         },
         'magazine-scan': {
           schedule: '0 30 5 * * *',
+        },
+        'manga-library-scan': {
+          schedule: '0 45 5 * * *',
+        },
+        'manga-source-resolve': {
+          schedule: '0 */10 * * * *',
+        },
+        'manga-dispatch-sweep': {
+          schedule: '0 */5 * * * *',
+        },
+        'manga-progress': {
+          schedule: '0 */2 * * * *',
+        },
+        'manga-follow': {
+          schedule: '0 7,37 * * * *',
         },
         'availability-sync': {
           schedule: '0 0 5 * * *',

@@ -8,6 +8,7 @@ import type {
   AnilistMediaPage,
   AnilistMediaSeason,
   AnilistMediaSort,
+  AnilistMediaType,
   AnilistTokenResponse,
   AnilistTokenState,
   AnilistViewer,
@@ -25,15 +26,45 @@ import { proxyRequestInterceptor } from '@server/utils/customProxyAgent';
 import axios from 'axios';
 import {
   AnilistAuthError,
+  AnilistBadResponseError,
   AnilistGraphQLError,
   AnilistOutageError,
   AnilistRateLimitedError,
   classifyAnilistFailure,
   firstAnilistGraphQlError,
 } from './failures';
+import type {
+  AnilistMalLinkPage,
+  AnilistMangaContentPolicy,
+  AnilistMangaDetails,
+  AnilistMangaPage,
+  AnilistMangaPageOptions,
+  AnilistMangaSummary,
+} from './manga';
+import {
+  ANILIST_MANGA_BATCH_SIZE,
+  ANILIST_MANGA_DETAILS_TTL_SECONDS,
+  ANILIST_MANGA_PAGE_TTL_SECONDS,
+  MANGA_BY_IDS_QUERY,
+  MANGA_DETAILS_QUERY,
+  MANGA_IDS_BY_MAL_QUERY,
+  MANGA_PAGE_QUERY,
+  buildAnilistMangaPageVariables,
+  sanitizeAnilistMalLinkPage,
+  sanitizeAnilistMangaBatch,
+  sanitizeAnilistMangaDetails,
+  sanitizeAnilistMangaPage,
+  sanitizeAnilistMangaSearch,
+} from './manga';
+import {
+  ANILIST_DEFAULT_MAX_WAIT_MS,
+  anilistRateLimiter,
+  parseAnilistRetryAfterSeconds,
+} from './rateLimiter';
 
 export {
   AnilistAuthError,
+  AnilistBadResponseError,
   AnilistGraphQLError,
   AnilistOutageError,
   AnilistRateLimitedError,
@@ -41,6 +72,7 @@ export {
 } from './failures';
 
 const ANILIST_PAGE_SIZE = 20;
+const ANILIST_TITLE_SEARCH_SIZE = 5;
 const ANILIST_TOKEN_TTL_FALLBACK_SECONDS = 365 * 24 * 60 * 60;
 const PUBLIC_PAGE_CACHE_TTL_SECONDS = 300;
 
@@ -85,8 +117,8 @@ const VIEWER_QUERY = `
 `;
 
 const MEDIA_LIST_COLLECTION_QUERY = `
-  query MediaListCollection($userId: Int!) {
-    MediaListCollection(userId: $userId, type: ANIME) {
+  query MediaListCollection($userId: Int!, $type: MediaType) {
+    MediaListCollection(userId: $userId, type: $type) {
       lists {
         name
         isCustomList
@@ -105,8 +137,8 @@ const MEDIA_LIST_COLLECTION_QUERY = `
 `;
 
 const MEDIA_QUERY = `
-  query Media($id: Int) {
-    Media(id: $id, type: ANIME) { ${MEDIA_FIELDS} }
+  query Media($id: Int, $type: MediaType) {
+    Media(id: $id, type: $type) { ${MEDIA_FIELDS} }
   }
 `;
 
@@ -144,12 +176,25 @@ interface GraphQLResponse<T> {
   errors?: { message?: string; status?: number }[];
 }
 
+const retryAfterFromError = (error: unknown): number => {
+  const headers = axios.isAxiosError(error)
+    ? error.response?.headers
+    : undefined;
+  return parseAnilistRetryAfterSeconds(
+    headers?.['retry-after'] ?? headers?.['Retry-After']
+  );
+};
+
 interface AnilistAPIOptions {
   accessToken?: string;
+  // How long a call may queue for the shared AniList budget before it fails
+  // fast with AnilistRateLimitedError.
+  maxRateLimitWaitMs?: number;
 }
 
 class AnilistAPI extends ExternalAPI {
   private accessToken?: string;
+  private maxRateLimitWaitMs: number;
 
   constructor(options: AnilistAPIOptions = {}) {
     const headers: Record<string, string> = {
@@ -166,14 +211,19 @@ class AnilistAPI extends ExternalAPI {
       {
         headers,
         nodeCache: cacheManager.getCache('anilist').data,
-        rateLimit: {
-          maxRPS: 1,
-          maxRequests: 90,
-        },
       }
     );
 
     this.accessToken = options.accessToken;
+    this.maxRateLimitWaitMs =
+      options.maxRateLimitWaitMs ?? ANILIST_DEFAULT_MAX_WAIT_MS;
+    // Interceptors run in reverse registration order, so the shared budget
+    // is reserved before ExternalAPI's own request interceptors. Cache hits
+    // and coalesced duplicates never reach this point.
+    this.axios.interceptors.request.use(async (config) => {
+      await anilistRateLimiter.acquire(this.maxRateLimitWaitMs);
+      return config;
+    });
   }
 
   static buildAuthorizeUrl(clientId: string): string {
@@ -202,6 +252,9 @@ class AnilistAPI extends ExternalAPI {
     });
     tokenClient.interceptors.request.use(proxyRequestInterceptor);
 
+    // The token endpoint is on AniList's host too, so it spends the same
+    // per-IP budget as GraphQL calls.
+    await anilistRateLimiter.acquire(ANILIST_DEFAULT_MAX_WAIT_MS);
     try {
       // The authorization code and client secret are intentionally sent to
       // AniList's fixed OAuth token endpoint.
@@ -233,6 +286,11 @@ class AnilistAPI extends ExternalAPI {
         throw e;
       }
       const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+      if (status === 429) {
+        const retryAfterSeconds = retryAfterFromError(e);
+        anilistRateLimiter.noteRateLimited(retryAfterSeconds);
+        throw new AnilistRateLimitedError(retryAfterSeconds);
+      }
       logger.warn('AniList PIN token exchange failed', {
         label: 'AniList API',
         status,
@@ -341,23 +399,133 @@ class AnilistAPI extends ExternalAPI {
   }
 
   async getMediaListCollection(
-    userId: number
+    userId: number,
+    type: AnilistMediaType = 'ANIME'
   ): Promise<AnilistMediaListCollection> {
     const data = await this.graphql<{
       MediaListCollection: AnilistMediaListCollection;
-    }>(MEDIA_LIST_COLLECTION_QUERY, { userId }, 0);
+    }>(MEDIA_LIST_COLLECTION_QUERY, { userId, type }, 0);
     return {
       lists: data.MediaListCollection?.lists ?? [],
     };
   }
 
-  async getMedia(id: number): Promise<AnilistMedia | null> {
+  async getMedia(
+    id: number,
+    type: AnilistMediaType = 'ANIME'
+  ): Promise<AnilistMedia | null> {
     const data = await this.graphql<{ Media: AnilistMedia | null }>(
       MEDIA_QUERY,
-      { id },
+      { id, type },
       0
     );
     return data.Media ?? null;
+  }
+
+  async getMangaDetails(id: number): Promise<AnilistMangaDetails | null> {
+    try {
+      const data = await this.graphql<{ Media?: unknown }>(
+        MANGA_DETAILS_QUERY,
+        { id },
+        ANILIST_MANGA_DETAILS_TTL_SECONDS
+      );
+      return sanitizeAnilistMangaDetails(data.Media) ?? null;
+    } catch (e) {
+      // AniList answers an unknown (or non-manga) id with a 404, either as
+      // the HTTP status or inside the GraphQL error body.
+      if (
+        (axios.isAxiosError(e) && e.response?.status === 404) ||
+        (e instanceof AnilistGraphQLError && e.status === 404)
+      ) {
+        return null;
+      }
+      throw e;
+    }
+  }
+
+  async getMangaPage(
+    options: AnilistMangaPageOptions
+  ): Promise<AnilistMangaPage> {
+    const data = await this.graphql<{ Page?: unknown }>(
+      MANGA_PAGE_QUERY,
+      buildAnilistMangaPageVariables(options, ANILIST_PAGE_SIZE),
+      ANILIST_MANGA_PAGE_TTL_SECONDS
+    );
+    return sanitizeAnilistMangaPage(data.Page, options);
+  }
+
+  /**
+   * Catalog cards for up to 50 AniList IDs in one cached request. Unknown
+   * IDs are simply missing; the caller applies the content policy.
+   */
+  async getMangaSummariesByIds(
+    ids: readonly number[]
+  ): Promise<AnilistMangaSummary[]> {
+    // Sorted, so the same set of IDs always shares one cache entry.
+    const unique = [...new Set(ids)].sort((a, b) => a - b);
+    if (unique.length > ANILIST_MANGA_BATCH_SIZE) {
+      throw new RangeError(
+        `At most ${ANILIST_MANGA_BATCH_SIZE} manga can be read at once.`
+      );
+    }
+    if (!unique.length) {
+      return [];
+    }
+    const data = await this.graphql<{ Page?: unknown }>(
+      MANGA_BY_IDS_QUERY,
+      { ids: unique },
+      ANILIST_MANGA_DETAILS_TTL_SECONDS
+    );
+    const media = sanitizeAnilistMangaBatch(data.Page, new Set(unique));
+    if (!media) {
+      throw new AnilistBadResponseError();
+    }
+    return media;
+  }
+
+  /**
+   * One page of the AniList manga linked to these MyAnimeList IDs, for
+   * library matching. An exact link ignores the content policy; nothing is
+   * cached or shared with another caller.
+   */
+  async getMangaIdsByMalIds(
+    malIds: readonly number[],
+    page: number,
+    options: { signal?: AbortSignal } = {}
+  ): Promise<AnilistMalLinkPage> {
+    const data = await this.graphql<{ Page?: unknown }>(
+      MANGA_IDS_BY_MAL_QUERY,
+      { page, malIds },
+      0,
+      options.signal
+    );
+    const result = sanitizeAnilistMalLinkPage(data.Page, new Set(malIds));
+    if (!result) {
+      throw new AnilistBadResponseError();
+    }
+    return result;
+  }
+
+  /** The best title matches for library matching, uncached. */
+  async searchMangaTitles(
+    search: string,
+    policy: AnilistMangaContentPolicy,
+    options: { signal?: AbortSignal } = {}
+  ): Promise<AnilistMangaSummary[]> {
+    const data = await this.graphql<{ Page?: unknown }>(
+      MANGA_PAGE_QUERY,
+      buildAnilistMangaPageVariables(
+        { ...policy, page: 1, sort: ['SEARCH_MATCH'], search },
+        ANILIST_TITLE_SEARCH_SIZE
+      ),
+      0,
+      options.signal
+    );
+    const media = sanitizeAnilistMangaSearch(data.Page, policy);
+    if (!media) {
+      throw new AnilistBadResponseError();
+    }
+    return media;
   }
 
   async saveMediaListEntry(options: {
@@ -404,14 +572,16 @@ class AnilistAPI extends ExternalAPI {
       sort: AnilistMediaSort;
       season?: AnilistMediaSeason;
       seasonYear?: number;
+      type?: AnilistMediaType;
     }
   ): Promise<AnilistMediaPage> {
+    const type = options.type ?? 'ANIME';
     const data = await this.graphql<{ Page: AnilistMediaPage }>(
       PAGE_MEDIA_QUERY,
       {
         page,
         perPage: ANILIST_PAGE_SIZE,
-        type: 'ANIME',
+        type,
         sort: [options.sort],
         season: options.season,
         seasonYear: options.seasonYear,
@@ -424,7 +594,7 @@ class AnilistAPI extends ExternalAPI {
         currentPage: page,
       },
       media: (data.Page?.media ?? []).filter(
-        (item) => item?.id && item.format !== 'MUSIC'
+        (item) => item?.id && (type !== 'ANIME' || item.format !== 'MUSIC')
       ),
     };
   }
@@ -432,15 +602,17 @@ class AnilistAPI extends ExternalAPI {
   private async graphql<T>(
     query: string,
     variables: Record<string, unknown>,
-    ttl: number
+    ttl: number,
+    signal?: AbortSignal
   ): Promise<T> {
     try {
+      const auth = this.accessToken
+        ? { headers: { Authorization: `Bearer ${this.accessToken}` } }
+        : undefined;
       const response = await this.post<GraphQLResponse<T>>(
         '',
         { query, variables },
-        this.accessToken
-          ? { headers: { Authorization: `Bearer ${this.accessToken}` } }
-          : undefined,
+        signal ? { ...auth, signal } : auth,
         ttl
       );
 
@@ -454,7 +626,8 @@ class AnilistAPI extends ExternalAPI {
       }
       if (response.errors?.length) {
         throw new AnilistGraphQLError(
-          response.errors[0]?.message || 'AniList GraphQL error'
+          response.errors[0]?.message || 'AniList GraphQL error',
+          graphQlError.status
         );
       }
       if (!response.data) {
@@ -472,15 +645,9 @@ class AnilistAPI extends ExternalAPI {
       }
       const status = axios.isAxiosError(e) ? e.response?.status : undefined;
       if (status === 429) {
-        const retryAfter = Number(
-          axios.isAxiosError(e)
-            ? (e.response?.headers?.['retry-after'] ??
-                e.response?.headers?.['Retry-After'])
-            : 60
-        );
-        throw new AnilistRateLimitedError(
-          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 60
-        );
+        const retryAfterSeconds = retryAfterFromError(e);
+        anilistRateLimiter.noteRateLimited(retryAfterSeconds);
+        throw new AnilistRateLimitedError(retryAfterSeconds);
       }
       const graphQlError = firstAnilistGraphQlError(
         axios.isAxiosError(e) ? e.response?.data : undefined

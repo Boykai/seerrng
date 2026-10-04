@@ -10,6 +10,8 @@ import {
   BoundedTaskQueue,
   BoundedTaskQueueFullError,
 } from '@server/utils/concurrency';
+import { TransactionDeferrals } from '@server/utils/transactionDeferrals';
+import { AsyncResource } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { QueryRunner } from 'typeorm';
 
@@ -20,6 +22,11 @@ export const MAX_REQUEST_DISPATCH_ATTEMPTS = 50;
 export const REQUEST_DISPATCH_CLAIM_LEASE_MS = 15 * 60 * 1000;
 export const REQUEST_DISPATCH_SCAN_INTERVAL_MS = 60_000;
 export const MAX_REQUEST_DISPATCH_RETRY_DELAY_MS = 6 * 60 * 60 * 1000;
+
+// Captured at module load, outside any request. A dispatch can be queued
+// inside a route's or a job's admission; it outlives that admission, so it
+// starts in this context instead of the caller's.
+const dispatchScope = new AsyncResource('RequestDispatch');
 
 export type RequestDispatchOutcome = {
   delivered: boolean;
@@ -35,10 +42,8 @@ export const getRequestDispatchRetryDelayMs = (attempts: number): number =>
 export class RequestDispatchManager {
   private active = new Set<number>();
   private deferred = new Set<number>();
-  private deferredByQueryRunner = new WeakMap<
-    QueryRunner,
-    RequestDispatchOutbox[]
-  >();
+  private deferredByQueryRunner =
+    new TransactionDeferrals<RequestDispatchOutbox>();
   private enqueuesInProgress = 0;
   private scan?: Promise<void>;
   private timer?: NodeJS.Timeout;
@@ -107,10 +112,13 @@ export class RequestDispatchManager {
       }
       if (transactional && queryRunner) {
         this.deferred.add(record.id);
-        const records = this.deferredByQueryRunner.get(queryRunner) ?? [];
-        if (!records.some(({ id }) => id === record.id)) {
-          records.push(record);
-          this.deferredByQueryRunner.set(queryRunner, records);
+        if (
+          !this.deferredByQueryRunner.some(
+            queryRunner,
+            ({ id }) => id === record.id
+          )
+        ) {
+          this.deferredByQueryRunner.add(queryRunner, record);
         }
         return;
       }
@@ -139,19 +147,33 @@ export class RequestDispatchManager {
   }
 
   public commit(queryRunner: QueryRunner): void {
-    const records = this.deferredByQueryRunner.get(queryRunner) ?? [];
-    this.deferredByQueryRunner.delete(queryRunner);
-    for (const record of records) {
+    for (const record of this.deferredByQueryRunner.commit(queryRunner)) {
       this.deferred.delete(record.id);
       this.dispatch(record);
     }
   }
 
   public rollback(queryRunner: QueryRunner): void {
-    const records = this.deferredByQueryRunner.get(queryRunner) ?? [];
-    this.deferredByQueryRunner.delete(queryRunner);
-    for (const record of records) {
+    for (const record of this.deferredByQueryRunner.rollback(queryRunner)) {
       this.deferred.delete(record.id);
+    }
+  }
+
+  // Outbox rows left by a transaction that never reported its end are
+  // dispatched by the retry scan if they were committed.
+  public discardStale(queryRunner: QueryRunner): void {
+    const stale = this.deferredByQueryRunner.discard(queryRunner);
+    for (const record of stale) {
+      this.deferred.delete(record.id);
+    }
+    if (stale.length > 0) {
+      logger.warn(
+        'Discarded deferred request dispatches of an ended transaction',
+        {
+          label: 'Request Dispatch',
+          count: stale.length,
+        }
+      );
     }
   }
 
@@ -340,7 +362,7 @@ export class RequestDispatchManager {
       return;
     }
     this.active.add(record.id);
-    trackBackgroundTask(`request dispatch outbox ${record.id}`, async () => {
+    const deliver = async (): Promise<void> => {
       try {
         await this.deliveryQueue.run(async () => {
           let claimToken: string | undefined;
@@ -409,7 +431,10 @@ export class RequestDispatchManager {
       } finally {
         this.active.delete(record.id);
       }
-    });
+    };
+    dispatchScope.runInAsyncScope(() =>
+      trackBackgroundTask(`request dispatch outbox ${record.id}`, deliver)
+    );
   }
 
   public async resume(respectBackoff = false): Promise<void> {

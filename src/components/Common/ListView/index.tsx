@@ -16,10 +16,12 @@ import {
   canRequestMissingBookFormat,
   isBookInProgress,
 } from '@app/utils/libraryMedia';
+import { getMangaImageUrl } from '@app/utils/mangaImages';
 import { MediaStatus } from '@server/constants/media';
 import type { WatchlistItem } from '@server/interfaces/api/discoverInterfaces';
 import type { ComicResult } from '@server/models/Comic';
 import type { MagazineResult } from '@server/models/Magazine';
+import type { MangaResult } from '@server/models/Manga';
 import type {
   AlbumResult,
   ArtistResult,
@@ -46,6 +48,7 @@ type ListViewProps = {
     | AuthorResult
     | ComicResult
     | MagazineResult
+    | MangaResult
   )[];
   plexItems?: WatchlistItem[];
   isEmpty?: boolean;
@@ -91,6 +94,7 @@ const ListView = ({
               | BookResult
               | ComicResult
               | MagazineResult
+              | MangaResult
           ).mediaInfo?.status !== MediaStatus.BLOCKLISTED
       ),
     [items]
@@ -330,6 +334,20 @@ const ListView = ({
                 mediaType={title.mediaType}
                 requestable={title.requestable}
                 providerTracked={title.provider === 'lazylibrarian'}
+                canExpand
+              />
+            );
+            break;
+          case 'manga':
+            titleCard = (
+              <TitleCard
+                key={title.id}
+                id={title.id}
+                image={getMangaImageUrl(title.posterPath)}
+                status={title.mediaInfo?.status}
+                title={title.title}
+                year={title.startYear?.toString()}
+                mediaType={title.mediaType}
                 canExpand
               />
             );

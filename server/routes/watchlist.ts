@@ -11,7 +11,10 @@ import { Router } from 'express';
 import { QueryFailedError } from 'typeorm';
 
 import { MediaType } from '@server/constants/media';
-import { watchlistCreate } from '@server/interfaces/api/watchlistCreate';
+import {
+  MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE,
+  watchlistCreate,
+} from '@server/interfaces/api/watchlistCreate';
 import {
   isValidExternalMediaId,
   isValidMusicBrainzResourceId,
@@ -54,7 +57,15 @@ watchlistRoutes.post<never, Watchlist, Watchlist>(
       }
       const parsedBody = watchlistCreate.safeParse(req.body);
       if (!parsedBody.success) {
-        return next({ status: 400, message: 'Invalid watchlist payload.' });
+        const mangaUnavailable = parsedBody.error.issues.some(
+          (issue) => issue.message === MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE
+        );
+        return next({
+          status: 400,
+          message: mangaUnavailable
+            ? MANGA_WATCHLISTS_UNAVAILABLE_MESSAGE
+            : 'Invalid watchlist payload.',
+        });
       }
       const values = {
         ...parsedBody.data,

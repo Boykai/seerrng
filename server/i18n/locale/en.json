@@ -44,6 +44,7 @@
   "notifications.common.issueType": "Issue Type",
   "notifications.common.issueTypeName": "{type} issue",
   "notifications.common.magazine": "magazine",
+  "notifications.common.manga": "manga",
   "notifications.common.movie": "movie",
   "notifications.common.music": "music",
   "notifications.common.open": "Open",

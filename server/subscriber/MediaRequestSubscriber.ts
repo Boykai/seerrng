@@ -51,9 +51,18 @@ import {
   cleanMagazineTitle,
   normalizeMagazineTitle,
 } from '@server/lib/magazineIdentity';
+import {
+  MANGA_DISPATCH_SWEEP_LIMIT,
+  MAX_MANGA_DISPATCH_SWEEP_LIMIT,
+  dispatchMangaRequest,
+  findDueMangaRequestIds,
+  releaseMangaDispatch,
+} from '@server/lib/mangaDispatch';
+import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import { runMediaEntityMutation } from '@server/lib/mediaMutation';
 import { getLidarrAlbumMediaStatus } from '@server/lib/musicAvailability';
 import notificationManager, { Notification } from '@server/lib/notifications';
+import type { RequestServiceType } from '@server/lib/requestDestination';
 import requestDispatchManager, {
   type RequestDispatchOutcome,
 } from '@server/lib/requestDispatch';
@@ -68,7 +77,6 @@ import {
   ServarrServiceAuthorityChangedError,
   runWithServarrServiceAdmission,
   runWithServarrServiceCollectionAdmission,
-  type ServarrServiceType,
 } from '@server/lib/serviceAdmission';
 import { type ReadarrSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -79,6 +87,7 @@ import {
 } from '@server/utils/bookshelfLookup';
 import { mapWithConcurrency } from '@server/utils/concurrency';
 import { withNestedTransaction } from '@server/utils/nestedTransaction';
+import { getTransactionDepth } from '@server/utils/transactionDeferrals';
 import { isEqual } from 'lodash';
 import type {
   EntityManager,
@@ -87,6 +96,7 @@ import type {
   RemoveEvent,
   TransactionCommitEvent,
   TransactionRollbackEvent,
+  TransactionStartEvent,
   UpdateEvent,
 } from 'typeorm';
 import { EventSubscriber, In, Not } from 'typeorm';
@@ -136,7 +146,7 @@ const saveRequestServiceTarget = async (
 };
 
 interface RequestDispatchServiceSelection {
-  serviceType: ServarrServiceType;
+  serviceType: RequestServiceType;
   serviceIds: number[];
 }
 
@@ -238,6 +248,14 @@ const getRequestDispatchServiceSelection = (
       serviceType: 'lazylibrarian',
       serviceIds: uniqueIds([selected?.id]),
     };
+  }
+  if (request.type === MediaType.MANGA) {
+    // dispatchWithServiceAuthority handles manga before any service selection.
+    throw new Error('Manga requests have no Servarr dispatch service.');
+  }
+  if (request.type !== MediaType.BOOK) {
+    const unsupportedType: never = request.type;
+    throw new Error(`Unsupported request type: ${String(unsupportedType)}`);
   }
 
   const format = request.bookFormat ?? 'ebook';
@@ -511,6 +529,37 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
   }
 
+  /**
+   * Queues the approved manga requests whose dispatch is due, then hands
+   * back what requests no longer need on Suwayomi. Does nothing while manga
+   * is disabled.
+   */
+  public async retryApprovedMangaRequests(
+    limit = MANGA_DISPATCH_SWEEP_LIMIT
+  ): Promise<void> {
+    if (!isMediaCategoryEnabled('manga')) {
+      return;
+    }
+    const boundedLimit =
+      Number.isSafeInteger(limit) && limit > 0
+        ? Math.min(limit, MAX_MANGA_DISPATCH_SWEEP_LIMIT)
+        : MANGA_DISPATCH_SWEEP_LIMIT;
+    try {
+      for (const requestId of await findDueMangaRequestIds(boundedLimit)) {
+        await requestDispatchManager.enqueue(requestId);
+      }
+    } finally {
+      try {
+        await releaseMangaDispatch();
+      } catch (error) {
+        logger.warn('Manga dispatch release failed', {
+          label: 'Manga Dispatch',
+          errorName: error instanceof Error ? error.name : typeof error,
+        });
+      }
+    }
+  }
+
   private getBookStatusFromLinks(media: Media): MediaStatus {
     const hasEbook =
       media.serviceId !== null &&
@@ -541,9 +590,12 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
   }
 
   private isRequestMediaAvailable(entity: MediaRequest): boolean {
+    // Manga requests never announce "Now Available": their availability is
+    // a library state, not the request's delivery.
     return (
+      (entity.type ?? entity.media.mediaType) !== MediaType.MANGA &&
       entity.media[entity.is4k ? 'status4k' : 'status'] ===
-      MediaStatus.AVAILABLE
+        MediaStatus.AVAILABLE
     );
   }
 
@@ -618,6 +670,8 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         event
       );
     } else if (entity.status === MediaRequestStatus.COMPLETED) {
+      // A manga request reaches COMPLETED only through
+      // `completeMangaRequest`, once every chapter it asked for is delivered.
       await this.enqueueRequestNotification(
         Notification.MEDIA_AVAILABLE,
         entity,
@@ -647,6 +701,13 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         ) {
           return { delivered: true };
         }
+        if (request.type === MediaType.MANGA && request.media) {
+          // The manga admission keys come from the identifiers, which the
+          // request's eager media relation does not load.
+          request.media.identifiers = await getRepository(MediaIdentifier).find(
+            { where: { media: { id: request.media.id } } }
+          );
+        }
 
         return runMediaEntityMutation(request.media, () =>
           this.dispatchWithServiceAuthority(request)
@@ -658,6 +719,12 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
   private async dispatchWithServiceAuthority(
     request: MediaRequest
   ): Promise<RequestDispatchOutcome> {
+    if (request.type === MediaType.MANGA) {
+      // Manga has no Servarr service: each dispatch write checks its Suwayomi
+      // instance instead.
+      return this.dispatchApprovedRequest(request);
+    }
+
     const selection = await runWithServarrServiceCollectionAdmission(
       getRequestDispatchServiceSelection(request).serviceType,
       async () => getRequestDispatchServiceSelection(request)
@@ -752,7 +819,11 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       if (retryAfterMs !== undefined) {
         return { delivered: false, retryAfterMs };
       }
+    } else if (request.type === MediaType.MANGA) {
+      return dispatchMangaRequest(request);
     } else {
+      const unsupportedType: never = request.type;
+      void unsupportedType;
       return { delivered: true };
     }
     const updated = await getRepository(MediaRequest).findOne({
@@ -2723,7 +2794,12 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       media.mediaType !== MediaType.TV &&
       entity.status === MediaRequestStatus.DECLINED &&
       media[statusKey] !== MediaStatus.AVAILABLE &&
-      media[statusKey] !== MediaStatus.DELETED
+      media[statusKey] !== MediaStatus.DELETED &&
+      // A manga's partial availability comes from its library, not a request.
+      !(
+        media.mediaType === MediaType.MANGA &&
+        media[statusKey] === MediaStatus.PARTIALLY_AVAILABLE
+      )
     ) {
       const hasOtherActiveRequest = await requestRepository.exists({
         where: {
@@ -3058,6 +3134,16 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         manager: event.manager as EntityManager,
       }
     );
+  }
+
+  // Nothing can be queued yet when an outermost transaction starts, so any
+  // deferred work still held for its query runner is stale.
+  public afterTransactionStart(event: TransactionStartEvent): void {
+    if (getTransactionDepth(event.queryRunner) !== 1) {
+      return;
+    }
+    notificationManager.discardStaleDeferredNotifications(event.queryRunner);
+    requestDispatchManager.discardStale(event.queryRunner);
   }
 
   public afterTransactionCommit(event: TransactionCommitEvent): void {

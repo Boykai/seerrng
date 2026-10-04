@@ -304,16 +304,18 @@ const TitleCard = ({
           await axios.post(
             `/api/v1/blocklist/collection/${encodeApiPathSegment(id)}`
           );
-        } else if (isAlbum || isBook || isComic || isMagazine) {
+        } else if (isAlbum || isBook || isComic || isMagazine || isManga) {
           await axios.post('/api/v1/blocklist', {
-            externalId: actionId,
+            externalId: isManga ? String(actionId) : actionId,
             externalProvider: isAlbum
               ? 'musicbrainz'
               : isBook
                 ? 'openlibrary'
                 : isComic
                   ? 'comicvine'
-                  : 'lazylibrarian',
+                  : isManga
+                    ? 'anilist'
+                    : 'lazylibrarian',
             mediaType: isAlbum ? 'music' : mediaType,
             title,
             user: user?.id,
@@ -457,6 +459,7 @@ const TitleCard = ({
   const isBook = mediaType === 'book';
   const isComic = mediaType === 'comic';
   const isMagazine = mediaType === 'magazine';
+  const isManga = mediaType === 'manga';
   const canonicalId = normalizeExternalTitleId(mediaType, id);
   const artwork = useAlbumArtwork(
     isAlbum ? String(canonicalId) : undefined,
@@ -498,8 +501,21 @@ const TitleCard = ({
     canShowWatchedStatus && watchStatusInView
   );
   const canUseVideoActions = videoMediaType && Number.isFinite(numericId);
+  // Manga requests need a configured Suwayomi server; browsing does not.
+  const mangaRequestId =
+    isManga &&
+    settings.currentSettings.suwayomiEnabled &&
+    Number.isSafeInteger(numericId) &&
+    numericId > 0
+      ? numericId
+      : undefined;
   const canUseRequestActions =
-    canUseVideoActions || isAlbum || isBook || isComic || isMagazine;
+    canUseVideoActions ||
+    isAlbum ||
+    isBook ||
+    isComic ||
+    isMagazine ||
+    mangaRequestId !== undefined;
   const canUseWatchlistActions =
     canUseVideoActions || isAlbum || isBook || isComic || isMagazine;
   const detailHref =
@@ -524,7 +540,9 @@ const TitleCard = ({
                 ? `/comic/${encodeApiPathSegment(canonicalId)}`
                 : mediaType === 'magazine'
                   ? `/magazine/${encodeApiPathSegment(canonicalId)}`
-                  : `/artist/${encodeApiPathSegment(canonicalId)}`;
+                  : isManga
+                    ? `/manga/${encodeApiPathSegment(canonicalId)}`
+                    : `/artist/${encodeApiPathSegment(canonicalId)}`;
   const displayImage = getTmdbPosterImageUrl(artwork);
   // Resolved provider artwork is routed by URL when image caching is enabled.
   const imageCacheType =
@@ -546,7 +564,9 @@ const TitleCard = ({
             ? Permission.REQUEST_COMIC
             : isMagazine
               ? Permission.REQUEST_MAGAZINE
-              : Permission.REQUEST_BOOK,
+              : isManga
+                ? Permission.REQUEST_MANGA
+                : Permission.REQUEST_BOOK,
   ];
 
   if (mediaType === 'movie') {
@@ -565,7 +585,12 @@ const TitleCard = ({
     hasPermission([Permission.MANAGE_BLOCKLIST], {
       type: 'or',
     }) &&
-    (canUseVideoActions || isAlbum || isBook || isComic || isMagazine);
+    (canUseVideoActions ||
+      isAlbum ||
+      isBook ||
+      isComic ||
+      isMagazine ||
+      isManga);
   const canRequest4k =
     ((mediaType === 'movie' && settings.currentSettings.movie4kEnabled) ||
       (mediaType === 'tv' && settings.currentSettings.series4kEnabled)) &&
@@ -586,6 +611,7 @@ const TitleCard = ({
     (!currentStatus ||
       currentStatus === MediaStatus.UNKNOWN ||
       currentStatus === MediaStatus.DELETED ||
+      (isManga && currentStatus === MediaStatus.PARTIALLY_AVAILABLE) ||
       canRequestAdditionalFormat ||
       canRequest4k);
   const requestingAdditional4k =
@@ -721,6 +747,16 @@ const TitleCard = ({
               magazineTitle={canonicalId}
               show={showRequestModal}
               type="magazine"
+              onComplete={requestComplete}
+              onUpdating={requestUpdating}
+              onCancel={closeModal}
+            />
+          )}
+          {mangaRequestId !== undefined && (
+            <RequestModal
+              mangaId={mangaRequestId}
+              show={showRequestModal}
+              type="manga"
               onComplete={requestComplete}
               onUpdating={requestUpdating}
               onCancel={closeModal}

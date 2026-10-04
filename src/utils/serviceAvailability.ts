@@ -1,4 +1,7 @@
-import type { MediaCategoryKey } from '@server/constants/mediaCategories';
+import {
+  DEFAULT_ENABLED_MEDIA_CATEGORIES,
+  type MediaAvailabilityCategoryKey,
+} from '@server/constants/mediaCategories';
 
 export interface OptionalServiceAvailability {
   musicEnabled: boolean;
@@ -9,7 +12,11 @@ export interface OptionalServiceAvailability {
   magazinesEnabled?: boolean;
   softwareEnabled?: boolean;
   romarrEnabled?: boolean;
-  enabledMediaCategories?: Partial<Record<MediaCategoryKey, boolean>>;
+  /** Whether a Suwayomi instance is configured; manga catalog paths ignore it. */
+  suwayomiEnabled?: boolean;
+  enabledMediaCategories?: Partial<
+    Record<MediaAvailabilityCategoryKey, boolean>
+  >;
 }
 
 export const DISCOVER_MEDIA_TYPES = [
@@ -33,10 +40,17 @@ export const DISCOVER_WATCHLIST_TYPES = [
 
 export type DiscoverWatchlistType = (typeof DISCOVER_WATCHLIST_TYPES)[number];
 
+// A missing category resolves to its default, matching the server.
 export const isConfiguredMediaCategoryEnabled = (
-  category: MediaCategoryKey,
+  category: MediaAvailabilityCategoryKey,
   availability: Pick<OptionalServiceAvailability, 'enabledMediaCategories'>
-): boolean => availability.enabledMediaCategories?.[category] !== false;
+): boolean => {
+  const enabled = availability.enabledMediaCategories?.[category];
+
+  return typeof enabled === 'boolean'
+    ? enabled
+    : DEFAULT_ENABLED_MEDIA_CATEGORIES[category];
+};
 
 export const isBookFormatEnabled = (
   format: 'ebook' | 'audiobook',
@@ -161,6 +175,14 @@ export const isOptionalCatalogPathEnabled = (
       Boolean(availability.magazinesEnabled) &&
       isConfiguredMediaCategoryEnabled('magazine', availability)
     );
+  }
+
+  if (
+    path === '/discover/manga' ||
+    path.startsWith('/discover/manga/') ||
+    path.startsWith('/manga/')
+  ) {
+    return isConfiguredMediaCategoryEnabled('manga', availability);
   }
 
   if (path === '/discover/audiobooks') {

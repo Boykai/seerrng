@@ -27,6 +27,7 @@ export type ExternalRuntimeConfig = Pick<
   | 'kapowarr'
   | 'backissue'
   | 'lazylibrarian'
+  | 'suwayomi'
   | 'notifications'
   | 'network'
 >;
@@ -81,6 +82,19 @@ const normalizeServarrServices = (
   });
 };
 
+const normalizeServiceRecords = (
+  value: unknown,
+  service: string
+): Record<string, unknown>[] => {
+  if (!Array.isArray(value)) {
+    throw new Error(`SEERR_EXTERNAL_CONFIG.${service} must be an array`);
+  }
+
+  return value.map((entry, index) => ({
+    ...assertRecord(entry, `${service}[${index}]`),
+  }));
+};
+
 const validate = (value: unknown): ExternalRuntimeConfig => {
   const root = assertRecord(value, 'root');
   if (typeof root.clientId !== 'string' || root.clientId.length === 0) {
@@ -114,9 +128,9 @@ const validate = (value: unknown): ExternalRuntimeConfig => {
     sonarr: normalizeServarrServices(root.sonarr, 'sonarr'),
     lidarr: normalizeServarrServices(root.lidarr, 'lidarr'),
     readarr: normalizeServarrServices(root.readarr, 'readarr'),
-    // Lenient for optional comics and magazine services: SEERR_EXTERNAL_CONFIG
-    // is hand-maintained or may predate an integration, so missing keys mean
-    // no configured instances.
+    // Lenient for optional comics, magazine and manga services:
+    // SEERR_EXTERNAL_CONFIG is hand-maintained or may predate an integration,
+    // so missing keys mean no configured instances.
     mylar:
       root.mylar === undefined
         ? []
@@ -133,6 +147,10 @@ const validate = (value: unknown): ExternalRuntimeConfig => {
       root.lazylibrarian === undefined
         ? []
         : normalizeServarrServices(root.lazylibrarian, 'lazylibrarian'),
+    suwayomi:
+      root.suwayomi === undefined
+        ? []
+        : normalizeServiceRecords(root.suwayomi, 'suwayomi'),
   } as unknown as ExternalRuntimeConfig;
 };
 
@@ -168,6 +186,7 @@ const loadFromSettingsFile = (): ExternalRuntimeConfig | undefined => {
       kapowarr: settings.kapowarr ?? [],
       backissue: settings.backissue ?? [],
       lazylibrarian: settings.lazylibrarian ?? [],
+      suwayomi: settings.suwayomi ?? [],
       notifications: settings.notifications,
       network: settings.network,
     };

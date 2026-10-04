@@ -1,0 +1,757 @@
+{
+  "description": "Schema records that differ between a postgres database built from empty by the migrations and one built by synchronize() from the entities. Each predates the manga work and has a reviewed reason; manga drift is never allowlisted. Any other drift, or an entry that no longer drifts, fails scripts/manga-migration-checks.mjs.",
+  "records": [
+    {
+      "reason": "Name only: both sides have the one-to-one unique constraint on mediaId, but the migration's generated name differs from the one synchronize() derives. Same column and behaviour; renaming it is a separate cleanup.",
+      "side": "entities",
+      "record": {
+        "kind": "unique",
+        "table": "blocklist",
+        "name": "REL_5c8af2d0e83b3be6d250eccc19",
+        "columns": ["mediaId"]
+      }
+    },
+    {
+      "reason": "Name only: both sides have the one-to-one unique constraint on mediaId, but the migration's generated name differs from the one synchronize() derives. Same column and behaviour; renaming it is a separate cleanup.",
+      "side": "migrations",
+      "record": {
+        "kind": "unique",
+        "table": "blocklist",
+        "name": "REL_62b7ade94540f9f8d8bede54b9",
+        "columns": ["mediaId"]
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "book_request_search",
+        "name": "createdAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "book_request_search",
+        "name": "createdAt",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "book_request_search",
+        "name": "updatedAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "book_request_search",
+        "name": "updatedAt",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Default spelling only: the migration wrote DEFAULT CURRENT_TIMESTAMP, while synchronize() writes now(). PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "desktop_auth_ticket",
+        "name": "createdAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Default spelling only: the migration wrote DEFAULT CURRENT_TIMESTAMP, while synchronize() writes now(). PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "desktop_auth_ticket",
+        "name": "createdAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "CURRENT_TIMESTAMP",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Default spelling only: the migration wrote DEFAULT CURRENT_TIMESTAMP, while synchronize() writes now(). PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "discovery_account",
+        "name": "linkedAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Default spelling only: the migration wrote DEFAULT CURRENT_TIMESTAMP, while synchronize() writes now(). PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "discovery_account",
+        "name": "linkedAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "CURRENT_TIMESTAMP",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "discovery_curated_identity_mapping",
+        "name": "updatedAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "discovery_curated_identity_mapping",
+        "name": "updatedAt",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "CURRENT_TIMESTAMP",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "discovery_curated_identity_pack",
+        "name": "updatedAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "discovery_curated_identity_pack",
+        "name": "updatedAt",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "CURRENT_TIMESTAMP",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "discovery_identity_mapping",
+        "name": "updatedAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "discovery_identity_mapping",
+        "name": "updatedAt",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "CURRENT_TIMESTAMP",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "No migration creates the partial unique index the entity declares for comicvine identifiers, so databases built by the migrations lack it. Adding it is a comic-specific migration outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "index",
+        "table": "media_identifier",
+        "name": "UQ_media_identifier_canonical_comic",
+        "columns": ["provider", "value"],
+        "unique": true,
+        "where": "(provider)::text = 'comicvine'::text"
+      }
+    },
+    {
+      "reason": "A migration creates this index on watchAheadParentRequestId, but the entity does not declare it, so synchronize() omits it. Extra index only; no data or constraint difference.",
+      "side": "migrations",
+      "record": {
+        "kind": "index",
+        "table": "media_request",
+        "name": "IDX_media_request_watch_ahead_parent",
+        "columns": ["watchAheadParentRequestId"],
+        "unique": false,
+        "where": null
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from watchAheadParentRequestId to media_request.id with ON DELETE CASCADE. The migration named it FK_media_request_watch_ahead_parent, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "foreignKey",
+        "table": "media_request",
+        "name": "FK_78e87f17da380c4c849f1b996ac",
+        "columns": ["watchAheadParentRequestId"],
+        "referencedTable": "media_request",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from watchAheadParentRequestId to media_request.id with ON DELETE CASCADE. The migration named it FK_media_request_watch_ahead_parent, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "foreignKey",
+        "table": "media_request",
+        "name": "FK_media_request_watch_ahead_parent",
+        "columns": ["watchAheadParentRequestId"],
+        "referencedTable": "media_request",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "media_search_metadata",
+        "name": "createdAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "media_search_metadata",
+        "name": "createdAt",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "media_search_metadata",
+        "name": "refreshedAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "media_search_metadata",
+        "name": "refreshedAt",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Name only: both sides have the non-unique index on searchText. The migration named it IDX_media_search_metadata_searchText, while the entity's unnamed @Index() gets TypeORM's generated name. Same column and behaviour.",
+      "side": "entities",
+      "record": {
+        "kind": "index",
+        "table": "media_search_metadata",
+        "name": "IDX_e19c5336f0253cff77865113bf",
+        "columns": ["searchText"],
+        "unique": false,
+        "where": null
+      }
+    },
+    {
+      "reason": "Name only: both sides have the non-unique index on searchText. The migration named it IDX_media_search_metadata_searchText, while the entity's unnamed @Index() gets TypeORM's generated name. Same column and behaviour.",
+      "side": "migrations",
+      "record": {
+        "kind": "index",
+        "table": "media_search_metadata",
+        "name": "IDX_media_search_metadata_searchText",
+        "columns": ["searchText"],
+        "unique": false,
+        "where": null
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from mediaId to media.id with ON DELETE CASCADE. The migration named it FK_media_search_metadata_media, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "foreignKey",
+        "table": "media_search_metadata",
+        "name": "FK_0dc93caff05b3c78bf6d48ac94a",
+        "columns": ["mediaId"],
+        "referencedTable": "media",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from mediaId to media.id with ON DELETE CASCADE. The migration named it FK_media_search_metadata_media, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "foreignKey",
+        "table": "media_search_metadata",
+        "name": "FK_media_search_metadata_media",
+        "columns": ["mediaId"],
+        "referencedTable": "media",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Name only: both sides have the unique constraint on mbAlbumId. The migration named it UQ_metadata_album_mbAlbumId, while the entity's unique: true column gets TypeORM's generated name. Same column and behaviour.",
+      "side": "entities",
+      "record": {
+        "kind": "unique",
+        "table": "metadata_album",
+        "name": "UQ_fb8eda254e560f96039f7a0d812",
+        "columns": ["mbAlbumId"]
+      }
+    },
+    {
+      "reason": "Name only: both sides have the unique constraint on mbAlbumId. The migration named it UQ_metadata_album_mbAlbumId, while the entity's unique: true column gets TypeORM's generated name. Same column and behaviour.",
+      "side": "migrations",
+      "record": {
+        "kind": "unique",
+        "table": "metadata_album",
+        "name": "UQ_metadata_album_mbAlbumId",
+        "columns": ["mbAlbumId"]
+      }
+    },
+    {
+      "reason": "Name only: both sides have the unique constraint on mbArtistId. The migration named it UQ_metadata_artist_mbArtistId, while the entity's unique: true column gets TypeORM's generated name. Same column and behaviour.",
+      "side": "entities",
+      "record": {
+        "kind": "unique",
+        "table": "metadata_artist",
+        "name": "UQ_bff8b9448b4a8a3af0f8957d4b7",
+        "columns": ["mbArtistId"]
+      }
+    },
+    {
+      "reason": "Name only: both sides have the unique constraint on mbArtistId. The migration named it UQ_metadata_artist_mbArtistId, while the entity's unique: true column gets TypeORM's generated name. Same column and behaviour.",
+      "side": "migrations",
+      "record": {
+        "kind": "unique",
+        "table": "metadata_artist",
+        "name": "UQ_metadata_artist_mbArtistId",
+        "columns": ["mbArtistId"]
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "provider_tracking_action",
+        "name": "completedAt",
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "provider_tracking_action",
+        "name": "completedAt",
+        "type": "timestamp without time zone",
+        "nullable": true,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "provider_tracking_action",
+        "name": "createdAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "provider_tracking_action",
+        "name": "createdAt",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "CURRENT_TIMESTAMP",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "queue_intervention",
+        "name": "actionAt",
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "queue_intervention",
+        "name": "actionAt",
+        "type": "timestamp without time zone",
+        "nullable": true,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "queue_intervention",
+        "name": "createdAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "queue_intervention",
+        "name": "createdAt",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "CURRENT_TIMESTAMP",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "queue_intervention",
+        "name": "lastSeenAt",
+        "type": "timestamp with time zone",
+        "nullable": false,
+        "default": "now()",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work. The migration also wrote DEFAULT CURRENT_TIMESTAMP where synchronize() writes now(); PostgreSQL evaluates both as the current transaction's start time.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "queue_intervention",
+        "name": "lastSeenAt",
+        "type": "timestamp without time zone",
+        "nullable": false,
+        "default": "CURRENT_TIMESTAMP",
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "queue_intervention",
+        "name": "resolvedAt",
+        "type": "timestamp with time zone",
+        "nullable": true,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type: the entity column is timestamp with time zone, while the migration created timestamp without time zone. Converting stored values needs its own migration and a time zone decision, outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "queue_intervention",
+        "name": "resolvedAt",
+        "type": "timestamp without time zone",
+        "nullable": true,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Same name and columns, different kind: the entity declares a unique index on (provider, externalRequestId), while the migration created a unique constraint. Both enforce the same uniqueness.",
+      "side": "entities",
+      "record": {
+        "kind": "index",
+        "table": "software_request",
+        "name": "UQ_software_request_provider_external_id",
+        "columns": ["provider", "externalRequestId"],
+        "unique": true,
+        "where": null
+      }
+    },
+    {
+      "reason": "Same name and columns, different kind: the entity declares a unique index on (provider, externalRequestId), while the migration created a unique constraint. Both enforce the same uniqueness.",
+      "side": "migrations",
+      "record": {
+        "kind": "unique",
+        "table": "software_request",
+        "name": "UQ_software_request_provider_external_id",
+        "columns": ["provider", "externalRequestId"]
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from approvedById to user.id with ON DELETE SET NULL. The migration named it FK_software_request_approved_by, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "foreignKey",
+        "table": "software_request",
+        "name": "FK_0aaf942f149f2c42ae1e27b733b",
+        "columns": ["approvedById"],
+        "referencedTable": "user",
+        "referencedColumns": ["id"],
+        "onDelete": "SET NULL",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from requestedById to user.id with ON DELETE CASCADE. The migration named it FK_software_request_requested_by, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "entities",
+      "record": {
+        "kind": "foreignKey",
+        "table": "software_request",
+        "name": "FK_6b70ccbc61d1b8077c3a3a73732",
+        "columns": ["requestedById"],
+        "referencedTable": "user",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from approvedById to user.id with ON DELETE SET NULL. The migration named it FK_software_request_approved_by, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "foreignKey",
+        "table": "software_request",
+        "name": "FK_software_request_approved_by",
+        "columns": ["approvedById"],
+        "referencedTable": "user",
+        "referencedColumns": ["id"],
+        "onDelete": "SET NULL",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Name only: both sides have the foreign key from requestedById to user.id with ON DELETE CASCADE. The migration named it FK_software_request_requested_by, while the entity's @JoinColumn sets no foreignKeyConstraintName, so synchronize() uses TypeORM's generated name. Same columns and behaviour; renaming the constraint is outside the manga work.",
+      "side": "migrations",
+      "record": {
+        "kind": "foreignKey",
+        "table": "software_request",
+        "name": "FK_software_request_requested_by",
+        "columns": ["requestedById"],
+        "referencedTable": "user",
+        "referencedColumns": ["id"],
+        "onDelete": "CASCADE",
+        "onUpdate": "NO ACTION"
+      }
+    },
+    {
+      "reason": "Type only: the entity declares text, while the migration created character varying without a length. Both hold unbounded text in PostgreSQL.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "user_settings",
+        "name": "spotifyDisplayName",
+        "type": "text",
+        "nullable": true,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type only: the entity declares text, while the migration created character varying without a length. Both hold unbounded text in PostgreSQL.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "user_settings",
+        "name": "spotifyDisplayName",
+        "type": "character varying",
+        "nullable": true,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type only: the entity declares text, while the migration created character varying without a length. Both hold unbounded text in PostgreSQL.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "user_settings",
+        "name": "spotifyUserId",
+        "type": "text",
+        "nullable": true,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Type only: the entity declares text, while the migration created character varying without a length. Both hold unbounded text in PostgreSQL.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "user_settings",
+        "name": "spotifyUserId",
+        "type": "character varying",
+        "nullable": true,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    }
+  ]
+}

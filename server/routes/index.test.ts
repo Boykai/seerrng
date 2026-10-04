@@ -9,9 +9,13 @@ import {
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
+import type { EnabledMediaCategories } from '@server/constants/mediaCategories';
 import dataSource, { getRepository } from '@server/datasource';
 import DiscoverSlider from '@server/entity/DiscoverSlider';
 import Media from '@server/entity/Media';
+import MediaIdentifier, {
+  MediaIdentifierProvider,
+} from '@server/entity/MediaIdentifier';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { UserSettings } from '@server/entity/UserSettings';
@@ -28,6 +32,7 @@ import request from 'supertest';
 import router, {
   EXTERNAL_METADATA_RATE_LIMIT,
   PUBLIC_BACKDROPS_RATE_LIMIT,
+  categoryAvailabilityGuard,
   getCommitUpdateStatus,
   getReleaseUpdateStatus,
 } from './index';
@@ -370,6 +375,89 @@ describe('Discover homepage synchronization API', () => {
     assert.strictEqual(oversized.status, 400);
   });
 
+  it('resolves manga state by canonical AniList id through the API schema', async () => {
+    const manga = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.BLOCKLISTED,
+        status4k: MediaStatus.UNKNOWN,
+        identifiers: [
+          new MediaIdentifier({
+            provider: MediaIdentifierProvider.ANILIST,
+            value: '30013',
+            canonical: true,
+          }),
+        ],
+      })
+    );
+    await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.BOOK,
+        status: MediaStatus.PENDING,
+        status4k: MediaStatus.UNKNOWN,
+        identifiers: [
+          new MediaIdentifier({
+            provider: MediaIdentifierProvider.ANILIST,
+            value: '777',
+            canonical: false,
+          }),
+        ],
+      })
+    );
+    const validatedApp = createOpenApiValidatedApp();
+    const settings = getSettings();
+    const priorLocalLogin = settings.main.localLogin;
+    settings.main.localLogin = true;
+    let sessionCookie: string | undefined;
+    try {
+      const loginResponse = await request(validatedApp)
+        .post('/api/v1/auth/local')
+        .set('X-Forwarded-Proto', 'https')
+        .send({ email: 'admin@seerr.dev', password: 'test1234' });
+      assert.strictEqual(loginResponse.status, 200);
+      sessionCookie = loginResponse.get('set-cookie')?.[0]?.split(';', 1)[0];
+    } finally {
+      settings.main.localLogin = priorLocalLogin;
+    }
+    assert.ok(sessionCookie);
+    const postState = (items: unknown[]) =>
+      request(validatedApp)
+        .post('/api/v1/discover/home/state')
+        .set('X-Forwarded-Proto', 'https')
+        .set('Cookie', sessionCookie!)
+        .send({ items });
+
+    const state = await postState([
+      { mediaType: MediaType.MANGA, id: ' 030013 ' },
+      { mediaType: MediaType.MANGA, id: '777' },
+    ]);
+    const numericId = await postState([{ mediaType: MediaType.MANGA, id: 1 }]);
+
+    assert.strictEqual(state.status, 200, JSON.stringify(state.body));
+    assert.deepStrictEqual(
+      state.body.items.map(
+        (item: { key: string; id: string; watchlisted: boolean }) => [
+          item.key,
+          item.id,
+          item.watchlisted,
+        ]
+      ),
+      [
+        ['manga:30013', '30013', false],
+        ['manga:777', '777', false],
+      ]
+    );
+    assert.strictEqual(state.body.items[0].media.id, manga.id);
+    assert.strictEqual(
+      state.body.items[0].media.status,
+      MediaStatus.BLOCKLISTED
+    );
+    assert.strictEqual(state.body.items[1].media, null);
+    assert.strictEqual(numericId.status, 400);
+  });
+
   it('isolates request and watchlist overlays by authenticated user', async () => {
     const [admin, friend] = await Promise.all([
       getRepository(User).findOneOrFail({
@@ -587,5 +675,68 @@ describe('Top-level API route validation', () => {
 
     assert.strictEqual(res.status, 400);
     assert.match(res.body.message, /Watch region/);
+  });
+});
+
+describe('categoryAvailabilityGuard', () => {
+  const requestGuarded = (
+    ...guardArgs: Parameters<typeof categoryAvailabilityGuard>
+  ) => {
+    const guardedApp = express();
+    guardedApp.get(
+      '/guarded',
+      categoryAvailabilityGuard(...guardArgs),
+      (_req, res) => {
+        res.status(200).json({ reached: true });
+      }
+    );
+    return request(guardedApp).get('/guarded');
+  };
+
+  const withCategories = async (
+    overrides: Partial<EnabledMediaCategories>,
+    run: () => Promise<void>
+  ) => {
+    const settings = getSettings();
+    const originalCategories = { ...settings.main.enabledMediaCategories };
+    settings.main.enabledMediaCategories = {
+      ...originalCategories,
+      ...overrides,
+    };
+    try {
+      await run();
+    } finally {
+      settings.main.enabledMediaCategories = originalCategories;
+    }
+  };
+
+  it('hides manga routes until an administrator enables manga', async () => {
+    await withCategories({ manga: false }, async () => {
+      const response = await requestGuarded(['manga']);
+      assert.strictEqual(response.status, 404);
+      assert.deepStrictEqual(response.body, {
+        status: 404,
+        message: 'Not found.',
+      });
+    });
+
+    await withCategories({ manga: true }, async () => {
+      const response = await requestGuarded(['manga']);
+      assert.strictEqual(response.status, 200);
+      assert.deepStrictEqual(response.body, { reached: true });
+    });
+  });
+
+  it('combines manga with existing categories in all and any modes', async () => {
+    await withCategories({ manga: false, comic: true }, async () => {
+      assert.strictEqual(
+        (await requestGuarded(['manga', 'comic'])).status,
+        404
+      );
+      assert.strictEqual(
+        (await requestGuarded(['manga', 'comic'], 'any')).status,
+        200
+      );
+    });
   });
 });

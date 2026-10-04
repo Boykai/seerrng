@@ -32,6 +32,7 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
   - [Move Bookshelf media paths](./docs/using-seerr/bookshelf-media-path-migration.md)
   - [Configure comics](./docs/using-seerr/comics-backend.md)
   - [Configure magazines](./docs/using-seerr/magazines-backend.md)
+  - [Enable manga](./docs/using-seerr/manga-backend.md)
   - [Companion services and SeerrNG NG forks](./docs/using-seerr/companion-services.md)
   - [Indexer searches by media category](./docs/using-seerr/indexer-searches.md)
   - [Configure services](./docs/using-seerr/settings/services.md)
@@ -74,7 +75,7 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
 - Admin-only Bookshelf path moves with a conflict and disk-space preview, confirmation, API access, and a dry-run-first CLI. The mover works inside one BookshelfNG database; consolidate an old split deployment before using it.
 - Resumable, layered Readarr/softcover-to-Hardcover migration with strict matching, softcover metadata recovery, validation, cutover checks, and an opt-in deterministic local-record fallback for books Hardcover cannot import.
 - Watchlists, blocklists, request quotas, override rules, permissions, notifications, issue reporting, and request management.
-- Authenticated **Download copy** links in Request Status for verified movie, TV, book, comic, magazine, ROM, and PC game files.
+- Authenticated **Download copy** links in Request Status for verified movie, TV, book, comic, magazine, manga chapter, ROM, and PC game files.
 - Request lifecycle tracking and availability notifications link users back to the matching Request Status item, where available files can be selected and saved.
 - Browser, service-worker, API, DNS, avatar, and image-proxy caching tuned for faster refreshes and tab restores.
 
@@ -113,6 +114,7 @@ SeerrNG documentation is maintained in the [docs folder](https://github.com/snap
 - [Find books, authors, and series](./docs/using-seerr/books-and-series.md)
 - [Discover and request comics](./docs/using-seerr/comics-backend.md)
 - [Discover and request magazines](./docs/using-seerr/magazines-backend.md)
+- [Discover manga](./docs/using-seerr/manga-backend.md)
 - [Track requests and status history](./docs/using-seerr/request-status.md)
 - [Browse and request emulation games and PC games](./docs/using-seerr/software-acquisition.md)
 - [Download verified files from Request Status](./docs/using-seerr/request-status.md)
