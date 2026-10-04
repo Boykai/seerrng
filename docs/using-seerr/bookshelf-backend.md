@@ -62,6 +62,12 @@ Readarr API path. Both routes reach the same BookshelfNG database and library;
 the facade carries the configured format context and does not create separate
 profile storage.
 
+Newer BookshelfNG builds include separate ebook and audiobook file counts in
+each book's statistics. SeerrNG uses the count for the selected service type,
+so having an ebook no longer makes an audiobook request appear available. The
+scanner falls back to Readarr's aggregate file count when those fields are not
+present.
+
 On BookshelfNG builds that support a dedicated SeerrNG key, operators can set
 `BOOKSHELF_SEERRNG_API_KEY` from a container or Kubernetes secret and use it in
 both SeerrNG service entries. This credential

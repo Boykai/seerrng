@@ -290,6 +290,80 @@ describe('Readarr Scanner', () => {
     assert.strictEqual(updated.status, MediaStatus.AVAILABLE);
   });
 
+  it('uses audiobook file statistics instead of aggregate availability', async () => {
+    configureReadarr([
+      {
+        id: 31,
+        serviceType: 'audiobook',
+        activeDirectory: '/audiobooks',
+      },
+    ]);
+    getBooksImpl = async () => [
+      fakeReadarrBook({
+        editions: [
+          {
+            foreignEditionId: 'edition-id',
+            title: 'Test Book',
+            isbn13: '9780000000010',
+            monitored: true,
+          },
+        ],
+        statistics: {
+          bookFileCount: 1,
+          ebookFileCount: 1,
+          audiobookFileCount: 0,
+          totalBookCount: 1,
+        },
+      }),
+    ];
+
+    await readarrScanner.run();
+
+    const updated = await getRepository(Media).findOneOrFail({
+      where: { mediaType: MediaType.BOOK },
+    });
+    assert.strictEqual(updated.status, MediaStatus.PROCESSING);
+    assert.strictEqual(updated.audiobookServiceId, 31);
+    assert.strictEqual(updated.serviceId, null);
+  });
+
+  it('uses ebook file statistics when the aggregate count is zero', async () => {
+    configureReadarr([
+      {
+        id: 32,
+        serviceType: 'ebook',
+        activeDirectory: '/ebooks',
+      },
+    ]);
+    getBooksImpl = async () => [
+      fakeReadarrBook({
+        editions: [
+          {
+            foreignEditionId: 'edition-id',
+            title: 'Test Book',
+            isbn13: '9780000000011',
+            monitored: true,
+          },
+        ],
+        statistics: {
+          bookFileCount: 0,
+          ebookFileCount: 1,
+          audiobookFileCount: 0,
+          totalBookCount: 1,
+        },
+      }),
+    ];
+
+    await readarrScanner.run();
+
+    const updated = await getRepository(Media).findOneOrFail({
+      where: { mediaType: MediaType.BOOK },
+    });
+    assert.strictEqual(updated.status, MediaStatus.AVAILABLE);
+    assert.strictEqual(updated.serviceId, 32);
+    assert.strictEqual(updated.audiobookServiceId, null);
+  });
+
   it('keeps an available ebook available while audiobook is still processing', async () => {
     const media = await seedBook('9780000000007', MediaStatus.AVAILABLE);
     media.serviceId = 10;
