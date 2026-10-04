@@ -202,6 +202,36 @@ export interface SuwayomiMangaChapterStates {
   chapters: { chapterNumber: number; isDownloaded: boolean }[];
 }
 
+/** A manga's natural key; `url` is absent when it cannot be stored. */
+export interface SuwayomiMangaKey {
+  id: string;
+  sourceId: string;
+  url?: string;
+}
+
+/** A stored chapter as the release calendar reads it. */
+export interface SuwayomiChapterRelease {
+  id: string;
+  mangaId: string;
+  /** -1 when the source gave none. */
+  chapterNumber: number;
+  isDownloaded: boolean;
+  /**
+   * Epoch milliseconds: the source's upload date or, when the source gave
+   * none, when Suwayomi stored the chapter.
+   */
+  releasedAt: number;
+}
+
+export interface SuwayomiChapterReleases {
+  mangas: SuwayomiMangaKey[];
+  chapters: SuwayomiChapterRelease[];
+  /** GraphQL calls made. */
+  pages: number;
+  /** False when the page budget ran out before every list ended. */
+  complete: boolean;
+}
+
 export interface SuwayomiChapter {
   id: string;
   mangaId: string;

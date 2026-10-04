@@ -1,11 +1,10 @@
 import Button from '@app/components/Common/Button';
 import PageTitle from '@app/components/Common/PageTitle';
+import useSettings from '@app/hooks/useSettings';
 import { Permission, useUser } from '@app/hooks/useUser';
-import {
-  encodeApiPathSegment,
-  normalizeMusicBrainzId,
-} from '@app/utils/apiPath';
 import defineMessages from '@app/utils/defineMessages';
+import { releaseCalendarHref } from '@app/utils/releaseCalendarLink';
+import { isConfiguredMediaCategoryEnabled } from '@app/utils/serviceAvailability';
 import type { ReleaseCalendarItem } from '@server/lib/releaseCalendar/normalize';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -15,6 +14,8 @@ const messages = defineMessages('calendar', {
   title: 'Release Calendar',
   description:
     'Upcoming movie, series, music, book, comic, magazine, PC game, and emulation releases from your acquisition services.',
+  descriptionWithManga:
+    'Upcoming movie, series, music, book, comic, magazine, PC game, and emulation releases from your acquisition services, and manga chapters that have already been released.',
   month: 'Month',
   scope: 'Calendar scope',
   mine: 'My requests',
@@ -22,12 +23,15 @@ const messages = defineMessages('calendar', {
   mediaType: 'Media type',
   allTypes:
     'Movies, series, music, books, comics, magazines, PC games, and emulation',
+  allTypesWithManga:
+    'Movies, series, music, books, comics, magazines, manga, PC games, and emulation',
   movies: 'Movies',
   series: 'Series',
   albums: 'Music albums',
   books: 'Books',
   comics: 'Comics',
   magazines: 'Magazines',
+  manga: 'Manga',
   games: 'Games and emulation',
   unmonitored: 'Include unmonitored titles',
   loading: 'Loading releases…',
@@ -40,6 +44,7 @@ const messages = defineMessages('calendar', {
     'This calendar reached its result limit. Narrow the media filter to see more releases.',
   available: 'Available',
   upcoming: 'Upcoming',
+  released: 'Released',
   air: 'Episode release',
   digital: 'Digital release',
   physical: 'Physical release',
@@ -47,6 +52,8 @@ const messages = defineMessages('calendar', {
   album: 'Album release',
   book: 'Book release',
   issue: 'Issue release',
+  chapter: 'Chapter release',
+  chapters: '{count, plural, one {# new chapter} other {# new chapters}}',
   game: 'Game release',
   pcGame: 'PC game',
   retroGame: 'Retro emulation',
@@ -62,9 +69,24 @@ const messages = defineMessages('calendar', {
 });
 const dateMonth = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+const ReleaseTitle = ({ item }: { item: ReleaseCalendarItem }) => {
+  const href = releaseCalendarHref(item);
+  return href ? (
+    <Link href={href} className="text-blue-300 hover:text-blue-200">
+      {item.title}
+    </Link>
+  ) : (
+    <>{item.title}</>
+  );
+};
 export default function CalendarPage() {
   const intl = useIntl();
   const { hasPermission } = useUser();
+  const { currentSettings } = useSettings();
+  const mangaEnabled = isConfiguredMediaCategoryEnabled(
+    'manga',
+    currentSettings
+  );
   const [month, setMonth] = useState(() => dateMonth(new Date()));
   const [scope, setScope] = useState('mine');
   const [type, setType] = useState('');
@@ -102,7 +124,9 @@ export default function CalendarPage() {
       <PageTitle title={intl.formatMessage(messages.title)} />
       <h1 className="heading">{intl.formatMessage(messages.title)}</h1>
       <p className="description mb-6">
-        {intl.formatMessage(messages.description)}
+        {intl.formatMessage(
+          mangaEnabled ? messages.descriptionWithManga : messages.description
+        )}
       </p>
       <div className="mb-6 flex flex-wrap items-end gap-4">
         <label htmlFor="calendar-month">
@@ -153,7 +177,11 @@ export default function CalendarPage() {
               setLimit(25);
             }}
           >
-            <option value="">{intl.formatMessage(messages.allTypes)}</option>
+            <option value="">
+              {intl.formatMessage(
+                mangaEnabled ? messages.allTypesWithManga : messages.allTypes
+              )}
+            </option>
             <option value="movie">{intl.formatMessage(messages.movies)}</option>
             <option value="tv">{intl.formatMessage(messages.series)}</option>
             <option value="music">{intl.formatMessage(messages.albums)}</option>
@@ -162,6 +190,11 @@ export default function CalendarPage() {
             <option value="magazine">
               {intl.formatMessage(messages.magazines)}
             </option>
+            {mangaEnabled && (
+              <option value="manga">
+                {intl.formatMessage(messages.manga)}
+              </option>
+            )}
             <option value="software">
               {intl.formatMessage(messages.games)}
             </option>
@@ -234,60 +267,16 @@ export default function CalendarPage() {
                 )}
               </time>
               <p className="mt-1 text-gray-400">
-                {intl.formatMessage(messages[item.dateType])}
+                {item.chapterCount
+                  ? intl.formatMessage(messages.chapters, {
+                      count: item.chapterCount,
+                    })
+                  : intl.formatMessage(messages[item.dateType])}
               </p>
             </div>
             <div className="min-w-0 flex-1 break-words">
               <h2 className="font-semibold text-gray-100">
-                {item.mediaType === 'software' &&
-                item.softwareCategory &&
-                item.igdbId ? (
-                  <Link
-                    href={`/software?category=${item.softwareCategory}&game=${item.igdbId}`}
-                    className="text-blue-300 hover:text-blue-200"
-                  >
-                    {item.title}
-                  </Link>
-                ) : item.mediaType === 'music' && item.mbId ? (
-                  <Link
-                    href={`/music/${encodeApiPathSegment(normalizeMusicBrainzId(item.mbId))}`}
-                    className="text-blue-300 hover:text-blue-200"
-                  >
-                    {item.title}
-                  </Link>
-                ) : item.mediaType === 'book' && item.bookId ? (
-                  <Link
-                    href={`/book/${encodeApiPathSegment(item.bookId)}?format=${item.bookFormat ?? 'ebook'}&lookupTitle=${encodeURIComponent(item.title)}`}
-                    className="text-blue-300 hover:text-blue-200"
-                  >
-                    {item.title}
-                  </Link>
-                ) : item.mediaType === 'comic' && item.comicId ? (
-                  <Link
-                    href={'/comic/' + encodeApiPathSegment(item.comicId)}
-                    className="text-blue-300 hover:text-blue-200"
-                  >
-                    {item.title}
-                  </Link>
-                ) : item.mediaType === 'magazine' && item.magazineTitle ? (
-                  <Link
-                    href={
-                      '/magazine/' + encodeApiPathSegment(item.magazineTitle)
-                    }
-                    className="text-blue-300 hover:text-blue-200"
-                  >
-                    {item.title}
-                  </Link>
-                ) : item.tmdbId ? (
-                  <Link
-                    href={`/${item.mediaType}/${item.tmdbId}`}
-                    className="text-blue-300 hover:text-blue-200"
-                  >
-                    {item.title}
-                  </Link>
-                ) : (
-                  item.title
-                )}
+                <ReleaseTitle item={item} />
               </h2>
               {item.artistName && (
                 <p className="mt-1 text-sm text-gray-400">{item.artistName}</p>
@@ -354,7 +343,11 @@ export default function CalendarPage() {
               className={`text-sm ${item.available ? 'text-green-400' : 'text-gray-400'}`}
             >
               {intl.formatMessage(
-                item.available ? messages.available : messages.upcoming
+                item.available
+                  ? messages.available
+                  : item.mediaType === 'manga'
+                    ? messages.released
+                    : messages.upcoming
               )}
               {item.is4k ? ' · 4K' : ''}
             </span>

@@ -3,11 +3,13 @@ import type {
   SuwayomiAvailability,
   SuwayomiCategory,
   SuwayomiChapter,
+  SuwayomiChapterRelease,
   SuwayomiChapterState,
   SuwayomiHealth,
   SuwayomiLibraryItem,
   SuwayomiMangaChapterStates,
   SuwayomiMangaDetails,
+  SuwayomiMangaKey,
   SuwayomiMangaSummary,
   SuwayomiMangaTrackRecords,
   SuwayomiQueue,
@@ -284,6 +286,55 @@ export const mapMangaChapterStates = (
       };
     }),
   };
+};
+
+/** A natural key; a URL that cannot be stored is left out, not rejected. */
+export const mapMangaKey = (
+  value: unknown,
+  operation: string
+): SuwayomiMangaKey => {
+  const raw = record(value, operation);
+  const url = raw.url;
+  return {
+    id: id(raw.id, operation),
+    sourceId: id(raw.sourceId, operation),
+    url:
+      typeof url === 'string' &&
+      url !== '' &&
+      url.length <= 2_048 &&
+      !HAS_CONTROL_CHARACTER.test(url)
+        ? url
+        : undefined,
+  };
+};
+
+/**
+ * A stored chapter dated by its upload date (epoch milliseconds) or, for an
+ * undated one, by when Suwayomi stored it (epoch seconds). Undefined when the
+ * row lacks the date its list is filtered on.
+ */
+export const mapChapterRelease = (
+  value: unknown,
+  operation: string,
+  undated: boolean
+): SuwayomiChapterRelease | undefined => {
+  const raw = record(value, operation);
+  const uploadDate = timestamp(raw.uploadDate);
+  const fetchedAt = timestamp(raw.fetchedAt);
+  const releasedAt = undated
+    ? uploadDate === undefined && fetchedAt !== undefined
+      ? Number(fetchedAt) * 1_000
+      : undefined
+    : uploadDate !== undefined
+      ? Number(uploadDate)
+      : undefined;
+  const release = {
+    id: id(raw.id, operation),
+    mangaId: id(raw.mangaId, operation),
+    chapterNumber: finite(raw.chapterNumber) ?? -1,
+    isDownloaded: flag(raw.isDownloaded, operation),
+  };
+  return releasedAt === undefined ? undefined : { ...release, releasedAt };
 };
 
 export const mapChapter = (

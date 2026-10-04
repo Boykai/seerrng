@@ -18,9 +18,17 @@ export interface ReleaseCalendarItem {
     | 'kapowarr'
     | 'lazylibrarian'
     | 'questarr'
-    | 'romarr';
+    | 'romarr'
+    | 'suwayomi';
   mediaType:
-    'movie' | 'tv' | 'music' | 'book' | 'comic' | 'magazine' | 'software';
+    | 'movie'
+    | 'tv'
+    | 'music'
+    | 'book'
+    | 'comic'
+    | 'magazine'
+    | 'software'
+    | 'manga';
   title: string;
   startsAt: string;
   dateType:
@@ -31,7 +39,8 @@ export interface ReleaseCalendarItem {
     | 'album'
     | 'book'
     | 'issue'
-    | 'game';
+    | 'game'
+    | 'chapter';
   allDay: boolean;
   tmdbId?: number;
   tvdbId?: number;
@@ -52,6 +61,10 @@ export interface ReleaseCalendarItem {
   seasonNumber?: number;
   episodeNumber?: number;
   episodeTitle?: string;
+  /** The AniList ID of a manga entry. */
+  mangaId?: number;
+  /** Chapters a manga entry stands for. */
+  chapterCount?: number;
   available: boolean;
   is4k: boolean;
   dateChanges?: ReleaseCalendarDateChange[];

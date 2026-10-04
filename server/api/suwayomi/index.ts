@@ -24,11 +24,13 @@ import {
   mapAvailability,
   mapCategory,
   mapChapter,
+  mapChapterRelease,
   mapChapterState,
   mapHealth,
   mapLibraryItem,
   mapMangaChapterStates,
   mapMangaDetails,
+  mapMangaKey,
   mapMangaSummary,
   mapMangaTrackRecords,
   mapQueue,
@@ -55,6 +57,8 @@ import type {
   SuwayomiCapabilities,
   SuwayomiCategory,
   SuwayomiChapter,
+  SuwayomiChapterRelease,
+  SuwayomiChapterReleases,
   SuwayomiChapterState,
   SuwayomiDetectedAuthMode,
   SuwayomiFetchResult,
@@ -63,6 +67,7 @@ import type {
   SuwayomiLibraryListing,
   SuwayomiMangaChapterStates,
   SuwayomiMangaDetails,
+  SuwayomiMangaKey,
   SuwayomiMangaTrackRecords,
   SuwayomiMutationResult,
   SuwayomiQueue,
@@ -906,6 +911,105 @@ class SuwayomiAPI extends ExternalAPI {
     return this.run(op, { ids: intIds(mangaIds, op) }, options, (data) =>
       nodes(data.mangas, op).map((node) => mapMangaChapterStates(node, op))
     );
+  }
+
+  /**
+   * The stored chapters of up to 100 manga released in [from, before): by
+   * the source's upload date or, for a chapter without one, by when Suwayomi
+   * stored it. Nothing here makes Suwayomi contact a source. Both lists are
+   * paged in ID order; when `maxPages` calls run out first, the result is
+   * marked incomplete. An empty, overlong or repeated cursor fails with
+   * BAD_RESPONSE.
+   */
+  async getChapterReleases(
+    mangaIds: readonly string[],
+    window: { from: Date; before: Date },
+    maxPages: number,
+    options: SuwayomiCallOptions = {}
+  ): Promise<SuwayomiChapterReleases> {
+    const op = 'ChapterReleases';
+    const ids = intIds(mangaIds, op);
+    const from = window?.from instanceof Date ? window.from.getTime() : NaN;
+    const before =
+      window?.before instanceof Date ? window.before.getTime() : NaN;
+    if (
+      !Number.isSafeInteger(from) ||
+      !Number.isSafeInteger(before) ||
+      from < 0 ||
+      before <= from ||
+      !Number.isSafeInteger(maxPages) ||
+      maxPages < 1
+    ) {
+      invalid(op);
+    }
+    const variables = {
+      ids,
+      uploadedFrom: String(from),
+      uploadedBefore: String(before),
+      fetchedFrom: String(Math.floor(from / 1_000)),
+      fetchedBefore: String(Math.ceil(before / 1_000)),
+    };
+    const lists = {
+      uploaded: { undated: false, done: false, after: null as string | null },
+      undated: { undated: true, done: false, after: null as string | null },
+    };
+    const followed = {
+      uploaded: new Set<string>(),
+      undated: new Set<string>(),
+    };
+    const chapters = new Map<string, SuwayomiChapterRelease>();
+    let mangas: SuwayomiMangaKey[] | undefined;
+    let pages = 0;
+    while (pages < maxPages && !(lists.uploaded.done && lists.undated.done)) {
+      pages += 1;
+      const page = {
+        ...variables,
+        uploadedAfter: lists.uploaded.after,
+        undatedAfter: lists.undated.after,
+      };
+      await this.run(op, page, options, (data) => {
+        mangas ??= nodes(data.mangas, op).map((node) => mapMangaKey(node, op));
+        for (const name of ['uploaded', 'undated'] as const) {
+          const list = lists[name];
+          // A finished list is sent again with its last cursor while the
+          // other one pages on; what it returns then is ignored.
+          if (list.done) continue;
+          const connection = record(data[name], op);
+          for (const node of nodes(connection, op)) {
+            const chapter = mapChapterRelease(node, op, list.undated);
+            if (
+              chapter &&
+              chapter.releasedAt >= from &&
+              chapter.releasedAt < before
+            ) {
+              chapters.set(chapter.id, chapter);
+            }
+          }
+          const pageInfo = record(connection.pageInfo, op);
+          if (typeof pageInfo.hasNextPage !== 'boolean') badResponse(op);
+          const cursor = pageInfo.endCursor;
+          const usable =
+            typeof cursor === 'string' &&
+            cursor !== '' &&
+            cursor.length <= MAX_CURSOR_LENGTH &&
+            !followed[name].has(cursor);
+          if (!pageInfo.hasNextPage) {
+            list.done = true;
+            if (usable) list.after = cursor;
+            continue;
+          }
+          if (!usable) badResponse(op);
+          followed[name].add(cursor as string);
+          list.after = cursor as string;
+        }
+      });
+    }
+    return {
+      mangas: mangas ?? [],
+      chapters: [...chapters.values()],
+      pages,
+      complete: lists.uploaded.done && lists.undated.done,
+    };
   }
 
   async enqueueChapters(
