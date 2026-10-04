@@ -5,11 +5,12 @@ supports `amd64` and `arm64`, uses YunoHost's Node.js 24 runtime, and stores
 persistent application data in the YunoHost app data directory.
 
 The installable package is maintained in the dedicated
-[`seerrng_ynh`](https://github.com/YunoHost-Apps/seerrng_ynh) repository, whose root
-layout is compatible with YunoHost's package tools:
+[`seerrng_ynh`](https://github.com/YunoHost-Apps/seerrng_ynh) repository. Until
+YunoHost approves the catalog submission, install the current package from its
+`testing` branch:
 
 ```bash
-sudo yunohost app install https://github.com/YunoHost-Apps/seerrng_ynh --debug
+sudo yunohost app install https://github.com/YunoHost-Apps/seerrng_ynh/tree/testing --debug
 ```
 
 Stable SeerrNG releases update the package manifest with the matching release
