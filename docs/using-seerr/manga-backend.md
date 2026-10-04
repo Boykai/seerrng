@@ -1141,6 +1141,52 @@ problem with an **Available** or **Partially Available** manga with **Report an
 Issue** on its details page. Manga reports use the **Other** issue type. While
 the Manga category is on, the **Issues** page has a **Manga** filter.
 
+## Chapter list
+
+While a Suwayomi server is configured, a manga's details page shows a
+**Chapters** list below **Manga Details**. Blocklisted titles show no list.
+The list shows the highest chapter number first; chapters without a number
+come last, as **Unknown**, and chapters with the same number keep the order in
+which Suwayomi lists them. Choose 10, 25, 50, or 100 chapters per page; 50 is
+the default.
+
+Each chapter shows its number, its name, the date its source lists for it, and
+one state:
+
+- **Downloaded**: Suwayomi reports the chapter downloaded. This alone does not
+  mean that you can download it.
+- **Requested**: a request that you can see holds the chapter. You see your
+  own requests; users with the **Manage Requests** or **View Requests**
+  permission see every request. Declined requests never count. A request
+  whose chapters SeerrNG has not chosen yet counts the chapters it would get
+  from the current list, and a request on another match counts by chapter
+  number.
+- **Not Requested**: any other chapter.
+
+A **Downloaded** chapter has a download button only when one of those requests
+offers the chapter as a verified [Download copy](#download-copy) that you may
+download under that section's rules. The button starts the same download as
+the request's **Request Status** card; the list adds no other way to download.
+
+When a current match links the title to a manga in the Suwayomi library, the
+list shows the chapters that Suwayomi has stored for that manga, using the
+default server's match first. Viewing the list only reads what Suwayomi has
+already stored: it never makes Suwayomi ask a source for chapters, and it
+changes nothing. New chapters appear once Suwayomi's own library update or a
+request's [dispatch](#dispatch) has added them. SeerrNG keeps each manga's
+chapter list for 60 seconds, so a change can take up to a minute to show.
+
+Without such a match, the list shows the chapter numbers that the requests you
+can see hold, as **Requested**, without names or dates. With none, the page
+says that the title is not in the library yet.
+
+The list never shows a chapter's scanlator, its source, or its address. When
+Suwayomi cannot be reached or answers with an error, the list says that the
+chapters are unavailable and offers **Retry**, and SeerrNG logs
+`Failed to list manga chapters` under the **Manga** label with IDs and codes
+only. The list comes from `GET /api/v1/manga/{mangaId}/chapters`; see the
+[REST API reference](../../seerr-api.yml).
+
 ## Download copy
 
 A manga request offers each chapter that SeerrNG has verified as a **Download
