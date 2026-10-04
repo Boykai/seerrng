@@ -71,7 +71,9 @@ const useDetailDisclosurePins = (mediaType: DetailDisclosureMediaType) => {
         ? `/api/v1/user/${userId}/settings/detail-disclosures/tv`
         : mediaType === 'music'
           ? `/api/v1/user/${userId}/settings/detail-disclosures/music`
-          : `/api/v1/user/${userId}/settings/detail-disclosures/book`;
+          : mediaType === 'manga'
+            ? `/api/v1/user/${userId}/settings/detail-disclosures/manga`
+            : `/api/v1/user/${userId}/settings/detail-disclosures/book`;
   const { data, mutate } = useSWR<UserSettingsDetailDisclosureResponse>(
     endpoint,
     {

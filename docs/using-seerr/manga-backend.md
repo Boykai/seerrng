@@ -51,6 +51,39 @@ or API key is required. Manga pages share SeerrNG's AniList request budget with
 the other AniList features. While AniList is rate limiting requests, manga pages
 may not load; try again later.
 
+## Filter manga discovery
+
+The manga Discover page has **Filters** and **Sort By** sections. Select a
+section's heading to open it, or pin the section to keep it open on later
+visits. The filters and the sort order are kept in the page address, so a
+filtered view can be bookmarked.
+
+**Filters** narrows the results with AniList's own filtering:
+
+- **Genres** and **Tags** keep titles that AniList lists under the chosen
+  names, and **Exclude Genres** and **Exclude Tags** leave them out. Each list
+  takes up to 10 names. A name can be included or excluded, not both.
+- **Format**, **Status**, **Country**, and **Source Material** each match one
+  value.
+- **Start Year**, **AniList Score**, **Chapters**, and **Volumes** set a range.
+  A bound matches only titles for which AniList has that value. A score,
+  chapter, or volume bound that no value falls outside, such as a minimum of 0,
+  is ignored.
+
+Adult genres and tags are listed only while **Include Adult Manga** is on, and
+the **Novel** format only while **Include Novels** is on. The
+[content switches](#choose-which-titles-appear) apply to every filtered view.
+
+**Sort By** orders the results by Trending, Popular, Top Rated, Start Date, or
+Title. Selecting the active sort again reverses its direction. Keyword results
+are ordered by relevance until you choose a sort, and other filtered views by
+Trending.
+
+SeerrNG loads AniList's genre and tag names when the **Filters** section opens
+and keeps them for a day. While AniList cannot be reached, the name lists are
+empty, but filters already in the page address still apply. Each page of
+results is one AniList request.
+
 ## Blocklist manga
 
 Users with permission to manage the blocklist can blocklist a manga title from

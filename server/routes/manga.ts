@@ -1,5 +1,8 @@
-import AnilistAPI from '@server/api/anilist';
-import type { AnilistMangaSort } from '@server/api/anilist/manga';
+import AnilistAPI, { AnilistGraphQLError } from '@server/api/anilist';
+import type {
+  AnilistMangaFilterOption,
+  AnilistMangaSort,
+} from '@server/api/anilist/manga';
 import {
   ANILIST_MANGA_BATCH_SIZE,
   ANILIST_MANGA_COUNTRIES,
@@ -15,6 +18,7 @@ import {
   isMangaInSuwayomiLibrary,
   sendAnilistFailure,
 } from '@server/lib/mangaCatalog';
+import { parseMangaDiscoverFilters } from '@server/lib/mangaDiscoverFilters';
 import logger from '@server/logger';
 import { mapMangaDetails, mapMangaResult } from '@server/models/Manga';
 import { filterEntityResponse } from '@server/utils/entityResponse';
@@ -31,6 +35,12 @@ export const MANGA_DISCOVER_SORTS = [
   'trending',
   'popular',
   'top_rated',
+  'popular.asc',
+  'top_rated.asc',
+  'start_date.desc',
+  'start_date.asc',
+  'title.asc',
+  'title.desc',
 ] as const;
 const MANGA_DISCOVER_SORT_ORDERS: Record<
   (typeof MANGA_DISCOVER_SORTS)[number],
@@ -39,6 +49,14 @@ const MANGA_DISCOVER_SORT_ORDERS: Record<
   trending: ['TRENDING_DESC', 'POPULARITY_DESC'],
   popular: ['POPULARITY_DESC'],
   top_rated: ['SCORE_DESC'],
+  // The ID breaks ties, so titles with equal values keep their order from
+  // one page to the next.
+  'popular.asc': ['POPULARITY', 'ID'],
+  'top_rated.asc': ['SCORE', 'ID'],
+  'start_date.desc': ['START_DATE_DESC', 'ID_DESC'],
+  'start_date.asc': ['START_DATE', 'ID'],
+  'title.asc': ['TITLE_ROMAJI', 'ID'],
+  'title.desc': ['TITLE_ROMAJI_DESC', 'ID_DESC'],
 };
 const MAX_MANGA_PAGE = 500;
 const MAX_MANGA_QUERY_LENGTH = 256;
@@ -194,13 +212,18 @@ mangaDiscoverRoutes.get('/', async (req, res) => {
       maxLength: 2,
     }
   );
+  const filters = parseMangaDiscoverFilters(
+    req.query,
+    valueOf(genre) || undefined
+  );
   const error = firstError(
     query,
     sortBy,
     genre,
     format,
     status,
-    countryOfOrigin
+    countryOfOrigin,
+    filters
   );
   if (error) {
     return res.status(400).json({ status: 400, message: error });
@@ -230,6 +253,7 @@ mangaDiscoverRoutes.get('/', async (req, res) => {
       format: valueOf(format),
       status: valueOf(status),
       countryOfOrigin: valueOf(countryOfOrigin),
+      ...valueOf(filters),
       ...policy,
     });
     const mediaByAnilistId = await findMangaMediaByAnilistIds(
@@ -254,6 +278,44 @@ mangaDiscoverRoutes.get('/', async (req, res) => {
     logger.error('Failed to retrieve manga discovery results', {
       label: 'Discover Manga',
       ...getHttpErrorDetails(e),
+    });
+    return sendAnilistFailure(
+      res,
+      e,
+      'AniList, the service used for manga discovery, timed out or is unavailable. Please try again.'
+    );
+  }
+});
+
+// Genre, tag and format names for the discover filters. AniList's lists are
+// cached and shared; the content policy is applied to every response, and a
+// failure is logged by its codes only.
+mangaDiscoverRoutes.get('/filters', async (_req, res) => {
+  const policy = getMangaContentPolicy();
+  const visibleNames = (options: AnilistMangaFilterOption[]) =>
+    options
+      .filter((option) => policy.includeAdult || !option.isAdult)
+      .map((option) => option.name)
+      .sort((a, b) => a.localeCompare(b, 'en'));
+
+  try {
+    const catalog = await new AnilistAPI().getMangaFilterOptions();
+    return res.status(200).json({
+      genres: visibleNames(catalog.genres),
+      tags: visibleNames(catalog.tags),
+      formats: ANILIST_MANGA_FORMATS.filter(
+        (format) => policy.includeNovels || format !== 'NOVEL'
+      ),
+    });
+  } catch (e) {
+    const { errorCode, status } = getHttpErrorDetails(e);
+    const failureStatus =
+      status ?? (e instanceof AnilistGraphQLError ? e.status : undefined);
+    logger.error('Failed to retrieve manga filter options', {
+      label: 'Discover Manga',
+      errorName: e instanceof Error ? e.name : 'UnknownError',
+      ...(errorCode ? { errorCode } : {}),
+      ...(failureStatus ? { status: failureStatus } : {}),
     });
     return sendAnilistFailure(
       res,

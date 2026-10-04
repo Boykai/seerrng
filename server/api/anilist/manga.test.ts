@@ -1,4 +1,8 @@
 import AnilistAPI, { AnilistRateLimitedError } from '@server/api/anilist';
+import {
+  AnilistBadResponseError,
+  AnilistGraphQLError,
+} from '@server/api/anilist/failures';
 import type { AnilistMangaPageOptions } from '@server/api/anilist/manga';
 import {
   anilistRateLimiter,
@@ -740,5 +744,291 @@ describe('manga detail mapping', () => {
       mapped.tags.map((tag) => tag.name),
       ['Revenge', 'Nudity']
     );
+  });
+});
+
+describe('AniList manga discover filters', () => {
+  it('sends each filter with inclusive bounds and keeps the content policy', async () => {
+    const api = new AnilistAPI();
+    const bodies = stubAnilist(api, () =>
+      mangaPage([
+        mangaFixture({ id: 1 }),
+        mangaFixture({ id: 2, isAdult: true }),
+        mangaFixture({ id: 3, format: 'NOVEL' }),
+      ])
+    );
+
+    const page = await api.getMangaPage(
+      pageOptions({
+        sort: ['START_DATE_DESC', 'ID_DESC'],
+        genre: 'Drama',
+        genres: ['Action', 'Comedy'],
+        excludedGenres: ['Horror'],
+        tags: ['Pirates'],
+        excludedTags: ['Time Skip'],
+        source: 'WEB_NOVEL',
+        startYear: { min: 1990, max: 2005 },
+        averageScore: { min: 70, max: 90 },
+        chapters: { min: 10, max: 200 },
+        volumes: { min: 1, max: 20 },
+      })
+    );
+
+    assert.deepEqual(bodies[0].variables, {
+      page: 1,
+      perPage: 20,
+      sort: ['START_DATE_DESC', 'ID_DESC'],
+      genre: 'Drama',
+      formatNotIn: ['NOVEL'],
+      isAdult: false,
+      genreIn: ['Action', 'Comedy'],
+      genreNotIn: ['Horror'],
+      tagIn: ['Pirates'],
+      tagNotIn: ['Time Skip'],
+      source: 'WEB_NOVEL',
+      startDateGreater: 19_899_999,
+      startDateLesser: 20_059_999,
+      averageScoreGreater: 69,
+      averageScoreLesser: 91,
+      chaptersGreater: 9,
+      chaptersLesser: 201,
+      volumesGreater: 0,
+      volumesLesser: 21,
+    });
+    for (const [argument, variable] of [
+      ['genre_in', 'genreIn'],
+      ['genre_not_in', 'genreNotIn'],
+      ['tag_in', 'tagIn'],
+      ['tag_not_in', 'tagNotIn'],
+      ['source', 'source'],
+      ['startDate_greater', 'startDateGreater'],
+      ['startDate_lesser', 'startDateLesser'],
+      ['averageScore_greater', 'averageScoreGreater'],
+      ['averageScore_lesser', 'averageScoreLesser'],
+      ['chapters_greater', 'chaptersGreater'],
+      ['chapters_lesser', 'chaptersLesser'],
+      ['volumes_greater', 'volumesGreater'],
+      ['volumes_lesser', 'volumesLesser'],
+    ]) {
+      assert.ok(
+        bodies[0].query.includes(`${argument}: $${variable}`),
+        argument
+      );
+      assert.ok(bodies[0].query.includes(`$${variable}:`), variable);
+    }
+    assert.deepEqual(
+      page.media.map((manga) => manga.id),
+      [1]
+    );
+  });
+
+  it('leaves out empty lists and bounds that exclude no known value', async () => {
+    const api = new AnilistAPI();
+    const bodies = stubAnilist(api, () => mangaPage([]));
+
+    await api.getMangaPage(
+      pageOptions({
+        includeAdult: true,
+        includeNovels: true,
+        genres: [],
+        excludedTags: [],
+        startYear: { min: 1800 },
+        averageScore: { min: 0, max: 100 },
+        chapters: { min: 0 },
+        volumes: { max: 0 },
+      })
+    );
+
+    assert.deepEqual(bodies[0].variables, {
+      page: 1,
+      perPage: 20,
+      sort: ['TRENDING_DESC'],
+      startDateGreater: 17_999_999,
+      volumesLesser: 1,
+    });
+  });
+
+  it('sends a rejected filter again instead of caching the rejection', async () => {
+    const api = new AnilistAPI();
+    const errors = [{ message: 'Example rejection', status: 400 }];
+    let reply: StubResponse = { data: { data: null, errors } };
+    const bodies = stubAnilist(api, () => reply);
+    const options = pageOptions({ tags: ['Unknown Example Tag'] });
+
+    await assert.rejects(api.getMangaPage(options), AnilistGraphQLError);
+    await assert.rejects(api.getMangaPage(options), AnilistGraphQLError);
+    assert.equal(bodies.length, 2);
+
+    reply = { status: 400, data: { data: null, errors } };
+    await assert.rejects(api.getMangaPage(options), (error: unknown) => {
+      assert.ok(axios.isAxiosError(error));
+      assert.equal(error.response?.status, 400);
+      return true;
+    });
+    assert.equal(bodies.length, 3);
+
+    reply = mangaPage([mangaFixture()]);
+    await api.getMangaPage(options);
+    await api.getMangaPage(options);
+    assert.equal(bodies.length, 4);
+  });
+});
+
+describe('AniList manga filter names', () => {
+  const catalogReply = (
+    overrides: Record<string, unknown> = {}
+  ): StubResponse => ({
+    data: {
+      data: {
+        GenreCollection: ['Drama', 'Action', 'Hentai'],
+        MediaTagCollection: [
+          { name: 'Pirates', isAdult: false },
+          { name: 'Example Adult Tag', isAdult: true },
+        ],
+        ...overrides,
+      },
+    },
+  });
+
+  it('reads the names once a day and asks for nothing else', async () => {
+    const first = new AnilistAPI();
+    const second = new AnilistAPI();
+    const firstBodies = stubAnilist(first, () => catalogReply());
+    const secondBodies = stubAnilist(second, () => catalogReply());
+
+    const options = await first.getMangaFilterOptions();
+    assert.deepEqual(await second.getMangaFilterOptions(), options);
+
+    assert.equal(firstBodies.length, 1);
+    assert.equal(secondBodies.length, 0);
+    assert.deepEqual(firstBodies[0].variables, {});
+    assert.match(firstBodies[0].query, /GenreCollection/);
+    assert.match(firstBodies[0].query, /MediaTagCollection \{ name isAdult \}/);
+    assert.doesNotMatch(firstBodies[0].query, /\b(id|description)\b/);
+    assert.deepEqual(options, {
+      genres: [
+        { name: 'Drama', isAdult: false },
+        { name: 'Action', isAdult: false },
+        { name: 'Hentai', isAdult: true },
+      ],
+      tags: [
+        { name: 'Pirates', isAdult: false },
+        { name: 'Example Adult Tag', isAdult: true },
+      ],
+    });
+
+    const cache = cacheManager.getCache('anilist').data;
+    const expiries = cache.keys().map((key) => cache.getTtl(key) ?? 0);
+    assert.equal(expiries.length, 1);
+    assert.ok(Math.abs(expiries[0] - Date.now() - 86_400_000) < 60_000);
+  });
+
+  it('shares one in-flight read between clients', async () => {
+    const first = new AnilistAPI();
+    const second = new AnilistAPI();
+    const firstBodies = stubAnilist(first, () => catalogReply());
+    const secondBodies = stubAnilist(second, () => catalogReply());
+
+    const [a, b] = await Promise.all([
+      first.getMangaFilterOptions(),
+      second.getMangaFilterOptions(),
+    ]);
+
+    assert.deepEqual(a, b);
+    assert.equal(firstBodies.length + secondBodies.length, 1);
+  });
+
+  it('spends the shared AniList budget', async () => {
+    const anime = new AnilistAPI();
+    const manga = new AnilistAPI();
+    stubAnilist(anime, animePage);
+    stubAnilist(manga, () => catalogReply());
+
+    await anime.getTrending(1);
+    await manga.getMangaFilterOptions();
+
+    assert.deepEqual(sleeps, [1_000]);
+  });
+
+  it('caches no failed or malformed reply', async () => {
+    const api = new AnilistAPI();
+    let reply: StubResponse = { status: 500, data: {} };
+    const bodies = stubAnilist(api, () => reply);
+
+    await assert.rejects(api.getMangaFilterOptions(), (error: unknown) =>
+      axios.isAxiosError(error)
+    );
+    reply = { data: { data: { GenreCollection: ['Drama'] } } };
+    await assert.rejects(api.getMangaFilterOptions(), AnilistBadResponseError);
+    reply = {
+      data: {
+        data: null,
+        errors: [{ message: 'Example failure', status: 400 }],
+      },
+    };
+    await assert.rejects(api.getMangaFilterOptions(), AnilistGraphQLError);
+    reply = catalogReply();
+    await api.getMangaFilterOptions();
+    await api.getMangaFilterOptions();
+
+    assert.equal(bodies.length, 4);
+  });
+
+  it('keeps names that pass through the discover parameters unchanged', async () => {
+    const api = new AnilistAPI();
+    stubAnilist(api, () =>
+      catalogReply({
+        GenreCollection: [
+          ' Drama ',
+          'Drama',
+          'g'.repeat(65),
+          'Comma, Genre',
+          '',
+          7,
+          null,
+          'Hentai',
+        ],
+        MediaTagCollection: [
+          { name: 'Pirates', isAdult: false },
+          { name: 'Pirates', isAdult: true },
+          { name: 'Unflagged Example' },
+          { name: 'Text Flag Example', isAdult: 'false' },
+          { name: 't'.repeat(65), isAdult: false },
+          { name: 'Comma, Tag', isAdult: false },
+          'Loose Example',
+          null,
+        ],
+      })
+    );
+
+    assert.deepEqual(await api.getMangaFilterOptions(), {
+      genres: [
+        { name: 'Drama', isAdult: false },
+        { name: 'Hentai', isAdult: true },
+      ],
+      tags: [
+        { name: 'Pirates', isAdult: false },
+        { name: 'Unflagged Example', isAdult: true },
+        { name: 'Text Flag Example', isAdult: true },
+      ],
+    });
+  });
+
+  it('keeps at most 100 genres and 1,000 tags', async () => {
+    const api = new AnilistAPI();
+    stubAnilist(api, () =>
+      catalogReply({
+        GenreCollection: Array.from({ length: 150 }, (_, i) => `Genre ${i}`),
+        MediaTagCollection: Array.from({ length: 1_200 }, (_, i) => ({
+          name: `Tag ${i}`,
+          isAdult: false,
+        })),
+      })
+    );
+
+    const options = await api.getMangaFilterOptions();
+
+    assert.equal(options.genres.length, 100);
+    assert.equal(options.tags.length, 1_000);
   });
 });

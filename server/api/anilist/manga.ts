@@ -18,7 +18,45 @@ export type AnilistMangaFormat = (typeof ANILIST_MANGA_FORMATS)[number];
 export type AnilistMangaStatus = (typeof ANILIST_MANGA_STATUSES)[number];
 export type AnilistMangaCountry = (typeof ANILIST_MANGA_COUNTRIES)[number];
 export type AnilistMangaSort =
-  'TRENDING_DESC' | 'POPULARITY_DESC' | 'SCORE_DESC' | 'SEARCH_MATCH';
+  | 'TRENDING_DESC'
+  | 'POPULARITY_DESC'
+  | 'SCORE_DESC'
+  | 'SEARCH_MATCH'
+  | 'POPULARITY'
+  | 'SCORE'
+  | 'START_DATE'
+  | 'START_DATE_DESC'
+  | 'TITLE_ROMAJI'
+  | 'TITLE_ROMAJI_DESC'
+  | 'ID'
+  | 'ID_DESC';
+
+// Every AniList MediaSource value; discovery can filter by any of them.
+export const ANILIST_MANGA_SOURCES = [
+  'ORIGINAL',
+  'MANGA',
+  'LIGHT_NOVEL',
+  'VISUAL_NOVEL',
+  'VIDEO_GAME',
+  'OTHER',
+  'NOVEL',
+  'DOUJINSHI',
+  'ANIME',
+  'WEB_NOVEL',
+  'LIVE_ACTION',
+  'GAME',
+  'COMIC',
+  'MULTIMEDIA_PROJECT',
+  'PICTURE_BOOK',
+] as const;
+export type AnilistMangaSource = (typeof ANILIST_MANGA_SOURCES)[number];
+
+export const ANILIST_MANGA_FILTER_OPTIONS_TTL_SECONDS = 86_400;
+export const MAX_ANILIST_FILTER_NAME_LENGTH = 64;
+const MAX_ANILIST_FILTER_GENRES = 100;
+const MAX_ANILIST_FILTER_TAGS = 1_000;
+// AniList's genre for adult titles; its tags carry their own adult flag.
+const ANILIST_ADULT_GENRES: ReadonlySet<string> = new Set(['Hentai']);
 
 const MAX_TEXT_LENGTH = 512;
 const MAX_LABEL_LENGTH = 128;
@@ -76,6 +114,19 @@ export const MANGA_PAGE_QUERY = `
     $status: MediaStatus
     $countryOfOrigin: CountryCode
     $isAdult: Boolean
+    $genreIn: [String]
+    $genreNotIn: [String]
+    $tagIn: [String]
+    $tagNotIn: [String]
+    $source: MediaSource
+    $startDateGreater: FuzzyDateInt
+    $startDateLesser: FuzzyDateInt
+    $averageScoreGreater: Int
+    $averageScoreLesser: Int
+    $chaptersGreater: Int
+    $chaptersLesser: Int
+    $volumesGreater: Int
+    $volumesLesser: Int
   ) {
     Page(page: $page, perPage: $perPage) {
       pageInfo { total currentPage lastPage hasNextPage }
@@ -89,6 +140,19 @@ export const MANGA_PAGE_QUERY = `
         status: $status
         countryOfOrigin: $countryOfOrigin
         isAdult: $isAdult
+        genre_in: $genreIn
+        genre_not_in: $genreNotIn
+        tag_in: $tagIn
+        tag_not_in: $tagNotIn
+        source: $source
+        startDate_greater: $startDateGreater
+        startDate_lesser: $startDateLesser
+        averageScore_greater: $averageScoreGreater
+        averageScore_lesser: $averageScoreLesser
+        chapters_greater: $chaptersGreater
+        chapters_lesser: $chaptersLesser
+        volumes_greater: $volumesGreater
+        volumes_lesser: $volumesLesser
       ) {
         ${MANGA_SUMMARY_FIELDS}
       }
@@ -123,12 +187,50 @@ export const MANGA_BY_IDS_QUERY = `
   }
 `;
 
+// Genre and tag names only: no IDs or descriptions are requested. One cached
+// reply serves every content policy; the caller applies it.
+export const MANGA_FILTER_OPTIONS_QUERY = `
+  query MangaFilterOptions {
+    GenreCollection
+    MediaTagCollection { name isAdult }
+  }
+`;
+
 export interface AnilistMangaContentPolicy {
   includeAdult: boolean;
   includeNovels: boolean;
 }
 
-export interface AnilistMangaPageOptions extends AnilistMangaContentPolicy {
+/** Inclusive bounds; either end may be open. */
+export interface AnilistMangaRange {
+  min?: number;
+  max?: number;
+}
+
+export interface AnilistMangaDiscoverFilters {
+  genres?: string[];
+  excludedGenres?: string[];
+  tags?: string[];
+  excludedTags?: string[];
+  source?: AnilistMangaSource;
+  startYear?: AnilistMangaRange;
+  averageScore?: AnilistMangaRange;
+  chapters?: AnilistMangaRange;
+  volumes?: AnilistMangaRange;
+}
+
+export interface AnilistMangaFilterOption {
+  name: string;
+  isAdult: boolean;
+}
+
+export interface AnilistMangaFilterOptions {
+  genres: AnilistMangaFilterOption[];
+  tags: AnilistMangaFilterOption[];
+}
+
+export interface AnilistMangaPageOptions
+  extends AnilistMangaContentPolicy, AnilistMangaDiscoverFilters {
   page: number;
   sort: AnilistMangaSort[];
   search?: string;
@@ -430,6 +532,47 @@ export const isAnilistMangaExcluded = (
   (!policy.includeAdult && manga.isAdult) ||
   (!policy.includeNovels && manga.format === 'NOVEL');
 
+// AniList's _greater and _lesser comparisons are exclusive and skip titles
+// without a value, so inclusive bounds widen by one and a bound that would
+// exclude no known value is left out.
+const setCountRange = (
+  variables: Record<string, unknown>,
+  name: string,
+  range: AnilistMangaRange | undefined,
+  ceiling = Number.POSITIVE_INFINITY
+): void => {
+  if (range?.min !== undefined && range.min > 0) {
+    variables[`${name}Greater`] = range.min - 1;
+  }
+  if (range?.max !== undefined && range.max < ceiling) {
+    variables[`${name}Lesser`] = range.max + 1;
+  }
+};
+
+const setDiscoverFilterVariables = (
+  variables: Record<string, unknown>,
+  filters: AnilistMangaDiscoverFilters
+): void => {
+  if (filters.genres?.length) variables.genreIn = filters.genres;
+  if (filters.excludedGenres?.length) {
+    variables.genreNotIn = filters.excludedGenres;
+  }
+  if (filters.tags?.length) variables.tagIn = filters.tags;
+  if (filters.excludedTags?.length) variables.tagNotIn = filters.excludedTags;
+  if (filters.source) variables.source = filters.source;
+  // Fuzzy dates are YYYYMMDD integers. YYYY9999 is never a real date, so the
+  // year bounds hold whether AniList compares inclusively or not.
+  if (filters.startYear?.min !== undefined) {
+    variables.startDateGreater = filters.startYear.min * 10_000 - 1;
+  }
+  if (filters.startYear?.max !== undefined) {
+    variables.startDateLesser = (filters.startYear.max + 1) * 10_000 - 1;
+  }
+  setCountRange(variables, 'averageScore', filters.averageScore, 100);
+  setCountRange(variables, 'chapters', filters.chapters);
+  setCountRange(variables, 'volumes', filters.volumes);
+};
+
 // Unset filters are left out entirely so AniList applies no filter for them.
 export const buildAnilistMangaPageVariables = (
   options: AnilistMangaPageOptions,
@@ -449,6 +592,7 @@ export const buildAnilistMangaPageVariables = (
     variables.countryOfOrigin = options.countryOfOrigin;
   }
   if (!options.includeAdult) variables.isAdult = false;
+  setDiscoverFilterVariables(variables, options);
   return variables;
 };
 
@@ -548,3 +692,72 @@ export const sanitizeAnilistMangaSearch = (
   isRecord(value) && Array.isArray(value.media)
     ? sanitizeAnilistMangaPage(value, policy).media
     : undefined;
+
+// A name must come back unchanged through the comma-separated discover
+// parameters, so longer names and names with a comma are dropped.
+const sanitizeFilterName = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const name = value.trim();
+  return name &&
+    name.length <= MAX_ANILIST_FILTER_NAME_LENGTH &&
+    !name.includes(',')
+    ? name
+    : undefined;
+};
+
+const sanitizeFilterOptionList = (
+  items: unknown[],
+  limit: number,
+  read: (item: unknown) => AnilistMangaFilterOption | undefined
+): AnilistMangaFilterOption[] => {
+  const options = new Map<string, AnilistMangaFilterOption>();
+  for (const item of items) {
+    if (options.size >= limit) {
+      break;
+    }
+    const option = read(item);
+    if (option && !options.has(option.name)) {
+      options.set(option.name, option);
+    }
+  }
+  return [...options.values()];
+};
+
+/** Undefined when either list is missing from the reply. */
+export const sanitizeAnilistMangaFilterOptions = (
+  value: unknown
+): AnilistMangaFilterOptions | undefined => {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.GenreCollection) ||
+    !Array.isArray(value.MediaTagCollection)
+  ) {
+    return undefined;
+  }
+  return {
+    genres: sanitizeFilterOptionList(
+      value.GenreCollection,
+      MAX_ANILIST_FILTER_GENRES,
+      (item) => {
+        const name = sanitizeFilterName(item);
+        return name
+          ? { name, isAdult: ANILIST_ADULT_GENRES.has(name) }
+          : undefined;
+      }
+    ),
+    tags: sanitizeFilterOptionList(
+      value.MediaTagCollection,
+      MAX_ANILIST_FILTER_TAGS,
+      (item) => {
+        if (!isRecord(item)) {
+          return undefined;
+        }
+        const name = sanitizeFilterName(item.name);
+        // A tag without a clear adult flag counts as adult.
+        return name ? { name, isAdult: item.isAdult !== false } : undefined;
+      }
+    ),
+  };
+};
