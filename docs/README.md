@@ -42,6 +42,8 @@ connects to.
 - [Choose available media categories](/using-seerr/settings/media-categories/)
 - [Configure media-server libraries](/using-seerr/settings/mediaserver)
 - [Choose companion services and SeerrNG NG forks](/using-seerr/companion-services)
+- [Configure ChaptarrNG and its SeerrNG service key](/using-seerr/bookshelf-backend/#chaptarrng)
+- [Connect read-only Audiobookshelf availability](/using-seerr/bookshelf-backend/#audiobookshelf-availability)
 - [Enable built-in HTTPS](/using-seerr/advanced/built-in-tls)
 - [Create override rules](/using-seerr/override-rules/)
 - [Bookshelf backend setup](/using-seerr/bookshelf-backend/)

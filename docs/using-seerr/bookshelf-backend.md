@@ -85,7 +85,10 @@ Readarr-compatible alternative. We maintain the fork because SeerrNG needs
 format-scoped requests and durable tracking when author metadata preparation
 delays a book add. ChaptarrNG remains a standalone app. SeerrNG sends the
 selected format explicitly, so one ChaptarrNG instance can serve ebooks and
-audiobooks without a provider-specific URL Base or API adapter.
+audiobooks without a provider-specific URL Base or API adapter. See the
+[ChaptarrNG fork feature guide](https://github.com/snapetech/chaptarrng/blob/main/docs/FORK_FEATURES.md)
+for its maintained changes, including Direct Download, backup protection,
+and package support.
 
 ### ChaptarrNG
 

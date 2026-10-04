@@ -29,7 +29,8 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
   - [Software requests: ROMs and PC games](./docs/using-seerr/software-acquisition.md)
   - [Request Status and Download copy](./docs/using-seerr/request-status.md)
   - [Books, authors, and series](./docs/using-seerr/books-and-series.md)
-  - [Audiobookshelf availability and ChaptarrNG integration](./docs/using-seerr/bookshelf-backend.md#audiobookshelf-availability)
+  - [ChaptarrNG Bookshelf integration](./docs/using-seerr/bookshelf-backend.md#chaptarrng)
+  - [Read-only Audiobookshelf availability](./docs/using-seerr/bookshelf-backend.md#audiobookshelf-availability)
   - [Move Bookshelf media paths](./docs/using-seerr/bookshelf-media-path-migration.md)
   - [Configure comics](./docs/using-seerr/comics-backend.md)
   - [Configure magazines](./docs/using-seerr/magazines-backend.md)
@@ -68,6 +69,10 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
   When both formats are enabled, their separate SeerrNG service entries can
   point to the same BookshelfNG URL and API key; separate app instances are
   not required.
+- ChaptarrNG requests preserve the selected book format, show author-preparation
+  progress and retry timing, and resume after imports complete. Pending imports
+  are cancelled only when no other active request still needs them; ChaptarrNG
+  `0.9.941+` also supports a restricted SeerrNG service key.
 - Optional read-only Audiobookshelf library scanning marks ISBN-matched items
   as available audiobooks without sending acquisition requests or changing
   Audiobookshelf data.
@@ -115,6 +120,7 @@ SeerrNG documentation is maintained in the [docs folder](https://github.com/snap
 - [Install SeerrNG](./docs/getting-started/index.mdx)
 - [Install on Unraid](./docs/getting-started/third-parties/unraid.mdx)
 - [Find books, authors, and series](./docs/using-seerr/books-and-series.md)
+- [ChaptarrNG fork changes and capabilities](https://github.com/snapetech/chaptarrng/blob/main/docs/FORK_FEATURES.md)
 - [Discover and request comics](./docs/using-seerr/comics-backend.md)
 - [Discover and request magazines](./docs/using-seerr/magazines-backend.md)
 - [Track requests and status history](./docs/using-seerr/request-status.md)
