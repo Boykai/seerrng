@@ -6,6 +6,7 @@ import {
   FilterResetButton,
   getFilterToggleButtonClass,
 } from '@app/components/Discover/FilterPanel/CompactFilterSelect';
+import { PinnedFilterSectionGroup } from '@app/components/Discover/PinnedFilterSection';
 import MediaSlider from '@app/components/MediaSlider';
 import useDebouncedState from '@app/hooks/useDebouncedState';
 import useDiscover from '@app/hooks/useDiscover';
@@ -15,12 +16,19 @@ import { useBatchUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
 import defineMessages from '@app/utils/defineMessages';
 import {
   BarsArrowDownIcon,
+  BarsArrowUpIcon,
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/solid';
 import type { MangaResult } from '@server/models/Manga';
 import { useRouter } from 'next/router';
 import { useEffect, useRef } from 'react';
 import { useIntl } from 'react-intl';
+import MangaFilters from './MangaFilters';
+import {
+  clearedMangaFilters,
+  getMangaFilterParams,
+  type MangaFilterUpdate,
+} from './mangaFilterParams';
 
 const messages = defineMessages('components.Discover.DiscoverManga', {
   manga: 'Manga',
@@ -32,25 +40,37 @@ const messages = defineMessages('components.Discover.DiscoverManga', {
   trending: 'Trending',
   popular: 'Popular',
   topRated: 'Top Rated',
+  startDate: 'Start Date',
+  title: 'Title',
   trendingManga: 'Trending Manga',
   popularManga: 'Popular Manga',
   topRatedManga: 'Top Rated Manga',
   unavailable: 'Manga discovery is unavailable right now.',
 });
 
+// Each sort starts descending; selecting the active descending sort again
+// reverses it. Trending has one direction.
 const MANGA_SORTS = [
-  { value: 'trending', label: 'trending', shelf: 'trendingManga' },
-  { value: 'popular', label: 'popular', shelf: 'popularManga' },
-  { value: 'top_rated', label: 'topRated', shelf: 'topRatedManga' },
+  { label: 'trending', desc: 'trending' },
+  { label: 'popular', desc: 'popular', asc: 'popular.asc' },
+  { label: 'topRated', desc: 'top_rated', asc: 'top_rated.asc' },
+  { label: 'startDate', desc: 'start_date.desc', asc: 'start_date.asc' },
+  { label: 'title', desc: 'title.desc', asc: 'title.asc' },
 ] as const satisfies readonly {
-  value: string;
   label: keyof typeof messages;
-  shelf: keyof typeof messages;
+  desc: string;
+  asc?: string;
 }[];
-type MangaSort = (typeof MANGA_SORTS)[number]['value'];
+const MANGA_SHELVES = [
+  { sort: 'trending', title: 'trendingManga' },
+  { sort: 'popular', title: 'popularManga' },
+  { sort: 'top_rated', title: 'topRatedManga' },
+] as const satisfies readonly { sort: string; title: keyof typeof messages }[];
 
-const getMangaSort = (value: unknown): MangaSort | undefined =>
-  MANGA_SORTS.find((sort) => sort.value === value)?.value;
+const getMangaSort = (value: unknown): string | undefined =>
+  MANGA_SORTS.flatMap((sort) =>
+    'asc' in sort ? [sort.desc, sort.asc] : [sort.desc]
+  ).find((sort) => sort === value);
 
 const DiscoverManga = () => {
   const intl = useIntl();
@@ -59,8 +79,12 @@ const DiscoverManga = () => {
   const query =
     typeof router.query.query === 'string' ? router.query.query.trim() : '';
   const sortBy = getMangaSort(router.query.sortBy);
-  // Without a sort or keyword the page shows one shelf per sort order.
-  const showShelves = !sortBy && !query;
+  const filters = getMangaFilterParams(router.query);
+  const hasFilters = Object.keys(filters).length > 0;
+  // Without a sort, keyword or filter the page shows one shelf per sort order.
+  const showShelves = !sortBy && !query && !hasFilters;
+  // Keyword results are ordered by relevance unless a sort is chosen.
+  const activeSort = sortBy ?? (showShelves || query ? undefined : 'trending');
   const [search, debouncedSearch, setSearch] = useDebouncedState(query);
   const routedSearchRef = useRef(query);
   useEffect(() => {
@@ -70,7 +94,7 @@ const DiscoverManga = () => {
 
   const discover = useDiscover<MangaResult>(
     '/api/v1/discover/manga',
-    { query, sortBy },
+    { query, sortBy, ...filters },
     {
       enabled: !showShelves,
       showErrorToast: false,
@@ -86,12 +110,13 @@ const DiscoverManga = () => {
     fetchMore: discover.fetchMore,
   });
   useSearchActivityReporter(
-    Boolean(search.trim()) &&
-      (search.trim() !== query ||
-        discover.isLoadingInitialData ||
-        discover.isValidating),
-    'manga-keyword'
+    search.trim() !== query ||
+      (!showShelves &&
+        (discover.isLoadingInitialData || discover.isValidating)),
+    'manga-discovery'
   );
+  const setParam = (values: MangaFilterUpdate & { sortBy?: string }) =>
+    update({ ...values, page: undefined });
   useEffect(() => {
     const nextSearch = debouncedSearch.trim();
 
@@ -109,75 +134,113 @@ const DiscoverManga = () => {
   return (
     <>
       <PageTitle title={title} />
-      <div className="mb-4">
+      <div className="app-filter-section-gap">
         <Header>{title}</Header>
-        <div className="app-filter-section-heading">
-          {intl.formatMessage(messages.filters)}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <FilterResetButton
-            label={intl.formatMessage(messages.clearFilters)}
-            selected={showShelves && !search.trim()}
-            onClick={() => {
-              routedSearchRef.current = '';
-              setSearch('');
-              update({ query: undefined, sortBy: undefined, page: undefined });
-            }}
-          />
-          <form
-            className="discover-filter-control w-72 max-w-full flex-none"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const nextSearch = search.trim();
-              routedSearchRef.current = nextSearch;
-              update({ query: nextSearch || undefined, page: undefined });
-            }}
-          >
-            <span
-              className={`discover-filter-control-label gap-1.5 ${
-                search.trim() ? 'discover-filter-control-label-active' : ''
-              }`}
-            >
-              <MagnifyingGlassIcon className="h-4 w-4" aria-hidden="true" />
-              {intl.formatMessage(messages.search)}
-            </span>
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={intl.formatMessage(messages.searchManga)}
-              aria-label={intl.formatMessage(messages.searchManga)}
-              className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0 text-xs font-medium text-gray-200 placeholder:text-gray-500 focus:ring-0"
-            />
-          </form>
-        </div>
-        <div className="app-filter-section-heading">
-          {intl.formatMessage(messages.sortBy)}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {MANGA_SORTS.map((sort) => (
-            <button
-              key={sort.value}
-              type="button"
-              aria-pressed={sortBy === sort.value}
-              onClick={() => update({ sortBy: sort.value, page: undefined })}
-              className={getFilterToggleButtonClass(sortBy === sort.value)}
-            >
-              {intl.formatMessage(messages[sort.label])}
-              <BarsArrowDownIcon className="h-4 w-4" aria-hidden="true" />
-            </button>
-          ))}
-        </div>
+        <PinnedFilterSectionGroup
+          mediaType="manga"
+          sections={[
+            {
+              section: 'filters',
+              label: intl.formatMessage(messages.filters),
+              children: (
+                <div className="app-filter-row">
+                  <FilterResetButton
+                    label={intl.formatMessage(messages.clearFilters)}
+                    selected={showShelves && !search.trim()}
+                    onClick={() => {
+                      routedSearchRef.current = '';
+                      setSearch('');
+                      update({
+                        ...clearedMangaFilters,
+                        query: undefined,
+                        sortBy: undefined,
+                        page: undefined,
+                      });
+                    }}
+                  />
+                  <form
+                    className="discover-filter-control app-filter-search-control"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const nextSearch = search.trim();
+                      routedSearchRef.current = nextSearch;
+                      update({
+                        query: nextSearch || undefined,
+                        page: undefined,
+                      });
+                    }}
+                  >
+                    <span
+                      className={`discover-filter-control-label ${
+                        search.trim()
+                          ? 'discover-filter-control-label-active'
+                          : ''
+                      }`}
+                    >
+                      <MagnifyingGlassIcon aria-hidden="true" />
+                      {intl.formatMessage(messages.search)}
+                    </span>
+                    <input
+                      type="search"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder={intl.formatMessage(messages.searchManga)}
+                      aria-label={intl.formatMessage(messages.searchManga)}
+                      className="app-filter-search-input"
+                    />
+                  </form>
+                  <MangaFilters filters={filters} onChange={setParam} />
+                </div>
+              ),
+            },
+            {
+              section: 'sortBy',
+              label: intl.formatMessage(messages.sortBy),
+              children: (
+                <div className="app-filter-row">
+                  {MANGA_SORTS.map((option) => {
+                    const ascending =
+                      'asc' in option && activeSort === option.asc;
+                    const active = ascending || activeSort === option.desc;
+                    const Icon = ascending
+                      ? BarsArrowUpIcon
+                      : BarsArrowDownIcon;
+
+                    return (
+                      <button
+                        key={option.desc}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() =>
+                          setParam({
+                            sortBy:
+                              active && !ascending && 'asc' in option
+                                ? option.asc
+                                : option.desc,
+                          })
+                        }
+                        className={getFilterToggleButtonClass(active)}
+                      >
+                        {intl.formatMessage(messages[option.label])}
+                        <Icon aria-hidden="true" />
+                      </button>
+                    );
+                  })}
+                </div>
+              ),
+            },
+          ]}
+        />
       </div>
       {showShelves ? (
-        MANGA_SORTS.map((sort) => (
+        MANGA_SHELVES.map((shelf) => (
           <MediaSlider
-            key={sort.value}
-            sliderKey={`manga-${sort.value}`}
-            title={intl.formatMessage(messages[sort.shelf])}
+            key={shelf.sort}
+            sliderKey={`manga-${shelf.sort}`}
+            title={intl.formatMessage(messages[shelf.title])}
             url="/api/v1/discover/manga"
-            extraParams={`sortBy=${sort.value}`}
-            linkUrl={`/discover/manga?sortBy=${sort.value}`}
+            extraParams={`sortBy=${shelf.sort}`}
+            linkUrl={`/discover/manga?sortBy=${shelf.sort}`}
           />
         ))
       ) : (

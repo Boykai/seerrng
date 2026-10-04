@@ -12724,7 +12724,7 @@ paths:
   /discover/manga:
     get:
       summary: Discover manga
-      description: Returns manga from AniList, which applies the filters. Requires the manga category; returns 404 while it is disabled. Adult titles and light novels are excluded unless an administrator enables them, whatever the filters ask for. Without sortBy, a query sorts by best match and no query sorts by trending. Range bounds are inclusive, and a range matches only titles for which AniList knows the value.
+      description: Returns manga from AniList, which applies the filters. Requires the manga category; returns 404 while it is disabled. Adult titles and light novels are excluded unless an administrator enables them, whatever the filters ask for. Without sortBy, a query sorts by best match and no query sorts by trending. Range bounds are inclusive. A bound matches only titles for which AniList knows the value, except that a minScore, minChapters or minVolumes of 0 and a maxScore of 100 are ignored.
       tags:
         - search
       parameters:
