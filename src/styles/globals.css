@@ -8038,6 +8038,8 @@
 
   .settings-manga-sources-table .app-data-table-heading,
   .settings-manga-sources-table .app-data-table-cell,
+  .media-chapter-table .app-data-table-heading,
+  .media-chapter-table .app-data-table-cell,
   .settings-manga-library-table .app-data-table-heading,
   .settings-manga-library-table .app-data-table-cell {
     padding-right: 5px;
@@ -8058,6 +8060,31 @@
 
   .settings-manga-library-binding-actions-column {
     width: 14rem;
+  }
+
+  /* Chapter rows wrap long names inside the scroller instead of widening it. */
+  .app-data-table.media-chapter-table {
+    min-width: 28rem;
+  }
+
+  .media-chapter-table .app-data-table-cell {
+    overflow-wrap: anywhere;
+  }
+
+  .media-chapter-number-column {
+    width: 4.5rem;
+  }
+
+  .media-chapter-date-column {
+    width: 6.5rem;
+  }
+
+  .media-chapter-status-column {
+    width: 6.5rem;
+  }
+
+  .media-chapter-actions-column {
+    width: 2.5rem;
   }
 
   .settings-manga-sources-stack,

@@ -5621,6 +5621,44 @@ const validateCurrentBatchContract = (files) => {
     'administrators reach a title waiting for a source through Choose Source',
     'the style standard must govern the Choose Source link'
   );
+  for (const [selector, declarations] of [
+    [
+      '.media-chapter-table .app-data-table-cell',
+      ['padding-right: 5px;', 'padding-left: 5px;', 'overflow-wrap: anywhere;'],
+    ],
+    ['.app-data-table.media-chapter-table', ['min-width: 28rem;']],
+    ['.media-chapter-number-column', ['width: 4.5rem;']],
+    ['.media-chapter-date-column', ['width: 6.5rem;']],
+    ['.media-chapter-status-column', ['width: 6.5rem;']],
+    ['.media-chapter-actions-column', ['width: 2.5rem;']],
+  ]) {
+    requireCssRule(
+      selector,
+      declarations,
+      'the manga chapter table geometry must resolve through shared global classes'
+    );
+  }
+  for (const token of [
+    'className="app-card-inset refreshed-inset-surface card-spacing-before"',
+    'className="media-inset-heading detail-card-heading-after"',
+    '<Table className="media-chapter-table">',
+    '<AvailabilityValue tone={status.tone}>',
+    'buttonSize="standard"',
+    'iconOnly',
+    '<PageErrorMessage',
+    '<PaginationFooter',
+  ]) {
+    requireText(
+      'src/components/MangaDetails/MangaChapterList.tsx',
+      token,
+      'the manga chapter list must use the shared inset card, data table, availability, message, action, and pagination roles'
+    );
+  }
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'The manga details page shows a Chapters inset card after Manga Details',
+    'the style standard must govern the manga chapter list'
+  );
   requireText(
     'src/components/Settings/SettingsNetwork/index.tsx',
     'className="settings-http-warning"',

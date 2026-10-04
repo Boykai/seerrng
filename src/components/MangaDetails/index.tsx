@@ -5,6 +5,7 @@ import { MangaWaitingStatus } from '@app/components/Common/MangaRequestScope';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
 import ExternalBlocklistModal from '@app/components/ExternalBlocklistModal';
+import MangaChapterList from '@app/components/MangaDetails/MangaChapterList';
 import { getMangaAvailability } from '@app/components/MangaDetails/mangaAvailability';
 import AvailabilityValue from '@app/components/MediaDetails/AvailabilityValue';
 import MediaDetailArtwork from '@app/components/MediaDetails/MediaDetailArtwork';
@@ -555,6 +556,11 @@ const MangaDetails = () => {
                 ))}
               </div>
             </section>
+            {settings.currentSettings.suwayomiEnabled &&
+              aniListId !== undefined &&
+              isBlocklistAvailable && (
+                <MangaChapterList key={aniListId} mangaId={aniListId} />
+              )}
           </div>
         </article>
         <div className="extra-bottom-space relative" />
