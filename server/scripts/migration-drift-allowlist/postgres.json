@@ -1,5 +1,5 @@
 {
-  "description": "Schema records that differ between a postgres database built from empty by the migrations and one built by synchronize() from the entities. Each predates the manga work and has a reviewed reason; manga drift is never allowlisted. Any other drift, or an entry that no longer drifts, fails scripts/manga-migration-checks.mjs.",
+  "description": "Schema records that differ between a postgres database built from empty by the migrations and one built by synchronize() from the entities. Each lies outside the manga tables and has a reviewed reason; manga drift is never allowlisted. Any other drift, or an entry that no longer drifts, fails scripts/manga-migration-checks.mjs.",
   "records": [
     {
       "reason": "Name only: both sides have the one-to-one unique constraint on mediaId, but the migration's generated name differs from the one synchronize() derives. Same column and behaviour; renaming it is a separate cleanup.",
@@ -363,6 +363,18 @@
         "table": "media_search_metadata",
         "name": "IDX_media_search_metadata_searchText",
         "columns": ["searchText"],
+        "unique": false,
+        "where": null
+      }
+    },
+    {
+      "reason": "Index on the migrations side only: AddVideoMetadataCacheExpiry1790986600000 creates IDX_media_search_video_metadata_expires on media_search_metadata(videoMetadataExpiresAt). The MediaSearchMetadata entity declares no index on that column, so synchronize() does not create one. The column is the same on both sides.",
+      "side": "migrations",
+      "record": {
+        "kind": "index",
+        "table": "media_search_metadata",
+        "name": "IDX_media_search_video_metadata_expires",
+        "columns": ["videoMetadataExpiresAt"],
         "unique": false,
         "where": null
       }
