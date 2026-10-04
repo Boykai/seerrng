@@ -1168,13 +1168,18 @@ offers the chapter as a verified [Download copy](#download-copy) that you may
 download under that section's rules. The button starts the same download as
 the request's **Request Status** card; the list adds no other way to download.
 
-When a current match links the title to a manga in the Suwayomi library, the
-list shows the chapters that Suwayomi has stored for that manga, using the
-default server's match first. Viewing the list only reads what Suwayomi has
+When a current match links the title to a manga that the Suwayomi library
+holds, the list shows the chapters that Suwayomi has stored for that manga.
+SeerrNG asks Suwayomi whether its library holds the manga, so a manga that a
+request's [dispatch](#dispatch) added shows without waiting for a library scan.
+When the title has several matches, the list uses the match of the newest
+request that you can see, then a match from a library scan or from the
+[Manga Library page](#manga-library-page), then the default server's match.
+Viewing the list only reads what Suwayomi has
 already stored: it never makes Suwayomi ask a source for chapters, and it
 changes nothing. New chapters appear once Suwayomi's own library update or a
-request's [dispatch](#dispatch) has added them. SeerrNG keeps each manga's
-chapter list for 60 seconds, so a change can take up to a minute to show.
+request's dispatch has added them. SeerrNG keeps each manga's chapter list for
+60 seconds, so a change can take up to a minute to show.
 
 Without such a match, the list shows the chapter numbers that the requests you
 can see hold, as **Requested**, without names or dates. With none, the page

@@ -385,6 +385,73 @@ describe('chapters of a library entry', () => {
     assert.deepStrictEqual(fake.operationNames(), ['ByNaturalKey']);
   });
 
+  it('lists an entry that dispatch added to the library before a library scan saw it', async () => {
+    const manga = fakeDispatchManga(21, { inLibrary: true });
+    const fake = await start(manga);
+    // Dispatch adds the match to Suwayomi's library; only a scan marks it.
+    await seedDispatchBinding(manga, { inLibrary: false });
+
+    const page = await view();
+
+    assert.strictEqual(page.inLibrary, true);
+    assert.deepStrictEqual(statesOf(page), [
+      [3, 'notRequested'],
+      [2, 'notRequested'],
+      [1, 'notRequested'],
+    ]);
+    assert.deepStrictEqual(fake.operationNames().sort(), READ_OPERATIONS);
+    assertReadsOnly(fake);
+  });
+
+  it('does not list a manga that Suwayomi keeps outside its library, and remembers that', async () => {
+    const manga = fakeDispatchManga(21);
+    const fake = await start(manga);
+    // Marked by an earlier scan; the manga has left the library since.
+    await seedDispatchBinding(manga, { inLibrary: true });
+    await seedProgressRequest(manga, { numbers: [2] });
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      assert.deepStrictEqual(await view(), {
+        pageInfo: { page: 1, pages: 1, pageSize: 50, results: 1 },
+        inLibrary: false,
+        results: [
+          { number: 2, name: '', uploadedAt: null, status: 'requested' },
+        ],
+      });
+    }
+    assert.deepStrictEqual(fake.operationNames(), ['ByNaturalKey']);
+  });
+
+  it("lists the match of the viewer's newest request first, so its copies are offered", async () => {
+    const scanned = fakeDispatchManga(21, { inLibrary: true });
+    const dispatched = downloadedManga(22, [1, 2]);
+    const fake = await start(scanned, dispatched);
+    await seedDispatchBinding(scanned);
+    const own = await seedDeliveredRequest(dispatched, {
+      binding: { inLibrary: false },
+    });
+    const linksOf = (page: MangaChapterPageResponse) =>
+      page.results.map(({ number, status, download }) => [
+        number,
+        status,
+        download?.requestId ?? null,
+      ]);
+
+    const ownView = await view();
+    assert.deepStrictEqual(linksOf(ownView), [
+      [2, 'available', own.request.id],
+      [1, 'available', own.request.id],
+    ]);
+    assert.deepStrictEqual(await view(REQUEST_VIEWER), ownView);
+    // Without a visible request, the match a library scan found comes first.
+    assert.deepStrictEqual(linksOf(await view(STRANGER)), [
+      [3, 'notRequested', null],
+      [2, 'notRequested', null],
+      [1, 'notRequested', null],
+    ]);
+    assertReadsOnly(fake);
+  });
+
   it('reads the default instance first and skips entries it may not use', async () => {
     const first = fakeDispatchManga(31, {
       inLibrary: true,

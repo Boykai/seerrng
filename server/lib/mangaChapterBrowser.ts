@@ -35,7 +35,7 @@ import { In, type FindOptionsSelect } from 'typeorm';
 export const MAX_MANGA_CHAPTER_PAGE = 10_000;
 export const MAX_MANGA_CHAPTER_PAGE_SIZE = 100;
 export const DEFAULT_MANGA_CHAPTER_PAGE_SIZE = 50;
-/** Library entries one view may look up; a missing entry is cached too. */
+/** Matches one view may look up; an entry the library lacks is cached too. */
 const MAX_BINDING_LOOKUPS = 5;
 const ID_SLICE = 500;
 
@@ -53,7 +53,7 @@ interface StoredChapter {
   scanlator: string | null;
 }
 
-/** Null when Suwayomi no longer has the manga. */
+/** Null when Suwayomi's library does not hold the manga. */
 interface CachedChapters {
   chapters: StoredChapter[] | null;
 }
@@ -178,7 +178,7 @@ const readChapters = async (
     binding.url
   );
   if (
-    !found ||
+    !found?.inLibrary ||
     found.sourceId !== binding.sourceId ||
     hashMangaSourceUrl(found.url) !== binding.urlHash
   ) {
@@ -197,12 +197,15 @@ const readChapters = async (
   };
 };
 
+const entryKey = (instanceId: number, sourceId: string, urlHash: string) =>
+  `${instanceId}:${sourceId}:${urlHash}`;
+
 /** One Suwayomi read per library entry at a time; failures are not cached. */
 const loadChapters = (
   instanceId: number,
   binding: Pick<MangaSourceBinding, 'sourceId' | 'url' | 'urlHash'>
 ): Promise<CachedChapters> => {
-  const key = `${instanceId}:${binding.sourceId}:${binding.urlHash}`;
+  const key = entryKey(instanceId, binding.sourceId, binding.urlHash);
   const cache = cacheManager.getCache('suwayomichapters').data;
   const cached = cache.get<CachedChapters>(key);
   if (cached) return Promise.resolve(cached);
@@ -221,18 +224,37 @@ const loadChapters = (
 };
 
 /**
- * The first library entry of the title that Suwayomi still has: entries on
- * the default instance first, then by instance and binding ID.
+ * The first of the title's matches whose manga Suwayomi's library holds now,
+ * whether a library scan or a request's dispatch put it there. Tried in this
+ * order: the matches of the viewer's visible requests, newest first, so their
+ * copies can be offered; then matches a library scan or review recorded in
+ * the library; then the default instance's; then by instance and binding ID.
  */
 const findBrowsedManga = async (
-  anilistId: number
+  anilistId: number,
+  manifests: readonly MangaRequestManifest[]
 ): Promise<BrowsedManga | undefined> => {
   const instances = getExternalRuntimeConfig().suwayomi;
-  const rankOf = (instanceId: number) =>
+  const requested = new Map<string, number>();
+  for (const manifest of [...manifests].reverse()) {
+    if (manifest.bindingSourceId && manifest.bindingUrlHash) {
+      const key = entryKey(
+        manifest.instanceId,
+        manifest.bindingSourceId,
+        manifest.bindingUrlHash
+      );
+      if (!requested.has(key)) requested.set(key, requested.size);
+    }
+  }
+  const requestRankOf = (binding: MangaSourceBinding) =>
+    requested.get(
+      entryKey(binding.instanceId, binding.sourceId, binding.urlHash)
+    ) ?? requested.size;
+  const instanceRankOf = (instanceId: number) =>
     instances.find((instance) => instance.id === instanceId)?.isDefault ? 0 : 1;
   const bindings = (
     await getRepository(MangaSourceBinding).find({
-      where: { anilistId, state: MangaBindingState.ACTIVE, inLibrary: true },
+      where: { anilistId, state: MangaBindingState.ACTIVE },
     })
   )
     .filter((binding) =>
@@ -240,7 +262,9 @@ const findBrowsedManga = async (
     )
     .sort(
       (a, b) =>
-        rankOf(a.instanceId) - rankOf(b.instanceId) ||
+        requestRankOf(a) - requestRankOf(b) ||
+        Number(b.inLibrary) - Number(a.inLibrary) ||
+        instanceRankOf(a.instanceId) - instanceRankOf(b.instanceId) ||
         a.instanceId - b.instanceId ||
         a.id - b.id
     )
@@ -520,8 +544,8 @@ export const getMangaChapterPage = async (
   viewer: MangaChapterViewer,
   paging: MangaChapterPaging
 ): Promise<MangaChapterPageResponse> => {
-  const browsed = await findBrowsedManga(anilistId);
   const manifests = await loadVisibleManifests(anilistId, viewer);
+  const browsed = await findBrowsedManga(anilistId, manifests);
   return browsed
     ? getLibraryChapterPage(browsed, manifests, paging)
     : getRequestedChapterPage(manifests, paging);
