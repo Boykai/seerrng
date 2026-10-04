@@ -1,6 +1,6 @@
 const clickFirstTitleCardInSlider = (sliderTitle: string): void => {
   cy.contains('.slider-header', sliderTitle)
-    .next('[data-testid=media-slider]')
+    .closest('[data-testid=media-slider]')
     .find('[data-testid=title-card]', { timeout: 15000 })
     .first()
     .trigger('mouseover')
@@ -8,12 +8,43 @@ const clickFirstTitleCardInSlider = (sliderTitle: string): void => {
     .invoke('text')
     .then((text) => {
       cy.contains('.slider-header', sliderTitle)
-        .next('[data-testid=media-slider]')
+        .closest('[data-testid=media-slider]')
         .find('[data-testid=title-card]')
         .first()
         .click();
       cy.get('[data-testid=media-title]').should('contain', text);
     });
+};
+
+const stubTitleDetails = (
+  mediaType: 'movie' | 'tv',
+  result: Record<string, unknown> & { id: number }
+) => {
+  const details = {
+    ...result,
+    credits: { cast: [], crew: [] },
+    productionCompanies: [],
+    productionCountries: [],
+    spokenLanguages: [],
+    genres: [],
+    keywords: [],
+    relatedVideos: [],
+    externalIds: {},
+    releases: { results: [] },
+    contentRatings: { results: [] },
+    seasons: [],
+    createdBy: [],
+    episodeRunTime: [],
+    networks: [],
+    originalLanguage: 'en',
+    status: 'Released',
+  };
+
+  cy.intercept('GET', `/api/v1/${mediaType}/${result.id}`, details);
+  cy.intercept('GET', `**/_next/data/*/${mediaType}/${result.id}.json*`, {
+    pageProps: { [mediaType]: details },
+    __N_SSP: true,
+  });
 };
 
 describe('Discover', () => {
@@ -68,13 +99,40 @@ describe('Discover', () => {
   });
 
   it('loads upcoming movies', () => {
+    const movie = {
+      id: 99002,
+      mediaType: 'movie',
+      title: 'Upcoming Movie Fixture',
+      releaseDate: '2099-01-01',
+      posterPath: null,
+    };
+    cy.intercept('GET', '/api/v1/discover/movies*', {
+      page: 1,
+      totalPages: 1,
+      totalResults: 1,
+      results: [movie],
+    });
+    stubTitleDetails('movie', movie);
     cy.visit('/');
     cy.contains('.slider-header', 'Upcoming Movies').scrollIntoView();
     clickFirstTitleCardInSlider('Upcoming Movies');
   });
 
   it('loads popular series', () => {
-    cy.intercept('/api/v1/discover/tv*').as('getPopularTv');
+    const series = {
+      id: 99001,
+      mediaType: 'tv',
+      name: 'Upcoming Series Fixture',
+      firstAirDate: '2099-01-01',
+      posterPath: null,
+    };
+    cy.intercept('GET', '/api/v1/discover/tv*', {
+      page: 1,
+      totalPages: 1,
+      totalResults: 1,
+      results: [series],
+    }).as('getPopularTv');
+    stubTitleDetails('tv', series);
     cy.visit('/');
     cy.contains('.slider-header', 'Popular Series').scrollIntoView();
     cy.wait('@getPopularTv');
@@ -82,6 +140,20 @@ describe('Discover', () => {
   });
 
   it('loads upcoming series', () => {
+    const series = {
+      id: 99001,
+      mediaType: 'tv',
+      name: 'Upcoming Series Fixture',
+      firstAirDate: '2099-01-01',
+      posterPath: null,
+    };
+    cy.intercept('GET', '/api/v1/discover/tv*', {
+      page: 1,
+      totalPages: 1,
+      totalResults: 1,
+      results: [series],
+    });
+    stubTitleDetails('tv', series);
     cy.visit('/');
     cy.contains('.slider-header', 'Upcoming Series').scrollIntoView();
     clickFirstTitleCardInSlider('Upcoming Series');
@@ -121,7 +193,7 @@ describe('Discover', () => {
     cy.visit('/');
     cy.wait('@getMedia');
     cy.contains('.slider-header', 'Recently Added')
-      .next('[data-testid=media-slider]')
+      .closest('[data-testid=media-slider]')
       .find('[data-testid=title-card]')
       .first()
       .find('[data-testid=title-card-title]')
@@ -197,7 +269,7 @@ describe('Discover', () => {
     cy.visit('/');
     cy.wait('@getRequests');
     cy.contains('.slider-header', 'Recent Requests')
-      .next('[data-testid=media-slider]')
+      .closest('[data-testid=media-slider]')
       .scrollIntoView()
       .should('be.visible')
       .find('[data-testid=request-card]')
@@ -322,14 +394,14 @@ describe('Discover', () => {
     cy.visit('/');
     cy.wait('@getRequests');
     cy.contains('.slider-header', 'Recent Requests')
-      .next('[data-testid=media-slider]')
+      .closest('[data-testid=media-slider]')
       .scrollIntoView()
       .should('be.visible')
       .contains('[data-testid=request-card]', 'Failed Card Book')
       .find('a[href="/book/OLCARDFAILEDW?manage=1&format=ebook"]')
       .should('contain', 'Failed');
     cy.contains('.slider-header', 'Recent Requests')
-      .next('[data-testid=media-slider]')
+      .closest('[data-testid=media-slider]')
       .scrollIntoView()
       .should('be.visible')
       .contains('[data-testid=request-card]', 'Failed Card Album')

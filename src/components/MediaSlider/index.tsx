@@ -1,5 +1,6 @@
 import Button from '@app/components/Common/Button';
 import CardTextVisibilityToggle from '@app/components/Common/CardTextVisibilityToggle';
+import PageErrorMessage from '@app/components/Common/PageErrorMessage';
 import Tooltip from '@app/components/Common/Tooltip';
 import ShowMoreCard from '@app/components/MediaSlider/ShowMoreCard';
 import PersonCard from '@app/components/PersonCard';
@@ -12,6 +13,7 @@ import { useUser } from '@app/hooks/useUser';
 import useWarmImageCache, {
   DISCOVER_SHELF_POSTER_CACHE_WARM_LIMIT,
 } from '@app/hooks/useWarmImageCache';
+import defineMessages from '@app/utils/defineMessages';
 import {
   buildDiscoverCacheContextKey,
   buildDiscoverSnapshotKey,
@@ -48,12 +50,14 @@ import axios from 'axios';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInView } from 'react-intersection-observer';
+import { useIntl } from 'react-intl';
 import useSWRInfinite from 'swr/infinite';
 
 interface MixedResult {
   page: number;
   totalResults: number;
   totalPages: number;
+  stale?: boolean;
   results: (
     | TvResult
     | MovieResult
@@ -65,6 +69,12 @@ interface MixedResult {
   )[];
 }
 
+const messages = defineMessages('components.MediaSlider', {
+  tmdbUnavailable: 'TMDB Movie Discovery Is Unavailable',
+  showingSavedResults: 'TMDB is unavailable. Showing saved results.',
+  tryAgain: 'Try Again',
+});
+
 interface MediaSliderProps {
   title: string;
   url: string;
@@ -75,6 +85,7 @@ interface MediaSliderProps {
   onNewTitles?: (titleCount: number) => void;
   randomizeOrder?: boolean;
   prioritizeFirstRow?: boolean;
+  posterTitleWeight?: 'regular';
 }
 
 type SliderTitle =
@@ -99,7 +110,9 @@ const MediaSlider = ({
   onNewTitles,
   randomizeOrder = false,
   prioritizeFirstRow = false,
+  posterTitleWeight,
 }: MediaSliderProps) => {
+  const intl = useIntl();
   const settings = useSettings();
   const { visibility } = useCardTextVisibility();
   const { user } = useUser();
@@ -352,6 +365,12 @@ const MediaSlider = ({
     settings.currentSettings.hideRequested,
   ]);
   const renderableTitles = titles;
+  const isTmdbMovieFeed = url === '/api/v1/discover/movies';
+  const showingSavedResults =
+    isTmdbMovieFeed &&
+    (data?.some((page) => page.stale) || (!!error && fallbackHasResults));
+  const showProviderError =
+    isTmdbMovieFeed && !!error && !renderableTitles.length;
   const visibleTitles = useMemo(
     () => renderableTitles.slice(0, MEDIA_SLIDER_TITLE_LIMIT),
     [renderableTitles]
@@ -431,6 +450,7 @@ const MediaSlider = ({
         case 'movie':
           return (
             <TitleCard
+              titleWeight={posterTitleWeight}
               key={title.id}
               id={title.id}
               isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
@@ -447,6 +467,7 @@ const MediaSlider = ({
               inProgress4k={
                 (title.mediaInfo?.downloadStatus4k ?? []).length > 0
               }
+              enablePosterFallbackLookup
               showText={visibility.movie === 'always'}
               priority={prioritizeFirstRow && index < 3}
             />
@@ -454,6 +475,7 @@ const MediaSlider = ({
         case 'tv':
           return (
             <TitleCard
+              titleWeight={posterTitleWeight}
               key={title.id}
               id={title.id}
               isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
@@ -470,6 +492,7 @@ const MediaSlider = ({
               inProgress4k={
                 (title.mediaInfo?.downloadStatus4k ?? []).length > 0
               }
+              enablePosterFallbackLookup
               showText={visibility.tv === 'always'}
               priority={prioritizeFirstRow && index < 3}
             />
@@ -486,6 +509,7 @@ const MediaSlider = ({
         case 'album':
           return (
             <TitleCard
+              titleWeight={posterTitleWeight}
               key={title.id}
               id={title.id}
               isAddedToWatchlist={title.mediaInfo?.watchlists?.length ?? 0}
@@ -509,6 +533,7 @@ const MediaSlider = ({
         case 'book':
           return (
             <TitleCard
+              titleWeight={posterTitleWeight}
               key={title.id}
               id={title.id}
               image={title.posterPath}
@@ -525,6 +550,7 @@ const MediaSlider = ({
         case 'artist':
           return (
             <TitleCard
+              titleWeight={posterTitleWeight}
               key={title.id}
               id={title.id}
               image={title.artistThumb ?? undefined}
@@ -566,6 +592,7 @@ const MediaSlider = ({
     data,
     linkUrl,
     prioritizeFirstRow,
+    posterTitleWeight,
     renderableTitles.length,
     showMorePosters,
     visibleTitles,
@@ -592,35 +619,52 @@ const MediaSlider = ({
 
   return (
     <div ref={ref}>
-      <div className="slider-header">
-        {linkUrl ? (
-          <Link href={linkUrl} className="slider-title min-w-0">
-            <span className="truncate">{title}</span>
-          </Link>
-        ) : (
-          <div className="slider-title">
-            <span>{title}</span>
-          </div>
-        )}
-        {visibleMediaTypes.length > 0 && (
-          <CardTextVisibilityToggle mediaType={visibleMediaTypes} />
-        )}
-        {randomizeOrder && (
-          <Tooltip content={`Refresh ${title}`}>
-            <Button
-              type="button"
-              buttonType="trailer"
-              buttonSize="sm"
-              onClick={refreshRandomizedOrder}
-              className="h-8 w-8 p-0"
-              aria-label={`Refresh ${title}`}
-            >
-              <ArrowPathIcon className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-        )}
-      </div>
       <Slider
+        heading={
+          <>
+            {linkUrl ? (
+              <Link href={linkUrl} className="page-heading">
+                <span>{title}</span>
+              </Link>
+            ) : (
+              <div className="page-heading">
+                <span>{title}</span>
+              </div>
+            )}
+            {visibleMediaTypes.length > 0 && (
+              <CardTextVisibilityToggle mediaType={visibleMediaTypes} />
+            )}
+            {randomizeOrder && (
+              <Tooltip content={`Refresh ${title}`}>
+                <Button
+                  type="button"
+                  buttonType="trailer"
+                  buttonSize="sm"
+                  onClick={refreshRandomizedOrder}
+                  aria-label={`Refresh ${title}`}
+                >
+                  <ArrowPathIcon />
+                </Button>
+              </Tooltip>
+            )}
+          </>
+        }
+        notice={
+          showingSavedResults || showProviderError ? (
+            <PageErrorMessage
+              title={intl.formatMessage(messages.tmdbUnavailable)}
+              description={
+                showingSavedResults
+                  ? intl.formatMessage(messages.showingSavedResults)
+                  : undefined
+              }
+              retry={{
+                onClick: revalidate,
+                tooltip: intl.formatMessage(messages.tryAgain),
+              }}
+            />
+          ) : undefined
+        }
         sliderKey={sliderKey}
         isLoading={snapshotHydrated && shouldLoad && !data && !error}
         isEmpty={!!data && hasReachedEnd && !renderableTitles.length}

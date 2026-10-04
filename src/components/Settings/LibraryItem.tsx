@@ -62,9 +62,9 @@ const LibraryItem = ({
                 e.stopPropagation();
                 reclassify.onReclassify();
               }}
-              className="app-button app-button-default compact-control ml-1 w-5 shrink-0 p-0"
+              className="app-button app-button-default button-standard compact-control ml-1 w-5 shrink-0 p-0"
             >
-              <ArrowsRightLeftIcon className="h-4 w-4" />
+              <ArrowsRightLeftIcon />
             </button>
           )}
         </div>

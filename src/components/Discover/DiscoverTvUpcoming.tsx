@@ -24,14 +24,22 @@ const DiscoverTvUpcoming = () => {
     error,
   } = useDiscover<TvResult>('/api/v1/discover/tv/upcoming');
 
+  const title = intl.formatMessage(messages.upcomingtv);
+
   if (error) {
-    return <ErrorPage statusCode={500} />;
+    return (
+      <>
+        <PageTitle title={title} />
+        <Header>{title}</Header>
+        <ErrorPage statusCode={500} />
+      </>
+    );
   }
 
   return (
     <>
       <PageTitle title={intl.formatMessage(messages.upcomingtv)} />
-      <div className="mt-1 mb-5">
+      <div>
         <Header>{intl.formatMessage(messages.upcomingtv)}</Header>
       </div>
       <ListView

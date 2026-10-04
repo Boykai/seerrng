@@ -1,4 +1,3 @@
-import Badge from '@app/components/Common/Badge';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { CheckIcon } from '@heroicons/react/24/outline';
@@ -25,32 +24,25 @@ const RequestFooterStatus = ({
 
   if (available) {
     return (
-      <Badge
-        badgeType="success"
-        className="h-[18px] items-center gap-1 !px-1.5 !text-[10px] !leading-none"
-      >
-        <CheckIcon className="h-3 w-3" aria-hidden="true" />
+      <span className="request-approval-text" data-approval-state="available">
+        <CheckIcon aria-hidden="true" />
         {intl.formatMessage(globalMessages.available)}
-      </Badge>
+      </span>
     );
   }
 
   if (requested) {
     return (
-      <Badge
-        badgeType="warning"
-        className="h-[18px] items-center !px-1.5 !text-[10px] !leading-none"
-      >
+      <span className="request-approval-text" data-approval-state="pending">
         {intl.formatMessage(messages.requested)}
-      </Badge>
+      </span>
     );
   }
 
   return (
     <span
-      className={`text-[11px] font-semibold ${
-        hasAutoApprove ? 'text-emerald-300' : 'text-yellow-300'
-      }`}
+      className="request-approval-text"
+      data-approval-state={hasAutoApprove ? 'automatic' : 'required'}
     >
       {intl.formatMessage(
         hasAutoApprove

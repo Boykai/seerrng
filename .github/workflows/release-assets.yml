@@ -22,6 +22,11 @@ on:
         required: false
         type: boolean
         default: false
+      reuse_windows_arm64_artifact:
+        description: Reuse the successful Windows ARM64 artifact from the prior run
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -102,7 +107,7 @@ jobs:
             msvs_version: '2026'
     steps:
       - name: Download validated artifacts from previous run
-        if: inputs.reuse_from_run_id != '' && (matrix.os != 'windows' || (matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact == true))
+        if: inputs.reuse_from_run_id != '' && (matrix.os != 'windows' || (matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact == true) || (matrix.arch == 'arm64' && inputs.reuse_windows_arm64_artifact == true))
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: seerrng-${{ matrix.os }}-${{ matrix.arch }}
@@ -112,20 +117,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true) || (matrix.os == 'windows' && matrix.arch == 'arm64' && inputs.reuse_windows_arm64_artifact != true)
         with:
           ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true) || (matrix.os == 'windows' && matrix.arch == 'arm64' && inputs.reuse_windows_arm64_artifact != true)
         with:
           node-version-file: 'package.json'
           package-manager-cache: false
 
       - name: Checkout release tooling
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true) || (matrix.os == 'windows' && matrix.arch == 'arm64' && inputs.reuse_windows_arm64_artifact != true)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
@@ -134,7 +139,7 @@ jobs:
           persist-credentials: false
 
       - name: Prepare isolated pnpm package metadata
-        if: (inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)) && matrix.os == 'windows'
+        if: (inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true) || (matrix.os == 'windows' && matrix.arch == 'arm64' && inputs.reuse_windows_arm64_artifact != true)) && matrix.os == 'windows'
         shell: bash
         run: |
           cat > .github/release-pnpm-tooling.json <<'JSON'
@@ -145,14 +150,14 @@ jobs:
           JSON
 
       - name: Pnpm Setup
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true) || (matrix.os == 'windows' && matrix.arch == 'arm64' && inputs.reuse_windows_arm64_artifact != true)
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: ${{ matrix.pnpm_version }}
           package_json_file: ${{ matrix.os == 'windows' && '.github/release-pnpm-tooling.json' || 'package.json' }}
 
       - name: Verify pinned pnpm runtime
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true) || (matrix.os == 'windows' && matrix.arch == 'arm64' && inputs.reuse_windows_arm64_artifact != true)
         shell: bash
         env:
           EXPECTED_PNPM_VERSION: ${{ matrix.pnpm_version }}
@@ -170,7 +175,7 @@ jobs:
           }
 
       - name: Verify runner platform
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true) || (matrix.os == 'windows' && matrix.arch == 'arm64' && inputs.reuse_windows_arm64_artifact != true)
         shell: bash
         env:
           EXPECTED_OS: ${{ matrix.os }}
@@ -195,7 +200,7 @@ jobs:
           }
 
       - name: Install node-gyp for Visual Studio 2026
-        if: matrix.os == 'windows' && matrix.arch == 'arm64'
+        if: matrix.os == 'windows' && matrix.arch == 'arm64' && (inputs.reuse_from_run_id == '' || inputs.reuse_windows_arm64_artifact != true)
         shell: bash
         run: |
           set -euo pipefail
@@ -210,7 +215,7 @@ jobs:
           printf 'npm_config_msvs_version=2026\n' >> "$GITHUB_ENV"
 
       - name: Build archive
-        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'arm64') || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true)
+        if: inputs.reuse_from_run_id == '' || (matrix.os == 'windows' && matrix.arch == 'x64' && inputs.reuse_windows_x64_artifact != true) || (matrix.os == 'windows' && matrix.arch == 'arm64' && inputs.reuse_windows_arm64_artifact != true)
         shell: bash
         env:
           EXPECTED_PNPM_VERSION: ${{ matrix.pnpm_version }}

@@ -1,7 +1,6 @@
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import Modal from '@app/components/Common/Modal';
-import SeriesSeasonEpisodeSelector from '@app/components/Common/SeriesSeasonEpisodeSelector';
 import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
 import AdvancedOptionsDisclosureButton from '@app/components/RequestModal/AdvancedOptionsDisclosureButton';
 import type { RequestOverrides } from '@app/components/RequestModal/AdvancedRequester';
@@ -11,6 +10,7 @@ import AdvancedRequester, {
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
 import RequestFooterStatus from '@app/components/RequestModal/RequestFooterStatus';
 import RequestMediaCard from '@app/components/RequestModal/RequestMediaCard';
+import RequestSeasonEpisodeTree from '@app/components/RequestModal/RequestSeasonEpisodeTree';
 import SearchByNameModal from '@app/components/RequestModal/SearchByNameModal';
 import {
   canPromotePendingDestinationRequests,
@@ -66,6 +66,7 @@ const messages = defineMessages('components.RequestModal', {
   alreadyAvailable:
     'The selected seasons or episodes are already available or requested.',
   noUnavailableItems: 'No unavailable seasons or episodes remain to request.',
+  episodesLoading: 'Load episode information before submitting this selection.',
   requestQuotaExceeded:
     'Your remaining request quota is not enough for this selection.',
   season: 'Season',
@@ -91,9 +92,9 @@ const messages = defineMessages('components.RequestModal', {
   notAvailable: 'Not Available',
   advancedOptions: 'Advanced Options',
   quality: 'Quality',
-  watchAheadLabel: 'Requested Episode Queue',
+  watchAheadLabel: 'Episode Queue',
   watchAheadDescription:
-    'This optional queue is Off by default for every TV request. If you turn it on, SeerrNG follows your linked media server playback and keeps this many upcoming episodes requested in Sonarr after the request is approved. Episodes use the parent approval and do not count against your request quota. Turning it off stops future additions but does not cancel episodes already requested.',
+    'Off by default. Follows your linked playback and keeps this many upcoming episodes requested. Uses 1 request. Turning it off stops future additions, not existing requests.',
   watchAheadOff: 'Off',
   watchAheadEpisodeOption:
     '{count, plural, one {# episode} other {# episodes}}',
@@ -139,9 +140,7 @@ const TvRequestModal = ({
     editRequest?.watchAheadEpisodeCount ?? 0
   );
   const [initializedSelectionKey, setInitializedSelectionKey] = useState('');
-  const [activeSeason, setActiveSeason] = useState<number>(
-    editingSeasonSelections[0]?.seasonNumber ?? -1
-  );
+  const [requestTreeReady, setRequestTreeReady] = useState(false);
   const selectedSeasons = seasonSelections.map(
     (selection) => selection.seasonNumber
   );
@@ -249,7 +248,7 @@ const TvRequestModal = ({
     (editRequest?.seasons ?? []).length;
 
   const updateRequest = async (alsoApproveRequest = false) => {
-    if (!editRequest) {
+    if (!editRequest || requestDisabled) {
       return;
     }
 
@@ -549,20 +548,25 @@ const TvRequestModal = ({
     !requestOverrides?.ignoreQuota &&
     unrequestedSeasons.length > (quota.tv.remaining ?? 0);
   const requestDisabledReason =
-    partialQuotaExceeded ||
-    (!settings.currentSettings.partialRequestsEnabled && fullQuotaExceeded)
-      ? intl.formatMessage(messages.requestQuotaExceeded)
-      : requestableSelections.length === 0
-        ? settings.currentSettings.partialRequestsEnabled &&
-          seasonSelections.length === 0 &&
-          unrequestedSeasons.length > 0
-          ? intl.formatMessage(messages.selectUnavailableItemsToRequest)
-          : intl.formatMessage(
-              unrequestedSeasons.length === 0
-                ? messages.noUnavailableItems
-                : messages.alreadyAvailable
-            )
-        : undefined;
+    settings.currentSettings.partialRequestsEnabled &&
+    !requestTreeReady &&
+    selectedSeasons.length > 0
+      ? intl.formatMessage(messages.episodesLoading)
+      : partialQuotaExceeded ||
+          (!settings.currentSettings.partialRequestsEnabled &&
+            fullQuotaExceeded)
+        ? intl.formatMessage(messages.requestQuotaExceeded)
+        : requestableSelections.length === 0
+          ? settings.currentSettings.partialRequestsEnabled &&
+            seasonSelections.length === 0 &&
+            unrequestedSeasons.length > 0
+            ? intl.formatMessage(messages.selectUnavailableItemsToRequest)
+            : intl.formatMessage(
+                unrequestedSeasons.length === 0
+                  ? messages.noUnavailableItems
+                  : messages.alreadyAvailable
+              )
+          : undefined;
 
   useEffect(() => {
     if (
@@ -581,15 +585,8 @@ const TvRequestModal = ({
       getAllRequestedSeasons()
     );
     setSeasonSelections(defaults);
-    if (
-      defaults.length > 0 &&
-      !defaults.some((selection) => selection.seasonNumber === activeSeason)
-    ) {
-      setActiveSeason(defaults[0].seasonNumber);
-    }
     setInitializedSelectionKey(requestSelectionKey);
   }, [
-    activeSeason,
     data,
     editRequest,
     effectiveIs4k,
@@ -676,8 +673,11 @@ const TvRequestModal = ({
         : intl.formatMessage(messages.edit)
     : intl.formatMessage(globalMessages.request);
   const requestDisabled = editRequest
-    ? false
-    : selectedDestinationCovered ||
+    ? settings.currentSettings.partialRequestsEnabled &&
+      selectedSeasons.length > 0 &&
+      !requestTreeReady
+    : (settings.currentSettings.partialRequestsEnabled && !requestTreeReady) ||
+      selectedDestinationCovered ||
       requestableSelections.length === 0 ||
       partialQuotaExceeded ||
       (!settings.currentSettings.partialRequestsEnabled && fullQuotaExceeded);
@@ -746,7 +746,7 @@ const TvRequestModal = ({
       }
       cancelButtonType={editRequest ? 'danger' : 'default'}
       actionButtonSize={editRequest ? 'standard' : 'sm'}
-      dialogClass="request-modal-site-surface sm:max-w-5xl"
+      dialogClass="request-modal-site-surface"
     >
       <RequestMediaCard
         artwork={
@@ -757,7 +757,7 @@ const TvRequestModal = ({
         artworkType="tmdb"
       >
         {editRequest && (
-          <div className="app-card-inset refreshed-inset-surface card-spacing-after rounded-lg border border-gray-700 p-3">
+          <div className="app-card-inset refreshed-inset-surface card-spacing-after">
             {isOwner
               ? intl.formatMessage(messages.pendingapproval)
               : intl.formatMessage(messages.requestfrom, {
@@ -788,9 +788,9 @@ const TvRequestModal = ({
             }
           />
         )}
-        <div className="app-card-inset refreshed-inset-surface rounded-lg border border-gray-700 p-3">
-          <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[80px_minmax(0,1fr)]">
-            <div className="detail-card-poster relative overflow-hidden rounded-lg ring-1 ring-gray-600">
+        <div className="app-card-inset refreshed-inset-surface detail-summary-card">
+          <div className="app-detail-summary-grid">
+            <div className="app-detail-poster-frame detail-card-poster">
               <CachedImage
                 type="tmdb"
                 src={
@@ -800,60 +800,60 @@ const TvRequestModal = ({
                 alt=""
                 fill
                 sizes="(min-width: 640px) 80px, 64px"
-                className="object-cover"
+                className="media-detail-artwork-image"
               />
             </div>
 
-            <div className="flex min-w-0 flex-col">
-              <h3 className="detail-summary-title truncate text-lg leading-5 font-semibold text-white">
+            <div>
+              <h3 className="card-title detail-summary-title">
                 {data?.name}
                 {releaseYear ? ` (${releaseYear})` : ''}
               </h3>
 
-              <div className="detail-card-heading-spacing detail-three-column-grid grid min-h-0 min-w-0 flex-1 items-stretch">
-                <div className="detail-paired-column-span min-w-0">
-                  <dl className="media-detail-rows refreshed-detail-text-muted detail-paired-columns grid min-w-0 content-start text-xs">
-                    <dt className="card:col-start-1 card:row-start-1 font-medium text-gray-100">
+              <div className="detail-card-heading-spacing detail-three-column-grid">
+                <div className="detail-paired-column-span">
+                  <dl className="card-table detail-paired-columns">
+                    <dt className="card-table-heading">
                       {intl.formatMessage(messages.mediaAndFormat)}:
                     </dt>
-                    <dd className="card:col-start-3 card:row-start-1 m-0 truncate">
+                    <dd className="card-table-value">
                       Series · {effectiveIs4k ? '4K' : 'HD'}
                     </dd>
-                    <dt className="card:col-start-1 card:row-start-2 font-medium text-gray-100">
+                    <dt className="card-table-heading">
                       {intl.formatMessage(messages.releaseDate)}:
                     </dt>
-                    <dd className="card:col-start-3 card:row-start-2 m-0 truncate">
-                      {firstAirDate}
-                    </dd>
-                    <dt className="card:col-start-1 card:row-start-3 font-medium text-gray-100">
+                    <dd className="card-table-value">{firstAirDate}</dd>
+                    <dt className="card-table-heading">
                       {intl.formatMessage(messages.runtime)}:
                     </dt>
-                    <dd className="card:col-start-3 card:row-start-3 m-0 truncate">
+                    <dd className="card-table-value">
                       {runtime
                         ? `${intl.formatNumber(runtime)} minutes`
                         : notAvailable}
                     </dd>
-                    <div className="media-detail-rows media-detail-column-divider card:col-span-1 card:col-start-5 card:row-span-3 card:row-start-1 col-span-2 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3">
+                    <div className="card-table media-detail-column-divider">
                       {featuredCrew.map((person) => (
                         <div
-                          className="contents"
+                          className="card-table-group"
                           key={`${person.job}-${person.id}`}
                         >
-                          <dt className="font-medium text-gray-100">
-                            {person.job}:
-                          </dt>
-                          <dd className="m-0 truncate">{person.name}</dd>
+                          <dt className="card-table-heading">{person.job}:</dt>
+                          <dd className="card-table-value">{person.name}</dd>
                         </div>
                       ))}
-                      <dt className="font-medium text-gray-100">
+                      <dt className="card-table-heading">
                         {intl.formatMessage(messages.network)}:
                       </dt>
-                      <dd className="m-0 truncate">{network}</dd>
+                      <dd className="card-table-value">{network}</dd>
                     </div>
-                    <dt className="card:col-start-1 card:row-start-4 font-medium text-gray-100">
+                    <dt className="card-table-heading">
                       {intl.formatMessage(messages.genres)}:
                     </dt>
-                    <dd className="card:col-span-3 card:col-start-3 card:row-start-4 m-0 line-clamp-2 min-w-0 break-words">
+                    <dd
+                      className="card-table-value"
+                      data-wrap="true"
+                      data-lines="2"
+                    >
                       {data?.genres?.length
                         ? data.genres
                             .slice(0, 3)
@@ -863,11 +863,11 @@ const TvRequestModal = ({
                     </dd>
                   </dl>
                 </div>
-                <dl className="media-detail-rows refreshed-detail-text-muted media-detail-column-divider grid h-full min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
-                  <dt className="font-medium text-gray-100">
+                <dl className="card-table media-detail-column-divider">
+                  <dt className="card-table-heading">
                     {intl.formatMessage(messages.status)}:
                   </dt>
-                  <dd className="m-0 truncate">
+                  <dd className="card-table-value">
                     {intl.formatMessage(
                       selectedDestinationAvailable
                         ? globalMessages.available
@@ -876,18 +876,18 @@ const TvRequestModal = ({
                           : messages.readyToRequest
                     )}
                   </dd>
-                  <dt className="font-medium text-gray-100">
+                  <dt className="card-table-heading">
                     {intl.formatMessage(messages.service)}:
                   </dt>
-                  <dd className="m-0 truncate">
+                  <dd className="card-table-value">
                     {selectedService?.name ??
                       fallbackService?.name ??
                       notAvailable}
                   </dd>
-                  <dt className="font-medium text-gray-100">
+                  <dt className="card-table-heading">
                     {intl.formatMessage(messages.approval)}:
                   </dt>
-                  <dd className="m-0 min-w-0">
+                  <dd className="card-table-value">
                     <RequestFooterStatus
                       available={selectedDestinationAvailable}
                       requested={selectedDestinationRequested}
@@ -900,81 +900,82 @@ const TvRequestModal = ({
           </div>
         </div>
 
-        {settings.currentSettings.partialRequestsEnabled && data && (
-          <SeriesSeasonEpisodeSelector
-            tvId={data.id}
-            seasons={visibleSeasons}
-            selections={requestableSelections}
-            activeSeason={
-              activeSeason >= 0
-                ? activeSeason
-                : (visibleSeasons[0]?.seasonNumber ?? -1)
-            }
-            disabledSeasons={getAllRequestedSeasons()}
-            disabledEpisodes={blockedEpisodesBySeason}
-            availableEpisodesBySeason={availableEpisodesBySeason}
-            onActiveSeasonChange={setActiveSeason}
-            onSelectionsChange={(nextSelections) => {
-              const allowedSelections =
-                (quota?.tv.remaining ?? 0) + (editRequest?.seasons.length ?? 0);
-              if (
-                !quota?.tv.limit ||
-                requestOverrides?.ignoreQuota ||
-                nextSelections.length <= seasonSelections.length ||
-                nextSelections.length <= allowedSelections
-              ) {
-                setSeasonSelections(nextSelections);
-              }
-            }}
-          />
-        )}
-
-        {canConfigureWatchAhead && (
-          <div className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
-            <RequestListboxControl
-              id="tv-watch-ahead-count"
-              label={intl.formatMessage(messages.watchAheadLabel)}
-              value={watchAheadEpisodeCount}
-              options={[
-                {
-                  value: 0,
-                  label: intl.formatMessage(messages.watchAheadOff),
-                },
-                ...[1, 2, 3, 4, 5].map((count) => ({
-                  value: count,
-                  label: intl.formatMessage(messages.watchAheadEpisodeOption, {
-                    count,
-                  }),
-                })),
-              ]}
-              onChange={setWatchAheadEpisodeCount}
-              loadingLabel={intl.formatMessage(messages.watchAheadOff)}
-            />
-            <p className="mt-2 text-xs text-gray-300">
-              {intl.formatMessage(messages.watchAheadDescription)}
-            </p>
-          </div>
-        )}
-
-        {!editRequest && (
-          <div className="mt-2 flex items-center">
-            <MediaQualitySelect
-              value={effectiveIs4k ? '4k' : 'hd'}
-              options={[
-                { label: 'HD', value: 'hd' },
-                { label: '4K', value: '4k' },
-              ]}
-              onChange={(quality) => {
-                setSelectedIs4k(quality === '4k');
-                setRequestOverrides(null);
-                setQualityRevision((current) => current + 1);
+        <div className="request-selection-layout">
+          {settings.currentSettings.partialRequestsEnabled && data && (
+            <RequestSeasonEpisodeTree
+              key={requestSelectionKey}
+              tvId={data.id}
+              seasons={visibleSeasons}
+              selections={requestableSelections}
+              disabledSeasons={getAllRequestedSeasons()}
+              disabledEpisodes={blockedEpisodesBySeason}
+              availableEpisodesBySeason={availableEpisodesBySeason}
+              onReadyChange={setRequestTreeReady}
+              onSelectionsChange={(nextSelections) => {
+                const allowedSelections =
+                  (quota?.tv.remaining ?? 0) +
+                  (editRequest?.seasons.length ?? 0);
+                if (
+                  !quota?.tv.limit ||
+                  requestOverrides?.ignoreQuota ||
+                  nextSelections.length <= seasonSelections.length ||
+                  nextSelections.length <= allowedSelections
+                ) {
+                  setSeasonSelections(nextSelections);
+                }
               }}
-              label={intl.formatMessage(messages.quality)}
-              autoSelectAvailable={false}
-              purpose="request"
             />
+          )}
+
+          <div className="request-selection-options">
+            {!editRequest && (
+              <MediaQualitySelect
+                value={effectiveIs4k ? '4k' : 'hd'}
+                options={[
+                  { label: 'HD', value: 'hd' },
+                  { label: '4K', value: '4k' },
+                ]}
+                onChange={(quality) => {
+                  setSelectedIs4k(quality === '4k');
+                  setRequestOverrides(null);
+                  setQualityRevision((current) => current + 1);
+                }}
+                label={intl.formatMessage(messages.quality)}
+                autoSelectAvailable={false}
+                purpose="request"
+              />
+            )}
+            {canConfigureWatchAhead && (
+              <div className="app-card-inset refreshed-inset-surface detail-item-padded request-episode-queue">
+                <RequestListboxControl
+                  id="tv-watch-ahead-count"
+                  label={intl.formatMessage(messages.watchAheadLabel)}
+                  value={watchAheadEpisodeCount}
+                  options={[
+                    {
+                      value: 0,
+                      label: intl.formatMessage(messages.watchAheadOff),
+                    },
+                    ...[1, 2, 3, 4, 5].map((count) => ({
+                      value: count,
+                      label: intl.formatMessage(
+                        messages.watchAheadEpisodeOption,
+                        {
+                          count,
+                        }
+                      ),
+                    })),
+                  ]}
+                  onChange={setWatchAheadEpisodeCount}
+                  loadingLabel={intl.formatMessage(messages.watchAheadOff)}
+                />
+                <p className="request-episode-queue-description refreshed-detail-text-muted">
+                  {intl.formatMessage(messages.watchAheadDescription)}
+                </p>
+              </div>
+            )}
           </div>
-        )}
+        </div>
         {canUseAdvancedOptions && (
           <AdvancedRequester
             key={(selectedIs4k ? '4k' : 'hd') + '-' + qualityRevision}
@@ -1005,8 +1006,8 @@ const TvRequestModal = ({
           />
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-          <div className="mr-auto flex items-center gap-2">
+        <div className="app-action-row app-modal-actions">
+          <div className="app-action-row" data-action-placement="leading">
             {canUseAdvancedOptions && (
               <AdvancedOptionsDisclosureButton
                 label={intl.formatMessage(messages.advancedOptions)}
@@ -1017,10 +1018,7 @@ const TvRequestModal = ({
               />
             )}
           </div>
-          <div
-            className="compact-control flex items-center"
-            ref={setRequestedByPortal}
-          />
+          <div className="app-action-row" ref={setRequestedByPortal} />
           <Button
             type="button"
             onClick={closeAction}

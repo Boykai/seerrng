@@ -16,9 +16,7 @@ const AdvancedOptionsDisclosureButton = ({
 }) => (
   <DetailDisclosureButton
     label={label}
-    icon={
-      <AdjustmentsHorizontalIcon className="h-3.5 w-3.5" aria-hidden="true" />
-    }
+    icon={<AdjustmentsHorizontalIcon aria-hidden="true" />}
     open={open}
     onClick={onToggle}
     pinned={pinned}

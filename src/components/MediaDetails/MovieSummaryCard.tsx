@@ -70,6 +70,8 @@ const MovieSummaryCard = ({
   watchedStatus,
   onSelect,
   artwork,
+  supplementalDirectors = [],
+  supplementalWriters = [],
 }: {
   data: MovieSummaryData;
   sortedCrew: MovieDetails['credits']['crew'];
@@ -82,12 +84,23 @@ const MovieSummaryCard = ({
   watchedStatus?: WatchStatusResponse;
   onSelect?: () => void;
   artwork?: ReactNode;
+  supplementalDirectors?: string[];
+  supplementalWriters?: string[];
 }) => {
   const intl = useIntl();
   const unavailable = intl.formatMessage(messages.notAvailable);
   const directors = sortedCrew.filter((person) => person.job === 'Director');
   const screenplay = sortedCrew.find((person) =>
     ['Screenplay', 'Writer', 'Story'].includes(person.job)
+  );
+  const normalizedCrewNames = new Set(
+    sortedCrew.map((person) => person.name.trim().toLocaleLowerCase())
+  );
+  const fallbackDirectors = supplementalDirectors.filter(
+    (name) => !normalizedCrewNames.has(name.trim().toLocaleLowerCase())
+  );
+  const fallbackWriters = supplementalWriters.filter(
+    (name) => !normalizedCrewNames.has(name.trim().toLocaleLowerCase())
   );
   const available = (status?: MediaStatus) =>
     status === MediaStatus.AVAILABLE ||
@@ -146,6 +159,7 @@ const MovieSummaryCard = ({
 
         <div
           className={`movie-summary-fields detail-card-heading-spacing grid min-w-0 flex-1 ${ratings ? 'movie-summary-fields-with-ratings' : 'detail-three-column-grid'}`}
+          data-table-layout="movie-title-details-table"
         >
           <div className="detail-paired-column-span min-w-0">
             <dl className="media-detail-rows detail-paired-columns grid min-w-0 content-start text-xs">
@@ -183,8 +197,9 @@ const MovieSummaryCard = ({
                   {intl.formatMessage(messages.director)}:
                 </dt>
                 <dd className="m-0 truncate">
-                  {directors.length > 0
-                    ? directors.slice(0, 2).map((person, index) => (
+                  {directors.length > 0 || fallbackDirectors.length > 0 ? (
+                    <>
+                      {directors.slice(0, 2).map((person, index) => (
                         <span key={`${person.id}-${person.creditId}`}>
                           {index > 0 && ', '}
                           <Link
@@ -194,20 +209,39 @@ const MovieSummaryCard = ({
                             {person.name}
                           </Link>
                         </span>
-                      ))
-                    : unavailable}
+                      ))}
+                      {fallbackDirectors.slice(0, 2).map((name, index) => (
+                        <span key={`fallback-director-${name}`}>
+                          {(directors.length > 0 || index > 0) && ', '}
+                          {name}
+                        </span>
+                      ))}
+                    </>
+                  ) : (
+                    unavailable
+                  )}
                 </dd>
                 <dt className="font-medium text-gray-100">
                   {intl.formatMessage(messages.screenplay)}:
                 </dt>
                 <dd className="m-0 truncate">
-                  {screenplay ? (
-                    <Link
-                      href={`/person/${screenplay.id}`}
-                      className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                    >
-                      {screenplay.name}
-                    </Link>
+                  {screenplay || fallbackWriters.length > 0 ? (
+                    <>
+                      {screenplay && (
+                        <Link
+                          href={`/person/${screenplay.id}`}
+                          className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                        >
+                          {screenplay.name}
+                        </Link>
+                      )}
+                      {fallbackWriters.slice(0, 2).map((name, index) => (
+                        <span key={`fallback-writer-${name}`}>
+                          {(screenplay || index > 0) && ', '}
+                          {name}
+                        </span>
+                      ))}
+                    </>
                   ) : (
                     unavailable
                   )}
@@ -216,13 +250,15 @@ const MovieSummaryCard = ({
                   {intl.formatMessage(messages.studio)}:
                 </dt>
                 <dd className="m-0 truncate">
-                  {data.productionCompanies[0] ? (
+                  {data.productionCompanies[0]?.id > 0 ? (
                     <Link
                       href={`/discover/movies/studio/${data.productionCompanies[0].id}`}
                       className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                     >
                       {data.productionCompanies[0].name}
                     </Link>
+                  ) : data.productionCompanies[0] ? (
+                    data.productionCompanies[0].name
                   ) : (
                     unavailable
                   )}
@@ -238,14 +274,18 @@ const MovieSummaryCard = ({
               >
                 {data.genres.length > 0
                   ? data.genres.map((genre, index) => (
-                      <span key={genre.id}>
+                      <span key={`${genre.id}-${genre.name}`}>
                         {index > 0 && ', '}
-                        <Link
-                          href={`/discover/movies?genre=${genre.id}`}
-                          className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                        >
-                          {genre.name}
-                        </Link>
+                        {genre.id > 0 ? (
+                          <Link
+                            href={`/discover/movies?genre=${genre.id}`}
+                            className="text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                          >
+                            {genre.name}
+                          </Link>
+                        ) : (
+                          genre.name
+                        )}
                       </span>
                     ))
                   : unavailable}

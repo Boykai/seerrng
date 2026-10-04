@@ -34,20 +34,27 @@ const DiscoverMovieGenre = () => {
     { enabled: !!genreId }
   );
 
-  if (error) {
-    return <ErrorPage statusCode={500} />;
-  }
+  const title =
+    isLoadingInitialData || error || !firstResultData?.genre?.name
+      ? intl.formatMessage(globalMessages.movies)
+      : intl.formatMessage(messages.genreMovies, {
+          genre: firstResultData?.genre.name,
+        });
 
-  const title = isLoadingInitialData
-    ? intl.formatMessage(globalMessages.loading)
-    : intl.formatMessage(messages.genreMovies, {
-        genre: firstResultData?.genre.name,
-      });
+  if (error) {
+    return (
+      <>
+        <PageTitle title={title} />
+        <Header>{title}</Header>
+        <ErrorPage statusCode={500} />
+      </>
+    );
+  }
 
   return (
     <>
       <PageTitle title={title} />
-      <div className="mt-1 mb-5">
+      <div>
         <Header>{title}</Header>
       </div>
       <ListView

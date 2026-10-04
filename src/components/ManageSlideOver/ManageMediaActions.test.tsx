@@ -416,7 +416,7 @@ it('shares permanent-delete wording and green cancel/red confirmation', () => {
   );
   expect(html).toContain('data-confirm="danger"');
   expect(html).toContain('data-cancel="success"');
-  expect(html).toContain('Permanently delete Movie from Radarr (4K)?');
+  expect(html).toContain('<h1>Permanently Delete Movie from Radarr (4K)?</h1>');
   expect(html).toContain(
     'permanently delete its media files and remove its library entry'
   );

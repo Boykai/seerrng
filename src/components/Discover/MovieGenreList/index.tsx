@@ -19,18 +19,32 @@ const MovieGenreList = () => {
     `/api/v1/discover/genreslider/movie`
   );
 
+  const title = intl.formatMessage(messages.moviegenres);
+
   if (!data && !error) {
-    return <LoadingSpinner />;
+    return (
+      <>
+        <PageTitle title={title} />
+        <Header>{title}</Header>
+        <LoadingSpinner />
+      </>
+    );
   }
 
   if (!data) {
-    return <ErrorPage statusCode={404} />;
+    return (
+      <>
+        <PageTitle title={title} />
+        <Header>{title}</Header>
+        <ErrorPage statusCode={404} />
+      </>
+    );
   }
 
   return (
     <>
       <PageTitle title={intl.formatMessage(messages.moviegenres)} />
-      <div className="mt-1 mb-5">
+      <div>
         <Header>{intl.formatMessage(messages.moviegenres)}</Header>
       </div>
       <ul className="cards-horizontal">

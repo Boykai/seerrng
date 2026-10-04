@@ -1,4 +1,7 @@
 import CachedImage from '@app/components/Common/CachedImage';
+import PageErrorMessage, {
+  type MessageRetry,
+} from '@app/components/Common/PageErrorMessage';
 import Link from 'next/link';
 
 export interface ExpandableCredit {
@@ -12,27 +15,33 @@ interface ExpandableCreditListProps {
   title: string;
   credits: ExpandableCredit[];
   emptyLabel: string;
+  retry?: MessageRetry;
 }
 
 const ExpandableCreditList = ({
   title,
   credits,
   emptyLabel,
+  retry,
 }: ExpandableCreditListProps) => (
-  <section className="app-card-inset refreshed-inset-surface card-spacing-before rounded-lg border border-gray-700 p-3">
-    <h2 className="media-inset-heading mb-2">{title}</h2>
+  <section className="app-card-inset refreshed-inset-surface card-spacing-before">
+    <h2 className="media-inset-heading card-spacing-after">{title}</h2>
     {credits.length === 0 ? (
-      <p className="refreshed-detail-text-muted text-xs">{emptyLabel}</p>
+      <PageErrorMessage title={emptyLabel} severity="empty" retry={retry} />
     ) : (
-      <div className="scrollable-card -mr-3 grid max-h-[252px] grid-cols-3 gap-1.5 overflow-y-auto pr-3">
+      <div
+        className="card-list scrollable-card"
+        data-list-layout="portrait"
+        data-scroll-layout="portrait"
+      >
         {credits.map((credit, index) => (
-          <Link
+          <div
             key={`${credit.id}-${credit.role}-${index}`}
-            href={`/person/${credit.id}`}
-            prefetch={false}
-            className="app-card-sub detail-item-surface detail-item-interactive group flex h-20 min-w-0 overflow-hidden"
+            data-card-size="compact"
+            data-card-layout="portrait"
+            className="app-card-sub detail-item-surface detail-item-interactive"
           >
-            <span className="relative h-full w-[54px] flex-shrink-0 overflow-hidden border-r border-gray-700 bg-white">
+            <span data-card-part="artwork">
               <CachedImage
                 type="tmdb"
                 src={
@@ -43,18 +52,19 @@ const ExpandableCreditList = ({
                 alt=""
                 fill
                 sizes="54px"
-                className="object-cover object-top"
               />
             </span>
-            <span className="flex min-w-0 flex-1 flex-col justify-center px-2 py-1.5">
-              <span className="truncate text-xs font-semibold text-gray-200 group-hover:text-white">
+            <span data-card-part="content">
+              <Link
+                href={`/person/${credit.id}`}
+                prefetch={false}
+                className="card-title"
+              >
                 {credit.name}
-              </span>
-              <span className="refreshed-detail-text mt-0.5 line-clamp-2 text-xs leading-4">
-                {credit.role}
-              </span>
+              </Link>
+              <span className="card-subheading">{credit.role}</span>
             </span>
-          </Link>
+          </div>
         ))}
       </div>
     )}

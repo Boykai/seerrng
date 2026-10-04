@@ -1,9 +1,14 @@
 import TitleCard from '@app/components/TitleCard';
 import { Permission, useUser } from '@app/hooks/useUser';
+import globalMessages from '@app/i18n/globalMessages';
+import defineMessages from '@app/utils/defineMessages';
+import type { MediaStatus } from '@server/constants/media';
 import type { MovieDetails } from '@server/models/Movie';
 import type { TvDetails } from '@server/models/Tv';
+import axios from 'axios';
 import { useMemo } from 'react';
 import { useInView } from 'react-intersection-observer';
+import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
 export interface TmdbTitleCardProps {
@@ -12,13 +17,29 @@ export interface TmdbTitleCardProps {
   tvdbId?: number;
   type: 'movie' | 'tv';
   title?: string;
+  posterPath?: string;
+  summary?: string;
+  year?: string;
+  status?: MediaStatus;
+  status4k?: MediaStatus;
   canExpand?: boolean;
   isAddedToWatchlist?: boolean;
   mutateParent?: () => void;
 }
 
+const messages = defineMessages('components.TitleCard', {
+  metadataFallback: '{provider} lookup failed. Showing saved details.',
+  metadataUnavailable: '{provider} lookup failed. Try again later.',
+});
+
 const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
   return (movie as MovieDetails).title !== undefined;
+};
+
+const getSupplementalPosterPath = (
+  title: MovieDetails | TvDetails
+): string | undefined => {
+  return title.supplementalMetadata?.posterUrl;
 };
 
 const TmdbTitleCard = ({
@@ -27,10 +48,16 @@ const TmdbTitleCard = ({
   tvdbId,
   type,
   title: fallbackTitle,
+  posterPath: fallbackPosterPath,
+  summary: fallbackSummary,
+  year: fallbackYear,
+  status: fallbackStatus,
+  status4k: fallbackStatus4k,
   canExpand,
   isAddedToWatchlist = false,
   mutateParent,
 }: TmdbTitleCardProps) => {
+  const intl = useIntl();
   const { hasPermission } = useUser();
 
   const { ref, inView } = useInView({
@@ -51,19 +78,54 @@ const TmdbTitleCard = ({
     }
   );
 
-  if (!title && !error && fallbackTitle) {
-    return (
-      <div ref={ref}>
-        <TitleCard
-          id={id}
-          title={fallbackTitle}
-          mediaType={type}
-          isAddedToWatchlist={isAddedToWatchlist}
-          canExpand={canExpand}
-          mutateParent={mutateParent}
-        />
-      </div>
-    );
+  const hasDescriptiveFallback = !!(
+    fallbackTitle ||
+    fallbackPosterPath ||
+    fallbackSummary ||
+    fallbackYear
+  );
+  const hasFallback = !!(
+    hasDescriptiveFallback ||
+    fallbackStatus !== undefined ||
+    fallbackStatus4k !== undefined
+  );
+  const fallbackTitleText =
+    fallbackTitle ??
+    `${intl.formatMessage(
+      type === 'movie' ? globalMessages.movie : globalMessages.tvshow
+    )} ${tmdbId}`;
+  const cachedSummary = [
+    fallbackSummary,
+    error
+      ? intl.formatMessage(messages.metadataFallback, { provider: 'TMDB' })
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  const unavailableSummary = error
+    ? intl.formatMessage(messages.metadataUnavailable, { provider: 'TMDB' })
+    : undefined;
+  const renderFallback = () => (
+    <div ref={ref}>
+      <TitleCard
+        id={tmdbId}
+        title={fallbackTitleText}
+        image={fallbackPosterPath}
+        enablePosterFallbackLookup
+        summary={cachedSummary || undefined}
+        year={fallbackYear}
+        status={fallbackStatus}
+        status4k={fallbackStatus4k}
+        mediaType={type}
+        isAddedToWatchlist={isAddedToWatchlist}
+        canExpand={canExpand}
+        mutateParent={mutateParent}
+      />
+    </div>
+  );
+
+  if (!title && !error && hasFallback) {
+    return renderFallback();
   }
 
   if (!title && !error) {
@@ -75,14 +137,38 @@ const TmdbTitleCard = ({
   }
 
   if (!title) {
-    return hasPermission(Permission.ADMIN) ? (
-      <TitleCard.ErrorCard
-        id={id}
-        tmdbId={tmdbId}
-        tvdbId={tvdbId}
-        type={type}
-      />
-    ) : null;
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      if (hasDescriptiveFallback) {
+        return renderFallback();
+      }
+
+      return hasPermission(Permission.ADMIN) ? (
+        <TitleCard.ErrorCard
+          id={id}
+          tmdbId={tmdbId}
+          tvdbId={tvdbId}
+          type={type}
+        />
+      ) : null;
+    }
+
+    if (hasFallback) {
+      return renderFallback();
+    }
+
+    return (
+      <div ref={ref}>
+        <TitleCard
+          id={tmdbId}
+          title={fallbackTitleText}
+          mediaType={type}
+          summary={unavailableSummary}
+          canExpand={canExpand}
+          isAddedToWatchlist={isAddedToWatchlist}
+          mutateParent={mutateParent}
+        />
+      </div>
+    );
   }
 
   return isMovie(title) ? (
@@ -92,10 +178,22 @@ const TmdbTitleCard = ({
       isAddedToWatchlist={
         title.mediaInfo?.watchlists?.length || isAddedToWatchlist
       }
-      image={title.posterPath}
+      image={title.posterPath || getSupplementalPosterPath(title)}
+      fallbackImage={getSupplementalPosterPath(title)}
       status={title.mediaInfo?.status}
       status4k={title.mediaInfo?.status4k}
-      summary={title.overview}
+      summary={
+        [
+          title.overview,
+          error
+            ? intl.formatMessage(messages.metadataFallback, {
+                provider: 'TMDB',
+              })
+            : undefined,
+        ]
+          .filter(Boolean)
+          .join('\n\n') || undefined
+      }
       title={title.title}
       userScore={title.voteAverage}
       voteCount={title.voteCount}
@@ -113,10 +211,22 @@ const TmdbTitleCard = ({
       isAddedToWatchlist={
         title.mediaInfo?.watchlists?.length || isAddedToWatchlist
       }
-      image={title.posterPath}
+      image={title.posterPath || getSupplementalPosterPath(title)}
+      fallbackImage={getSupplementalPosterPath(title)}
       status={title.mediaInfo?.status}
       status4k={title.mediaInfo?.status4k}
-      summary={title.overview}
+      summary={
+        [
+          title.overview,
+          error
+            ? intl.formatMessage(messages.metadataFallback, {
+                provider: 'TMDB',
+              })
+            : undefined,
+        ]
+          .filter(Boolean)
+          .join('\n\n') || undefined
+      }
       title={title.name}
       userScore={title.voteAverage}
       voteCount={title.voteCount}

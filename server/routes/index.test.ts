@@ -3,6 +3,7 @@ import path from 'node:path';
 import { afterEach, before, describe, it, mock } from 'node:test';
 
 import PushoverAPI from '@server/api/pushover';
+import TheMovieDb from '@server/api/themoviedb';
 import { DiscoverSliderType } from '@server/constants/discover';
 import {
   MediaRequestStatus,
@@ -572,9 +573,49 @@ describe('Top-level API route validation', () => {
   });
 
   it('allows unauthenticated login backdrop requests', async () => {
+    const calls: unknown[][] = [];
+    const get = mock.method(
+      TheMovieDb.prototype as unknown as {
+        get: (...args: unknown[]) => Promise<unknown>;
+      },
+      'get',
+      async (...args: unknown[]) => {
+        calls.push(args);
+        assert.strictEqual(args[0], '/trending/all/week');
+        return {
+          page: 1,
+          total_pages: 1,
+          total_results: 1,
+          results: [
+            {
+              id: 100,
+              media_type: 'movie',
+              title: 'Fixture Movie',
+              backdrop_path: '/fixture-backdrop.jpg',
+              release_date: '2026-01-01',
+            },
+          ],
+        };
+      }
+    );
     const res = await request(app).get('/api/v1/backdrops');
 
     assert.notStrictEqual(res.status, 403);
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body, [
+      {
+        path: '/fixture-backdrop.jpg',
+        title: 'Fixture Movie',
+        mediaType: 'movie',
+        year: '2026',
+      },
+    ]);
+    assert.strictEqual(get.mock.callCount(), 1);
+    assert.strictEqual(calls[0][0], '/trending/all/week');
+    assert.strictEqual(
+      (calls[0][1] as { params: { page: number } }).params.page,
+      1
+    );
   });
 
   it('rejects malformed keyword detail IDs before provider lookup', async () => {

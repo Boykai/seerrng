@@ -3,9 +3,12 @@ import test from 'node:test';
 import { DetailDisclosurePinsMutationState } from './detailDisclosurePinsMutation';
 
 const initialPins = {
+  overview: false,
   details: false,
   advancedOptions: false,
+  taskFilters: false,
   collection: false,
+  mediaServer: false,
   cast: false,
   crew: false,
   artists: false,
@@ -22,9 +25,12 @@ test('optimistically updates one detail disclosure pin without clearing others',
   const mutation = state.begin('crew', true);
 
   assert.deepStrictEqual(mutation.next, {
+    overview: false,
     details: false,
     advancedOptions: false,
+    taskFilters: false,
     collection: false,
+    mediaServer: false,
     cast: true,
     crew: true,
     artists: false,
@@ -54,6 +60,17 @@ test('collection pin changes preserve cast pins and roll back independently', ()
   assert.deepStrictEqual(state.rollback(mutation), previous);
 });
 
+test('media server pin defaults off and preserves other TV pins when changed', () => {
+  const state = new DetailDisclosurePinsMutationState();
+  const defaultMutation = state.begin('mediaServer', true);
+  assert.strictEqual(defaultMutation.previous.mediaServer, false);
+  const previous = { ...initialPins, cast: true, crew: true };
+  state.synchronize('user-1:tv', previous);
+  const mutation = state.begin('mediaServer', true);
+  assert.deepStrictEqual(mutation.next, { ...previous, mediaServer: true });
+  assert.deepStrictEqual(state.rollback(mutation), previous);
+});
+
 test('isolates detail disclosure pin mutations when the signed-in user changes', () => {
   const state = new DetailDisclosurePinsMutationState();
   state.synchronize('user-1', initialPins);
@@ -61,4 +78,13 @@ test('isolates detail disclosure pin mutations when the signed-in user changes',
   state.synchronize('user-2', initialPins);
 
   assert.strictEqual(state.isCurrent(oldUserMutation), false);
+});
+
+test('Overview pin updates preserve independent sections and roll back on failure', () => {
+  const state = new DetailDisclosurePinsMutationState();
+  const previous = { ...initialPins, mediaServer: true, details: true };
+  state.synchronize('user-1:tv', previous);
+  const mutation = state.begin('overview', true);
+  assert.deepStrictEqual(mutation.next, { ...previous, overview: true });
+  assert.deepStrictEqual(state.rollback(mutation), previous);
 });

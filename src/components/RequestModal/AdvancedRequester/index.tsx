@@ -26,6 +26,7 @@ import {
 } from '@server/utils/preferredLanguage';
 import axios from 'axios';
 import { isEqual } from 'lodash';
+import type { ReactNode } from 'react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useIntl } from 'react-intl';
@@ -46,7 +47,7 @@ type RequestListboxOption<T extends RequestListboxValue> = {
 
 type RequestListboxControlProps<T extends RequestListboxValue> = {
   id: string;
-  label: string;
+  label: ReactNode;
   value: T;
   options: RequestListboxOption<T>[];
   onChange: (value: T) => void;
@@ -91,22 +92,13 @@ export const RequestListboxControl = <T extends RequestListboxValue>({
             {label}
           </Listbox.Label>
           <Listbox.Button id={id} className="request-listbox-button">
-            <span className="truncate">{selectedLabel}</span>
+            <span>{selectedLabel}</span>
             <ChevronDownIcon
               className="request-listbox-chevron"
               aria-hidden="true"
             />
           </Listbox.Button>
-          <Transition
-            as={Fragment}
-            show={open}
-            enter="transition-opacity ease-in duration-150"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="transition-opacity ease-out duration-100"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
+          <Transition as={Fragment} show={open}>
             <Listbox.Options
               anchor="bottom start"
               portal
@@ -120,12 +112,9 @@ export const RequestListboxControl = <T extends RequestListboxValue>({
                       className={`request-listbox-option ${
                         optionActive ? 'request-listbox-option-active' : ''
                       }`}
+                      data-selected={selected}
                     >
-                      <span
-                        className={`block truncate ${selected ? 'font-semibold' : 'font-normal'}`}
-                      >
-                        {option.label}
-                      </span>
+                      <span>{option.label}</span>
                       {selected && (
                         <CheckIcon
                           className="request-listbox-check"
@@ -742,7 +731,11 @@ const AdvancedRequester = ({
 
   if (!data && !error) {
     return (
-      <div className="mb-2 w-full">
+      <div
+        className={panelOnly ? 'card-layout card-spacing-after' : 'mb-2 w-full'}
+        data-card-layout={panelOnly ? 'request-options' : undefined}
+        data-options-state={panelOnly ? 'loading' : undefined}
+      >
         <SmallLoadingSpinner />
       </div>
     );
@@ -823,22 +816,13 @@ const AdvancedRequester = ({
                   <span>{intl.formatMessage(messages.requestedBy)}</span>
                 </Listbox.Label>
                 <Listbox.Button className="request-listbox-button">
-                  <span className="truncate">{selectedUser.displayName}</span>
+                  <span>{selectedUser.displayName}</span>
                   <ChevronDownIcon
                     className="request-listbox-chevron"
                     aria-hidden="true"
                   />
                 </Listbox.Button>
-                <Transition
-                  as={Fragment}
-                  show={open}
-                  enter="transition-opacity ease-in duration-150"
-                  enterFrom="opacity-0"
-                  enterTo="opacity-100"
-                  leave="transition-opacity ease-out duration-100"
-                  leaveFrom="opacity-100"
-                  leaveTo="opacity-0"
-                >
+                <Transition as={Fragment} show={open}>
                   <Listbox.Options
                     anchor="top end"
                     portal
@@ -852,14 +836,9 @@ const AdvancedRequester = ({
                             className={`request-listbox-option ${
                               active ? 'request-listbox-option-active' : ''
                             }`}
+                            data-selected={selected}
                           >
-                            <span
-                              className={
-                                selected ? 'font-semibold' : 'font-normal'
-                              }
-                            >
-                              {candidate.displayName}
-                            </span>
+                            <span>{candidate.displayName}</span>
                             {selected && (
                               <CheckIcon
                                 className="request-listbox-check"
@@ -886,17 +865,18 @@ const AdvancedRequester = ({
         open={panelOnly ? expanded : true}
         className={
           panelOnly
-            ? expanded
-              ? 'group mt-2'
-              : 'group'
+            ? 'card-layout'
             : 'app-card-inset refreshed-inset-surface card-spacing-before group rounded-lg border border-gray-700'
         }
+        data-card-layout={panelOnly ? 'request-options' : undefined}
+        data-expanded={panelOnly ? expanded : undefined}
       >
         <summary
           onClick={panelOnly ? undefined : (event) => event.preventDefault()}
+          hidden={panelOnly}
           className={
             panelOnly
-              ? 'hidden'
+              ? undefined
               : 'flex cursor-pointer list-none items-center gap-3 p-3 focus:ring-2 focus:ring-indigo-400 focus:outline-none'
           }
         >
@@ -943,10 +923,23 @@ const AdvancedRequester = ({
           <ChevronDownIcon className="refreshed-detail-text-muted h-5 w-5 flex-shrink-0 transition group-open:rotate-180" />
         </summary>
         <div
-          className={`${panelOnly ? 'app-card-inset refreshed-inset-surface rounded-lg border border-gray-700 p-3' : 'border-t border-gray-700 p-3'} ${!rootFolderTable && serviceOptionsHidden ? 'hidden' : ''}`}
+          className={
+            panelOnly
+              ? 'app-card-inset refreshed-inset-surface'
+              : 'border-t border-gray-700 p-3'
+          }
+          data-card-part={panelOnly ? 'body' : undefined}
+          hidden={!rootFolderTable && serviceOptionsHidden}
         >
           {!!data && selectedServer !== null && serviceOverridesEnabled && (
-            <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div
+              className={
+                panelOnly
+                  ? 'app-action-row card-spacing-after'
+                  : 'mb-3 flex flex-wrap items-center gap-2'
+              }
+              data-action-placement={panelOnly ? 'leading' : undefined}
+            >
               {serviceServers.length > 0 && (
                 <RequestListboxControl
                   id="server"
@@ -1079,28 +1072,29 @@ const AdvancedRequester = ({
             </div>
           )}
           {rootFolderTable && (
-            <div className="mb-3">
-              <h4 className="mb-2 text-xs font-semibold text-gray-200">
+            <div className="card-spacing-after">
+              <h4 className="card-table-heading card-spacing-after">
                 {intl.formatMessage(messages.availableRootFolders)}
               </h4>
-              <div className="grid w-fit max-w-full grid-cols-[minmax(0,max-content)_max-content] justify-start gap-x-3 gap-y-1 text-xs">
-                <div className="request-divider-dark col-span-2 mb-1 grid grid-cols-subgrid border-b px-1 pb-2">
-                  <span className="refreshed-detail-text font-medium">
+              <div className="card-table" data-table-layout="request-folders">
+                <div data-table-part="header">
+                  <span className="card-table-heading refreshed-detail-text">
                     {intl.formatMessage(messages.rootfolder)}
                   </span>
-                  <span className="refreshed-detail-text font-medium">
+                  <span className="card-table-heading refreshed-detail-text">
                     {intl.formatMessage(messages.availableSpace)}
                   </span>
                 </div>
                 <div
-                  className={`col-span-2 grid grid-cols-subgrid gap-y-1 ${
-                    (serverData?.rootFolders.length ?? 0) > 5
-                      ? 'scrollable-card max-h-[8.5rem] overflow-y-auto'
-                      : ''
-                  }`}
+                  className="scrollable-card"
+                  data-table-part="rows"
+                  data-scrollable={(serverData?.rootFolders.length ?? 0) > 5}
                 >
                   {isValidating || !serverData ? (
-                    <span className="refreshed-detail-text-muted col-span-2">
+                    <span
+                      className="card-table-value refreshed-detail-text-muted"
+                      data-table-part="feedback"
+                    >
                       {intl.formatMessage(globalMessages.loading)}
                     </span>
                   ) : (
@@ -1113,14 +1107,13 @@ const AdvancedRequester = ({
                           key={`folder-card-${folder.id}`}
                           data-button-help="off"
                           onClick={() => selectRequestFolder(folder.path ?? '')}
-                          className={`col-span-2 grid grid-cols-subgrid rounded border px-1 py-1 text-left transition focus:ring-2 focus:ring-indigo-400 focus:outline-none ${
-                            isSelected
-                              ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200'
-                              : 'border-transparent text-gray-300 hover:border-indigo-400 hover:bg-gray-800/80 hover:text-white'
-                          }`}
+                          data-table-part="choice-row"
+                          aria-pressed={isSelected}
                         >
-                          <span className="truncate">{folder.path}</span>
-                          <span className="refreshed-detail-text whitespace-nowrap">
+                          <span className="card-table-value">
+                            {folder.path}
+                          </span>
+                          <span className="card-table-value refreshed-detail-text">
                             {formatBytes(folder.freeSpace ?? 0)}
                           </span>
                         </button>
@@ -1135,7 +1128,14 @@ const AdvancedRequester = ({
             serviceOverridesEnabled &&
             !isValidating &&
             !!serverData?.tags?.length && (
-              <div className="discover-filter-control mb-2 max-w-xl">
+              <div
+                className={
+                  panelOnly
+                    ? 'discover-filter-control card-spacing-after'
+                    : 'discover-filter-control mb-2 max-w-xl'
+                }
+                data-options-control={panelOnly ? 'tags' : undefined}
+              >
                 <label
                   htmlFor="tags"
                   className={controlLabelClass(
@@ -1183,12 +1183,26 @@ const AdvancedRequester = ({
               </div>
             )}
           {isIgnoreQuotaVisible && (
-            <div className="mb-2">
+            <div className={panelOnly ? 'card-spacing-after' : 'mb-2'}>
               <label htmlFor="ignoreQuota">
                 {intl.formatMessage(messages.ignoreQuotaTitle)}
               </label>
-              <div className="flex items-center justify-between">
-                <p className="refreshed-detail-text text-sm">
+              <div
+                className={
+                  panelOnly
+                    ? 'app-action-row'
+                    : 'flex items-center justify-between'
+                }
+                data-action-placement={panelOnly ? 'distributed' : undefined}
+                data-options-control={panelOnly ? 'quota' : undefined}
+              >
+                <p
+                  className={
+                    panelOnly
+                      ? 'card-body-text refreshed-detail-text'
+                      : 'refreshed-detail-text text-sm'
+                  }
+                >
                   {intl.formatMessage(messages.ignoreQuotaDescription)}
                 </p>
                 <SlideCheckbox
@@ -1199,7 +1213,10 @@ const AdvancedRequester = ({
             </div>
           )}
           {isAnime && (
-            <div className="mt-4 italic">
+            <div
+              className={panelOnly ? 'card-body-text' : 'mt-4 italic'}
+              data-options-note={panelOnly ? 'anime' : undefined}
+            >
               {intl.formatMessage(messages.animenote)}
             </div>
           )}

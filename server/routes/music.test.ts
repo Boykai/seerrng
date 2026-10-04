@@ -4,6 +4,7 @@ import { afterEach, before, describe, it, mock } from 'node:test';
 import CoverArtArchive from '@server/api/coverartarchive';
 import ListenBrainzAPI from '@server/api/listenbrainz';
 import MusicBrainz from '@server/api/musicbrainz';
+import LidarrAPI from '@server/api/servarr/lidarr';
 import TheAudioDb from '@server/api/theaudiodb';
 import { IssueStatus, IssueType } from '@server/constants/issue';
 import {
@@ -161,6 +162,51 @@ const albumDetails = {
   },
 };
 
+// Successful ListenBrainz detail fixtures still ask MusicBrainz for taxonomy.
+// Model an explicitly unavailable supplemental record, not a swallowed socket error.
+function mockAlbumEnrichment(
+  mbId: string,
+  options: { taxonomy?: boolean; artwork?: boolean } = {}
+) {
+  const assertions: (() => void)[] = [];
+  if (options.taxonomy !== false) {
+    const taxonomy = mock.method(
+      MusicBrainz.prototype,
+      'getReleaseGroupDetails',
+      async () => {
+        throw new Error(
+          '[MusicBrainz] Fixture release group unavailable: status code 404'
+        );
+      }
+    );
+    assertions.push(() =>
+      assert.deepStrictEqual(
+        taxonomy.mock.calls.map((call) => call.arguments),
+        [[{ releaseGroupId: mbId }]]
+      )
+    );
+  }
+  if (options.artwork !== false) {
+    const artwork = mock.method(
+      CoverArtArchive.prototype,
+      'getCoverArt',
+      async () => ({ images: [], release: `/release/${mbId}` })
+    );
+    assertions.push(() =>
+      assert.deepStrictEqual(
+        artwork.mock.calls.map((call) => call.arguments),
+        [[mbId]]
+      )
+    );
+  }
+  // Assert before afterEach restores spies; Vitest clears their call history.
+  return () => {
+    for (const assertion of assertions) {
+      assertion();
+    }
+  };
+}
+
 describe('GET /music/:id artist lists', () => {
   it('rejects malformed album IDs before artist discography provider lookup', async () => {
     const getAlbum = mock.method(ListenBrainzAPI.prototype, 'getAlbum');
@@ -313,6 +359,7 @@ describe('GET /music/:id', () => {
   });
 
   it('returns album details when optional ListenBrainz stats and tags are absent', async () => {
+    const assertEnrichment = mockAlbumEnrichment('release-group-id');
     mock.method(ListenBrainzAPI.prototype, 'getAlbum', async () => ({
       release_group_mbid: 'release-group-id',
       type: 'Album',
@@ -349,9 +396,13 @@ describe('GET /music/:id', () => {
     assert.deepStrictEqual(res.body.tags.artist, []);
     assert.deepStrictEqual(res.body.stats.listeners, []);
     assert.deepStrictEqual(res.body.tracks[0].artists, []);
+    assertEnrichment();
   });
 
   it('includes release labels when MusicBrainz exposes them', async () => {
+    const assertEnrichment = mockAlbumEnrichment('release-group-id', {
+      artwork: false,
+    });
     const releaseId = '00000000-0000-0000-0000-000000000001';
     mock.method(ListenBrainzAPI.prototype, 'getAlbum', async () => ({
       caa_release_mbid: releaseId,
@@ -415,9 +466,18 @@ describe('GET /music/:id', () => {
       res.body.recordLabel,
       'Example Records, Example Records Publishing'
     );
+    assertEnrichment();
   });
 
   it('falls back to MusicBrainz when ListenBrainz has no album detail page', async () => {
+    const assertEnrichment = mockAlbumEnrichment('release-group-id', {
+      taxonomy: false,
+    });
+    const images = mock.method(
+      TheAudioDb.prototype,
+      'getArtistImages',
+      async () => ({ artistThumb: null, artistBackground: null })
+    );
     mock.method(ListenBrainzAPI.prototype, 'getAlbum', async () => {
       throw new Error('[ListenBrainz] Failed to fetch album details: 404');
     });
@@ -457,9 +517,21 @@ describe('GET /music/:id', () => {
     assert.deepStrictEqual(res.body.tags.releaseGroup, [
       { count: 5, genreMbid: '', tag: 'jazz' },
     ]);
+    assert.deepStrictEqual(
+      images.mock.calls.map((call) => call.arguments),
+      [['artist-id']]
+    );
+    assertEnrichment();
   });
 
   it('returns the normalized MusicBrainz release-group rating and vote count', async () => {
+    const audioRating = mock.method(
+      TheAudioDb.prototype,
+      'getAlbumRating',
+      async () => {
+        throw new Error('Fixture TheAudioDb rating unavailable');
+      }
+    );
     mock.method(
       MusicBrainz.prototype,
       'getReleaseGroupDetails',
@@ -486,6 +558,10 @@ describe('GET /music/:id', () => {
     const res = await agent.get('/music/release-group-id/rating');
 
     assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(
+      audioRating.mock.calls.map((call) => call.arguments),
+      [['release-group-id']]
+    );
     assert.deepStrictEqual(res.body, {
       rating: {
         score: 8.5,
@@ -523,6 +599,7 @@ describe('GET /music/:id', () => {
   });
 
   it('filters saved media request users from music detail responses', async () => {
+    const assertEnrichment = mockAlbumEnrichment('release-group-id');
     mock.method(ListenBrainzAPI.prototype, 'getAlbum', async () => ({
       release_group_mbid: 'release-group-id',
       type: 'Album',
@@ -561,9 +638,45 @@ describe('GET /music/:id', () => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.mediaInfo.mbId, 'release-group-id');
+    assertEnrichment();
   });
 
   it('returns every available Lidarr quality without exposing completed requests', async (t) => {
+    const assertEnrichment = mockAlbumEnrichment('quality-release-group-id');
+    const albums = mock.method(LidarrAPI.prototype, 'getAlbums', async () => [
+      {
+        id: 10,
+        mbId: 'quality-release-group-id',
+        foreignAlbumId: 'quality-release-group-id',
+        title: 'Quality Album',
+        monitored: true,
+        artistId: 1,
+        titleSlug: 'quality-album',
+        profileId: 1,
+        duration: 180000,
+        albumType: 'Album',
+        statistics: {
+          trackFileCount: 0,
+          trackCount: 1,
+          totalTrackCount: 1,
+          sizeOnDisk: 0,
+          percentOfTracks: 0,
+        },
+      },
+    ]);
+    const tracks = mock.method(LidarrAPI.prototype, 'getTracks', async () => [
+      {
+        id: 1,
+        albumId: 10,
+        title: 'Quality Track',
+        trackNumber: '1',
+        absoluteTrackNumber: 1,
+        mediumNumber: 1,
+        hasFile: false,
+        trackFileId: 0,
+        foreignRecordingId: 'quality-recording-id',
+      },
+    ]);
     mock.method(ListenBrainzAPI.prototype, 'getAlbum', async () => ({
       release_group_mbid: 'quality-release-group-id',
       type: 'Album',
@@ -664,14 +777,28 @@ describe('GET /music/:id', () => {
     const res = await agent.get('/music/quality-release-group-id');
 
     assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(
+      albums.mock.calls.map((call) => call.arguments),
+      [[300], [300]]
+    );
+    assert.deepStrictEqual(
+      tracks.mock.calls.map((call) => call.arguments),
+      [
+        [{ albumId: 10 }, 300],
+        [{ albumId: 10 }, 300],
+      ]
+    );
+    assert.deepStrictEqual(res.body.trackAvailability, { mp3: [], flac: [] });
     assert.deepStrictEqual(res.body.availableServices, [
       { serverId: 1, quality: 'MP3' },
       { serverId: 2, quality: 'FLAC' },
     ]);
     assert.strictEqual(res.body.mediaInfo.requests.length, 0);
+    assertEnrichment();
   });
 
   it('hydrates independent request and issue trees without dropping detail state', async () => {
+    const assertEnrichment = mockAlbumEnrichment('release-group-id');
     mock.method(ListenBrainzAPI.prototype, 'getAlbum', async () => ({
       release_group_mbid: 'release-group-id',
       type: 'Album',
@@ -730,5 +857,6 @@ describe('GET /music/:id', () => {
       res.body.mediaInfo.issues[0].comments[0].message,
       'Independent issue comment'
     );
+    assertEnrichment();
   });
 });

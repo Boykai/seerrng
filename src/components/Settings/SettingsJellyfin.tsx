@@ -425,7 +425,6 @@ const SettingsJellyfin: React.FC<SettingsJellyfinProps> = ({
               {!dataSync?.running && (
                 <Button buttonType="warning" onClick={() => startScan()}>
                   <svg
-                    className="mr-1 h-5 w-5"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"

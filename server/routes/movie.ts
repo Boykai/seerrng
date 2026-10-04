@@ -12,9 +12,14 @@ import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import { Watchlist } from '@server/entity/Watchlist';
+import { enqueueImageCacheWarm } from '@server/lib/imageCacheWarmer';
 import { upsertMediaSearchMetadata } from '@server/lib/mediaSearchMetadata';
 import { getSettings, type RadarrSettings } from '@server/lib/settings';
 import { rankTmdbMovieResults } from '@server/lib/tmdbRank';
+import {
+  getAggregatedMovieMetadata,
+  VideoMetadataNotFoundError,
+} from '@server/lib/videoMetadataCatalog';
 import logger from '@server/logger';
 import { mapMovieDetails } from '@server/models/Movie';
 import { mapMovieResult } from '@server/models/Search';
@@ -155,7 +160,6 @@ movieRoutes.post(
 );
 
 movieRoutes.get('/:id', async (req, res, next) => {
-  const tmdb = new TheMovieDb();
   const movieId = parseTmdbRouteId(req.params.id);
   if (!movieId) {
     return next({ status: 404, message: 'Movie not found.' });
@@ -167,10 +171,10 @@ movieRoutes.get('/:id', async (req, res, next) => {
   const language = parsedLanguage.value ?? req.locale;
 
   try {
-    const tmdbMovie = await tmdb.getMovie({
+    const { details: tmdbMovie, provenance } = await getAggregatedMovieMetadata(
       movieId,
-      language,
-    });
+      language
+    );
 
     const media = await Media.getMedia(tmdbMovie.id, MediaType.MOVIE, req.user);
 
@@ -188,6 +192,8 @@ movieRoutes.get('/:id', async (req, res, next) => {
 
     await upsertMediaSearchMetadata(media?.id, {
       title: data.title,
+      overview: data.overview,
+      posterPath: data.posterPath,
       alternateTitle: data.originalTitle,
       releaseDate: data.releaseDate,
       genres: data.genres.map((genre) => genre.name).join(', '),
@@ -206,18 +212,33 @@ movieRoutes.get('/:id', async (req, res, next) => {
         .map((company) => company.name)
         .join(', '),
       format: 'Movie',
-      provider: 'TMDB',
-      externalIds: [data.id, data.imdbId].filter(Boolean).join(' '),
+      provider: provenance.sources
+        .map((source) => source.source.toUpperCase())
+        .join(' '),
+      videoMetadataExpiresAt: new Date(provenance.expiresAt),
+      externalIds: [
+        data.id,
+        data.imdbId,
+        tmdbMovie.external_ids.tvdb_id,
+        tmdbMovie.external_ids.wikidata_id,
+      ]
+        .filter(Boolean)
+        .join(' '),
     });
 
-    // TMDB issue where it doesnt fallback to English when no overview is available in requested locale.
-    if (!data.overview) {
-      const tvEnglish = await tmdb.getMovie({ movieId });
-      data.overview = tvEnglish.overview;
+    data.metadataSources = provenance.sources;
+    data.metadataProvenance = provenance.fields;
+    data.supplementalMetadata = provenance.supplemental;
+    if (provenance.supplemental.posterUrl) {
+      enqueueImageCacheWarm([provenance.supplemental.posterUrl]);
     }
+    data.metadataExpiresAt = provenance.expiresAt;
 
     return res.status(200).json(filterEntityResponse(data, req.user));
   } catch (e) {
+    if (e instanceof VideoMetadataNotFoundError) {
+      return next({ status: 404, message: 'Movie not found.', cause: e });
+    }
     logger.debug('Something went wrong retrieving movie', {
       label: 'API',
       errorMessage: e.message,

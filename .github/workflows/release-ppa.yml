@@ -6,6 +6,11 @@ on:
       tag:
         description: Release tag, for example v0.1.0
         required: true
+      reuse_published_source_versions:
+        description: Verify existing published package versions by Ubuntu series instead of uploading again
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -48,9 +53,19 @@ jobs:
         run: bash scripts/ensure-release-tag-on-main.sh "$TAG"
 
       - name: Install packaging tools
-        run: sudo apt-get update && sudo apt-get install -y build-essential debhelper devscripts dpkg-dev gnupg curl python3-launchpadlib
+        env:
+          REUSE_PUBLISHED_SOURCE_VERSIONS: ${{ inputs.reuse_published_source_versions || '' }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          if [[ -n "$REUSE_PUBLISHED_SOURCE_VERSIONS" ]]; then
+            sudo apt-get install -y python3-launchpadlib
+          else
+            sudo apt-get install -y build-essential debhelper devscripts dpkg-dev gnupg curl python3-launchpadlib
+          fi
 
       - name: Download Linux asset
+        if: inputs.reuse_published_source_versions == ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -64,6 +79,7 @@ jobs:
           exit 1
 
       - name: Import GPG key
+        if: inputs.reuse_published_source_versions == ''
         id: gpg
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
@@ -76,6 +92,7 @@ jobs:
           echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
 
       - name: Prepare source package
+        if: inputs.reuse_published_source_versions == ''
         id: source
         run: |
           set -euo pipefail
@@ -185,17 +202,43 @@ jobs:
           GPG_FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}
           GH_RUN_ID: ${{ github.run_id }}
           GH_RUN_ATTEMPT: ${{ github.run_attempt }}
+          REUSE_PUBLISHED_SOURCE_VERSIONS: ${{ inputs.reuse_published_source_versions || '' }}
         run: |
           set -euo pipefail
-          python3 .ppa-release-tools/scripts/publish-launchpad-ppa.py \
-            --package-dir "$SOURCE_DIR" \
-            --tag "$RELEASE_TAG" \
-            --upstream-version "$UPSTREAM_VERSION" \
-            --series "$UBUNTU_SERIES" \
-            --archive-url "$ARCHIVE_API" \
-            --archive-web "$ARCHIVE_WEB" \
-            --gpg-key-id "$GPG_FINGERPRINT" \
-            --run-id "$GH_RUN_ID" \
-            --run-attempt "$GH_RUN_ATTEMPT" \
-            --timeout-minutes 300 \
-            --max-attempts 2
+          if [[ -n "$REUSE_PUBLISHED_SOURCE_VERSIONS" ]]; then
+            jq -e '
+              type == "object" and
+              (keys - ["jammy", "noble"] | length == 0) and
+              all(.[]; type == "string")
+            ' <<<"$REUSE_PUBLISHED_SOURCE_VERSIONS" >/dev/null || {
+              echo 'Reusable PPA versions must be a JSON map from jammy/noble to source package versions.' >&2
+              exit 1
+            }
+            source_version="$(jq -er --arg series "$UBUNTU_SERIES" '.[$series] | select(type == "string")' <<<"$REUSE_PUBLISHED_SOURCE_VERSIONS")"
+            version_prefix="${UPSTREAM_VERSION}+ppa"
+            version_suffix="${source_version#"$version_prefix"}"
+            [[ "$version_suffix" =~ ^[0-9]+\.[0-9]+\.[0-9]+~${UBUNTU_SERIES}$ ]] || {
+              echo "Reusable PPA version does not match $UPSTREAM_VERSION for $UBUNTU_SERIES: $source_version" >&2
+              exit 1
+            }
+            echo "Verifying already-published PPA package $source_version."
+            python3 .ppa-release-tools/scripts/wait-for-launchpad-ppa.py \
+              --archive-url "$ARCHIVE_API" \
+              --archive-web "$ARCHIVE_WEB" \
+              --series "$UBUNTU_SERIES" \
+              --source-version "$source_version" \
+              --timeout-minutes 5
+          else
+            python3 .ppa-release-tools/scripts/publish-launchpad-ppa.py \
+              --package-dir "$SOURCE_DIR" \
+              --tag "$RELEASE_TAG" \
+              --upstream-version "$UPSTREAM_VERSION" \
+              --series "$UBUNTU_SERIES" \
+              --archive-url "$ARCHIVE_API" \
+              --archive-web "$ARCHIVE_WEB" \
+              --gpg-key-id "$GPG_FINGERPRINT" \
+              --run-id "$GH_RUN_ID" \
+              --run-attempt "$GH_RUN_ATTEMPT" \
+              --timeout-minutes 300 \
+              --max-attempts 2
+          fi

@@ -4,6 +4,11 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import PaginationFooter from '@app/components/Common/PaginationFooter';
 import Tooltip from '@app/components/Common/Tooltip';
+import {
+  CompactSelect,
+  getFilterToggleButtonClass,
+} from '@app/components/Discover/FilterPanel/CompactFilterSelect';
+import { PinnedFilterSectionGroup } from '@app/components/Discover/PinnedFilterSection';
 import RequestItem from '@app/components/RequestList/RequestItem';
 import {
   getPositiveQueryParamNumber,
@@ -20,13 +25,7 @@ import {
   writeLocalStoredRecord,
 } from '@app/utils/localStorage';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  Bars3BottomLeftIcon,
-  CircleStackIcon,
-  FunnelIcon,
-} from '@heroicons/react/24/solid';
+import { ArrowDownIcon, ArrowUpIcon } from '@heroicons/react/24/solid';
 import type { RequestResultsResponse } from '@server/interfaces/api/requestInterfaces';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -40,6 +39,10 @@ const messages = defineMessages('components.RequestList', {
   sortAdded: 'Most Recent',
   sortModified: 'Last Modified',
   sortDirection: 'Toggle Sort Direction',
+  taskFilters: 'Task Filters',
+  mediaFilters: 'Media Filters',
+  sortBy: 'Sort By',
+  mediaType: 'Media Type',
   unableToConnect:
     'Unable to connect to {services}. Some information may be unavailable.',
 });
@@ -172,12 +175,31 @@ const RequestList = () => {
     currentPageSize,
   ]);
 
+  const pendingHeading = (
+    <>
+      <PageTitle title={intl.formatMessage(messages.requests)} />
+      <div className="page-title-row">
+        <h2 className="page-title">{intl.formatMessage(messages.requests)}</h2>
+      </div>
+    </>
+  );
+
   if (!data && !error) {
-    return <LoadingSpinner />;
+    return (
+      <>
+        {pendingHeading}
+        <LoadingSpinner />
+      </>
+    );
   }
 
   if (!data) {
-    return <LoadingSpinner />;
+    return (
+      <>
+        {pendingHeading}
+        <LoadingSpinner />
+      </>
+    );
   }
 
   const changePage = (nextPage: number) => {
@@ -194,173 +216,168 @@ const RequestList = () => {
             : intl.formatMessage(messages.requests)
         }
       />
-      <div className="mb-4 flex flex-col justify-between lg:flex-row lg:items-end">
-        <Header
-          subtext={
-            router.pathname.startsWith('/profile') ? (
-              <Link href={`/profile`} className="hover:underline">
-                {currentUser?.displayName}
-              </Link>
-            ) : router.query.userId ? (
-              <Link href={`/users/${user?.id}`} className="hover:underline">
-                {user?.displayName}
-              </Link>
-            ) : (
-              ''
-            )
-          }
-        >
-          {intl.formatMessage(messages.requests)}
-        </Header>
-        <div className="mt-2 flex flex-grow flex-col sm:flex-row lg:flex-grow-0">
-          <div className="mb-2 flex flex-grow sm:mr-2 sm:mb-0 lg:flex-grow-0">
-            <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-gray-800 px-3 text-sm text-gray-100">
-              <CircleStackIcon className="h-6 w-6" />
-            </span>
-            <select
-              id="mediaType"
-              name="mediaType"
-              onChange={(e) => {
-                setCurrentMediaType(e.target.value as MediaType);
-                router.push({
-                  pathname: router.pathname,
-                  query: router.query.userId
-                    ? {
-                        userId: router.query.userId,
-                        mediaType: e.target.value,
-                      }
-                    : { mediaType: e.target.value },
-                });
-              }}
-              value={effectiveMediaType}
-              className="rounded-r-only"
-            >
-              <option value="all">
-                {intl.formatMessage(globalMessages.all)}
-              </option>
-              <option value="movie">
-                {intl.formatMessage(globalMessages.movies)}
-              </option>
-              <option value="tv">
-                {intl.formatMessage(globalMessages.tvshows)}
-              </option>
-              <option value="music">
-                {intl.formatMessage(globalMessages.music)}
-              </option>
-              <option value="book">
-                {intl.formatMessage(globalMessages.books)}
-              </option>
-              <option value="manga">
-                {intl.formatMessage(globalMessages.manga)}
-              </option>
-            </select>
-          </div>
-          <div className="mb-2 flex flex-grow sm:mr-2 sm:mb-0 lg:flex-grow-0">
-            <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-gray-800 px-3 text-sm text-gray-100">
-              <FunnelIcon className="h-6 w-6" />
-            </span>
-            <select
-              id="filter"
-              name="filter"
-              onChange={(e) => {
-                setCurrentFilter(e.target.value as Filter);
-                router.push({
-                  pathname: router.pathname,
-                  query: router.query.userId
-                    ? {
-                        userId: router.query.userId,
-                        filter: e.target.value,
-                        mediaType: effectiveMediaType,
-                      }
-                    : { filter: e.target.value, mediaType: effectiveMediaType },
-                });
-              }}
-              value={effectiveFilter}
-              className="rounded-r-only"
-            >
-              <option value="all">
-                {intl.formatMessage(globalMessages.all)}
-              </option>
-              <option value="pending">
-                {intl.formatMessage(globalMessages.pending)}
-              </option>
-              <option value="approved">
-                {intl.formatMessage(globalMessages.approved)}
-              </option>
-              <option value="completed">
-                {intl.formatMessage(globalMessages.completed)}
-              </option>
-              <option value="processing">
-                {intl.formatMessage(globalMessages.processing)}
-              </option>
-              <option value="failed">
-                {intl.formatMessage(globalMessages.failed)}
-              </option>
-              <option value="available">
-                {intl.formatMessage(globalMessages.available)}
-              </option>
-              <option value="unavailable">
-                {intl.formatMessage(globalMessages.unavailable)}
-              </option>
-              <option value="deleted">
-                {intl.formatMessage(globalMessages.deleted)}
-              </option>
-            </select>
-          </div>
-          <div className="mb-2 flex flex-grow sm:mb-0 lg:flex-grow-0">
-            <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-gray-800 px-3 text-gray-100 sm:text-sm">
-              <Bars3BottomLeftIcon className="h-6 w-6" />
-            </span>
-            <select
-              id="sort"
-              name="sort"
-              onChange={(e) => {
-                setCurrentSort(e.target.value as Sort);
-                router.push({
-                  pathname: router.pathname,
-                  query: router.query.userId
-                    ? {
-                        userId: router.query.userId,
-                        filter: effectiveFilter,
-                        mediaType: effectiveMediaType,
-                      }
-                    : {
-                        filter: effectiveFilter,
-                        mediaType: effectiveMediaType,
-                      },
-                });
-              }}
-              value={currentSort}
-              className="rounded-none border-r-0"
-            >
-              <option value="added">
-                {intl.formatMessage(messages.sortAdded)}
-              </option>
-              <option value="modified">
-                {intl.formatMessage(messages.sortModified)}
-              </option>
-            </select>
-            <Tooltip content={intl.formatMessage(messages.sortDirection)}>
-              <Button
-                buttonType="default"
-                className="app-control-shadow-exempt z-40 mr-2 rounded-l-none px-3"
-                buttonSize="md"
-                onClick={() =>
-                  setCurrentSortDirection(
-                    currentSortDirection === 'asc' ? 'desc' : 'asc'
-                  )
-                }
-              >
-                {currentSortDirection === 'asc' ? (
-                  <ArrowUpIcon className="h-6 w-6" />
-                ) : (
-                  <ArrowDownIcon className="h-6 w-6" />
-                )}
-              </Button>
-            </Tooltip>
-          </div>
-        </div>
-      </div>
+      <Header
+        subtext={
+          router.pathname.startsWith('/profile') ? (
+            <Link href={`/profile`} className="hover:underline">
+              {currentUser?.displayName}
+            </Link>
+          ) : router.query.userId ? (
+            <Link href={`/users/${user?.id}`} className="hover:underline">
+              {user?.displayName}
+            </Link>
+          ) : (
+            ''
+          )
+        }
+      >
+        {intl.formatMessage(messages.requests)}
+      </Header>
+      <PinnedFilterSectionGroup
+        mediaType={
+          effectiveMediaType === 'tv'
+            ? 'tv'
+            : effectiveMediaType === 'music'
+              ? 'music'
+              : effectiveMediaType === 'book'
+                ? 'book'
+                : 'movie'
+        }
+        sections={[
+          {
+            section: 'taskFilters',
+            label: intl.formatMessage(messages.taskFilters),
+            children: (
+              <div className="app-filter-row">
+                <CompactSelect
+                  label={intl.formatMessage(globalMessages.status)}
+                  value={effectiveFilter}
+                  defaultValue="pending"
+                  options={(
+                    [
+                      ['all', globalMessages.all],
+                      ['pending', globalMessages.pending],
+                      ['approved', globalMessages.approved],
+                      ['completed', globalMessages.completed],
+                      ['processing', globalMessages.processing],
+                      ['failed', globalMessages.failed],
+                      ['available', globalMessages.available],
+                      ['unavailable', globalMessages.unavailable],
+                      ['deleted', globalMessages.deleted],
+                    ] as const
+                  ).map(([value, label]) => ({
+                    value,
+                    label: intl.formatMessage(label),
+                  }))}
+                  onChange={(value) => {
+                    setCurrentFilter(value as Filter);
+                    router.push({
+                      pathname: router.pathname,
+                      query: router.query.userId
+                        ? {
+                            userId: router.query.userId,
+                            filter: value,
+                            mediaType: effectiveMediaType,
+                          }
+                        : { filter: value, mediaType: effectiveMediaType },
+                    });
+                  }}
+                />
+              </div>
+            ),
+          },
+          {
+            section: 'mediaFilters',
+            label: intl.formatMessage(messages.mediaFilters),
+            children: (
+              <div className="app-filter-row">
+                <CompactSelect
+                  label={intl.formatMessage(messages.mediaType)}
+                  value={effectiveMediaType}
+                  options={(
+                    [
+                      ['all', globalMessages.all],
+                      ['movie', globalMessages.movies],
+                      ['tv', globalMessages.tvshows],
+                      ['music', globalMessages.music],
+                      ['book', globalMessages.books],
+                      ['manga', globalMessages.manga],
+                    ] as const
+                  ).map(([value, label]) => ({
+                    value,
+                    label: intl.formatMessage(label),
+                  }))}
+                  onChange={(value) => {
+                    setCurrentMediaType(value as MediaType);
+                    router.push({
+                      pathname: router.pathname,
+                      query: router.query.userId
+                        ? { userId: router.query.userId, mediaType: value }
+                        : { mediaType: value },
+                    });
+                  }}
+                />
+              </div>
+            ),
+          },
+          {
+            section: 'sortBy',
+            label: intl.formatMessage(messages.sortBy),
+            children: (
+              <div className="app-filter-row">
+                <CompactSelect
+                  label={intl.formatMessage(messages.sortBy)}
+                  value={currentSort}
+                  options={[
+                    {
+                      value: 'added',
+                      label: intl.formatMessage(messages.sortAdded),
+                    },
+                    {
+                      value: 'modified',
+                      label: intl.formatMessage(messages.sortModified),
+                    },
+                  ]}
+                  onChange={(value) => {
+                    setCurrentSort(value as Sort);
+                    router.push({
+                      pathname: router.pathname,
+                      query: router.query.userId
+                        ? {
+                            userId: router.query.userId,
+                            filter: effectiveFilter,
+                            mediaType: effectiveMediaType,
+                          }
+                        : {
+                            filter: effectiveFilter,
+                            mediaType: effectiveMediaType,
+                          },
+                    });
+                  }}
+                />
+                <Tooltip content={intl.formatMessage(messages.sortDirection)}>
+                  <button
+                    type="button"
+                    className={getFilterToggleButtonClass(false)}
+                    aria-label={intl.formatMessage(messages.sortDirection)}
+                    onClick={() =>
+                      setCurrentSortDirection(
+                        currentSortDirection === 'asc' ? 'desc' : 'asc'
+                      )
+                    }
+                  >
+                    {currentSortDirection === 'asc' ? (
+                      <ArrowUpIcon />
+                    ) : (
+                      <ArrowDownIcon />
+                    )}
+                  </button>
+                </Tooltip>
+              </div>
+            ),
+          },
+        ]}
+      />
 
       {data.serviceErrors &&
         (data.serviceErrors.radarr.length > 0 ||

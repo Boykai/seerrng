@@ -8,8 +8,9 @@ sidebar_position: 3
 
 :::warning
 The package's catalog entry is awaiting review by YunoHost maintainers. Until it
-is listed in the official catalog, install it from the dedicated package
-repository below.
+is listed in the official catalog, install it from the `testing` branch of the
+dedicated package repository below. That branch receives each published
+SeerrNG release.
 :::
 
 ## Requirements
@@ -28,10 +29,10 @@ are managed by SeerrNG and the media server you connect during setup.
 ## Install the package
 
 The package is available for manual installation from the
-[`seerrng_ynh` repository](https://github.com/YunoHost-Apps/seerrng_ynh):
+[`seerrng_ynh` testing branch](https://github.com/YunoHost-Apps/seerrng_ynh/tree/testing):
 
 ```bash
-sudo yunohost app install https://github.com/YunoHost-Apps/seerrng_ynh --debug
+sudo yunohost app install https://github.com/YunoHost-Apps/seerrng_ynh/tree/testing --debug
 ```
 
 Choose the dedicated domain and `/` as the installation path. After installation,

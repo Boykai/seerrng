@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: ''
+      reuse_package_workflow_runs:
+        description: JSON map of required package workflow filenames to successful run IDs for this exact tag
+        required: false
+        type: string
+        default: '{}'
       reuse_published_image:
         description: Reuse the image only after its revision label matches this tag
         required: false
@@ -51,6 +56,7 @@ jobs:
       contents: read
     outputs:
       reuse_windows_x64_artifact: ${{ steps.recovery.outputs.reuse_windows_x64_artifact || 'false' }}
+      reuse_windows_arm64_artifact: ${{ steps.recovery.outputs.reuse_windows_arm64_artifact || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -119,6 +125,7 @@ jobs:
           fi
 
           jobs="$(gh api "repos/$REPO/actions/runs/$REUSE_FROM_RUN_ID/jobs?per_page=100")"
+          reuse_windows_arm64_artifact=false
           if jq -e '
             ([.jobs[] | select(.conclusion == "failure") | .name] ==
               ["Build release assets / Build windows x64"]) and
@@ -134,6 +141,7 @@ jobs:
             ] - [.jobs[] | select(.conclusion == "success") | .name]) | length == 0)
           ' <<<"$jobs" >/dev/null; then
             reuse_windows_x64_artifact=false
+            reuse_windows_arm64_artifact=true
           elif jq -e '
             ([.jobs[] | select(.conclusion == "failure") | .name] ==
               ["Build release assets / Upload release assets"]) and
@@ -151,11 +159,38 @@ jobs:
             ] - [.jobs[] | select(.conclusion == "success") | .name]) | length == 0)
           ' <<<"$jobs" >/dev/null; then
             reuse_windows_x64_artifact=true
+            reuse_windows_arm64_artifact=true
+          elif jq -e '
+            ([.jobs[] | select(.conclusion == "failure") | .name] ==
+              ["Dispatch package channels"]) and
+            (([
+              "Validate main release tag",
+              "Generate changelog",
+              "Create draft release",
+              "Publish multi-arch manifests",
+              "Scan release image (linux/amd64)",
+              "Scan release image (linux/arm64)",
+              "Sign images and create SBOM attestations",
+              "Verify signatures and attestations",
+              "Build release assets / Validate release tag",
+              "Build release assets / Build linux x64",
+              "Build release assets / Build linux arm64",
+              "Build release assets / Build macos arm64",
+              "Build release assets / Build macos x64",
+              "Build release assets / Build windows x64",
+              "Build release assets / Build windows arm64",
+              "Build release assets / Build optional Jellyfin plugin",
+              "Build release assets / Upload release assets"
+            ] - [.jobs[] | select(.conclusion == "success") | .name]) | length == 0)
+          ' <<<"$jobs" >/dev/null; then
+            reuse_windows_x64_artifact=true
+            reuse_windows_arm64_artifact=true
           else
             echo 'The previous run did not fail at a supported recoverable release stage.' >&2
             exit 1
           fi
           echo "reuse_windows_x64_artifact=$reuse_windows_x64_artifact" >> "$GITHUB_OUTPUT"
+          echo "reuse_windows_arm64_artifact=$reuse_windows_arm64_artifact" >> "$GITHUB_OUTPUT"
 
           artifacts="$(gh api "repos/$REPO/actions/runs/$REUSE_FROM_RUN_ID/artifacts?per_page=100")"
           if [[ "$reuse_windows_x64_artifact" == true ]]; then
@@ -717,6 +752,39 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  sync-yunohost-package:
+    name: Sync YunoHost package
+    needs: [publish-release]
+    uses: ./.github/workflows/sync-yunohost.yml
+    with:
+      release_tag: ${{ inputs.tag || github.ref_name }}
+    secrets:
+      YUNOHOST_PACKAGE_TOKEN: ${{ secrets.YUNOHOST_PACKAGE_TOKEN }}
+    permissions:
+      contents: write
+
+  dispatch-chocolatey:
+    name: Dispatch Chocolatey after publication
+    needs: [publish-release]
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch Chocolatey package workflow
+        env:
+          GH_TOKEN: ${{ secrets.GH_WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$TAG" == *-* ]]; then
+            echo "Skipping Chocolatey for pre-release tag $TAG."
+            exit 0
+          fi
+          gh workflow run release-chocolatey.yml --repo "$REPO" --ref main -f "tag=$TAG"
+
   build-release-assets:
     name: Build release assets
     needs: [validate-main-tag, create-draft-release]
@@ -725,6 +793,7 @@ jobs:
       tag: ${{ inputs.tag || github.ref_name }}
       reuse_from_run_id: ${{ inputs.reuse_from_run_id || '' }}
       reuse_windows_x64_artifact: ${{ needs.validate-main-tag.outputs.reuse_windows_x64_artifact == 'true' }}
+      reuse_windows_arm64_artifact: ${{ needs.validate-main-tag.outputs.reuse_windows_arm64_artifact == 'true' }}
     permissions:
       actions: read
       contents: write
@@ -746,41 +815,97 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag || github.ref_name }}
+          REUSE_FROM_RUN_ID: ${{ inputs.reuse_from_run_id || '' }}
+          REUSE_PACKAGE_WORKFLOW_RUNS: ${{ inputs.reuse_package_workflow_runs || '{}' }}
         run: |
           set -euo pipefail
           if [[ "$TAG" == *-* ]]; then
             echo "Skipping stable package channels for pre-release tag $TAG."
             exit 0
           fi
-          for workflow in \
+          required_workflows=(
             release-linux-packages.yml \
             release-flatpak.yml \
             release-aur.yml \
-            release-chocolatey.yml \
-            release-snap.yml \
             release-ppa.yml \
             release-copr.yml
-          do
-            optional=false
-            if [[ "$workflow" == "release-snap.yml" || "$workflow" == "release-chocolatey.yml" ]]; then
-              optional=true
+          )
+          # release-chocolatey.yml is dispatched after the public-release gate.
+          optional_workflows=(
+            release-snap.yml
+          )
+          declare -A dispatch_started=()
+          required_names=()
+          required_run_ids=()
+          pending_names=()
+          allowed_reuse_workflows="$(printf '%s\n' "${required_workflows[@]}" | jq -R . | jq -s .)"
+          jq -e --argjson allowed "$allowed_reuse_workflows" '
+            type == "object" and
+            (keys - $allowed | length == 0) and
+            all(.[]; (tostring | test("^[0-9]+$")))
+          ' <<<"$REUSE_PACKAGE_WORKFLOW_RUNS" >/dev/null || {
+            echo 'Reusable package workflows must be a JSON object of required workflow names to numeric run IDs.' >&2
+            exit 1
+          }
+
+          for workflow in "${required_workflows[@]}"; do
+            reused_run_id="$(jq -r --arg workflow "$workflow" '.[$workflow] // empty' <<<"$REUSE_PACKAGE_WORKFLOW_RUNS")"
+            if [[ -n "$reused_run_id" ]]; then
+              run_json="$(gh api "repos/$REPO/actions/runs/$reused_run_id")"
+              workflow_path=".github/workflows/$workflow"
+              jq -e --arg workflow_path "$workflow_path" '
+                .path == $workflow_path and
+                .event == "workflow_dispatch" and
+                .head_branch == "main" and
+                .status == "completed" and
+                .conclusion == "success"
+              ' <<<"$run_json" >/dev/null || {
+                echo "Refusing to reuse unsuccessful or mismatched package workflow run $reused_run_id for $workflow." >&2
+                exit 1
+              }
+              run_logs="$(gh run view "$reused_run_id" --repo "$REPO" --log)"
+              grep -Fq "RELEASE_TAG: $TAG" <<<"$run_logs" || {
+                echo "Refusing to reuse $workflow run $reused_run_id because its logs do not confirm tag $TAG." >&2
+                exit 1
+              }
+              echo "Reusing verified $workflow run $reused_run_id for $TAG."
+              required_names+=("$workflow")
+              required_run_ids+=("$reused_run_id")
+              continue
             fi
-            dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+            dispatch_started["$workflow"]="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             if ! gh workflow run "$workflow" --repo "$REPO" --ref main -f "tag=$TAG"; then
-              if [[ "$optional" == true ]]; then
+              exit 1
+            fi
+            echo "Dispatched $workflow for $TAG."
+            pending_names+=("$workflow")
+          done
+
+          if [[ -z "$REUSE_FROM_RUN_ID" ]]; then
+            for workflow in "${optional_workflows[@]}"; do
+              dispatch_started["$workflow"]="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              if ! gh workflow run "$workflow" --repo "$REPO" --ref main -f "tag=$TAG"; then
                 echo "::warning::Optional package workflow $workflow could not be dispatched; continuing."
                 continue
               fi
-              exit 1
-            fi
+              echo "Dispatched optional $workflow for $TAG."
+            done
+          else
+            echo 'Skipping optional Chocolatey and Snap workflows during release recovery; Chocolatey dispatch follows publication.'
+          fi
+
+          for workflow in "${pending_names[@]}"; do
             run_id=""
             for attempt in {1..60}; do
               runs_json="$(gh api "repos/$REPO/actions/workflows/$workflow/runs?event=workflow_dispatch&branch=main&per_page=20")"
-              run_id="$(jq -r --arg started "$dispatch_started" '
+              run_id="$(jq -r --arg started "${dispatch_started[$workflow]}" '
                 [.workflow_runs[]
                   | select(.created_at >= $started and .head_branch == "main")
-                  | .id]
-                | first // empty
+                ]
+                | sort_by(.created_at)
+                | last
+                | .id // empty
               ' <<<"$runs_json")"
               if [[ -n "$run_id" ]]; then
                 break
@@ -788,22 +913,32 @@ jobs:
               sleep 5
             done
             if [[ -z "$run_id" ]]; then
-              if [[ "$optional" == true ]]; then
-                echo "::warning::Optional package workflow $workflow did not appear; continuing."
-                continue
-              fi
               echo "Unable to find the dispatched $workflow run." >&2
               exit 1
             fi
-            echo "Waiting for $workflow run $run_id"
-            if ! node scripts/watch-github-run.mjs "$REPO" "$run_id"; then
-              if [[ "$optional" == true ]]; then
-                echo "::warning::Optional package workflow $workflow failed; continuing without that package channel."
-                continue
-              fi
-              exit 1
+            required_names+=("$workflow")
+            required_run_ids+=("$run_id")
+          done
+
+          watcher_pids=()
+          for index in "${!required_run_ids[@]}"; do
+            workflow="${required_names[$index]}"
+            run_id="${required_run_ids[$index]}"
+            (
+              echo "Waiting for required $workflow run $run_id"
+              node scripts/watch-github-run.mjs "$REPO" "$run_id"
+            ) &
+            watcher_pids+=("$!")
+          done
+
+          dispatch_status=0
+          for index in "${!watcher_pids[@]}"; do
+            if ! wait "${watcher_pids[$index]}"; then
+              echo "::error::Required package workflow ${required_names[$index]} failed."
+              dispatch_status=1
             fi
           done
+          (( dispatch_status == 0 )) || exit 1
 
       - name: Verify release package assets
         env:
@@ -859,7 +994,8 @@ jobs:
 
   announce-discord:
     name: Announce release to Discord
-    needs: [changelog, publish, publish-release, dispatch-package-channels]
+    needs:
+      [changelog, publish, publish-release, sync-yunohost-package, dispatch-package-channels]
     timeout-minutes: 10
     runs-on: [self-hosted, Linux, X64, seerrng]
     permissions:

@@ -29,6 +29,32 @@ export interface UserCredentialVersionOptions {
   expectedCredentialVersion?: number;
 }
 
+export interface UserSecurityActorOptions extends UserCredentialVersionOptions {
+  /** Server-only opt-in for operations using the fresh actor's native account. */
+  includeMediaServerCredentials?: boolean;
+}
+
+const loadSecurityActor = (
+  actorId: number,
+  options: UserSecurityActorOptions
+): Promise<User | null> => {
+  const repository = getRepository(User);
+  if (options.includeMediaServerCredentials !== true)
+    return repository.findOneBy({ id: actorId });
+
+  // Same explicit, own-user credential selection as playback. Keep all default
+  // identity/permission/version columns and never load password/reset secrets.
+  return repository
+    .createQueryBuilder('user')
+    .addSelect([
+      'user.plexToken',
+      'user.jellyfinAuthToken',
+      'user.jellyfinDeviceId',
+    ])
+    .where('user.id = :actorId', { actorId })
+    .getOne();
+};
+
 export const runWithUserCredentialVersionContext = <Result>(
   actorId: number,
   expectedCredentialVersion: number,
@@ -180,7 +206,7 @@ export const runAuthorizedUserSecurityMutation = <Result>(
     }
   );
 
-export interface AuthorizedUserSecurityReadOptions extends UserCredentialVersionOptions {
+export interface AuthorizedUserSecurityReadOptions extends UserSecurityActorOptions {
   permissionCheckOptions?: PermissionCheckOptions;
   requirePermission?: boolean;
 }
@@ -207,7 +233,7 @@ export const runUserSecurityReadWithActor = async <Result>(
     throw new Error('A valid user ID is required for a security read.');
   }
 
-  const actor = await getRepository(User).findOneBy({ id: actorId });
+  const actor = await loadSecurityActor(actorId, options);
   if (
     !actor ||
     !isRequestCredentialAuthorityCurrent(
@@ -283,11 +309,11 @@ export const runUserSecurityMutationWithActor = <Result>(
   targetIds: number | number[],
   permissionForOtherUsers: Permission | Permission[],
   callback: (actor: User) => Promise<Result>,
-  options: UserCredentialVersionOptions = {}
+  options: UserSecurityActorOptions = {}
 ): Promise<Result> => {
   const targets = Array.isArray(targetIds) ? targetIds : [targetIds];
   return runUserSecurityMutationUnchecked([actorId, ...targets], async () => {
-    const actor = await getRepository(User).findOneBy({ id: actorId });
+    const actor = await loadSecurityActor(actorId, options);
     if (
       !actor ||
       !isRequestCredentialAuthorityCurrent(

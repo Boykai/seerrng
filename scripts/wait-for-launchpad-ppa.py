@@ -73,8 +73,11 @@ def classify_failed_upload(
 ) -> None:
     upload_log_url = build.upload_log_url
     if not upload_log_url:
+        build_link = getattr(build, "web_link", None) or getattr(
+            build, "self_link", "an unknown Launchpad build"
+        )
         raise RuntimeError(
-            f"Launchpad marked {build.web_link} as 'Failed to upload' without an "
+            f"Launchpad marked {build_link} as 'Failed to upload' without an "
             "upload log; refusing to republish an unclassified failure."
         )
 
@@ -87,8 +90,11 @@ def classify_failed_upload(
         f"Unable to find source publication seerrng/{source_version} in {series}"
     )
     if expected_error not in upload_log_text:
+        build_link = getattr(build, "web_link", None) or getattr(
+            build, "self_link", "an unknown Launchpad build"
+        )
         raise RuntimeError(
-            f"Launchpad marked {build.web_link} as 'Failed to upload', but its log "
+            f"Launchpad marked {build_link} as 'Failed to upload', but its log "
             "does not match the known source-publication race. "
             f"Inspect {upload_log_url}."
         )
@@ -102,9 +108,12 @@ def classify_failed_upload(
 
 def fail_for_build(build: Any) -> None:
     state = build.buildstate
-    log_url = build.upload_log_url or build.build_log_url or build.web_link
+    build_link = getattr(build, "web_link", None) or getattr(
+        build, "self_link", "an unknown Launchpad build"
+    )
+    log_url = build.upload_log_url or build.build_log_url or build_link
     raise RuntimeError(
-        f"Launchpad build {build.web_link} ended in '{state}'. Inspect {log_url}."
+        f"Launchpad build {build_link} ended in '{state}'. Inspect {log_url}."
     )
 
 
@@ -148,6 +157,10 @@ def main() -> int:
                     for binary in binary_publications
                     if binary.binary_package_name == "seerrng"
                     and binary.status == PUBLISHED
+                    and getattr(
+                        binary, "binary_package_version", args.source_version
+                    )
+                    == args.source_version
                 ]
                 amd64_builds = [
                     build for build in builds if build.arch_tag == "amd64"
@@ -168,47 +181,52 @@ def main() -> int:
                     ):
                         fail_for_build(build)
 
-                if publication_status != PUBLISHED:
-                    if publication_status in ("Superseded", "Deleted", "Obsolete"):
-                        raise RuntimeError(
-                            f"Launchpad source publication {publication.self_link} "
-                            f"ended in '{publication_status}'."
+                if publication_status in ("Superseded", "Deleted", "Obsolete"):
+                    raise RuntimeError(
+                        f"Launchpad source publication {publication.self_link} "
+                        f"ended in '{publication_status}'."
+                    )
+
+                if not amd64_builds and publication_status == PUBLISHED:
+                    raise RuntimeError(
+                        f"No amd64 build record exists for {publication.self_link}."
+                    )
+
+                completed = bool(amd64_builds) and all(
+                    build.buildstate == "Successfully built"
+                    for build in amd64_builds
+                )
+                if completed and binaries:
+                    print(
+                        f"Published {args.source_version} for {args.series}: "
+                        f"{publication.self_link}",
+                        flush=True,
+                    )
+                    for binary in binaries:
+                        binary_link = (
+                            getattr(binary, "web_link", None)
+                            or getattr(binary, "self_link", None)
+                            or getattr(
+                                binary, "binary_package_version", args.source_version
+                            )
                         )
-                    build_states = ", ".join(
-                        build.buildstate for build in amd64_builds
-                    ) or "no build records"
+                        print(f"Published binary: {binary_link}", flush=True)
+                    return 0
+
+                states = ", ".join(
+                    f"{build.arch_tag}={build.buildstate}" for build in amd64_builds
+                ) or "no build records"
+                binary_states = ", ".join(
+                    f"{binary.binary_package_name}={binary.status}"
+                    for binary in binary_publications
+                ) or "no binary publication records"
+                if publication_status != PUBLISHED:
                     report = (
                         f"Waiting for source publication {publication.self_link} "
                         f"to become Published (currently {publication_status}; "
-                        f"builds [{build_states}])."
+                        f"builds [{states}], binaries [{binary_states}])."
                     )
                 else:
-                    if not amd64_builds:
-                        raise RuntimeError(
-                            f"No amd64 build record exists for {publication.self_link}."
-                        )
-
-                    completed = all(
-                        build.buildstate == "Successfully built"
-                        for build in amd64_builds
-                    )
-                    if completed and binaries:
-                        print(
-                            f"Published {args.source_version} for {args.series}: "
-                            f"{publication.self_link}",
-                            flush=True,
-                        )
-                        for binary in binaries:
-                            print(f"Published binary: {binary.web_link}", flush=True)
-                        return 0
-
-                    states = ", ".join(
-                        f"{build.arch_tag}={build.buildstate}" for build in amd64_builds
-                    )
-                    binary_states = ", ".join(
-                        f"{binary.binary_package_name}={binary.status}"
-                        for binary in publication.getPublishedBinaries()
-                    ) or "no binary publication records"
                     report = (
                         f"Waiting for binary publication in {args.series}: "
                         f"builds [{states}], binaries [{binary_states}]."

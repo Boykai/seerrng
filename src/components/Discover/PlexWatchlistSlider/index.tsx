@@ -79,6 +79,7 @@ const PlexWatchlistSlider = () => {
                 id={item.tmdbId}
                 tmdbId={item.tmdbId}
                 type={item.mediaType === 'tv' ? 'tv' : 'movie'}
+                title={item.title}
                 isAddedToWatchlist={true}
               />
             ) : null;
@@ -110,12 +111,14 @@ const PlexWatchlistSlider = () => {
 
   return (
     <div ref={ref}>
-      <div className="slider-header">
-        <Link href="/discover/watchlist" className="slider-title">
-          <span>{intl.formatMessage(messages.plexwatchlist)}</span>
-        </Link>
-      </div>
       <Slider
+        heading={
+          <>
+            <Link href="/discover/watchlist" className="page-heading">
+              <span>{intl.formatMessage(messages.plexwatchlist)}</span>
+            </Link>
+          </>
+        }
         sliderKey="watchlist"
         isLoading={isLoading}
         isEmpty={isWatchlistEmpty}

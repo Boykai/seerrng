@@ -44,31 +44,31 @@ const RecentRequestsSlider = () => {
 
   return (
     <div ref={ref}>
-      <div className="slider-header">
-        <Link href="/requests?filter=all" className="slider-title">
-          <span>{intl.formatMessage(sliderTitles.recentrequests)}</span>
-        </Link>
-      </div>
-
-      {hasServiceErrors &&
-        (hasPermission(Permission.MANAGE_REQUESTS) ||
-          hasPermission(Permission.REQUEST_ADVANCED)) && (
-          <div className="service-error-banner">
-            <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
-            <span>
-              {intl.formatMessage(messages.unableToConnect, {
-                services: [
-                  ...requests.serviceErrors.radarr.map((s) => s.name),
-                  ...requests.serviceErrors.sonarr.map((s) => s.name),
-                  ...requests.serviceErrors.lidarr.map((s) => s.name),
-                  ...requests.serviceErrors.readarr.map((s) => s.name),
-                ].join(', '),
-              })}
-            </span>
-          </div>
-        )}
-
       <Slider
+        heading={
+          <Link href="/requests?filter=all" className="page-heading">
+            <span>{intl.formatMessage(sliderTitles.recentrequests)}</span>
+          </Link>
+        }
+        notice={
+          hasServiceErrors &&
+          (hasPermission(Permission.MANAGE_REQUESTS) ||
+            hasPermission(Permission.REQUEST_ADVANCED)) && (
+            <div className="service-error-banner">
+              <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
+              <span>
+                {intl.formatMessage(messages.unableToConnect, {
+                  services: [
+                    ...requests.serviceErrors.radarr.map((s) => s.name),
+                    ...requests.serviceErrors.sonarr.map((s) => s.name),
+                    ...requests.serviceErrors.lidarr.map((s) => s.name),
+                    ...requests.serviceErrors.readarr.map((s) => s.name),
+                  ].join(', '),
+                })}
+              </span>
+            </div>
+          )
+        }
         compact
         sliderKey="requests"
         disableItemContentVisibility

@@ -68,10 +68,18 @@ const DiscoverMovies = ({
     isReachingEnd: discover.isReachingEnd,
     fetchMore: discover.fetchMore,
   });
-  if (discover.error) return <ErrorPage statusCode={500} />;
   const title = studio
     ? intl.formatMessage(messages.studioMovies, { studio: studio.name })
     : (titleOverride ?? intl.formatMessage(messages.movies));
+  if (discover.error) {
+    return (
+      <>
+        <PageTitle title={title} />
+        <Header>{title}</Header>
+        <ErrorPage statusCode={500} />
+      </>
+    );
+  }
   const curatedStudio = studio
     ? studios.find((item) => item.url.endsWith(`/${studio.id}`))
     : undefined;

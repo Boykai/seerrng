@@ -13,6 +13,7 @@ export type AvailableCacheIds =
   | 'plextv'
   | 'plexwatchlist'
   | 'tvdb'
+  | 'tvmaze'
   | 'lidarr'
   | 'readarr'
   | 'musicbrainz'
@@ -212,6 +213,11 @@ class CacheManager {
     tvdb: new Cache('tvdb', 'The TVDB API', {
       stdTtl: 21600,
       maxKeys: TVDB_MAX_KEYS,
+    }),
+    tvmaze: new Cache('tvmaze', 'TVmaze API', {
+      stdTtl: 3600,
+      maxKeys: 1000,
+      maxBytes: 16 * 1024 * 1024,
     }),
     plexguid: new Cache('plexguid', 'Plex GUID', {
       stdTtl: 86400 * 7,

@@ -1,3 +1,5 @@
+const BASIC_REQUEST_PERMISSION = 32;
+
 const visitUserEditPage = (email: string): void => {
   cy.visit('/users');
 
@@ -29,7 +31,27 @@ describe('Auto Request Settings', () => {
 
   it('should see auto-request settings after being given permission', () => {
     cy.env<{ USER_EMAIL: string }>(['USER_EMAIL']).then(({ USER_EMAIL }) => {
-      visitUserEditPage(USER_EMAIL);
+      cy.request<{ results: { id: number; email: string }[] }>(
+        '/api/v1/user?take=100'
+      )
+        .then(({ body }) => {
+          const user = body.results.find(
+            (result) => result.email === USER_EMAIL
+          );
+
+          if (!user) {
+            throw new Error(`Could not find the seeded user ${USER_EMAIL}`);
+          }
+
+          return cy.request(
+            'POST',
+            `/api/v1/user/${user.id}/settings/permissions`,
+            { permissions: BASIC_REQUEST_PERMISSION }
+          );
+        })
+        .its('status')
+        .should('eq', 200)
+        .then(() => visitUserEditPage(USER_EMAIL));
     });
 
     cy.get('[data-testid=settings-nav-desktop').contains('Permissions').click();

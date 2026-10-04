@@ -53,6 +53,34 @@ export interface TvdbTvDetails {
   episodes: TvdbEpisode[];
 }
 
+export interface TvdbVideoMetadataRecord {
+  id: number;
+  name: string;
+  type?: string;
+  slug?: string;
+  overview?: string;
+  firstAired?: string;
+  lastAired?: string;
+  releaseDate?: string;
+  year?: string;
+  runtime?: number;
+  averageRuntime?: number;
+  status?: { name?: string } | string;
+  genres?: { id?: number; name?: string }[];
+  companies?: {
+    studio?: { id?: number; name?: string }[];
+    network?: { id?: number; name?: string }[];
+    production?: { id?: number; name?: string }[];
+  };
+  remoteIds?: { id?: string; type?: number; sourceName?: string }[];
+  aliases?: string[];
+  image?: string;
+  translations?: { overview?: string; name?: string };
+  originalLanguage?: string;
+  originalCountry?: string;
+  [key: string]: unknown;
+}
+
 interface TvdbCompanyType {
   companyTypeId: number;
   companyTypeName: string;

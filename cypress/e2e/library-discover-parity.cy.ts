@@ -209,6 +209,8 @@ describe('Books and Music discover parity', () => {
         cy.contains(/^Video$/).should('not.exist');
       });
     cy.contains('[data-testid=page-header]', 'Movies').should('be.visible');
+    openFilterSection('Filters');
+    openFilterSection('Sort By');
     cy.contains('Filters').should('be.visible');
     cy.contains('button', 'Clear Filters').should('be.visible');
     cy.contains('button', 'Popularity').should('be.visible');
@@ -259,6 +261,8 @@ describe('Books and Music discover parity', () => {
     cy.visit('/discover/music');
     cy.wait('@getMusic');
     cy.contains('[data-testid=page-header]', 'Music').should('be.visible');
+    openFilterSection('Filters');
+    openFilterSection('Sort By');
     cy.contains('button', 'Release Date').should('be.visible').click();
     cy.contains('button', 'Release Date').click();
     cy.location('search').should('include', 'sortBy=release_date.');
@@ -280,6 +284,8 @@ describe('Books and Music discover parity', () => {
     }).as('getMovies');
     cy.visit('/discover/movies?genre=28');
     cy.wait('@getMovies');
+    openFilterSection('Filters');
+    openFilterSection('Sort By');
     cy.contains('button', 'Release Date').click();
     cy.location('search').should('include', 'sortBy=release_date.desc');
     cy.contains('button', 'Clear Filters').click();
@@ -294,6 +300,8 @@ describe('Books and Music discover parity', () => {
     }).as('getTv');
     cy.visit('/discover/tv?status=Returning%20Series');
     cy.wait('@getTv');
+    openFilterSection('Filters');
+    openFilterSection('Sort By');
     cy.contains('button', 'First Air Date').click();
     cy.location('search').should('include', 'sortBy=first_air_date.desc');
     cy.contains('button', 'Clear Filters').click();
@@ -325,6 +333,7 @@ describe('Books and Music discover parity', () => {
       '/discover/music?primaryReleaseDateGte=2020-01-01&primaryReleaseDateLte=2020-12-31&sortBy=release_date.asc&genre=rock'
     );
     cy.wait('@getMusic');
+    openFilterSection('Filters');
     cy.contains('button', 'Clear Filters').click();
     cy.location('search').should('not.include', 'primaryReleaseDateGte=');
     cy.location('search').should('not.include', 'primaryReleaseDateLte=');
@@ -1264,93 +1273,123 @@ describe('Books and Music discover parity', () => {
     cy.request('POST', '/api/v1/settings/main', { hideAvailable: false });
   });
 
-  it('honors hide blocklisted for books and music', () => {
-    cy.request('POST', '/api/v1/settings/main', { hideBlocklisted: true });
-    cy.request('/api/v1/settings/public')
-      .its('body.hideBlocklisted')
-      .should('eq', true);
-    cy.intercept('GET', '/api/v1/settings/public').as('getPublicSettings');
+  [
+    { manager: true, hideBlocklisted: true },
+    { manager: true, hideBlocklisted: false },
+    { manager: false, hideBlocklisted: true },
+    { manager: false, hideBlocklisted: false },
+  ].forEach(({ manager, hideBlocklisted }) => {
+    it(`preserves book and music blocklist visibility for ${manager ? 'managers' : 'ordinary users'} with hiding ${hideBlocklisted ? 'enabled' : 'disabled'}`, () => {
+      if (!manager) {
+        cy.loginAsUser();
+      }
+      cy.request('/api/v1/auth/me')
+        .its('body.permissions')
+        .then((permissions) => {
+          const canManageBlocklist =
+            (BigInt(permissions) & BigInt(2 | 268435456)) !== BigInt(0);
+          expect(canManageBlocklist).to.eq(manager);
+        });
+      // Mock only the displayed policy and optional-media availability; never
+      // change shared settings merely to exercise the visibility branches.
+      cy.intercept('GET', '**/api/v1/settings/public*', (req) => {
+        req.continue((response) => {
+          response.body = {
+            ...response.body,
+            hideBlocklisted,
+            booksEnabled: true,
+            ebookServiceEnabled: true,
+            audiobookServiceEnabled: true,
+            musicEnabled: true,
+          };
+        });
+      }).as('getPublicSettings');
+      const shouldHide = !manager || hideBlocklisted;
 
-    cy.intercept('GET', '/api/v1/discover/books*', {
-      page: 1,
-      totalPages: 1,
-      totalResults: 2,
-      results: [
-        {
-          id: 'OLBLOCKEDBOOKW',
-          mediaType: 'book',
-          title: 'Blocked Book',
-          author: 'Blocked Author',
-          firstPublishYear: 2026,
-          mediaInfo: {
-            status: 6,
-            requests: [],
+      cy.intercept('GET', '/api/v1/discover/books*', {
+        page: 1,
+        totalPages: 1,
+        totalResults: 2,
+        results: [
+          {
+            id: 'OLBLOCKEDBOOKW',
+            mediaType: 'book',
+            title: 'Blocked Book',
+            author: 'Blocked Author',
+            firstPublishYear: 2026,
+            mediaInfo: {
+              status: 6,
+              requests: [],
+            },
           },
-        },
-        {
-          id: 'OLVISIBLEBOOKW',
-          mediaType: 'book',
-          title: 'Visible Book',
-          author: 'Visible Author',
-          firstPublishYear: 2026,
-          mediaInfo: {
-            status: 1,
-            requests: [],
+          {
+            id: 'OLVISIBLEBOOKW',
+            mediaType: 'book',
+            title: 'Visible Book',
+            author: 'Visible Author',
+            firstPublishYear: 2026,
+            mediaInfo: {
+              status: 1,
+              requests: [],
+            },
           },
-        },
-      ],
-    }).as('getBlocklistedBooks');
+        ],
+      }).as('getBlocklistedBooks');
 
-    cy.visit('/discover/books');
-    cy.wait('@getPublicSettings').then(({ response }) => {
-      expect(response?.statusCode).to.eq(200);
-      expect(response?.body.hideBlocklisted).to.eq(true);
+      cy.visit('/discover/books');
+      cy.wait('@getPublicSettings').then(({ response }) => {
+        expect(response?.statusCode).to.eq(200);
+        expect(response?.body.hideBlocklisted).to.eq(hideBlocklisted);
+      });
+      cy.reload(true);
+      cy.wait('@getPublicSettings');
+      cy.wait('@getBlocklistedBooks');
+      cy.contains('[data-testid=title-card-title]', 'Visible Book').should(
+        'be.visible'
+      );
+      cy.contains('[data-testid=title-card-title]', 'Blocked Book').should(
+        shouldHide ? 'not.exist' : 'be.visible'
+      );
+
+      cy.intercept('GET', '/api/v1/discover/music*', {
+        page: 1,
+        totalPages: 1,
+        totalResults: 2,
+        results: [
+          {
+            id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+            mediaType: 'album',
+            title: 'Blocked Album',
+            'primary-type': 'Album',
+            'first-release-date': '2026-05-01',
+            'artist-credit': [{ name: 'Blocked Artist' }],
+            mediaInfo: {
+              status: 6,
+            },
+          },
+          {
+            id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+            mediaType: 'album',
+            title: 'Visible Album',
+            'primary-type': 'Album',
+            'first-release-date': '2026-05-01',
+            'artist-credit': [{ name: 'Visible Artist' }],
+            mediaInfo: {
+              status: 1,
+            },
+          },
+        ],
+      }).as('getBlocklistedMusic');
+
+      cy.visit('/discover/music');
+      cy.wait('@getBlocklistedMusic');
+      cy.contains('[data-testid=title-card-title]', 'Visible Album').should(
+        'be.visible'
+      );
+      cy.contains('[data-testid=title-card-title]', 'Blocked Album').should(
+        shouldHide ? 'not.exist' : 'be.visible'
+      );
     });
-    cy.reload(true);
-    cy.wait('@getPublicSettings');
-    cy.wait('@getBlocklistedBooks');
-    cy.contains('[data-testid=title-card-title]', 'Visible Book').should(
-      'be.visible'
-    );
-    cy.contains('Blocked Book').should('not.exist');
-
-    cy.intercept('GET', '/api/v1/discover/music*', {
-      page: 1,
-      totalPages: 1,
-      totalResults: 2,
-      results: [
-        {
-          id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
-          mediaType: 'album',
-          title: 'Blocked Album',
-          'primary-type': 'Album',
-          'first-release-date': '2026-05-01',
-          'artist-credit': [{ name: 'Blocked Artist' }],
-          mediaInfo: {
-            status: 6,
-          },
-        },
-        {
-          id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
-          mediaType: 'album',
-          title: 'Visible Album',
-          'primary-type': 'Album',
-          'first-release-date': '2026-05-01',
-          'artist-credit': [{ name: 'Visible Artist' }],
-          mediaInfo: {
-            status: 1,
-          },
-        },
-      ],
-    }).as('getBlocklistedMusic');
-
-    cy.visit('/discover/music');
-    cy.wait('@getBlocklistedMusic');
-    cy.contains('[data-testid=title-card-title]', 'Visible Album').should(
-      'be.visible'
-    );
-    cy.contains('Blocked Album').should('not.exist');
-    cy.request('POST', '/api/v1/settings/main', { hideBlocklisted: false });
   });
 
   it('keeps request list media filters addressable for book and music queues', () => {
@@ -1372,14 +1411,18 @@ describe('Books and Music discover parity', () => {
       .its('request.url')
       .should('include', 'mediaType=book')
       .and('include', 'filter=pending');
-    cy.get('select[name=mediaType]').should('have.value', 'book');
-    cy.get('select[name=filter]').should('have.value', 'pending');
+    openFilterSection('Media Filters');
+    openFilterSection('Task Filters');
+    cy.get('button[aria-label="Media Type"]').should('contain', 'Books');
+    cy.get('button[aria-label="Status"]').should('contain', 'Pending');
 
-    cy.get('select[name=mediaType]').select('music');
+    cy.get('button[aria-label="Media Type"]').click();
+    cy.contains('[role=option]', /^Music$/).click();
     cy.wait('@getRequests')
       .its('request.url')
       .should('include', 'mediaType=music');
     cy.location('search').should('include', 'mediaType=music');
+    cy.get('button[aria-label="Media Type"]').should('contain', 'Music');
   });
 
   it('marks a missing dual-format book side as partial when its service ID is zero', () => {

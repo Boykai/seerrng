@@ -117,6 +117,14 @@ describe('getImageCacheUrl', () => {
     assert.equal(
       getImageCacheUrl({
         cacheImages: true,
+        src: 'https://static.tvmaze.com/uploads/poster.jpg',
+        type: 'tmdb',
+      }),
+      '/imageproxy/tvmaze/uploads/poster.jpg'
+    );
+    assert.equal(
+      getImageCacheUrl({
+        cacheImages: true,
         src: 'https://covers.openlibrary.org/b/id/123-L.jpg',
         type: 'book',
       }),

@@ -78,6 +78,7 @@ const sanitizeTmdbExternalIds = (value: unknown): Record<string, unknown> => {
     'facebook_id',
     'instagram_id',
     'twitter_id',
+    'wikidata_id',
   ]) {
     const normalized = boundedTmdbString(value[field], 512);
     if (normalized) result[field] = normalized;

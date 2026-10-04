@@ -7,16 +7,22 @@ if [[ ! "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
   exit 2
 fi
 
-if ! latest_published_tag="$(
+if ! published_tags="$(
   gh api --paginate -X GET -f per_page=100 "repos/${repository}/releases" \
-    --jq '.[] | select(.draft == false and .prerelease == false) | [.published_at, .tag_name] | @tsv' |
-    LC_ALL=C sort |
-    tail -n 1 |
-    cut -f 2-
+    --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name'
   )"; then
   echo "Unable to query published releases for ${repository}." >&2
   exit 1
 fi
+
+# Draft releases can be published out of order after a recovery run. Choose the
+# highest stable version, not the release that happened to publish most recently.
+latest_published_tag="$(
+  printf '%s\n' "$published_tags" |
+    sed -nE '/^v[0-9]+\.[0-9]+\.[0-9]+$/p' |
+    LC_ALL=C sort -V |
+    tail -n 1
+)"
 
 if [[ ! "$latest_published_tag" =~ ^v[0-9][0-9A-Za-z._+-]{0,126}$ ]]; then
   echo "Unable to determine the latest published release tag for ${repository}." >&2

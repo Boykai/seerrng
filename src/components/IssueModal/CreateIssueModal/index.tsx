@@ -448,7 +448,7 @@ const CreateIssueModal = ({
                 buttonSize="standard"
               >
                 <span className="inline-flex items-center gap-1.5 [&_svg]:!m-0">
-                  <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+                  <XMarkIcon aria-hidden="true" />
                   <span>{intl.formatMessage(globalMessages.cancel)}</span>
                 </span>
               </Button>
@@ -465,7 +465,7 @@ const CreateIssueModal = ({
                 }
               >
                 <span className="inline-flex items-center gap-1.5 [&_svg]:!m-0">
-                  <PaperAirplaneIcon className="h-4 w-4" aria-hidden="true" />
+                  <PaperAirplaneIcon aria-hidden="true" />
                   <span>{intl.formatMessage(messages.submitissue)}</span>
                 </span>
               </Button>

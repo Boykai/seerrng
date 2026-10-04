@@ -97,6 +97,7 @@ import {
   getRequestStatusPage,
   insertRequestStatusEvent,
   isMangaChapterRetryable,
+  recordRequestRetry,
   recordRequestStatus,
 } from '@server/lib/requestStatus';
 import {
@@ -4976,6 +4977,7 @@ requestRoutes.post<{
               await requestRepository.save(request);
             }
             await requestDispatchManager.enqueue(request.id);
+            await recordRequestRetry(request.id);
 
             return res
               .status(200)

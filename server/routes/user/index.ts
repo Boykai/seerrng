@@ -2360,6 +2360,7 @@ router.get<{ id: string }, UserWatchDataResponse>(
 
             const recentlyWatched = sortBy(
               await getRepository(Media).find({
+                relations: { searchMetadata: true },
                 where: [
                   {
                     mediaType: MediaType.MOVIE,

@@ -14,6 +14,7 @@ area: bookshelf
 action: none
 breaking: false
 ---
+
 Hardcover-backed book searches now keep working from cached metadata during a short upstream outage.
 ```
 

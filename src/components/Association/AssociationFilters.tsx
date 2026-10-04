@@ -287,7 +287,7 @@ function OtherAssociationFilters({ edges, mediaType, children }: FilterProps) {
         section="filters"
         label={intl.formatMessage(messages.filters)}
       >
-        <div className="flex flex-wrap gap-2">
+        <div className="app-filter-row">
           <FilterResetButton
             label={intl.formatMessage(messages.clear)}
             selected={

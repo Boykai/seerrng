@@ -49,10 +49,10 @@ const FormatRequestControl = ({
         className={`format-request-control format-request-control-single ${className ?? ''}`}
       >
         <span className="format-request-single-label">
-          <ArrowDownTrayIcon className="h-4 w-4" aria-hidden="true" />
+          <ArrowDownTrayIcon aria-hidden="true" />
           {intl.formatMessage(messages.request)}
           <span
-            className="font-semibold"
+            data-format-request-part="option-label"
             data-testid={`format-request-option-${option.id}`}
           >
             {option.label}
@@ -63,7 +63,7 @@ const FormatRequestControl = ({
 
     return option.disabled && option.disabledReason ? (
       <Tooltip content={option.disabledReason}>
-        <span className="inline-flex">{button}</span>
+        <span data-format-request-part="disabled-option-wrapper">{button}</span>
       </Tooltip>
     ) : (
       button
@@ -102,7 +102,9 @@ const FormatRequestControl = ({
 
         return option.disabled && option.disabledReason ? (
           <Tooltip key={option.id} content={option.disabledReason}>
-            <span className="inline-flex">{button}</span>
+            <span data-format-request-part="disabled-option-wrapper">
+              {button}
+            </span>
           </Tooltip>
         ) : (
           button

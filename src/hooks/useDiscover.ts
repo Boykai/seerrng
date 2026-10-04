@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWRInfinite from 'swr/infinite';
 import useSettings from './useSettings';
-import { useUser } from './useUser';
+import { Permission, useUser } from './useUser';
 
 export { encodeURIExtraParams } from '@server/utils/discoverQuery';
 
@@ -172,7 +172,8 @@ const useDiscover = <
   } = {}
 ): DiscoverResult<T, S> => {
   const settings = useSettings();
-  const { user } = useUser();
+  const { user, hasPermission } = useUser();
+  const canManageBlocklist = hasPermission(Permission.MANAGE_BLOCKLIST);
   const { addToast } = useToasts();
   const intl = useIntl();
   const router = useRouter();
@@ -303,7 +304,10 @@ const useDiscover = <
       );
     }
 
-    if (hideBlocklisted) {
+    if (
+      hideBlocklisted &&
+      (!canManageBlocklist || settings.currentSettings.hideBlocklisted)
+    ) {
       filteredTitles = filteredTitles.filter(
         (i) => !i.mediaInfo || i.mediaInfo.status !== MediaStatus.BLOCKLISTED
       );
@@ -315,7 +319,9 @@ const useDiscover = <
     availableQuality,
     hideAvailable,
     hideBlocklisted,
+    canManageBlocklist,
     settings.currentSettings.hideAvailable,
+    settings.currentSettings.hideBlocklisted,
   ]);
 
   const lastResultPage = data?.[data.length - 1];

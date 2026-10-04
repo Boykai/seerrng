@@ -1,5 +1,7 @@
 import Button from '@app/components/Common/Button';
-import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import LoadingSpinner, {
+  PageStatus,
+} from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import PaginationFooter from '@app/components/Common/PaginationFooter';
 import {
@@ -11,7 +13,7 @@ import {
 import { BOOK_GENRES } from '@app/components/Discover/FilterPanel/libraryFilterUtils';
 import MediaFilterOption from '@app/components/Discover/MediaFilterOption';
 import { tvNetworks } from '@app/components/Discover/NetworkSlider';
-import PinnedFilterSection from '@app/components/Discover/PinnedFilterSection';
+import { PinnedFilterSectionGroup } from '@app/components/Discover/PinnedFilterSection';
 import { studios } from '@app/components/Discover/StudioSlider';
 import FocusedIssue from '@app/components/IssueList/FocusedIssue';
 import IssueItem from '@app/components/IssueList/IssueItem';
@@ -171,8 +173,29 @@ const IssueList = () => {
       : null
   );
 
-  if (!data && !error) return <LoadingSpinner />;
-  if (!data) return <ErrorPage statusCode={500} />;
+  const pendingHeading = (
+    <>
+      <PageTitle title={intl.formatMessage(messages.issues)} />
+      <div className="page-title-row">
+        <h2 className="page-title">{intl.formatMessage(messages.issues)}</h2>
+      </div>
+    </>
+  );
+
+  if (!data && !error)
+    return (
+      <>
+        {pendingHeading}
+        <LoadingSpinner />
+      </>
+    );
+  if (!data)
+    return (
+      <>
+        {pendingHeading}
+        <ErrorPage statusCode={500} />
+      </>
+    );
 
   const resetPage = () => page !== 1 && updateQueryParams('page', '1');
   const clearMediaSpecificFilters = () => {
@@ -256,275 +279,289 @@ const IssueList = () => {
     { label: intl.formatMessage(messages.sixMonths), value: '6m' },
   ];
 
+  const pinMediaType =
+    mediaFilter === 'tv'
+      ? 'tv'
+      : mediaFilter === 'music'
+        ? 'music'
+        : mediaFilter === 'book'
+          ? 'book'
+          : 'movie';
   return (
     <>
       <PageTitle title={intl.formatMessage(messages.issues)} />
-      <h2 className="mt-8 text-2xl leading-7 font-bold text-gray-100 sm:text-4xl sm:leading-9">
-        <span className="text-overseerr">
-          {intl.formatMessage(messages.issues)}
-        </span>
-      </h2>
+      <div className="page-title-row">
+        <h2 className="page-title">{intl.formatMessage(messages.issues)}</h2>
+        <PageStatus />
+      </div>
       {focusedIssueId && (
         <FocusedIssue key={focusedIssueId} issueId={focusedIssueId} />
       )}
-      <section className="app-filter-section-gap mt-4">
-        <div className="mb-2 text-sm text-gray-300">
-          {intl.formatMessage(messages.taskFilters)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterResetButton
-            label={intl.formatMessage(messages.clearFilters)}
-            selected={
-              filter === 'all' &&
-              timeFrame === 'all' &&
-              mediaFilter === 'all' &&
-              issueTypeFilter === 'all' &&
-              releaseYearFilter === 'any' &&
-              !genreFilter &&
-              !studioFilter &&
-              !networkFilter &&
-              !albumTypeFilter &&
-              !search &&
-              sort === 'added' &&
-              direction === 'desc'
-            }
-            onClick={clearFilters}
-          />
-          {(
-            [
-              ['all', messages.allIssues, data.counts?.all ?? 0],
-              ['open', globalMessages.open, data.counts?.open ?? 0],
-              ['resolved', globalMessages.resolved, data.counts?.resolved ?? 0],
-            ] as const
-          ).map(([value, label, count]) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={filter === value}
-              onClick={() => {
-                setFilter(value);
-                resetPage();
-              }}
-              className={getFilterToggleButtonClass(filter === value)}
-            >
-              {intl.formatMessage(label)}
-              <span className="rounded-full bg-black/35 px-1.5 text-[10px]">
-                {count}
-              </span>
-            </button>
-          ))}
-          <CompactSelect
-            label={intl.formatMessage(messages.issueType)}
-            value={issueTypeFilter}
-            options={issueTypeOptions}
-            onChange={(value) => {
-              setIssueTypeFilter(value as IssueTypeFilter);
-              resetPage();
-            }}
-          />
-        </div>
-      </section>
-      <PinnedFilterSection
-        mediaType={
-          mediaFilter === 'tv'
-            ? 'tv'
-            : mediaFilter === 'music'
-              ? 'music'
-              : mediaFilter === 'book'
-                ? 'book'
-                : 'movie'
-        }
-        section="mediaFilters"
-        label={intl.formatMessage(messages.mediaFilters)}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          {(
-            [
-              ['all', messages.allMedia],
-              ['movie', messages.movies],
-              ['tv', messages.series],
-              ['music', messages.music],
-              ['book', messages.books],
-              ['comic', messages.comics],
-              ['magazine', messages.magazines],
-              ...(mangaEnabled
-                ? ([['manga', globalMessages.manga]] as const)
-                : []),
-            ] as const
-          ).map(([value, label]) => (
-            <MediaFilterOption
-              key={value}
-              pin={mediaPin}
-              value={value}
-              label={intl.formatMessage(label)}
-              selected={mediaFilter === value}
-            >
-              <button
-                type="button"
-                aria-pressed={mediaFilter === value}
-                onClick={() => {
-                  setMediaFilter(value);
-                  clearMediaSpecificFilters();
-                  resetPage();
-                }}
-                className="app-control-shadow-exempt app-filter-segment-focus flex h-full items-center px-2"
-              >
-                {intl.formatMessage(label)}
-              </button>
-            </MediaFilterOption>
-          ))}
-        </div>
-      </PinnedFilterSection>
-      <section
-        className="app-filter-section-gap"
-        aria-label={intl.formatMessage(messages.filters)}
-      >
-        <div className="mb-2 text-sm text-gray-300">
-          {intl.formatMessage(messages.filters)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <CompactSelect
-            label={intl.formatMessage(messages.timePeriod)}
-            value={timeFrame}
-            options={timeFrameOptions}
-            onChange={(value) => {
-              setTimeFrame(value as TimeFrame);
-              resetPage();
-            }}
-          />
-          <label className="discover-filter-control w-72 flex-none self-center">
-            <span
-              className={`discover-filter-control-label gap-1 ${
-                search.trim() ? 'discover-filter-control-label-active' : ''
-              }`}
-            >
-              <MagnifyingGlassIcon className="h-3.5 w-3.5" aria-hidden="true" />
-              {intl.formatMessage(messages.search)}
-            </span>
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                resetPage();
-              }}
-              placeholder={intl.formatMessage(messages.searchIssues)}
-              aria-label={intl.formatMessage(messages.searchIssues)}
-              className="min-w-0 flex-1 border-0 bg-transparent px-2 py-0 text-xs font-medium text-gray-200 placeholder:text-gray-500 focus:ring-0"
-            />
-          </label>
-          {hasMetadataFilters && (
-            <>
-              <CompactSelect
-                label={intl.formatMessage(
-                  mediaFilter === 'music'
-                    ? messages.releaseYear
-                    : mediaFilter === 'book'
-                      ? messages.firstPublished
-                      : messages.releaseDate
+      <PinnedFilterSectionGroup
+        mediaType={pinMediaType}
+        sections={[
+          {
+            section: 'taskFilters',
+            label: intl.formatMessage(messages.taskFilters),
+            children: (
+              <div className="app-filter-row">
+                <FilterResetButton
+                  label={intl.formatMessage(messages.clearFilters)}
+                  selected={
+                    filter === 'all' &&
+                    timeFrame === 'all' &&
+                    mediaFilter === 'all' &&
+                    issueTypeFilter === 'all' &&
+                    releaseYearFilter === 'any' &&
+                    !genreFilter &&
+                    !studioFilter &&
+                    !networkFilter &&
+                    !albumTypeFilter &&
+                    !search &&
+                    sort === 'added' &&
+                    direction === 'desc'
+                  }
+                  onClick={clearFilters}
+                />
+                {(
+                  [
+                    ['all', messages.allIssues, data.counts?.all ?? 0],
+                    ['open', globalMessages.open, data.counts?.open ?? 0],
+                    [
+                      'resolved',
+                      globalMessages.resolved,
+                      data.counts?.resolved ?? 0,
+                    ],
+                  ] as const
+                ).map(([value, label, count]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={filter === value}
+                    onClick={() => {
+                      setFilter(value);
+                      resetPage();
+                    }}
+                    className={getFilterToggleButtonClass(filter === value)}
+                  >
+                    {intl.formatMessage(label)}
+                    <span className="app-filter-count">{count}</span>
+                  </button>
+                ))}
+                <CompactSelect
+                  label={intl.formatMessage(messages.issueType)}
+                  value={issueTypeFilter}
+                  options={issueTypeOptions}
+                  onChange={(value) => {
+                    setIssueTypeFilter(value as IssueTypeFilter);
+                    resetPage();
+                  }}
+                />
+              </div>
+            ),
+          },
+          {
+            section: 'mediaFilters',
+            label: intl.formatMessage(messages.mediaFilters),
+            children: (
+              <div className="app-filter-row">
+                {(
+                  [
+                    ['all', messages.allMedia],
+                    ['movie', messages.movies],
+                    ['tv', messages.series],
+                    ['music', messages.music],
+                    ['book', messages.books],
+                    ['comic', messages.comics],
+                    ['magazine', messages.magazines],
+                    ...(mangaEnabled
+                      ? ([['manga', globalMessages.manga]] as const)
+                      : []),
+                  ] as const
+                ).map(([value, label]) => (
+                  <MediaFilterOption
+                    key={value}
+                    pin={mediaPin}
+                    value={value}
+                    label={intl.formatMessage(label)}
+                    selected={mediaFilter === value}
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={mediaFilter === value}
+                      onClick={() => {
+                        setMediaFilter(value);
+                        clearMediaSpecificFilters();
+                        resetPage();
+                      }}
+                      className="app-control-shadow-exempt app-filter-segment-focus"
+                    >
+                      {intl.formatMessage(label)}
+                    </button>
+                  </MediaFilterOption>
+                ))}
+              </div>
+            ),
+          },
+          {
+            section: 'filters',
+            label: intl.formatMessage(messages.filters),
+            children: (
+              <div className="app-filter-row">
+                <CompactSelect
+                  label={intl.formatMessage(messages.timePeriod)}
+                  value={timeFrame}
+                  options={timeFrameOptions}
+                  onChange={(value) => {
+                    setTimeFrame(value as TimeFrame);
+                    resetPage();
+                  }}
+                />
+                <label className="discover-filter-control app-filter-search-control">
+                  <span
+                    className={`discover-filter-control-label ${
+                      search.trim()
+                        ? 'discover-filter-control-label-active'
+                        : ''
+                    }`}
+                  >
+                    <MagnifyingGlassIcon aria-hidden="true" />
+                    {intl.formatMessage(messages.search)}
+                  </span>
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(event) => {
+                      setSearch(event.target.value);
+                      resetPage();
+                    }}
+                    placeholder={intl.formatMessage(messages.searchIssues)}
+                    aria-label={intl.formatMessage(messages.searchIssues)}
+                    className="app-filter-search-input"
+                  />
+                </label>
+                {hasMetadataFilters && (
+                  <>
+                    <CompactSelect
+                      label={intl.formatMessage(
+                        mediaFilter === 'music'
+                          ? messages.releaseYear
+                          : mediaFilter === 'book'
+                            ? messages.firstPublished
+                            : messages.releaseDate
+                      )}
+                      value={releaseYearFilter}
+                      options={yearOptions}
+                      onChange={(value) => {
+                        setReleaseYearFilter(value);
+                        resetPage();
+                      }}
+                    />
+                    <CompactSelect
+                      label={intl.formatMessage(messages.genres)}
+                      value={genreFilter}
+                      options={genreOptions}
+                      onChange={(value) => {
+                        setGenreFilter(value);
+                        resetPage();
+                      }}
+                    />
+                  </>
                 )}
-                value={releaseYearFilter}
-                options={yearOptions}
-                onChange={(value) => {
-                  setReleaseYearFilter(value);
-                  resetPage();
-                }}
-              />
-              <CompactSelect
-                label={intl.formatMessage(messages.genres)}
-                value={genreFilter}
-                options={genreOptions}
-                onChange={(value) => {
-                  setGenreFilter(value);
-                  resetPage();
-                }}
-              />
-            </>
-          )}
-          {mediaFilter === 'movie' && (
-            <CompactSelect
-              label={intl.formatMessage(messages.studio)}
-              value={studioFilter}
-              options={[
-                { label: intl.formatMessage(messages.any), value: '' },
-                ...studios.map((studio) => ({
-                  label: studio.name,
-                  value: studio.name.toLocaleLowerCase(),
-                })),
-              ]}
-              onChange={(value) => {
-                setStudioFilter(value);
-                resetPage();
-              }}
-            />
-          )}
-          {mediaFilter === 'tv' && (
-            <CompactSelect
-              label={intl.formatMessage(messages.network)}
-              value={networkFilter}
-              options={[
-                { label: intl.formatMessage(messages.any), value: '' },
-                ...tvNetworks.map((network) => ({
-                  label: network.name,
-                  value: network.name.toLocaleLowerCase(),
-                })),
-              ]}
-              onChange={(value) => {
-                setNetworkFilter(value);
-                resetPage();
-              }}
-            />
-          )}
-          {mediaFilter === 'music' && (
-            <CompactSelect
-              label={intl.formatMessage(messages.albumType)}
-              value={albumTypeFilter}
-              options={[
-                { label: intl.formatMessage(messages.any), value: '' },
-                { label: intl.formatMessage(messages.album), value: 'album' },
-                { label: intl.formatMessage(messages.ep), value: 'ep' },
-                { label: intl.formatMessage(messages.single), value: 'single' },
-              ]}
-              onChange={(value) => {
-                setAlbumTypeFilter(value);
-                resetPage();
-              }}
-            />
-          )}
-        </div>
-      </section>
-      <section className="app-filter-section-gap">
-        <div className="mb-2 text-sm text-gray-300">
-          {intl.formatMessage(messages.sortBy)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {(
-            [
-              ['added', messages.sortDate],
-              ['modified', messages.sortModified],
-              ['status', messages.sortStatus],
-            ] as const
-          ).map(([value, label]) => {
-            const active = sort === value;
-            const Icon =
-              active && direction === 'asc'
-                ? BarsArrowUpIcon
-                : BarsArrowDownIcon;
-            return (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={active}
-                onClick={() => updateSort(value)}
-                className={getFilterToggleButtonClass(active)}
-              >
-                {intl.formatMessage(label)}
-                <Icon className="h-4 w-4" />
-              </button>
-            );
-          })}
-        </div>
-      </section>
+                {mediaFilter === 'movie' && (
+                  <CompactSelect
+                    label={intl.formatMessage(messages.studio)}
+                    value={studioFilter}
+                    options={[
+                      { label: intl.formatMessage(messages.any), value: '' },
+                      ...studios.map((studio) => ({
+                        label: studio.name,
+                        value: studio.name.toLocaleLowerCase(),
+                      })),
+                    ]}
+                    onChange={(value) => {
+                      setStudioFilter(value);
+                      resetPage();
+                    }}
+                  />
+                )}
+                {mediaFilter === 'tv' && (
+                  <CompactSelect
+                    label={intl.formatMessage(messages.network)}
+                    value={networkFilter}
+                    options={[
+                      { label: intl.formatMessage(messages.any), value: '' },
+                      ...tvNetworks.map((network) => ({
+                        label: network.name,
+                        value: network.name.toLocaleLowerCase(),
+                      })),
+                    ]}
+                    onChange={(value) => {
+                      setNetworkFilter(value);
+                      resetPage();
+                    }}
+                  />
+                )}
+                {mediaFilter === 'music' && (
+                  <CompactSelect
+                    label={intl.formatMessage(messages.albumType)}
+                    value={albumTypeFilter}
+                    options={[
+                      { label: intl.formatMessage(messages.any), value: '' },
+                      {
+                        label: intl.formatMessage(messages.album),
+                        value: 'album',
+                      },
+                      { label: intl.formatMessage(messages.ep), value: 'ep' },
+                      {
+                        label: intl.formatMessage(messages.single),
+                        value: 'single',
+                      },
+                    ]}
+                    onChange={(value) => {
+                      setAlbumTypeFilter(value);
+                      resetPage();
+                    }}
+                  />
+                )}
+              </div>
+            ),
+          },
+          {
+            section: 'sortBy',
+            label: intl.formatMessage(messages.sortBy),
+            children: (
+              <div className="app-filter-row">
+                {(
+                  [
+                    ['added', messages.sortDate],
+                    ['modified', messages.sortModified],
+                    ['status', messages.sortStatus],
+                  ] as const
+                ).map(([value, label]) => {
+                  const active = sort === value;
+                  const Icon =
+                    active && direction === 'asc'
+                      ? BarsArrowUpIcon
+                      : BarsArrowDownIcon;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => updateSort(value)}
+                      className={getFilterToggleButtonClass(active)}
+                    >
+                      {intl.formatMessage(label)}
+                      <Icon />
+                    </button>
+                  );
+                })}
+              </div>
+            ),
+          },
+        ]}
+      />
       <div className="card-stack card-spacing-before">
         {data.results
           .filter((issue) => issue.id !== focusedIssueId)

@@ -128,6 +128,16 @@ const projectMediaListItem = (
   ...(media.mbId != null ? { mbId: media.mbId } : {}),
   ...(media.mediaAddedAt != null ? { mediaAddedAt: media.mediaAddedAt } : {}),
   ...(anilistId !== undefined ? { anilistId } : {}),
+  ...(media.searchMetadata?.title ? { title: media.searchMetadata.title } : {}),
+  ...(media.searchMetadata?.overview
+    ? { overview: media.searchMetadata.overview }
+    : {}),
+  ...(media.searchMetadata?.posterPath
+    ? { posterPath: media.searchMetadata.posterPath }
+    : {}),
+  ...(media.searchMetadata?.releaseDate
+    ? { releaseDate: media.searchMetadata.releaseDate }
+    : {}),
 });
 
 /** The AniList ID of each manga item, which carries no TMDB ID. */
@@ -428,6 +438,7 @@ mediaRoutes.get(
       const [media, mediaCount] = await mediaRepository.findAndCount({
         order: sortFilter,
         where: whereClause,
+        relations: { searchMetadata: true },
         take: pageSize,
         skip,
       });

@@ -33,7 +33,7 @@ const MediaDetailArtwork = ({ src, type }: MediaDetailArtworkProps) => {
         fill
         priority
         sizes="100vw"
-        className="media-detail-artwork-image object-cover object-top"
+        className="media-detail-artwork-image"
       />
       <div className="refreshed-artwork-scrim" />
       <div className="refreshed-artwork-gradient" />

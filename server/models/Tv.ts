@@ -9,6 +9,11 @@ import type {
 import type Media from '@server/entity/Media';
 import type { Video } from './Movie';
 import type {
+  VideoMetadataAttribution,
+  VideoMetadataProvenance,
+  VideoMetadataSupplemental,
+} from './VideoMetadata';
+import type {
   Cast,
   Crew,
   ExternalIds,
@@ -112,6 +117,10 @@ export interface TvDetails {
   mediaInfo?: Media;
   watchProviders?: WatchProviders[];
   onUserWatchlist?: boolean;
+  metadataSources?: VideoMetadataAttribution[];
+  metadataProvenance?: VideoMetadataProvenance['fields'];
+  supplementalMetadata?: VideoMetadataSupplemental;
+  metadataExpiresAt?: string;
 }
 
 const mapEpisodeResult = (episode: TmdbTvEpisodeResult): Episode => ({

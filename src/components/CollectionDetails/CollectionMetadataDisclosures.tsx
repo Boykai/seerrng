@@ -27,8 +27,8 @@ const messages = defineMessages('components.CollectionDetails.Metadata', {
   subjectTags: 'Subject Tags',
   fullCastList: 'Full Cast List',
   fullCrewList: 'Full Crew List',
-  noCast: 'No cast information available',
-  noCrew: 'No crew information available',
+  noCast: 'No Cast Information Available',
+  noCrew: 'No Crew Information Available',
   noTags: 'No subject tags available',
 });
 

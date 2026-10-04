@@ -1,25 +1,16 @@
-import RTAudFresh from '@app/assets/rt_aud_fresh.svg';
-import RTAudRotten from '@app/assets/rt_aud_rotten.svg';
-import RTFresh from '@app/assets/rt_fresh.svg';
-import RTRotten from '@app/assets/rt_rotten.svg';
-import ImdbLogo from '@app/assets/services/imdb.svg';
-import TmdbLogo from '@app/assets/tmdb_logo.svg';
 import CollectionSummaryCard from '@app/components/CollectionDetails/CollectionSummaryCard';
-import Tooltip from '@app/components/Common/Tooltip';
 import DetailDisclosureButton from '@app/components/MediaDetails/DetailDisclosureButton';
 import ExpandableCreditList from '@app/components/MediaDetails/ExpandableCreditList';
-import MdblistRatingBadges from '@app/components/MediaDetails/MdblistRatingBadges';
 import MediaDetailArtwork from '@app/components/MediaDetails/MediaDetailArtwork';
 import MediaQualitySelect from '@app/components/MediaDetails/MediaQualitySelect';
+import MetadataAttribution from '@app/components/MediaDetails/MetadataAttribution';
 import MovieSummaryCard from '@app/components/MediaDetails/MovieSummaryCard';
+import VideoRatings from '@app/components/MediaDetails/VideoRatings';
 import { subjectTagClassName } from '@app/components/MediaDetails/subjectTagStyle';
 import MediaSlider from '@app/components/MediaSlider';
 import useDetailDisclosurePins from '@app/hooks/useDetailDisclosurePins';
-import useLocale from '@app/hooks/useLocale';
 import useWatchStatus from '@app/hooks/useWatchStatus';
 import defineMessages from '@app/utils/defineMessages';
-import { getSafeHref } from '@app/utils/safeUrl';
-import { getEffectiveVideoRatings } from '@app/utils/videoRatings';
 import type { RatingResponse } from '@server/api/ratings';
 import { MediaStatus } from '@server/constants/media';
 import type { MovieDetails } from '@server/models/Movie';
@@ -45,8 +36,8 @@ const messages = defineMessages('components.MovieDetails.Layout', {
   subjectTags: 'Subject Tags',
   fullCastList: 'Full Cast List',
   fullCrewList: 'Full Crew List',
-  noCast: 'No cast information available',
-  noCrew: 'No crew information available',
+  noCast: 'No Cast Information Available',
+  noCrew: 'No Crew Information Available',
   noTags: 'No subject tags available',
   movieDetails: 'Details',
   status: 'Status',
@@ -60,11 +51,6 @@ const messages = defineMessages('components.MovieDetails.Layout', {
   minutes: '{minutes} minutes',
   recommendations: 'Recommendations',
   similar: 'Similar Titles',
-  rtCriticsScore: 'Rotten Tomatoes Tomatometer',
-  rtAudienceScore: 'Rotten Tomatoes Audience Score',
-  imdbUserScore: 'IMDB User Score – votes: {formattedCount}',
-  imdbScore: 'IMDb user score',
-  tmdbUserScore: 'TMDB User Score',
   theatrical: 'Theatrical',
   digital: 'Digital',
   physical: 'Physical',
@@ -109,20 +95,12 @@ const MovieDetailsLayout = ({
   playbackActions,
 }: MovieDetailsLayoutProps) => {
   const intl = useIntl();
-  const { locale } = useLocale();
-  const effectiveRatings = getEffectiveVideoRatings(ratingData);
   const { data: watchedStatus } = useWatchStatus(
     'movie',
     data.id,
     Boolean(data.mediaInfo)
   );
   const { pins, togglePinned } = useDetailDisclosurePins('movie');
-  const [showRatingsReview, setShowRatingsReview] = useState(false);
-  useEffect(() => {
-    setShowRatingsReview(
-      new URLSearchParams(window.location.search).has('ratingsReview')
-    );
-  }, []);
   const [showDetails, setShowDetails] = useState(false);
   useEffect(() => {
     setShowDetails(pins.details);
@@ -226,6 +204,8 @@ const MovieDetailsLayout = ({
           <MovieSummaryCard
             data={data}
             sortedCrew={sortedCrew}
+            supplementalDirectors={data.supplementalMetadata?.directors}
+            supplementalWriters={data.supplementalMetadata?.writers}
             show4kAvailability={show4kAvailability}
             watchedStatus={watchedStatus}
           />
@@ -242,6 +222,8 @@ const MovieDetailsLayout = ({
               {data.overview ||
                 intl.formatMessage(messages.overviewUnavailable)}
             </p>
+
+            <MetadataAttribution sources={data.metadataSources} />
 
             {featuredCrew.length > 0 && (
               <div className="detail-three-column-grid card:border-t-0 card:pt-0 mt-4 grid border-t border-gray-600 pt-3">
@@ -365,7 +347,10 @@ const MovieDetailsLayout = ({
               <h2 className="media-inset-heading detail-card-heading-after">
                 {intl.formatMessage(messages.movieDetails)}
               </h2>
-              <div className="detail-three-column-grid grid">
+              <div
+                className="detail-three-column-grid grid"
+                data-table-layout="movie-details-table"
+              >
                 <dl className="media-detail-rows grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-3 text-xs">
                   <dt className="font-medium text-gray-100">
                     {intl.formatMessage(messages.status)}:
@@ -447,22 +432,27 @@ const MovieDetailsLayout = ({
                   </dt>
                   <dd className="m-0 min-w-0">
                     {data.productionCompanies.length > 0
-                      ? data.productionCompanies.slice(0, 4).map((studio) => (
-                          <Link
-                            key={studio.id}
-                            href={`/discover/movies/studio/${studio.id}`}
-                            className="block truncate text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                          >
-                            {studio.name}
-                          </Link>
-                        ))
+                      ? data.productionCompanies.slice(0, 4).map((studio) =>
+                          studio.id > 0 ? (
+                            <Link
+                              key={studio.id}
+                              href={`/discover/movies/studio/${studio.id}`}
+                              className="block truncate text-indigo-300 hover:text-indigo-200 hover:underline focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                            >
+                              {studio.name}
+                            </Link>
+                          ) : (
+                            <span className="block truncate" key={studio.name}>
+                              {studio.name}
+                            </span>
+                          )
+                        )
                       : unavailable}
                   </dd>
                 </dl>
               </div>
             </section>
           )}
-          +{' '}
           <div className="media-rating-row">
             <MediaQualitySelect
               value={selectedQuality}
@@ -485,102 +475,13 @@ const MovieDetailsLayout = ({
               onChange={setSelectedQuality}
               label={intl.formatMessage(messages.quality)}
             />
-            {effectiveRatings.rtCriticsRating !== undefined &&
-              effectiveRatings.rtCriticsScore !== undefined && (
-                <Tooltip content={intl.formatMessage(messages.rtCriticsScore)}>
-                  <a
-                    href={getSafeHref(effectiveRatings.rtUrl)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="media-rating-link"
-                  >
-                    {effectiveRatings.rtCriticsRating === 'Rotten' ? (
-                      <RTRotten className="media-rating-icon" />
-                    ) : (
-                      <RTFresh className="media-rating-icon" />
-                    )}
-                    <span className="media-rating-value">
-                      {effectiveRatings.rtCriticsScore}%
-                    </span>
-                  </a>
-                </Tooltip>
-              )}
-            {effectiveRatings.rtAudienceRating !== undefined &&
-              effectiveRatings.rtAudienceScore !== undefined && (
-                <Tooltip content={intl.formatMessage(messages.rtAudienceScore)}>
-                  <a
-                    href={getSafeHref(effectiveRatings.rtUrl)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="media-rating-link"
-                  >
-                    {effectiveRatings.rtAudienceRating === 'Spilled' ? (
-                      <RTAudRotten className="media-rating-icon media-rating-icon-audience" />
-                    ) : (
-                      <RTAudFresh className="media-rating-icon media-rating-icon-audience" />
-                    )}
-                    <span className="media-rating-value">
-                      {effectiveRatings.rtAudienceScore}%
-                    </span>
-                  </a>
-                </Tooltip>
-              )}
-            {effectiveRatings.imdbScore !== undefined && (
-              <Tooltip
-                content={
-                  effectiveRatings.imdbVotes
-                    ? intl.formatMessage(messages.imdbUserScore, {
-                        formattedCount: intl.formatNumber(
-                          effectiveRatings.imdbVotes,
-                          {
-                            notation: 'compact',
-                            compactDisplay: 'short',
-                            maximumFractionDigits: 1,
-                          }
-                        ),
-                      })
-                    : intl.formatMessage(messages.imdbScore)
-                }
-              >
-                <a
-                  href={getSafeHref(effectiveRatings.imdbUrl)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="media-rating-link"
-                >
-                  <ImdbLogo className="media-rating-wordmark" />
-                  <span className="media-rating-value">
-                    {effectiveRatings.imdbScore.toFixed(1)}
-                  </span>
-                </a>
-              </Tooltip>
-            )}
-            <MdblistRatingBadges
-              ratings={
-                showRatingsReview
-                  ? {
-                      ...ratingData?.mdblist,
-                      metacriticRating: 68,
-                      traktRating: 8.3,
-                    }
-                  : ratingData?.mdblist
-              }
+            <VideoRatings
+              mediaType="movie"
+              id={data.id}
+              voteAverage={data.voteAverage}
+              voteCount={data.voteCount}
+              ratings={ratingData}
             />
-            {data.voteCount > 0 && (
-              <Tooltip content={intl.formatMessage(messages.tmdbUserScore)}>
-                <a
-                  href={`https://www.themoviedb.org/movie/${data.id}?language=${locale}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="media-rating-link"
-                >
-                  <TmdbLogo className="media-rating-wordmark" />
-                  <span className="media-rating-value">
-                    {Math.round(data.voteAverage * 10)}%
-                  </span>
-                </a>
-              </Tooltip>
-            )}
           </div>
           <div className="media-primary-action-row">
             {playbackActions?.(selectedQuality === '4k')}

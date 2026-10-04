@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { styleContract } from './cssContract.mjs';
 
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8');
 const css = read('./globals.css');
@@ -31,15 +32,55 @@ test('menu hover, selected and selected-hover use diagonal blue gradients', () =
   }
 });
 
-test('request dialogs share grey disabled styling', () => {
+test('request dialogs use shared semantic action controls and the global disabled state', () => {
   for (const media of ['Movie', 'Tv', 'Book', 'Music']) {
     const source = read(`../components/RequestModal/${media}RequestModal.tsx`);
-    assert.match(source, /request-submit-control/);
     assert.match(source, /selectedDestinationCovered/);
+    const tag = media === 'Tv' ? 'Button' : 'button';
+    const actions = [
+      ...source.matchAll(new RegExp(`<${tag}\\b([\\s\\S]*?)<\\/${tag}>`, 'g')),
+    ];
+    const submit = actions.find(([, body]) =>
+      body.includes('data-testid="modal-ok-button"')
+    )?.[1];
+    assert.ok(submit, `Missing request submit action: ${media}`);
+    if (media === 'Tv') {
+      assert.match(submit, /buttonType="success"/);
+      assert.match(submit, /buttonSize="standard"/);
+      assert.match(submit, /disabled=\{requestDisabled\}/);
+      assert.match(submit, /onClick=\{\(\) => void submitAction\(\)\}/);
+    } else {
+      const roles = submit.match(/className="([^"]+)"/)?.[1].split(/\s+/);
+      for (const role of [
+        'app-button',
+        'app-button-success',
+        'button-standard',
+      ]) {
+        assert.ok(
+          roles?.includes(role),
+          `Missing shared request role: ${media} ${role}`
+        );
+      }
+      assert.match(submit, /disabled=\{[^}]*selectedDestinationCovered/s);
+      assert.match(submit, /onClick=\{\(\) => void sendRequest\(\)\}/);
+    }
   }
-  assert.match(
-    css,
-    /\.request-submit-control:disabled\s*\{[^}]*border-gray-600 bg-gray-900 text-gray-500/
+  const button = read('../components/Common/Button/index.tsx');
+  assert.match(button, /success: 'app-button-success'/);
+  assert.match(button, /standard: 'button-standard'/);
+  const contract = styleContract(css);
+  assert.equal(contract.declaration('.app-button:disabled', 'opacity'), '0.6');
+  assert.equal(
+    contract.declaration('.app-button:disabled', 'cursor'),
+    'not-allowed'
+  );
+  assert.equal(
+    contract.declaration('button.app-button:disabled', 'text-shadow'),
+    'none'
+  );
+  assert.equal(
+    contract.declaration('button.app-button:disabled svg', 'filter'),
+    'none'
   );
 });
 

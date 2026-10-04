@@ -99,6 +99,18 @@ function initTvdbImageProxy() {
   }
   return _tvdbImageProxy;
 }
+let _tvmazeImageProxy: ImageProxy;
+function initTvmazeImageProxy() {
+  if (!_tvmazeImageProxy) {
+    _tvmazeImageProxy = new ImageProxy('tvmaze', 'https://static.tvmaze.com', {
+      rateLimitOptions: {
+        maxRequests: 10,
+        maxRPS: 10,
+      },
+    });
+  }
+  return _tvmazeImageProxy;
+}
 let _coverArtArchiveImageProxy: ImageProxy;
 function initCoverArtArchiveImageProxy() {
   if (!_coverArtArchiveImageProxy) {
@@ -182,6 +194,8 @@ const getImageProxy = (type: string): ImageProxy | null => {
       return initTmdbImageProxy();
     case 'tvdb':
       return initTvdbImageProxy();
+    case 'tvmaze':
+      return initTvmazeImageProxy();
     case 'coverartarchive':
       return initCoverArtArchiveImageProxy();
     case 'archiveorg':
