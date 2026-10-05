@@ -4,6 +4,7 @@ import {
   AnilistGraphQLError,
 } from '@server/api/anilist/failures';
 import type { AnilistMangaPageOptions } from '@server/api/anilist/manga';
+import { sanitizeAnilistDescription } from '@server/api/anilist/manga';
 import {
   anilistRateLimiter,
   resetAnilistRateLimiterForTests,
@@ -880,6 +881,54 @@ describe('AniList Planning list reads', () => {
       limited.getMangaPlanningPage(77, 1),
       rateLimited(30, true)
     );
+  });
+});
+
+describe('AniList description sanitizer', () => {
+  it('leaves at most one blank line for a run of line breaks', () => {
+    assert.equal(
+      sanitizeAnilistDescription('One<br><br><br><br>Two'),
+      'One<br><br>Two'
+    );
+    assert.equal(
+      sanitizeAnilistDescription('One<br>\n <br/>\n<BR >\n<br />Two'),
+      'One<br><br>Two'
+    );
+    assert.equal(
+      sanitizeAnilistDescription('<p>One<br><br><br>Two</p><p>Three</p>'),
+      '<p>One<br><br>Two</p><p>Three</p>'
+    );
+  });
+
+  it('keeps single and double breaks and breaks between text', () => {
+    for (const html of [
+      'One<br>Two<br><br>Three',
+      'One<br>\n<br>\nTwo',
+      'One<br>.<br>.<br>Two',
+      'One<br><i> </i><br><br>Two',
+    ]) {
+      assert.equal(sanitizeAnilistDescription(html), html);
+    }
+  });
+
+  it('drops line breaks at the start and end', () => {
+    assert.equal(
+      sanitizeAnilistDescription('\n<br><br> One<br>Two <br>\n<br><br>\n'),
+      'One<br>Two'
+    );
+    assert.equal(sanitizeAnilistDescription('<br>\n<br> <br>'), undefined);
+  });
+
+  it('still strips spoilers, unsafe markup and empty values', () => {
+    assert.equal(
+      sanitizeAnilistDescription(
+        '<p onclick="alert(1)">Plot <span class="markdown_spoiler">Secret</span><a href="https://example.com/x">link</a><img src="x" onerror="alert(1)"><script>alert(1)</script> <b style="color:red">end</b></p>'
+      ),
+      '<p>Plot link <b>end</b></p>'
+    );
+    for (const value of [undefined, null, 7, '', '   ', '<script>x</script>']) {
+      assert.equal(sanitizeAnilistDescription(value), undefined);
+    }
   });
 });
 

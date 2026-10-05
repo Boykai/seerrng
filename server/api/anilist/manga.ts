@@ -401,6 +401,15 @@ const formatFuzzyDate = (value: unknown): string | undefined => {
 const descriptionWindow = new JSDOM('').window;
 const descriptionPurify = DOMPurify(descriptionWindow);
 
+// Three or more line breaks with only whitespace between them, and the
+// breaks at either end of a description.
+const BREAK_RUN = /<br>(?:\s*<br>){2,}/g;
+const EDGE_BREAKS = /^(?:\s*<br>)+|(?:<br>\s*)+$/g;
+
+/**
+ * The description as safe HTML with a few text tags. A run of line breaks
+ * leaves at most one blank line, and none at the start or end.
+ */
 export const sanitizeAnilistDescription = (
   value: unknown
 ): string | undefined => {
@@ -421,6 +430,8 @@ export const sanitizeAnilistDescription = (
       ALLOWED_ATTR: [],
       ALLOW_DATA_ATTR: false,
     })
+    .replace(BREAK_RUN, '<br><br>')
+    .replace(EDGE_BREAKS, '')
     .trim();
   return sanitized || undefined;
 };
