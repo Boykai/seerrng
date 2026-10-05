@@ -101,6 +101,13 @@ const messages = defineMessages('components.SoftwareCatalog', {
   mainStoryEstimate: 'Main Story: {hours} h',
   completionist: 'Completionist',
   hoursValue: '{hours} h',
+  addToMyGames: 'Add to My Games',
+  alreadyInMyGames: 'Already in My Games',
+  gameAddedToLibrary: 'Added as a private backlog game.',
+  gameLibraryAddError: 'This game could not be added to My Games.',
+  openMyGames: 'Open My Games',
+  gameLibraryDescription:
+    'Add it to your private game library, then track progress and choose whether to share it with your household.',
 });
 
 type Category = 'retro' | 'modern' | 'game';
@@ -194,6 +201,8 @@ const SoftwareCatalog = ({
   const [requestError, setRequestError] = useState('');
   const [requestSuccess, setRequestSuccess] = useState('');
   const [requesting, setRequesting] = useState(false);
+  const [addingToLibrary, setAddingToLibrary] = useState(false);
+  const [gameLibraryFeedback, setGameLibraryFeedback] = useState('');
   const hydratedGameId = useRef<number | undefined>(undefined);
   const openedFromCatalog = useRef(false);
   const linkedCategory =
@@ -213,10 +222,20 @@ const SoftwareCatalog = ({
       ? `/api/v1/request/software/catalog/games/${linkedGameId}?category=${linkedCategory}`
       : null
   );
-
   useEffect(() => {
     if (router.isReady && linkedCategory) setCategory(linkedCategory);
   }, [linkedCategory, router.isReady]);
+
+  const linkedSearchQuery =
+    typeof router.query.q === 'string' ? router.query.q : undefined;
+  useEffect(() => {
+    if (!router.isReady || externalQuery !== undefined || !linkedSearchQuery) {
+      return;
+    }
+    setCategory(linkedCategory ?? 'game');
+    setSearchInput(linkedSearchQuery);
+    setSubmittedQuery(linkedSearchQuery);
+  }, [externalQuery, linkedCategory, linkedSearchQuery, router.isReady]);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -248,6 +267,12 @@ const SoftwareCatalog = ({
   const selectedCategory = visibleCategories.includes(category)
     ? category
     : (visibleCategories[0] ?? category);
+  const gameLibraryLookupKey = selectedGame
+    ? `/api/v1/game-library/lookup?category=${selectedCategory}&catalogId=${selectedGame.igdbId}`
+    : null;
+  const { data: gameLibraryLookup, mutate: mutateGameLibraryLookup } = useSWR<{
+    entry: { id: number } | null;
+  }>(gameLibraryLookupKey);
   const { data: systemCatalog } = useSWR<{ results: CatalogSystemOption[] }>(
     selectedCategory !== 'game' && visibleCategories.length
       ? '/api/v1/request/software/catalog/systems'
@@ -447,6 +472,24 @@ const SoftwareCatalog = ({
       setRequestError(intl.formatMessage(requestFailure));
     } finally {
       setRequesting(false);
+    }
+  };
+
+  const addToMyGames = async () => {
+    if (!selectedGame || !user) return;
+    setAddingToLibrary(true);
+    setGameLibraryFeedback('');
+    try {
+      await axios.post('/api/v1/game-library', {
+        category: selectedCategory,
+        catalogId: selectedGame.igdbId,
+      });
+      await mutateGameLibraryLookup();
+      setGameLibraryFeedback(intl.formatMessage(messages.gameAddedToLibrary));
+    } catch {
+      setGameLibraryFeedback(intl.formatMessage(messages.gameLibraryAddError));
+    } finally {
+      setAddingToLibrary(false);
     }
   };
 
@@ -924,6 +967,43 @@ const SoftwareCatalog = ({
                     </dl>
                   </section>
                 )}
+              {user && (
+                <section className="app-card-inset card-layout">
+                  <p className="card-body-text">
+                    {intl.formatMessage(messages.gameLibraryDescription)}
+                  </p>
+                  <div className="app-action-row">
+                    <Button
+                      buttonType="default"
+                      buttonSize="sm"
+                      disabled={
+                        addingToLibrary || Boolean(gameLibraryLookup?.entry)
+                      }
+                      onClick={() => void addToMyGames()}
+                    >
+                      {gameLibraryLookup?.entry
+                        ? intl.formatMessage(messages.alreadyInMyGames)
+                        : addingToLibrary
+                          ? intl.formatMessage(globalMessages.loading)
+                          : intl.formatMessage(messages.addToMyGames)}
+                    </Button>
+                    {gameLibraryLookup?.entry && (
+                      <Button
+                        buttonType="default"
+                        buttonSize="sm"
+                        onClick={() => void router.push('/games')}
+                      >
+                        {intl.formatMessage(messages.openMyGames)}
+                      </Button>
+                    )}
+                  </div>
+                  {gameLibraryFeedback && (
+                    <p className="page-status" role="status">
+                      {gameLibraryFeedback}
+                    </p>
+                  )}
+                </section>
+              )}
               {(selectedGame.screenshots?.length ?? 0) > 0 && (
                 <div>
                   <h3 className="mb-2 font-semibold text-white">

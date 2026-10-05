@@ -6586,6 +6586,12 @@
     color: #fff;
   }
 
+  .game-library-sharing-label {
+    font-size: var(--card-body-font-size);
+    line-height: var(--card-copy-line-height);
+    color: rgb(var(--theme-control-text) / 0.9);
+  }
+
   .selection-circle[data-partial='true'] {
     --selection-circle-border: rgb(var(--selection-color-partial));
     --selection-circle-surface: rgb(var(--selection-color-dark));

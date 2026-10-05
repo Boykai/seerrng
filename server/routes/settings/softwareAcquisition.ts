@@ -121,6 +121,8 @@ const settingsView = (settings: SoftwareAcquisitionSettings) => ({
   },
   emulationCatalogProvider: settings.emulationCatalogProvider ?? 'questarr',
   emulationSystemGroups: settings.emulationSystemGroups,
+  steamApiKey: settings.steamApiKey ? REDACTED_SECRET : '',
+  steamApiKeyConfigured: Boolean(settings.steamApiKey),
 });
 
 const hasProviderCapabilities = (
@@ -247,6 +249,15 @@ softwareAcquisitionRoutes.put(
       });
     }
 
+    const steamApiKey = req.body.steamApiKey ?? current.steamApiKey ?? '';
+    if (
+      typeof steamApiKey !== 'string' ||
+      steamApiKey.length > 2048 ||
+      /[\r\n\0]/.test(steamApiKey)
+    ) {
+      return res.status(400).json({ error: 'Steam Web API key is invalid.' });
+    }
+
     if (emulationCatalogProvider === 'romarr') {
       if (!romarr.value.hostname || !romarr.value.apiKey) {
         return res.status(400).json({
@@ -278,6 +289,7 @@ softwareAcquisitionRoutes.put(
       questarr: questarr.value,
       emulationCatalogProvider,
       emulationSystemGroups: emulationSystemGroups.value,
+      steamApiKey,
     };
     const settings = getSettings();
     const saved = await settings.persistSection(
