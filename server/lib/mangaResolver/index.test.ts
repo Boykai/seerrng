@@ -39,7 +39,10 @@ import {
   mangaNoMatchDelayMs,
   type MangaResolverLimits,
 } from '@server/lib/mangaResolver';
-import { requestMangaTitleSearch } from '@server/lib/mangaResolver/titles';
+import {
+  isMangaTitleDue,
+  requestMangaTitleSearch,
+} from '@server/lib/mangaResolver/titles';
 import requestAdmissionCoordinator from '@server/lib/requestAdmission';
 import requestDispatchManager from '@server/lib/requestDispatch';
 import type { SuwayomiSettings } from '@server/lib/settings';
@@ -938,6 +941,101 @@ describe('manga source resolver: backoff', () => {
     advance(HOUR);
     await run.run();
     assert.equal(searches.length, 2);
+  });
+
+  it('counts a title as due once its wait passes, asked for or not', () => {
+    const now = new Date(clock);
+    const row = (nextAttemptAt: number | null, asked: boolean) =>
+      new MangaSourceResolution({
+        instanceId: 1,
+        anilistId: T1,
+        nextAttemptAt: nextAttemptAt === null ? null : new Date(nextAttemptAt),
+        searchRequestedAt: asked ? new Date(clock - HOUR) : null,
+      });
+
+    assert.equal(isMangaTitleDue(undefined, now), true);
+    for (const asked of [false, true]) {
+      assert.equal(isMangaTitleDue(row(null, asked), now), true);
+      assert.equal(isMangaTitleDue(row(clock, asked), now), true);
+      assert.equal(isMangaTitleDue(row(clock + 1, asked), now), false);
+    }
+  });
+
+  it('waits for the retry time when a run defers an admin search', async () => {
+    const requestId = await seedRequest(T1, PENDING);
+    anilistReplies.set(T1, new Error('synthetic failure'));
+    await serve({ sources: [{ id: '1001' }] });
+    const run = resolver();
+    await requestMangaTitleSearch(1, T1);
+    advance(1);
+
+    await run.run();
+    assert.deepEqual(anilistCalls, [T1]);
+    assert.deepEqual(await stateOf(T1), {
+      status: 'QUEUED',
+      reason: null,
+      mangadexUuid: null,
+      attempts: 0,
+      nextAttemptAt: clock + HOUR,
+      lastError: 'ANILIST_FAILED',
+    });
+    assert.ok((await resolution(T1))?.searchRequestedAt);
+
+    advance(HOUR / 2);
+    await run.run();
+    assert.deepEqual(anilistCalls, [T1]);
+
+    anilistReplies.delete(T1);
+    advance(HOUR);
+    await run.run();
+    assert.deepEqual(anilistCalls, [T1, T1]);
+    assert.equal(searches.length, 2);
+    assert.equal((await stateOf(T1)).status, 'NO_MATCH');
+    assert.equal((await resolution(T1))?.searchRequestedAt, null);
+    assert.equal(await requestStatusOf(requestId), PENDING);
+  });
+
+  it('keeps a title due when an admin asks for a search during its run', async () => {
+    await seedRequest(T1);
+    await serve({ sources: [{ id: '1001' }] });
+    let asked = false;
+    mock.method(AnilistAPI.prototype, 'getMangaDetails', async (id: number) => {
+      outside('anilist');
+      anilistCalls.push(id);
+      if (!asked) {
+        asked = true;
+        await requestMangaTitleSearch(1, id);
+      }
+      return details(id);
+    });
+    // The search request carries the real time; the run starts before it.
+    clock -= 1000;
+    const run = resolver();
+
+    await run.run();
+    assert.equal(searches.length, 2);
+    assert.deepEqual(await stateOf(T1), {
+      status: 'NO_MATCH',
+      reason: 'NO_CANDIDATES',
+      mangadexUuid: null,
+      attempts: 1,
+      nextAttemptAt: null,
+      lastError: null,
+    });
+    assert.ok((await resolution(T1))?.searchRequestedAt);
+
+    advance(1);
+    await run.run();
+    assert.equal(searches.length, 4);
+    assert.deepEqual(await stateOf(T1), {
+      status: 'NO_MATCH',
+      reason: 'NO_CANDIDATES',
+      mangadexUuid: null,
+      attempts: 2,
+      nextAttemptAt: clock + 6 * HOUR,
+      lastError: null,
+    });
+    assert.equal((await resolution(T1))?.searchRequestedAt, null);
   });
 });
 

@@ -4397,6 +4397,10 @@ components:
           type: string
           format: date-time
           nullable: true
+          description: >-
+            The earliest time a run searches the title again. Null when the
+            title has no wait, and when no run will search it: the title is
+            bound, or only pending requests wait and no admin search is open.
         searchRequestedAt:
           type: string
           format: date-time

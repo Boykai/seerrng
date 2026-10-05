@@ -605,6 +605,11 @@ title that the **Manga Content** switches allow.
 
 ### Statuses and retries
 
+The **Next search** times apply while an approved request waits for the
+title or an administrator's search request is open. Otherwise the job does
+not search the title, whatever its status, until a request is approved or an
+administrator asks for a search.
+
 | Status | Meaning | Next search |
 | --- | --- | --- |
 | **Awaiting Approval** | Only pending requests wait, and no search that an administrator asked for is open. | When a request is approved or an administrator asks for a search. |
@@ -622,7 +627,13 @@ title that the **Manga Content** switches allow.
 - A title that no selected source may search, because none of them is
   installed or **Include Adult Manga** leaves none, waits as **No Match**
   does.
-- An administrator's search request resets the wait.
+- An administrator's search request resets the wait, and the next run
+  searches the title. When that run cannot search it, the request stays open
+  and the title waits as any other does: until the next run after a rate
+  limit or when Suwayomi cannot be reached, and for an hour after an AniList
+  failure or a match that could not be saved. A search request made while a
+  run is already searching the title stays open, and the next run searches
+  the title again.
 - When a title's match is rejected or its manga leaves the server, a request
   whose chapters step 6 of [Dispatch](#dispatch) has not recorded yet waits
   for a source again, and the next run searches the title. A request whose
@@ -641,9 +652,11 @@ Like the [Manga Library page](#manga-library-page), it appears while the
 Manga category is on and a Suwayomi server is configured. The page lists the
 titles that wait for a source with their status from
 [Statuses and retries](#statuses-and-retries), a short reason, and their
-**Last Check** and **Next Check** times; filter the list by **Status**. A
-title whose details SeerrNG cannot show, for example because the **Manga
-Content** switches hide it, appears only as its AniList ID.
+**Last Check** and **Next Check** times; filter the list by **Status**.
+**Next Check** stays empty for a title whose requests are all pending with no
+open search request, because no run searches it. A title whose details
+SeerrNG cannot show, for example because the **Manga Content** switches hide
+it, appears only as its AniList ID.
 
 - **Search Now** asks the job to search the title next and resets its wait.
   The title shows **Search Queued** until the search has run. For a title
