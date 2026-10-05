@@ -7,6 +7,8 @@ import { JSDOM } from 'jsdom';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { IntlProvider } from 'react-intl';
+import type * as SwrModule from 'swr';
+import { SWRConfig } from 'swr';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RequestCard from '.';
 
@@ -17,21 +19,29 @@ const state = vi.hoisted(() => ({
     { data?: unknown; error?: unknown; isLoading?: boolean }
   >,
   granted: [] as number[],
+  realSwr: false,
 }));
-vi.mock('swr', () => ({
-  default: (key: string | null, options?: { fallbackData?: unknown }) => {
-    state.keys.push(key);
-    if (key?.startsWith('/api/v1/request/')) {
-      return {
-        data: options?.fallbackData,
-        mutate: vi.fn(),
-        ...state.responses[key],
-      };
-    }
-    return (key && state.responses[key]) ?? {};
-  },
-  mutate: vi.fn(),
-}));
+vi.mock('swr', async (importOriginal) => {
+  const actual = await importOriginal<typeof SwrModule>();
+  return {
+    ...actual,
+    default: (key: string | null, options?: { fallbackData?: unknown }) => {
+      if (state.realSwr) {
+        return actual.default(key, options ?? {});
+      }
+      state.keys.push(key);
+      if (key?.startsWith('/api/v1/request/')) {
+        return {
+          data: options?.fallbackData,
+          mutate: vi.fn(),
+          ...state.responses[key],
+        };
+      }
+      return (key && state.responses[key]) ?? {};
+    },
+    mutate: vi.fn(),
+  };
+});
 vi.mock('axios', () => ({
   default: { post: vi.fn(), delete: vi.fn(), isAxiosError: () => false },
 }));
@@ -187,6 +197,7 @@ beforeEach(() => {
   state.keys = [];
   state.responses = { '/api/v1/manga/30013': { data: title } };
   state.granted = [];
+  state.realSwr = false;
 });
 
 afterEach(async () => {
@@ -359,7 +370,6 @@ it('shows the not-found card when the AniList ID is missing', async () => {
 });
 
 it('takes the AniList ID from the request when the list item has none', async () => {
-  // The user request list sends media without identifiers or a scope.
   const listItem = mangaRequest({ mangaScope: undefined }, []);
   state.responses['/api/v1/request/41'] = { isLoading: true };
   await render(listItem);
@@ -380,6 +390,112 @@ it('takes the AniList ID from the request when the list item has none', async ()
   expect(state.keys).toContain('/api/v1/manga/30013');
   expect(host.textContent).toContain('Sample Manga');
   expect(host.textContent).toContain('ChaptersLatest 25');
+});
+
+const renderWithFetcher = async (
+  request: MangaScopedRequest,
+  cached?: MangaScopedRequest
+) => {
+  const fetched: string[] = [];
+  state.realSwr = true;
+  await act(async () =>
+    root.render(
+      <SWRConfig
+        value={{
+          provider: () => {
+            const cache = new Map();
+            if (cached) {
+              cache.set(`/api/v1/request/${request.id}`, { data: cached });
+            }
+            return cache;
+          },
+          shouldRetryOnError: false,
+          fetcher: async (url: string) => {
+            fetched.push(url);
+            if (url === '/api/v1/manga/30013') {
+              return title;
+            }
+            if (url === `/api/v1/request/${request.id}`) {
+              return request;
+            }
+            throw new Error(`Unexpected fetch: ${url}`);
+          },
+        }}
+      >
+        <IntlProvider locale="en" timeZone="UTC">
+          <RequestCard request={request} />
+        </IntlProvider>
+      </SWRConfig>
+    )
+  );
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+  return fetched;
+};
+
+it('renders a manga card from the list item without fetching its request', async () => {
+  const fetched = await renderWithFetcher(
+    mangaRequest({
+      mangaScope: scope({ scope: MangaRequestScope.LATEST_N, latestCount: 25 }),
+    })
+  );
+
+  expect(fetched).toEqual(['/api/v1/manga/30013']);
+  expect(host.textContent).toContain('Sample Manga');
+  expect(host.textContent).toContain('ChaptersLatest 25');
+});
+
+it('fetches a manga card request again after an approval', async () => {
+  state.granted = [Permission.MANAGE_REQUESTS];
+  const fetched = await renderWithFetcher(mangaRequest());
+  expect(fetched).toEqual(['/api/v1/manga/30013']);
+
+  const approve = [...host.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Approve'
+  );
+  await act(async () =>
+    approve?.dispatchEvent(
+      new dom.window.MouseEvent('click', { bubbles: true })
+    )
+  );
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+
+  expect(fetched).toEqual(['/api/v1/manga/30013', '/api/v1/request/41']);
+});
+
+it('fetches a manga card request when it mounts over an older cached copy', async () => {
+  state.granted = [Permission.MANAGE_REQUESTS];
+  const fetched = await renderWithFetcher(
+    mangaRequest({ status: MediaRequestStatus.APPROVED }),
+    mangaRequest()
+  );
+
+  expect([...fetched].sort()).toEqual([
+    '/api/v1/manga/30013',
+    '/api/v1/request/41',
+  ]);
+  expect(host.textContent).toContain('Sample Manga');
+  expect(
+    [...host.querySelectorAll('button')].map((button) => button.textContent)
+  ).not.toContain('Approve');
+});
+
+it('still fetches the request for a movie card', async () => {
+  const fetched = await renderWithFetcher(
+    mangaRequest({
+      type: 'movie',
+      media: {
+        id: 9,
+        tmdbId: 550,
+        status: MediaStatus.PENDING,
+        status4k: MediaStatus.UNKNOWN,
+        downloadStatus: [],
+        downloadStatus4k: [],
+      },
+    } as unknown as Partial<MangaScopedRequest>)
+  );
+
+  expect(fetched).toContain('/api/v1/request/41');
+  expect(fetched).toContain('/api/v1/movie/550');
 });
 
 it('keeps the waiting status on the not-found card', async () => {

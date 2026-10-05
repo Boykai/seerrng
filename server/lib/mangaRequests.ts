@@ -5,9 +5,11 @@ import {
   MangaRequestCheckpoint,
   MangaRequestScope,
 } from '@server/constants/mangaRequest';
+import { MediaType } from '@server/constants/media';
 import type MangaRequestChapter from '@server/entity/MangaRequestChapter';
 import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import { hashMangaSourceUrl } from '@server/entity/MangaSourceBinding';
+import type { MediaRequest } from '@server/entity/MediaRequest';
 import {
   enqueueMangaRequestDispatch,
   syncMangaRequestBindings,
@@ -528,4 +530,24 @@ export const loadMangaRequestScopeSummaries = async (
     }
   }
   return summaries;
+};
+
+/** Adds the read-only chapter scope summary to each manga request. */
+export const attachMangaRequestScopes = async (
+  manager: EntityManager,
+  requests: readonly MediaRequest[]
+): Promise<void> => {
+  const ids = requests
+    .filter(({ type }) => type === MediaType.MANGA)
+    .map(({ id }) => id);
+  if (ids.length === 0) {
+    return;
+  }
+  const summaries = await loadMangaRequestScopeSummaries(manager, ids);
+  for (const request of requests) {
+    const mangaScope = summaries.get(request.id);
+    if (mangaScope) {
+      Object.assign(request, { mangaScope });
+    }
+  }
 };

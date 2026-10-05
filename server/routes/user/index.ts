@@ -40,6 +40,7 @@ import {
   removeLocalAvatarFiles,
   storeLocalAvatar,
 } from '@server/lib/localAvatar';
+import { attachMangaRequestScopes } from '@server/lib/mangaRequests';
 import { hydrateMediaRequestRelations } from '@server/lib/mediaRequestHydration';
 import {
   MediaServerUserAuthorityChangedError,
@@ -1504,7 +1505,23 @@ router.get<{ id: string }, UserRequestsResponse>(
             .take(pageSize)
             .skip(skip)
             .getManyAndCount();
-          const requests = await hydrateMediaRequestRelations(requestRows);
+          // Manga cards read their AniList ID and chapter scope from the page.
+          const isManga = ({ type }: MediaRequest) => type === MediaType.MANGA;
+          const hydrated = new Map(
+            [
+              ...(await hydrateMediaRequestRelations(
+                requestRows.filter((row) => !isManga(row))
+              )),
+              ...(await hydrateMediaRequestRelations(
+                requestRows.filter(isManga),
+                { includeMediaIdentifiers: true }
+              )),
+            ].map((request) => [request.id, request])
+          );
+          const requests = requestRows.map(
+            (row) => hydrated.get(row.id) ?? row
+          );
+          await attachMangaRequestScopes(dataSource.manager, requests);
 
           return res.status(200).json({
             pageInfo: {
