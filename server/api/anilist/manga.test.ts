@@ -460,6 +460,59 @@ describe('AniList manga catalog requests', () => {
     });
   });
 
+  it('caches only usable manga details, for 12 hours', async () => {
+    const api = new AnilistAPI();
+    let reply: StubResponse = {
+      data: {
+        data: { Media: null },
+        errors: [{ message: 'Internal Server Error', status: 500 }],
+      },
+    };
+    const bodies = stubAnilist(api, () => reply);
+
+    await assert.rejects(api.getMangaDetails(30013), AnilistGraphQLError);
+    reply = { data: { data: { Media: null } } };
+    assert.equal(await api.getMangaDetails(30013), null);
+    reply = { data: { data: { Media: mangaFixture() } } };
+    const details = await api.getMangaDetails(30013);
+    reply = { status: 500, data: {} };
+    assert.deepEqual(await api.getMangaDetails(30013), details);
+
+    assert.equal(details?.id, 30013);
+    assert.equal(bodies.length, 3);
+    const cache = cacheManager.getCache('anilist').data;
+    const expiries = cache.keys().map((key) => cache.getTtl(key) ?? 0);
+    assert.equal(expiries.length, 1);
+    assert.ok(Math.abs(expiries[0] - Date.now() - 43_200_000) < 60_000);
+  });
+
+  it('shares a details read only between callers that wait alike and cannot cancel', async () => {
+    const clients = [
+      new AnilistAPI(),
+      new AnilistAPI(),
+      new AnilistAPI({ maxRateLimitWaitMs: 2_000 }),
+      new AnilistAPI(),
+    ];
+    const bodies = clients.map((api) =>
+      stubAnilist(api, () => ({ data: { data: { Media: mangaFixture() } } }))
+    );
+
+    const results = await Promise.all([
+      clients[0].getMangaDetails(30013),
+      clients[1].getMangaDetails(30013),
+      clients[2].getMangaDetails(30013),
+      clients[3].getMangaDetails(30013, {
+        signal: new AbortController().signal,
+      }),
+    ]);
+
+    assert.deepEqual(
+      bodies.map((sent) => sent.length),
+      [1, 0, 1, 1]
+    );
+    assert.ok(results.every((details) => details?.id === 30013));
+  });
+
   it('keeps anime lookups on the ANIME type', async () => {
     const api = new AnilistAPI();
     const bodies = stubAnilist(api, (body) =>
@@ -666,19 +719,19 @@ describe('AniList manga batch reads', () => {
   });
 
   it('rejects malformed batch pages and reports rate limits', async () => {
-    // Replies are cached per ID set, so each case reads its own ID.
-    for (const [id, reply] of [
-      [1, { data: { data: { Page: null } } }],
-      [2, { data: { data: { Page: {} } } }],
-      [3, { data: { data: { Page: { media: 'none' } } } }],
-    ] as const) {
+    for (const reply of [
+      { data: { data: { Page: null } } },
+      { data: { data: { Page: {} } } },
+      { data: { data: { Page: { media: 'none' } } } },
+    ]) {
       const api = new AnilistAPI();
-      stubAnilist(api, () => reply);
+      const bodies = stubAnilist(api, () => reply);
       await assert.rejects(
-        api.getMangaSummariesByIds([id]),
+        api.getMangaSummariesByIds([1]),
         (error: unknown) =>
           error instanceof Error && error.name === 'AnilistBadResponseError'
       );
+      assert.equal(bodies.length, 1);
     }
 
     const limited = new AnilistAPI();
@@ -691,6 +744,36 @@ describe('AniList manga batch reads', () => {
       limited.getMangaSummariesByIds([4]),
       rateLimited(30, true)
     );
+  });
+
+  it('caches only a usable batch, for 12 hours', async () => {
+    const api = new AnilistAPI();
+    let reply: StubResponse = {
+      data: {
+        data: { Page: { media: [] } },
+        errors: [{ message: 'Internal Server Error', status: 500 }],
+      },
+    };
+    const bodies = stubAnilist(api, () => reply);
+
+    await assert.rejects(
+      api.getMangaSummariesByIds([1, 2]),
+      AnilistGraphQLError
+    );
+    reply = mangaPage([mangaFixture({ id: 1 })]);
+    const first = await api.getMangaSummariesByIds([2, 1]);
+    reply = { status: 500, data: {} };
+    assert.deepEqual(await api.getMangaSummariesByIds([1, 2]), first);
+
+    assert.deepEqual(
+      first.map((manga) => manga.id),
+      [1]
+    );
+    assert.equal(bodies.length, 2);
+    const cache = cacheManager.getCache('anilist').data;
+    const expiries = cache.keys().map((key) => cache.getTtl(key) ?? 0);
+    assert.equal(expiries.length, 1);
+    assert.ok(Math.abs(expiries[0] - Date.now() - 43_200_000) < 60_000);
   });
 });
 

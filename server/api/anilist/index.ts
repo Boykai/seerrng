@@ -434,25 +434,41 @@ class AnilistAPI extends ExternalAPI {
     return data.Media ?? null;
   }
 
-  async getMangaDetails(id: number): Promise<AnilistMangaDetails | null> {
-    try {
-      const data = await this.graphql<{ Media?: unknown }>(
-        MANGA_DETAILS_QUERY,
-        { id },
-        ANILIST_MANGA_DETAILS_TTL_SECONDS
-      );
-      return sanitizeAnilistMangaDetails(data.Media) ?? null;
-    } catch (e) {
-      // AniList answers an unknown (or non-manga) id with a 404, either as
-      // the HTTP status or inside the GraphQL error body.
-      if (
-        (axios.isAxiosError(e) && e.response?.status === 404) ||
-        (e instanceof AnilistGraphQLError && e.status === 404)
-      ) {
-        return null;
-      }
-      throw e;
-    }
+  /**
+   * One manga's details, cached for 12 hours once AniList answers with a
+   * usable title. Null for an unknown or non-manga ID.
+   */
+  async getMangaDetails(
+    id: number,
+    options: { signal?: AbortSignal } = {}
+  ): Promise<AnilistMangaDetails | null> {
+    return this.readMangaShared(
+      'manga-details',
+      { id },
+      ANILIST_MANGA_DETAILS_TTL_SECONDS,
+      async () => {
+        try {
+          const data = await this.graphql<{ Media?: unknown }>(
+            MANGA_DETAILS_QUERY,
+            { id },
+            0,
+            options.signal
+          );
+          return sanitizeAnilistMangaDetails(data.Media) ?? null;
+        } catch (e) {
+          // AniList answers an unknown (or non-manga) id with a 404, either
+          // as the HTTP status or inside the GraphQL error body.
+          if (
+            (axios.isAxiosError(e) && e.response?.status === 404) ||
+            (e instanceof AnilistGraphQLError && e.status === 404)
+          ) {
+            return null;
+          }
+          throw e;
+        }
+      },
+      options.signal
+    );
   }
 
   async getMangaPage(
@@ -495,14 +511,16 @@ class AnilistAPI extends ExternalAPI {
 
   /**
    * A cached read that anonymous clients share. Identical concurrent reads
-   * make one AniList request, and only a successful reply is cached, so a
-   * rejected request is sent again next time instead of failing from cache.
+   * make one AniList request, and only a usable reply is cached: a rejected
+   * request, or a title AniList does not know (null), is asked again next
+   * time instead of being answered from cache.
    */
   private async readMangaShared<T>(
     name: string,
     variables: Record<string, unknown>,
     ttl: number,
-    load: () => Promise<T>
+    load: () => Promise<T>,
+    signal?: AbortSignal
   ): Promise<T> {
     const config = { params: variables };
     const cached = this.getCached<T>(name, config);
@@ -510,10 +528,13 @@ class AnilistAPI extends ExternalAPI {
       recordCacheHit('external-api');
       return cached;
     }
-    // A client with a token neither shares nor joins another client's read.
-    const flightKey = this.accessToken
-      ? undefined
-      : JSON.stringify([name, variables]);
+    // A client with a token, or a caller that can cancel its own read,
+    // neither shares nor joins another read. Shared reads keep each caller's
+    // wait limit for the request budget.
+    const flightKey =
+      this.accessToken || signal
+        ? undefined
+        : JSON.stringify([name, variables, this.maxRateLimitWaitMs]);
     const pending = flightKey && pendingMangaReads.get(flightKey);
     if (pending) {
       return pending as Promise<T>;
@@ -521,7 +542,9 @@ class AnilistAPI extends ExternalAPI {
     const read = (async () => {
       try {
         const value = await load();
-        this.setCached(name, value, ttl, config);
+        if (value !== null) {
+          this.setCached(name, value, ttl, config);
+        }
         return value;
       } finally {
         if (flightKey) {
@@ -552,16 +575,23 @@ class AnilistAPI extends ExternalAPI {
     if (!unique.length) {
       return [];
     }
-    const data = await this.graphql<{ Page?: unknown }>(
-      MANGA_BY_IDS_QUERY,
+    return this.readMangaShared(
+      'manga-batch',
       { ids: unique },
-      ANILIST_MANGA_DETAILS_TTL_SECONDS
+      ANILIST_MANGA_DETAILS_TTL_SECONDS,
+      async () => {
+        const data = await this.graphql<{ Page?: unknown }>(
+          MANGA_BY_IDS_QUERY,
+          { ids: unique },
+          0
+        );
+        const media = sanitizeAnilistMangaBatch(data.Page, new Set(unique));
+        if (!media) {
+          throw new AnilistBadResponseError();
+        }
+        return media;
+      }
     );
-    const media = sanitizeAnilistMangaBatch(data.Page, new Set(unique));
-    if (!media) {
-      throw new AnilistBadResponseError();
-    }
-    return media;
   }
 
   /**
