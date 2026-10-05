@@ -132,6 +132,7 @@ describe('describeResolveError', () => {
         false,
         true,
       ],
+      MANGA_BINDING_NOT_ACTIVE: [changed, false, true],
       MANGA_CANDIDATE_GONE: [
         'Suwayomi no longer has this suggestion. Search again for new suggestions.',
         false,

@@ -12,6 +12,7 @@ export type MangaResolveErrorCode =
   | 'MANGA_CANDIDATE_NOT_FOUND'
   | 'MANGA_ITEM_NOT_FOUND'
   | 'MANGA_ALREADY_BOUND'
+  | 'MANGA_BINDING_NOT_ACTIVE'
   | 'MANGA_CANDIDATE_GONE'
   | 'MANGA_ITEM_BOUND_ELSEWHERE'
   | 'MANGA_UNSUPPORTED_SERVER'
@@ -131,5 +132,10 @@ export interface MangaResolveBindResponse {
   /** `unchanged` when the item was already bound to the title. */
   outcome: 'bound' | 'unchanged';
   binding: MangaLibraryBinding;
+  title: MangaResolveTitle;
+}
+
+export interface MangaResolveUnbindResponse {
+  /** The title once the match is rejected. */
   title: MangaResolveTitle;
 }

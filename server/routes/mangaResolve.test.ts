@@ -345,6 +345,9 @@ const select = (agent: Agent, anilistId: number, candidateId: number) =>
 const bind = (agent: Agent, anilistId: number, body: Record<string, unknown>) =>
   agent.post(`${BASE}/${anilistId}/bind`).send({ instanceId: 1, ...body });
 
+const unbind = (agent: Agent, anilistId: number, bindingId: unknown) =>
+  agent.post(`${BASE}/${anilistId}/unbind`).send({ instanceId: 1, bindingId });
+
 beforeEach(() => {
   settings.main.enabledMediaCategories = { ...categories, manga: true };
   configure();
@@ -400,12 +403,14 @@ describe('manga resolve picker: access', () => {
     const server = await serve({ mangas: [], outside: [manga] });
     await seedRequest(T1);
     const candidate = await seedCandidate(T1, manga);
+    const active = await seedBinding(T1, sourceManga(102));
     const routes = (agent: Agent) => [
       () => agent.get(BASE),
       () => agent.get(`${BASE}/${T1}`).query({ instanceId: 1 }),
       () => agent.post(`${BASE}/${T1}/search`).send({ instanceId: 1 }),
       () => select(agent, T1, candidate.id),
       () => bind(agent, T1, { suwayomiMangaId: manga.id }),
+      () => unbind(agent, T1, active.id),
     ];
     // One request at a time: supertest closes an agent's server when the
     // request that opened it ends, which can reset requests still in flight.
@@ -416,14 +421,17 @@ describe('manga resolve picker: access', () => {
     };
 
     const friend = await loginAs('friend@seerr.dev');
-    assert.deepEqual(await statuses(friend), [403, 403, 403, 403, 403]);
+    assert.deepEqual(await statuses(friend), [403, 403, 403, 403, 403, 403]);
     assert.equal((await request(app).get(BASE)).status, 403);
 
     const admin = await asAdmin();
     settings.main.enabledMediaCategories = { ...categories, manga: false };
-    assert.deepEqual(await statuses(admin), [404, 404, 404, 404, 404]);
+    assert.deepEqual(await statuses(admin), [404, 404, 404, 404, 404, 404]);
 
-    assert.deepEqual(await bindings(), []);
+    assert.deepEqual(
+      (await bindings()).map(({ id, state }) => [id, state]),
+      [[active.id, 'ACTIVE']]
+    );
     assert.equal(await resolution(T1), null);
     assert.deepEqual(server.requests, []);
   });
@@ -512,11 +520,13 @@ describe('manga resolve picker: titles', () => {
     assert.deepEqual(await ids({ status: 'NEEDS_PICK' }), [T3]);
     assert.deepEqual(await ids({ status: 'NO_MATCH' }), [T4]);
     assert.deepEqual(await ids({ status: 'EXCLUDED' }), [T5]);
+    // A bound title leaves the list but stays under its own filter.
+    assert.deepEqual(await ids({ status: 'BOUND' }), [T6]);
     const invalid: Query[] = [
       { take: 0 },
       { take: 101 },
       { skip: -1 },
-      { status: 'BOUND' },
+      { status: 'ACTIVE' },
       { unknown: 1 },
     ];
     for (const query of invalid) {
@@ -1100,5 +1110,169 @@ describe('manga resolve picker: bind', () => {
     );
     assert.deepEqual(await bindings(), []);
     assert.equal(await resolution(T1), null);
+  });
+});
+
+describe('manga resolve picker: unbind', () => {
+  const states = async () =>
+    (await bindings()).map(({ id, state }) => [id, state]);
+
+  it('rejects the match without Suwayomi and puts the title back in the queue', async () => {
+    const server = await serve();
+    const requestId = await seedRequest(T1, APPROVED, BOUND);
+    await seedResolution(T1, {
+      status: MangaResolutionStatus.BOUND,
+      reason: 'ADMIN_BIND',
+    });
+    const active = await seedBinding(T1, sourceManga(101), {
+      confidence: MangaBindingConfidence.MANUAL,
+      matchedBy: 'manual',
+      origin: 'admin',
+    });
+    const agent = await asAdmin();
+    admissions = [];
+    queued = [];
+
+    const res = await unbind(agent, T1, active.id);
+
+    assert.equal(res.status, 200);
+    const title = res.body.title as MangaResolveTitle;
+    assert.deepEqual(
+      [title.anilistId, title.status, title.reason, title.nextAttemptAt],
+      [T1, 'QUEUED', null, null]
+    );
+    // The row stays as history; only its state changes.
+    assert.deepEqual(await states(), [[active.id, 'REJECTED']]);
+    assert.equal(await manifestOf(requestId), AWAITING_BINDING);
+    assert.equal(await requestStatusOf(requestId), APPROVED);
+    assert.deepEqual(queued, []);
+    assert.deepEqual(server.requests, []);
+    // The same order as the library review's reject.
+    const key = getMangaAdmissionKey(T1);
+    assert.deepEqual(admissions, [
+      { resources: ['user-security:user:1'], depth: 0 },
+      { resources: [key], depth: 1 },
+      { resources: ['service-config:suwayomi:1'], depth: 2 },
+    ]);
+    const listed = await agent.get(BASE).query({ status: 'QUEUED' });
+    assert.deepEqual(
+      listed.body.results.map(({ anilistId }: MangaResolveTitle) => anilistId),
+      [T1]
+    );
+    const detail = (await agent.get(`${BASE}/${T1}`).query({ instanceId: 1 }))
+      .body as MangaResolveDetail;
+    assert.deepEqual(detail.bindings, []);
+
+    assert.deepEqual(failure(await unbind(agent, T1, active.id)), [
+      409,
+      'MANGA_BINDING_NOT_ACTIVE',
+    ]);
+    assert.deepEqual(server.requests, []);
+  });
+
+  it('keeps the title bound while another active match remains', async () => {
+    await serve();
+    const requestId = await seedRequest(T1, PENDING, BOUND);
+    const first = await seedBinding(T1, sourceManga(101));
+    const second = await seedBinding(T1, sourceManga(102));
+    const agent = await asAdmin();
+
+    const res = await unbind(agent, T1, first.id);
+
+    assert.equal(res.status, 200);
+    assert.equal((res.body.title as MangaResolveTitle).status, 'BOUND');
+    assert.deepEqual(await states(), [
+      [first.id, 'REJECTED'],
+      [second.id, 'ACTIVE'],
+    ]);
+    assert.equal(await manifestOf(requestId), BOUND);
+    assert.equal(await requestStatusOf(requestId), PENDING);
+  });
+
+  it('refuses an unknown title, instance or active match', async () => {
+    const requestId = await seedRequest(T1, APPROVED, BOUND);
+    const active = await seedBinding(T1, sourceManga(101));
+    const orphaned = await seedBinding(T1, sourceManga(102), {
+      state: MangaBindingState.ORPHANED,
+    });
+    const elsewhere = await seedBinding(T1, sourceManga(103), {
+      instanceId: 2,
+    });
+    const other = await seedBinding(OTHER_TITLE, sourceManga(104));
+    const agent = await asAdmin();
+
+    assert.deepEqual(failure(await unbind(agent, T1, active.id)), [
+      404,
+      'MANGA_INSTANCE_NOT_FOUND',
+    ]);
+    await serve();
+    assert.deepEqual(failure(await unbind(agent, T3, active.id)), [
+      404,
+      'MANGA_RESOLVE_TITLE_NOT_FOUND',
+    ]);
+    for (const bindingId of [orphaned.id, elsewhere.id, other.id, 999_999]) {
+      assert.deepEqual(failure(await unbind(agent, T1, bindingId)), [
+        409,
+        'MANGA_BINDING_NOT_ACTIVE',
+      ]);
+    }
+    for (const body of [
+      {},
+      { instanceId: 1 },
+      { instanceId: 1, bindingId: 0 },
+      { instanceId: 1, bindingId: 'x' },
+      { instanceId: 1, bindingId: active.id, x: 1 },
+    ]) {
+      const res = await agent.post(`${BASE}/${T1}/unbind`).send(body);
+      assert.equal(res.status, 400);
+    }
+    assert.equal(
+      (
+        await agent
+          .post(`${BASE}/0/unbind`)
+          .send({ instanceId: 1, bindingId: active.id })
+      ).status,
+      400
+    );
+    assert.deepEqual(await states(), [
+      [active.id, 'ACTIVE'],
+      [orphaned.id, 'ORPHANED'],
+      [elsewhere.id, 'ACTIVE'],
+      [other.id, 'ACTIVE'],
+    ]);
+    assert.equal(await manifestOf(requestId), BOUND);
+  });
+
+  it('refuses a match that changed before its write and writes nothing', async () => {
+    await serve();
+    const requestId = await seedRequest(T1, APPROVED, BOUND);
+    const active = await seedBinding(T1, sourceManga(101));
+    const agent = await asAdmin();
+    const key = getMangaAdmissionKey(T1);
+    let changed = false;
+    queued = [];
+    // The library scan marks the match no longer current meanwhile.
+    mock.method(requestAdmissionCoordinator, 'run', (async (
+      resources,
+      callback
+    ) => {
+      if (!changed && resources.includes(key)) {
+        changed = true;
+        await getRepository(MangaSourceBinding).update(active.id, {
+          state: MangaBindingState.ORPHANED,
+        });
+      }
+      return observedRun(resources, callback);
+    }) as typeof requestAdmissionCoordinator.run);
+
+    assert.deepEqual(failure(await unbind(agent, T1, active.id)), [
+      409,
+      'MANGA_ITEM_CHANGED',
+    ]);
+
+    assert.ok(changed);
+    assert.deepEqual(await states(), [[active.id, 'ORPHANED']]);
+    assert.equal(await manifestOf(requestId), BOUND);
+    assert.deepEqual(queued, []);
   });
 });

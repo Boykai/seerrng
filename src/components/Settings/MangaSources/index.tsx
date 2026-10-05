@@ -76,8 +76,9 @@ const readId = (value: ParsedUrlQuery[string]): number | undefined =>
     : undefined;
 
 /**
- * Requested titles that wait for a Suwayomi source. A title's detail opens
- * from `?anilistId=&instanceId=`, so links and reloads open it too.
+ * Requested titles that wait for a Suwayomi source, or the matched ones under
+ * the Bound filter. A title's detail opens from `?anilistId=&instanceId=`, so
+ * links and reloads open it too.
  */
 const MangaSources = () => {
   const intl = useIntl();
@@ -395,17 +396,22 @@ const MangaSources = () => {
                           <PencilIcon />
                           <span>{intl.formatMessage(globalMessages.open)}</span>
                         </Button>
-                        <Button
-                          buttonType="default"
-                          buttonSize="standard"
-                          disabled={busy}
-                          onClick={(event) =>
-                            void searchNow(title, event.currentTarget)
-                          }
-                        >
-                          <MagnifyingGlassIcon />
-                          <span>{intl.formatMessage(messages.searchNow)}</span>
-                        </Button>
+                        {/* A bound title waits for nothing to search. */}
+                        {title.status !== 'BOUND' && (
+                          <Button
+                            buttonType="default"
+                            buttonSize="standard"
+                            disabled={busy}
+                            onClick={(event) =>
+                              void searchNow(title, event.currentTarget)
+                            }
+                          >
+                            <MagnifyingGlassIcon />
+                            <span>
+                              {intl.formatMessage(messages.searchNow)}
+                            </span>
+                          </Button>
+                        )}
                       </div>
                     </Table.TD>
                   </tr>

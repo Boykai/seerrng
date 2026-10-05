@@ -304,6 +304,12 @@ test('current shared owners pass their checks and functional mutations fail', ()
       '<Table.TD>',
       'a narrow manga chapter list must drop the Uploaded column so Status and the action column fit',
     ],
+    [
+      'src/components/Settings/MangaSources/TitleDetail.tsx',
+      'buttonType="danger"\n            buttonSize="standard"\n            disabled={busy}\n            aria-describedby',
+      'buttonType="default"\n            buttonSize="standard"\n            disabled={busy}\n            aria-describedby',
+      'Remove Match must be a standard-size danger button in the shared inset entry layout',
+    ],
   ];
   for (const [fileName, original, replacement, reason] of cases) {
     const source = readFileSync(

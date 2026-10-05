@@ -6,13 +6,17 @@ const MAX_INT32 = 2_147_483_647;
 const MAX_SOURCE_ID = BigInt('9223372036854775807');
 const MAX_URL_LENGTH = 2_048;
 
-/** The statuses the list filters by; a BOUND title leaves the list. */
+/**
+ * The statuses the list filters by. A BOUND title leaves the unfiltered
+ * list; the BOUND filter lists it.
+ */
 export const LIST_STATUSES = [
   'AWAITING_APPROVAL',
   'QUEUED',
   'NEEDS_PICK',
   'NO_MATCH',
   'EXCLUDED',
+  'BOUND',
 ] as const satisfies readonly `${MangaResolveListStatus}`[];
 
 export type ListStatus = (typeof LIST_STATUSES)[number];
@@ -51,6 +55,11 @@ export const searchBody = (instanceId: number) => ({ instanceId });
 export const selectBody = (instanceId: number, candidateId: number) => ({
   instanceId,
   candidateId,
+});
+
+export const unbindBody = (instanceId: number, bindingId: number) => ({
+  instanceId,
+  bindingId,
 });
 
 export type BindBody =

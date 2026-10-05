@@ -36,7 +36,7 @@ export const StatusBadges = ({ title }: { title: MangaResolveTitle }) => {
 
 /**
  * One fixed message per reason. An exact link credits MangaDex through the
- * match that carries it; the list has none, as BOUND titles leave it.
+ * match that carries it; the list passes none, so a bound row shows no credit.
  */
 export const StatusReason = ({
   title,

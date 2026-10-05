@@ -14,6 +14,7 @@ import {
   resolveListKey,
   searchBody,
   selectBody,
+  unbindBody,
   type BindResult,
 } from './requestBodies';
 
@@ -38,6 +39,9 @@ const createValidatedApp = (): Express => {
     res.status(200).json({})
   );
   app.post('/api/v1/manga/resolve/:anilistId/bind', (_req, res) =>
+    res.status(200).json({})
+  );
+  app.post('/api/v1/manga/resolve/:anilistId/unbind', (_req, res) =>
     res.status(200).json({})
   );
   app.use(
@@ -72,6 +76,7 @@ describe('manga source requests behind the OpenAPI validator', () => {
       resolveListKey(1, 10, 'NEEDS_PICK'),
       resolveListKey(1, 10, 'NO_MATCH'),
       resolveListKey(1, 10, 'EXCLUDED'),
+      resolveListKey(1, 10, 'BOUND'),
     ]) {
       const response = await request(app).get(key);
       assert.equal(response.status, 200, `${key} ${response.body.message}`);
@@ -124,6 +129,15 @@ describe('manga source requests behind the OpenAPI validator', () => {
     }
   });
 
+  it('accepts an unbind', async () => {
+    for (const body of [unbindBody(0, 1), unbindBody(2, 2_147_483_647)]) {
+      const response = await request(app)
+        .post('/api/v1/manga/resolve/9001/unbind')
+        .send(body);
+      assert.equal(response.status, 200, JSON.stringify(response.body));
+    }
+  });
+
   it('refuses bodies of the wrong shape', async () => {
     for (const [route, body] of [
       ['search', {}],
@@ -134,6 +148,9 @@ describe('manga source requests behind the OpenAPI validator', () => {
       ['bind', { instanceId: 0, suwayomiMangaId: 1, sourceId: '1002' }],
       ['bind', { instanceId: 0, sourceId: 1002, url: '/manga/1' }],
       ['bind', { instanceId: 0, sourceId: '1002', url: '' }],
+      ['unbind', { instanceId: 0 }],
+      ['unbind', { instanceId: 0, bindingId: 0 }],
+      ['unbind', { instanceId: 0, bindingId: 1, sourceId: '1002' }],
     ] as const) {
       const response = await request(app)
         .post(`/api/v1/manga/resolve/9001/${route}`)

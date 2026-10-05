@@ -4,6 +4,7 @@ import type {
   MangaResolveBindResponse,
   MangaResolveErrorResponse,
   MangaResolveSearchResponse,
+  MangaResolveUnbindResponse,
 } from '@server/interfaces/api/mangaResolveInterfaces';
 import { isTrackedJobRunning, scheduledJobs } from '@server/job/schedule';
 import { MangaResolveError } from '@server/lib/mangaResolver/errors';
@@ -13,6 +14,7 @@ import {
   prepareMangaResolveBind,
   prepareMangaResolveSelect,
   requestMangaResolveSearch,
+  unbindMangaResolveTitle,
 } from '@server/lib/mangaResolver/review';
 import { Permission } from '@server/lib/permissions';
 import logger from '@server/logger';
@@ -53,13 +55,14 @@ const listQuery = z
     skip: fromDigits(
       z.number().int().min(0).max(MAX_PAGINATION_OFFSET)
     ).default(0),
-    // The list holds only waiting titles, so none is BOUND.
+    // BOUND lists the titles whose open requests all have a match.
     status: z
       .enum([
         MangaResolutionStatus.QUEUED,
         MangaResolutionStatus.NEEDS_PICK,
         MangaResolutionStatus.NO_MATCH,
         MangaResolutionStatus.EXCLUDED,
+        MangaResolutionStatus.BOUND,
         'AWAITING_APPROVAL',
       ])
       .optional(),
@@ -68,6 +71,7 @@ const listQuery = z
 const detailQuery = z.object({ instanceId: fromDigits(instanceId) }).strict();
 const searchBody = z.object({ instanceId }).strict();
 const selectBody = z.object({ instanceId, candidateId: positiveId }).strict();
+const unbindBody = z.object({ instanceId, bindingId: positiveId }).strict();
 const bindBody = z.union([
   z.object({ instanceId, suwayomiMangaId: positiveId }).strict(),
   z.object({ instanceId, sourceId, url }).strict(),
@@ -218,6 +222,28 @@ mangaResolveRoutes.post(
     return prepareMangaResolveBind(anilistId, body.data, signal);
   }),
   decide
+);
+
+mangaResolveRoutes.post(
+  '/:anilistId/unbind',
+  authorizedMutation(Permission.ADMIN, async (req, res) => {
+    try {
+      const anilistId = anilistIdOf(req);
+      const body = unbindBody.safeParse(req.body);
+      if (!body.success) throw invalidRequest();
+      return res
+        .status(200)
+        .json(
+          (await unbindMangaResolveTitle(
+            anilistId,
+            body.data
+          )) satisfies MangaResolveUnbindResponse
+        );
+    } catch (error) {
+      if (error instanceof MangaResolveError) return sendError(res, error);
+      throw error;
+    }
+  })
 );
 
 export default mangaResolveRoutes;

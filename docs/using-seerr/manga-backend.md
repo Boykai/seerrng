@@ -654,15 +654,19 @@ titles that wait for a source with their status from
 [Statuses and retries](#statuses-and-retries), a short reason, and their
 **Last Check** and **Next Check** times; filter the list by **Status**.
 **Next Check** stays empty for a title whose requests are all pending with no
-open search request, because no run searches it. A title whose details
-SeerrNG cannot show, for example because the **Manga Content** switches hide
-it, appears only as its AniList ID.
+open search request, because no run searches it. **Bound** lists the titles
+that have a match instead, while one of their requests is open and step 6 of
+[Dispatch](#dispatch) has not recorded its chapters yet; their **Next Check**
+stays empty too, and the other choices leave these titles out. A title whose
+details SeerrNG cannot show, for example because the **Manga Content**
+switches hide it, appears only as its AniList ID.
 
 - **Search Now** asks the job to search the title next and resets its wait.
   The title shows **Search Queued** until the search has run. For a title
   whose request is still pending, the page asks you to confirm first, because
   the search sends the title to MangaDex and to the selected sources even
-  though the request is not approved.
+  though the request is not approved. The page does not offer it for a
+  **Bound** title, which has a match.
 - **Open** shows the title's status with a link to its request, its matches
   on the server under **Library Matches**, and its **Suggestions**, exact
   links first. Each suggestion shows its title, the name and language of its
@@ -676,9 +680,16 @@ it, appears only as its AniList ID.
 - **Match by Hand** matches the title to a manga that Suwayomi already knows:
   enter its **Suwayomi Manga ID**, or choose one of the sources selected for
   the server and enter the manga's **Source-Relative URL**.
+- **Remove Match** removes one of the title's current matches under
+  **Library Matches** after you confirm, as **Reject** does on the
+  [Manga Library page](#manga-library-page): SeerrNG keeps the match's
+  history, changes nothing in Suwayomi, and returns a manga that is in the
+  Suwayomi library to that page's review queue. For what happens to the
+  title's requests, see the end of this section.
 
 After a match, the page closes the title's details and the title leaves the
-list. If an action fails, the page says why; when the title changed in the
+list. After **Remove Match**, the details stay open and show the title's new
+status. If an action fails, the page says why; when the title changed in the
 meantime, refresh it and try again. Administrators can also open a title that
 is [waiting for a source](#waiting-for-a-source) from its request with
 **Choose Source**.
@@ -689,11 +700,12 @@ normal not-found response.
 
 | Method and route | Purpose |
 | --- | --- |
-| `GET /` | List titles that wait for a source, with their status, 20 per page by default. Filter by `status`: `QUEUED`, `NEEDS_PICK`, `NO_MATCH`, `EXCLUDED`, or `AWAITING_APPROVAL` for a pending request with no open search request. |
+| `GET /` | List titles that wait for a source, with their status, 20 per page by default. Filter by `status`: `QUEUED`, `NEEDS_PICK`, `NO_MATCH`, `EXCLUDED`, or `AWAITING_APPROVAL` for a pending request with no open search request. `BOUND` lists the titles that have a match instead, as the **Bound** filter does. |
 | `GET /{anilistId}?instanceId=` | Show a title's status, its suggestions, and its current matches on that Suwayomi server. |
 | `POST /{anilistId}/search` | Search the title at the next run, or start a run now, with a fresh wait. This also searches a title whose request is still pending. |
 | `POST /{anilistId}/select` | Match the title to one of its suggestions. |
 | `POST /{anilistId}/bind` | Match the title to a manga that Suwayomi already knows. Name the manga by its Suwayomi ID, or by its source ID and its address in Suwayomi. |
+| `POST /{anilistId}/unbind` | Remove one of the title's current matches, named by its `bindingId` from the title's matches, as **Remove Match** does. A match that is no longer current returns HTTP `409`. |
 
 - Before a match, SeerrNG reads the manga from Suwayomi. When Suwayomi no
   longer knows a suggestion, the match returns HTTP `409`. A manga that
@@ -712,11 +724,14 @@ normal not-found response.
 
 Matches made here or by the job also appear on the **Manga Library** page
 under **Library Matches**, with the status **Active** while the manga is not
-in the Suwayomi library. Reject a match there to undo it: the title's
-requests whose chapters step 6 of [Dispatch](#dispatch) has not recorded yet
-wait for a source again, and the job never matches that manga to the title by
-itself again. A request whose chapters step 6 has recorded keeps its match;
-see [Which match a request uses](#which-match-a-request-uses).
+in the Suwayomi library. Reject a match there, or remove it here with
+**Remove Match**, to undo it: the title's requests whose chapters step 6 of
+[Dispatch](#dispatch) has not recorded yet wait for a source again unless the
+title has another current match on the server, and the job never matches that
+manga to the title by itself again. A request whose chapters step 6 has
+recorded keeps its match and
+[needs attention](#requests-that-need-attention) until the match is current
+again; see [Which match a request uses](#which-match-a-request-uses).
 
 ### What leaves your server
 

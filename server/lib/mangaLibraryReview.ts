@@ -515,11 +515,13 @@ export const linkMangaLibraryItem = (
 
 /**
  * Refuses the (item, AniList ID) pair for good: no step proposes or links it
- * again, though a manual bind still can. Touches only the database.
+ * again, though a manual bind still can. Touches only the database. With
+ * `activeBindingId`, the pair must still be that ACTIVE binding.
  */
 export const rejectMangaLibraryPair = async (
   key: ItemKey,
-  anilistId: number
+  anilistId: number,
+  { activeBindingId }: { activeBindingId?: number } = {}
 ): Promise<MangaLibraryItemState> => {
   const snapshot = findInstance(key.instanceId);
   const { instanceId, sourceId, url } = key;
@@ -527,6 +529,17 @@ export const rejectMangaLibraryPair = async (
     runWithSuwayomiInstanceAdmission(snapshot, async () => {
       await dataSource.transaction(async (manager) => {
         const { bindings, candidate } = await loadItem(manager, key);
+        if (
+          activeBindingId !== undefined &&
+          !bindings.some(
+            (row) =>
+              row.id === activeBindingId &&
+              row.anilistId === anilistId &&
+              row.state === MangaBindingState.ACTIVE
+          )
+        ) {
+          throw new MangaLibraryError('MANGA_ITEM_CHANGED');
+        }
         if (bindings.length === 0 && !candidate) {
           throw new MangaLibraryError('MANGA_ITEM_NOT_FOUND');
         }

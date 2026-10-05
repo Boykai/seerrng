@@ -5747,6 +5747,22 @@ const validateCurrentBatchContract = (files) => {
     'The chapter table and its pagination footer sit in one `media-chapter-list` size container.',
     'the style standard must govern the narrow manga chapter list'
   );
+  requireOrder(
+    'src/components/Settings/MangaSources/TitleDetail.tsx',
+    [
+      'const BindingCard',
+      'className="settings-manga-sources-item"',
+      'buttonType="danger"',
+      'buttonSize="standard"',
+      'messages.removeMatch',
+    ],
+    'Remove Match must be a standard-size danger button in the shared inset entry layout'
+  );
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    "Manga Sources' Status filter also offers Bound",
+    'the style standard must govern the Bound filter and Remove Match'
+  );
   requireText(
     'src/components/Settings/SettingsNetwork/index.tsx',
     'className="settings-http-warning"',
