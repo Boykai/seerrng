@@ -76,6 +76,9 @@ Adult genres and tags are listed only while **Include Adult Manga** is on, and
 the **Novel** format only while **Include Novels** is on. The
 [content switches](#choose-which-titles-appear) apply to every filtered view.
 
+Each genre and tag on a manga's details page links to the manga Discover page
+filtered by that genre or tag.
+
 **Sort By** orders the results by Trending, Popular, Top Rated, Start Date, or
 Title. Selecting the active sort again reverses its direction. Keyword results
 are ordered by relevance until you choose a sort, and other filtered views by

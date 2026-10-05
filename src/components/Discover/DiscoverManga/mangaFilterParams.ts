@@ -65,6 +65,8 @@ export const MANGA_FILTER_KEYS = [
 ] as const;
 // The API accepts at most this many names in each list.
 export const MAX_MANGA_FILTER_NAMES = 10;
+// The API accepts names of at most this many characters.
+export const MAX_MANGA_FILTER_NAME_LENGTH = 64;
 
 export type MangaNameFilter = (typeof MANGA_NAME_FILTERS)[number];
 export type MangaFilterKey = (typeof MANGA_FILTER_KEYS)[number];
@@ -89,6 +91,19 @@ export const splitMangaFilterNames = (value?: string): string[] => [
 export const joinMangaFilterNames = (
   names: readonly string[]
 ): string | undefined => (names.length ? names.join(',') : undefined);
+
+// Address of manga discovery filtered by one genre or tag. A name that would
+// not come back unchanged through the comma-separated list gets no address.
+export const getMangaFilterHref = (
+  filter: 'genres' | 'tags',
+  name: string
+): string | undefined =>
+  name &&
+  name === name.trim() &&
+  name.length <= MAX_MANGA_FILTER_NAME_LENGTH &&
+  !name.includes(',')
+    ? `/discover/manga?${filter}=${encodeURIComponent(name)}`
+    : undefined;
 
 const allowedValues: Partial<Record<MangaFilterKey, readonly string[]>> = {
   format: MANGA_FORMATS,

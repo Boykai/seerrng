@@ -42,13 +42,12 @@ vi.mock('next/link', () => ({
   default: ({
     href,
     children,
-    className,
-  }: {
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     href: string;
     children: React.ReactNode;
-    className?: string;
   }) => (
-    <a href={href} className={className}>
+    <a href={href} {...props}>
       {children}
     </a>
   ),
@@ -319,7 +318,7 @@ it('renders only the sanitized description as HTML', async () => {
   expect(host.querySelectorAll('i')).toHaveLength(0);
 });
 
-it('links only to AniList and MyAnimeList in a new tab', async () => {
+it('links genres and tags to manga discovery and opens only AniList and MyAnimeList in a new tab', async () => {
   await render();
 
   const links = [...host.querySelectorAll('a')].map((link) => ({
@@ -341,7 +340,65 @@ it('links only to AniList and MyAnimeList in a new tab', async () => {
       rel: 'noopener noreferrer',
       text: 'View on MyAnimeList',
     },
+    {
+      href: '/discover/manga?genres=Adventure',
+      target: null,
+      rel: null,
+      text: 'Adventure',
+    },
+    {
+      href: '/discover/manga?genres=Drama',
+      target: null,
+      rel: null,
+      text: 'Drama',
+    },
+    {
+      href: '/discover/manga?tags=Pirates',
+      target: null,
+      rel: null,
+      text: 'Pirates',
+    },
   ]);
+  expect(
+    [...host.querySelectorAll('a[href^="/discover/manga?"]')].map(
+      (link) => link.className
+    )
+  ).toEqual(['app-detail-link', 'app-detail-link', 'app-detail-link']);
+});
+
+it('encodes genre and tag links and keeps names the filter cannot carry as text', async () => {
+  const longName = 'x'.repeat(65);
+  state.swr = {
+    data: details({
+      genres: ['Slice of Life', "Boys' Love"],
+      tags: [
+        { name: 'Cats & Dogs', rank: 80 },
+        { name: 'Before/After', rank: 70 },
+        { name: 'A+B', rank: 60 },
+        { name: 'Comedy, Drama', rank: 50 },
+        { name: ' Padded ', rank: 40 },
+        { name: longName, rank: 30 },
+      ],
+    }),
+  };
+  await render();
+
+  expect(
+    [...host.querySelectorAll('a[href^="/discover/manga?"]')].map((link) => [
+      link.getAttribute('href'),
+      link.textContent,
+    ])
+  ).toEqual([
+    ['/discover/manga?genres=Slice%20of%20Life', 'Slice of Life'],
+    ["/discover/manga?genres=Boys'%20Love", "Boys' Love"],
+    ['/discover/manga?tags=Cats%20%26%20Dogs', 'Cats & Dogs'],
+    ['/discover/manga?tags=Before%2FAfter', 'Before/After'],
+    ['/discover/manga?tags=A%2BB', 'A+B'],
+  ]);
+  expect(detailValue('Genres')).toBe("Slice of Life, Boys' Love");
+  expect(detailValue('Tags')).toBe(
+    `Cats & Dogs, Before/After, A+B, Comedy, Drama,  Padded , ${longName}`
+  );
 });
 
 it('renders no request action', async () => {
