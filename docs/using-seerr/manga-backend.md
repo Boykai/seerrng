@@ -48,8 +48,10 @@ search, and their details pages show the normal not-found page.
 
 SeerrNG reads manga metadata from AniList's public catalog; no AniList account
 or API key is required. Manga pages share SeerrNG's AniList request budget with
-the other AniList features. While AniList is rate limiting requests, manga pages
-may not load; try again later.
+the other AniList features. While AniList is rate limiting requests or is
+unavailable, manga pages may not load; try again later. A manga's details page
+then shows that its details could not be loaded, with a **Retry** button.
+Unknown titles show the not-found page.
 
 ## Filter manga discovery
 

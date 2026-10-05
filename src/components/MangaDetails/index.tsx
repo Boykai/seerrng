@@ -1,8 +1,11 @@
 import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
-import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import LoadingSpinner, {
+  PageStatus,
+} from '@app/components/Common/LoadingSpinner';
 import { MangaWaitingStatus } from '@app/components/Common/MangaRequestScope';
+import PageErrorMessage from '@app/components/Common/PageErrorMessage';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
 import ExternalBlocklistModal from '@app/components/ExternalBlocklistModal';
@@ -38,7 +41,7 @@ import {
   MediaType,
 } from '@server/constants/media';
 import type { MangaDetails as MangaDetailsType } from '@server/models/Manga';
-import axios from 'axios';
+import axios, { type AxiosError } from 'axios';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { Fragment, useEffect, useState } from 'react';
@@ -61,6 +64,11 @@ const messages = defineMessages('components.MangaDetails', {
   volumes: 'Volumes',
   availability: 'Availability',
   mangaDetails: 'Manga Details',
+  loading: 'Loading Manga Details',
+  loadError: 'Manga Details Could Not Be Loaded',
+  rateLimited: 'Too many requests right now. Try again in a moment.',
+  unavailable: 'The details are unavailable right now. Try again later.',
+  retryTooltip: 'Fetch the manga details again.',
   startDate: 'Start Date',
   endDate: 'End Date',
   story: 'Story',
@@ -165,8 +173,9 @@ const MangaDetails = () => {
   const {
     data,
     error,
+    isValidating,
     mutate: revalidate,
-  } = useSWR<MangaDetailsType>(
+  } = useSWR<MangaDetailsType, AxiosError>(
     mangaId ? `/api/v1/manga/${encodeApiPathSegment(mangaId)}` : null
   );
   const activeRequests =
@@ -200,6 +209,36 @@ const MangaDetails = () => {
   }
 
   if (!data) {
+    const status = error?.response?.status;
+    // A rate limit, a server failure or no answer at all can pass, so the
+    // details can be fetched again. Any other failure means no such title.
+    if (status === undefined || status === 429 || status >= 500) {
+      return (
+        <>
+          <PageTitle title={intl.formatMessage(messages.mangaDetails)} />
+          <div className="page-title-row">
+            <h1 className="page-title">
+              {intl.formatMessage(messages.mangaDetails)}
+            </h1>
+            <PageStatus
+              active={isValidating}
+              label={intl.formatMessage(messages.loading)}
+            />
+          </div>
+          <PageErrorMessage
+            title={intl.formatMessage(messages.loadError)}
+            description={intl.formatMessage(
+              status === 429 ? messages.rateLimited : messages.unavailable
+            )}
+            retry={{
+              onClick: () => revalidate(),
+              tooltip: intl.formatMessage(messages.retryTooltip),
+              busy: isValidating,
+            }}
+          />
+        </>
+      );
+    }
     return <ErrorPage statusCode={404} />;
   }
 

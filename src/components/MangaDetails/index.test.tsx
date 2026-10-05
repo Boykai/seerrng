@@ -10,7 +10,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import MangaDetails from '.';
 
 const state = vi.hoisted(() => ({
-  swr: {} as { data?: unknown; error?: unknown },
+  swr: {} as { data?: unknown; error?: unknown; isValidating?: boolean },
   byKey: {} as Record<string, { data?: unknown; error?: unknown }>,
   keys: [] as unknown[],
   post: vi.fn(),
@@ -103,6 +103,8 @@ vi.mock('next/dynamic', () => ({
 vi.mock('@app/components/Common/PageTitle', () => ({ default: () => null }));
 vi.mock('@app/components/Common/LoadingSpinner', () => ({
   default: () => <div data-testid="loading" />,
+  PageStatus: ({ active, label }: { active?: boolean; label?: string }) =>
+    active ? <div data-testid="page-status">{label}</div> : null,
 }));
 vi.mock('@app/pages/_error', () => ({
   default: ({ statusCode }: { statusCode: number }) => (
@@ -420,6 +422,89 @@ it('shows the not-found page when the manga is unknown or excluded', async () =>
   expect(host.querySelector('[data-testid="error-page"]')?.textContent).toBe(
     '404'
   );
+});
+
+it('keeps the not-found page for a request the server refuses', async () => {
+  state.swr = { error: { response: { status: 400 } } };
+  await render();
+
+  expect(host.querySelector('[data-testid="error-page"]')?.textContent).toBe(
+    '404'
+  );
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+});
+
+const loadFailure = () => {
+  const message = host.querySelector('[role="alert"]');
+  return {
+    heading: host.querySelector('h1')?.textContent,
+    title: message?.querySelector('h3')?.textContent,
+    detail: message?.querySelector('p')?.textContent,
+    retry: [...(message?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent === 'Retry'
+    ),
+    tooltip: message?.querySelector('span[title]')?.getAttribute('title'),
+  };
+};
+
+it('offers a retry instead of the not-found page while AniList is rate limited', async () => {
+  state.swr = { error: { response: { status: 429 } } };
+  await render();
+
+  expect(host.querySelector('[data-testid="error-page"]')).toBeNull();
+  const failure = loadFailure();
+  expect(failure).toMatchObject({
+    heading: 'Manga Details',
+    title: 'Manga Details Could Not Be Loaded',
+    detail: 'Too many requests right now. Try again in a moment.',
+    tooltip: 'Fetch the manga details again.',
+  });
+  expect(host.querySelector('[data-testid="page-status"]')).toBeNull();
+
+  await act(async () => {
+    failure.retry!.dispatchEvent(
+      new dom.window.MouseEvent('click', { bubbles: true })
+    );
+  });
+  expect(state.revalidate).toHaveBeenCalledTimes(1);
+});
+
+it('offers a retry when the details are unavailable or the server cannot be reached', async () => {
+  for (const error of [
+    { response: { status: 503 } },
+    { response: { status: 500 } },
+    { message: 'Network Error' },
+  ]) {
+    state.swr = { error };
+    state.revalidate.mockReset();
+    await render();
+
+    expect(host.querySelector('[data-testid="error-page"]')).toBeNull();
+    const failure = loadFailure();
+    expect(failure).toMatchObject({
+      heading: 'Manga Details',
+      title: 'Manga Details Could Not Be Loaded',
+      detail: 'The details are unavailable right now. Try again later.',
+    });
+    await act(async () => {
+      failure.retry!.dispatchEvent(
+        new dom.window.MouseEvent('click', { bubbles: true })
+      );
+    });
+    expect(state.revalidate).toHaveBeenCalledTimes(1);
+  }
+});
+
+it('shows the page status and a busy retry while the details load again', async () => {
+  state.swr = { error: { response: { status: 503 } }, isValidating: true };
+  await render();
+
+  expect(host.querySelector('[data-testid="page-status"]')?.textContent).toBe(
+    'Loading Manga Details'
+  );
+  const { retry } = loadFailure();
+  expect(retry?.hasAttribute('disabled')).toBe(true);
+  expect(retry?.getAttribute('aria-busy')).toBe('true');
 });
 
 const reportIssueButton = () =>
