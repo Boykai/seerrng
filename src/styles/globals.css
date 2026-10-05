@@ -7793,6 +7793,29 @@
     gap: var(--card-spacing);
   }
 
+  .reader-settings-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--card-spacing);
+  }
+
+  .reader-generated-address-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--button-content-gap);
+    width: 100%;
+    min-width: 0;
+  }
+
+  .reader-generated-address-field > input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .reader-generated-address-field > .app-button {
+    justify-self: end;
+  }
+
   .settings-service-card-content {
     @apply flex min-w-0 flex-1 items-start gap-3;
   }

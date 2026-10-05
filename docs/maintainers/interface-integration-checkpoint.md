@@ -440,10 +440,36 @@ element diagnostics on failure.
 - Final screenshot inspection found the new ownership/sharing captions were
   using browser-default black text. Added the scoped
   `.game-library-sharing-label` role in `src/styles/globals.css`, applied it in
-  GameLibrary, and added a computed-color browser assertion. The exact-source
-  gate, production build, and desktop/mobile browser captures are rerun after
-  this final UI repair. Human visual acceptance remains separate; John’s review
-  of the game and reader surfaces is still a release gate.
+  GameLibrary, and added a computed-color browser assertion. The first
+  incremental build artifact did not include the new rule. A clean build from
+  the exact source emitted it, and the browser assertion now verifies the
+  rendered caption color.
+- The rebuilt reader settings screenshot exposed cramped side-by-side service
+  cards and narrow generated-address controls. Reader service and shelf cards
+  now use one column; each generated address fills its row, with its copy action
+  below it. The Cypress flow checks card order, address width, and action bounds
+  at desktop and mobile sizes.
+- A clean production build passed with the tracked source changes applied to a
+  detached build worktree. It generated `/games`, `/settings/services`, and
+  `/qa-request-edit`; CSS includes the game caption and reader layout roles.
+  Log: `/tmp/seerrng-reader-settings-layout-build-20261005.log`.
+- The Game Library browser flow passed **1/1** in Chromium 153 against that
+  build at 1280×900 and 390×844 CSS viewports. It covers manual ownership,
+  household sharing, Play Together, and horizontal bounds. The reader settings
+  flow passed **1/1** at the same viewports, covering saved URLs, preference,
+  generated links, service-card width, and non-overlapping copy actions. Logs:
+  `/tmp/seerrng-final-ui-game-cypress-20261005.log` and
+  `/tmp/seerrng-final-ui-reader-cypress-20261005.log`.
+- Desktop and mobile review captures are at
+  `/tmp/seerrng-game-library-final-review-20261005/` and
+  `/tmp/seerrng-reader-settings-final-review-20261005/`. These are iteration
+  captures, not John’s human acceptance. The exact-tree
+  `pnpm validate:development` run follows this ledger update before the UI-fix
+  commit; its receipt is
+  `/tmp/seerrng-game-library-validation-final-candidate-20261005.log`.
+- Tests used a fresh disposable SQLite configuration and local providers only.
+  No live Grimmory, BookOrbit, Steam, QuestarrNG, or ROMarrNG provider was
+  contacted. John’s visual acceptance remains a release gate.
 
 ## Rebuilt candidate and rendered review — October 4, 2026 (Regina local)
 

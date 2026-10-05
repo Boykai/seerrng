@@ -517,7 +517,7 @@ const ReaderDeliverySettings = () => {
                 {intl.formatMessage(messages.catalogAddress)}
               </label>
               <div className="form-input-area">
-                <div className="form-input-field">
+                <div className="reader-generated-address-field">
                   <input
                     id={provider + '-opds'}
                     type="text"
@@ -549,7 +549,7 @@ const ReaderDeliverySettings = () => {
                   {intl.formatMessage(messages.comicCatalogAddress)}
                 </label>
                 <div className="form-input-area">
-                  <div className="form-input-field">
+                  <div className="reader-generated-address-field">
                     <input
                       id={provider + '-komga'}
                       type="text"
@@ -630,7 +630,7 @@ const ReaderDeliverySettings = () => {
         {data && draft && !error && (
           <form onSubmit={(event) => void submit(event)}>
             {saveError && <Alert type="error" title={saveError} />}
-            <ul className="settings-service-grid">
+            <ul className="reader-settings-grid">
               {renderProvider(
                 'grimmory',
                 draft.grimmoryUrl,
@@ -735,7 +735,7 @@ const ReaderDeliverySettings = () => {
             </p>
           )}
           {groupings && groupings.length > 0 && (
-            <ul className="settings-service-grid">
+            <ul className="reader-settings-grid">
               {groupings.map((grouping) => {
                 const providerName =
                   grouping.provider === 'grimmory' ? 'Grimmory' : 'BookOrbit';

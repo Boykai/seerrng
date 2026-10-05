@@ -1,4 +1,37 @@
 describe('Reader app delivery settings', () => {
+  const assertGeneratedAddressFieldsFit = () => {
+    for (const selector of [
+      '#grimmory-opds',
+      '#grimmory-komga',
+      '#bookorbit-opds',
+    ]) {
+      cy.get(selector).then(($input) => {
+        const input = $input[0];
+        const field = input.closest('.reader-generated-address-field');
+        const button = field?.querySelector('button');
+        expect(field, `${selector} has a dedicated address layout`).not.to.eq(
+          null
+        );
+        expect(button, `${selector} has a copy action`).not.to.eq(null);
+        const inputBounds = input.getBoundingClientRect();
+        const buttonBounds = button!.getBoundingClientRect();
+        const fieldBounds = field!.getBoundingClientRect();
+        expect(
+          inputBounds.width,
+          `${selector} remains readable`
+        ).to.be.at.least(260);
+        expect(
+          buttonBounds.top,
+          `${selector} copy action sits below the URL`
+        ).to.be.at.least(inputBounds.bottom - 1);
+        expect(
+          buttonBounds.right,
+          `${selector} copy action stays in its row`
+        ).to.be.at.most(fieldBounds.right + 1);
+      });
+    }
+  };
+
   beforeEach(() => {
     cy.loginAsAdmin();
     cy.viewport(1280, 900);
@@ -49,12 +82,31 @@ describe('Reader app delivery settings', () => {
     cy.get('#reader-delivery-preferred').should('have.value', 'bookorbit');
     cy.contains('SeerrNG-managed reader shelves').should('be.visible');
     cy.contains('No reader shelves have been created').should('be.visible');
-    cy.contains('h3.settings-group-heading', 'Reader Apps').scrollIntoView();
+    cy.get('.reader-settings-grid')
+      .first()
+      .children('li')
+      .then(($cards) => {
+        expect($cards).to.have.length(2);
+        const first = $cards[0].getBoundingClientRect();
+        const second = $cards[1].getBoundingClientRect();
+        expect(
+          first.width,
+          'reader service cards use the settings width'
+        ).to.be.greaterThan(550);
+        expect(
+          first.bottom,
+          'reader service cards stack in reading order'
+        ).to.be.at.most(second.top + 1);
+      });
+    assertGeneratedAddressFieldsFit();
     cy.document().then((document) => {
       expect(
         document.documentElement.scrollWidth,
         'page should not overflow horizontally at desktop width'
       ).to.be.at.most(document.documentElement.clientWidth);
+    });
+    cy.contains('h3.settings-group-heading', 'Reader Apps').scrollIntoView({
+      offset: { top: -140, left: 0 },
     });
     cy.screenshot('reader-delivery-settings-desktop', {
       capture: 'viewport',
@@ -74,7 +126,10 @@ describe('Reader app delivery settings', () => {
     cy.viewport(390, 844);
     cy.window().its('innerWidth').should('eq', 390);
     cy.window().its('innerHeight').should('eq', 844);
-    cy.contains('h3.settings-group-heading', 'Reader Apps').scrollIntoView();
+    assertGeneratedAddressFieldsFit();
+    cy.contains('h3.settings-group-heading', 'Reader Apps').scrollIntoView({
+      offset: { top: -120, left: 0 },
+    });
     cy.document().then((document) => {
       expect(
         document.documentElement.scrollWidth,
