@@ -305,6 +305,12 @@ test('current shared owners pass their checks and functional mutations fail', ()
       'a narrow manga chapter list must drop the Uploaded column so Status and the action column fit',
     ],
     [
+      'src/components/MangaDetails/index.tsx',
+      '<ul className="card-list">',
+      '<ul className="flex flex-col gap-2">',
+      'manga Open Issues must follow the Chapters card as a shared inset card listing the shared issue cards',
+    ],
+    [
       'src/components/Settings/MangaSources/TitleDetail.tsx',
       'buttonType="danger"\n            buttonSize="standard"\n            disabled={busy}\n            aria-describedby',
       'buttonType="default"\n            buttonSize="standard"\n            disabled={busy}\n            aria-describedby',

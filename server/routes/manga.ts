@@ -168,9 +168,11 @@ mangaRoutes.get('/:id', async (req, res) => {
     if (!manga || isAnilistMangaExcluded(manga, policy)) {
       return res.status(404).json({ status: 404, message: 'Manga not found.' });
     }
-    const media = (await findMangaMediaByAnilistIds([anilistId], req.user)).get(
-      anilistId
-    );
+    const media = (
+      await findMangaMediaByAnilistIds([anilistId], req.user, {
+        includeIssues: true,
+      })
+    ).get(anilistId);
     const details = {
       ...mapMangaDetails(manga, policy, media),
       inSuwayomiLibrary: await isMangaInSuwayomiLibrary(anilistId),

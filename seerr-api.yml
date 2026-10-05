@@ -3992,6 +3992,17 @@ components:
             onUserWatchlist:
               type: boolean
               description: True when the title is on the requesting user's watchlist.
+            mediaInfo:
+              allOf:
+                - $ref: '#/components/schemas/MediaInfo'
+                - type: object
+                  properties:
+                    issues:
+                      type: array
+                      readOnly: true
+                      description: Issues reported for this title, newest first. Users without permission to view issues get only the issues they reported.
+                      items:
+                        $ref: '#/components/schemas/Issue'
     MangaSummariesResponse:
       type: object
       required:

@@ -5748,6 +5748,23 @@ const validateCurrentBatchContract = (files) => {
     'the style standard must govern the narrow manga chapter list'
   );
   requireOrder(
+    'src/components/MangaDetails/index.tsx',
+    [
+      '<MangaChapterList',
+      'className="app-card-inset refreshed-inset-surface card-spacing-before"',
+      'aria-labelledby="manga-open-issues-heading"',
+      'className="media-inset-heading detail-card-heading-after"',
+      '<ul className="card-list">',
+      '<IssueBlock issue={issue} />',
+    ],
+    'manga Open Issues must follow the Chapters card as a shared inset card listing the shared issue cards'
+  );
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'The manga details page shows an Open Issues inset card last',
+    'the style standard must govern manga Open Issues'
+  );
+  requireOrder(
     'src/components/Settings/MangaSources/TitleDetail.tsx',
     [
       'const BindingCard',

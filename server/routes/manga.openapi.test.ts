@@ -8,6 +8,16 @@ import type {
   AnilistMangaDetails,
   AnilistMangaSummary,
 } from '@server/api/anilist/manga';
+import { IssueStatus, IssueType } from '@server/constants/issue';
+import { MediaStatus, MediaType } from '@server/constants/media';
+import { getRepository } from '@server/datasource';
+import Issue from '@server/entity/Issue';
+import IssueComment from '@server/entity/IssueComment';
+import Media from '@server/entity/Media';
+import MediaIdentifier, {
+  MediaIdentifierProvider,
+} from '@server/entity/MediaIdentifier';
+import { User } from '@server/entity/User';
 import { getSettings } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
 import express from 'express';
@@ -52,9 +62,21 @@ const details: AnilistMangaDetails = {
 // Validates requests and responses against the published contract, so the
 // spec and the routes cannot drift apart. Error responses follow the spec's
 // convention of documenting a description only, so their bodies are checked
-// with response validation off.
-function createApp({ validateResponses = true } = {}) {
+// with response validation off. The validator checks a response before it is
+// serialized, while its dates are still Date objects, so details with tracked
+// media are checked by replaying their serialized body.
+function createApp({
+  validateResponses = true,
+  user,
+  replay,
+}: { validateResponses?: boolean; user?: User; replay?: unknown } = {}) {
   const app = express();
+  if (user) {
+    app.use((req, _res, next) => {
+      req.user = user;
+      next();
+    });
+  }
   app.use(
     OpenApiValidator.middleware({
       apiSpec: path.join(process.cwd(), 'seerr-api.yml'),
@@ -63,6 +85,9 @@ function createApp({ validateResponses = true } = {}) {
       validateSecurity: false,
     })
   );
+  if (replay !== undefined) {
+    app.get('/api/v1/manga/:id', (_req, res) => res.status(200).json(replay));
+  }
   app.use('/api/v1/discover/manga', mangaDiscoverRoutes);
   app.use('/api/v1/manga', mangaRoutes);
   app.get('/api/v1/search', (req, res) =>
@@ -159,6 +184,75 @@ describe('manga catalog through the OpenAPI contract', () => {
     assert.strictEqual(res.status, 200, JSON.stringify(res.body));
     assert.strictEqual(res.body.title, 'Sample Manga');
     assert.deepStrictEqual(res.body.story, [{ id: 1, name: 'Sample Author' }]);
+  });
+
+  it('returns documented reported issues with manga details', async () => {
+    mock.method(AnilistAPI.prototype, 'getMangaDetails', async () => details);
+    const admin = await getRepository(User).findOneByOrFail({
+      email: 'admin@seerr.dev',
+    });
+    const media = await getRepository(Media).save(
+      new Media({
+        tmdbId: 0,
+        mediaType: MediaType.MANGA,
+        status: MediaStatus.AVAILABLE,
+      })
+    );
+    await getRepository(MediaIdentifier).save(
+      new MediaIdentifier({
+        media,
+        provider: MediaIdentifierProvider.ANILIST,
+        value: '30013',
+        canonical: true,
+      })
+    );
+    const issue = await getRepository(Issue).save(
+      new Issue({
+        createdBy: admin,
+        issueType: IssueType.OTHER,
+        status: IssueStatus.OPEN,
+        media,
+        comments: [new IssueComment({ user: admin, message: 'Blank pages' })],
+      })
+    );
+
+    const { status, body } = await request(
+      createApp({ validateResponses: false, user: admin })
+    ).get('/api/v1/manga/30013');
+
+    assert.strictEqual(status, 200, JSON.stringify(body));
+    assert.deepStrictEqual(
+      body.mediaInfo.issues.map(
+        ({ id, comments }: { id: number; comments: { message: string }[] }) => [
+          id,
+          comments[0]?.message,
+        ]
+      ),
+      [[issue.id, 'Blank pages']]
+    );
+
+    // Entity responses reduce users to their public fields, so the replay
+    // checks the issues without their users.
+    const issues = JSON.parse(
+      JSON.stringify(body.mediaInfo.issues, (key, value) =>
+        ['createdBy', 'modifiedBy', 'user'].includes(key) ? undefined : value
+      )
+    );
+    const replay = (mediaInfo: unknown) =>
+      request(createApp({ replay: { ...body, mediaInfo } })).get(
+        '/api/v1/manga/30013'
+      );
+
+    const documented = await replay({ ...body.mediaInfo, issues });
+    assert.strictEqual(documented.status, 200, JSON.stringify(documented.body));
+    assert.strictEqual(documented.body.mediaInfo.issues[0].id, issue.id);
+
+    const malformed = await replay({
+      ...body.mediaInfo,
+      issues: [{ ...issues[0], id: 'first' }],
+    });
+    assert.strictEqual(malformed.status, 500);
+    assert.match(malformed.body.message, /mediaInfo\/issues\/0\/id/);
   });
 
   it('admits detail requests that end in an AniList rate limit', async () => {

@@ -14,14 +14,19 @@ import type {
   AnilistMangaSummary,
 } from '@server/api/anilist/manga';
 import { resetAnilistRateLimiterForTests } from '@server/api/anilist/rateLimiter';
+import { IssueStatus, IssueType } from '@server/constants/issue';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import { Blocklist } from '@server/entity/Blocklist';
+import Issue from '@server/entity/Issue';
+import IssueComment from '@server/entity/IssueComment';
 import Media from '@server/entity/Media';
 import MediaIdentifier, {
   MediaIdentifierProvider,
 } from '@server/entity/MediaIdentifier';
+import { User } from '@server/entity/User';
 import cacheManager from '@server/lib/cache';
+import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
@@ -240,6 +245,67 @@ describe('GET /manga/:id', () => {
     assert.strictEqual(res.body.siteUrl, 'https://anilist.co/manga/30013');
     assert.strictEqual(res.body.mediaInfo?.id, media.id);
     assert.strictEqual(res.body.mediaInfo?.status, MediaStatus.AVAILABLE);
+  });
+
+  it('includes reported issues for users who may view them, and only their own otherwise', async () => {
+    const media = await trackManga(30013);
+    mock.method(AnilistAPI.prototype, 'getMangaDetails', async () => details());
+    mock.method(AnilistAPI.prototype, 'getMangaPage', async () => page());
+    const users = getRepository(User);
+    const friend = await users.findOneByOrFail({ email: 'friend@seerr.dev' });
+    const admin = await users.findOneByOrFail({ email: 'admin@seerr.dev' });
+    const [ownIssue, foreignIssue] = await getRepository(Issue).save([
+      new Issue({
+        createdBy: friend,
+        issueType: IssueType.OTHER,
+        status: IssueStatus.OPEN,
+        media,
+        comments: [new IssueComment({ user: friend, message: 'Own issue' })],
+      }),
+      new Issue({
+        createdBy: admin,
+        issueType: IssueType.OTHER,
+        status: IssueStatus.RESOLVED,
+        media,
+        comments: [
+          new IssueComment({ user: admin, message: 'Foreign private issue' }),
+        ],
+      }),
+    ]);
+    const agent = await loginAs('friend@seerr.dev');
+    const issueIds = async () => {
+      const res = await agent.get('/api/v1/manga/30013');
+      assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+      return {
+        ids: res.body.mediaInfo.issues.map((issue: { id: number }) => issue.id),
+        body: JSON.stringify(res.body),
+      };
+    };
+
+    const own = await issueIds();
+    assert.deepStrictEqual(own.ids, [ownIssue.id]);
+    assert.doesNotMatch(own.body, /Foreign private issue/);
+
+    for (const permission of [
+      Permission.VIEW_ISSUES,
+      Permission.MANAGE_ISSUES,
+    ]) {
+      await users.update(friend.id, {
+        permissions: friend.permissions | permission,
+      });
+      const all = await issueIds();
+      assert.deepStrictEqual(
+        [...all.ids].sort((a, b) => a - b),
+        [ownIssue.id, foreignIssue.id].sort((a, b) => a - b),
+        String(permission)
+      );
+    }
+
+    // Lists leave issues out; only the details carry them.
+    const list = await agent.get('/api/v1/discover/manga');
+    assert.strictEqual(list.status, 200, JSON.stringify(list.body));
+    assert.strictEqual(list.body.results[0].mediaInfo.id, media.id);
+    assert.strictEqual(list.body.results[0].mediaInfo.issues, undefined);
   });
 
   it('answers excluded titles like unknown ids until an administrator includes them', async () => {

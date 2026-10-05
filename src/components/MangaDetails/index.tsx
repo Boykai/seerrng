@@ -10,6 +10,7 @@ import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
 import { getMangaFilterHref } from '@app/components/Discover/DiscoverManga/mangaFilterParams';
 import ExternalBlocklistModal from '@app/components/ExternalBlocklistModal';
+import IssueBlock from '@app/components/IssueBlock';
 import MangaChapterList from '@app/components/MangaDetails/MangaChapterList';
 import { getMangaAvailability } from '@app/components/MangaDetails/mangaAvailability';
 import AvailabilityValue from '@app/components/MediaDetails/AvailabilityValue';
@@ -36,11 +37,14 @@ import {
   MinusCircleIcon,
   StarIcon,
 } from '@heroicons/react/24/solid';
+import { IssueStatus } from '@server/constants/issue';
 import {
   MediaRequestStatus,
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
+import type Issue from '@server/entity/Issue';
+import type Media from '@server/entity/Media';
 import type { MangaDetails as MangaDetailsType } from '@server/models/Manga';
 import axios, { type AxiosError } from 'axios';
 import dynamic from 'next/dynamic';
@@ -89,6 +93,7 @@ const messages = defineMessages('components.MangaDetails', {
   viewOnMyAnimeList: 'View on MyAnimeList',
   viewRequest: 'View Request',
   reportissue: 'Report an Issue',
+  openIssues: 'Open Issues',
   formatManga: 'Manga',
   formatOneShot: 'One Shot',
   formatNovel: 'Novel',
@@ -300,6 +305,30 @@ const MangaDetails = () => {
     !!data.mediaInfo?.id &&
     (data.mediaInfo.status === MediaStatus.AVAILABLE ||
       data.mediaInfo.status === MediaStatus.PARTIALLY_AVAILABLE);
+  const mediaInfo = data.mediaInfo;
+  // Issues arrive without their media, which the issue card reads to find
+  // the title.
+  const openIssues =
+    mediaInfo &&
+    aniListId !== undefined &&
+    hasPermission([Permission.MANAGE_ISSUES, Permission.VIEW_ISSUES], {
+      type: 'or',
+    })
+      ? (mediaInfo.issues ?? [])
+          .filter((issue) => issue.status === IssueStatus.OPEN)
+          .map(
+            (issue) =>
+              ({
+                ...issue,
+                media: {
+                  ...mediaInfo,
+                  identifiers: [
+                    { provider: 'anilist', value: String(aniListId) },
+                  ],
+                } as Media,
+              }) as Issue
+          )
+      : [];
   const availability = getMangaAvailability(
     data.mediaInfo?.status,
     data.inSuwayomiLibrary
@@ -715,6 +744,26 @@ const MangaDetails = () => {
               isBlocklistAvailable && (
                 <MangaChapterList key={aniListId} mangaId={aniListId} />
               )}
+            {openIssues.length > 0 && (
+              <section
+                className="app-card-inset refreshed-inset-surface card-spacing-before"
+                aria-labelledby="manga-open-issues-heading"
+              >
+                <h2
+                  id="manga-open-issues-heading"
+                  className="media-inset-heading detail-card-heading-after"
+                >
+                  {intl.formatMessage(messages.openIssues)}
+                </h2>
+                <ul className="card-list">
+                  {openIssues.map((issue) => (
+                    <li key={issue.id}>
+                      <IssueBlock issue={issue} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </div>
         </article>
         <div className="extra-bottom-space relative" />

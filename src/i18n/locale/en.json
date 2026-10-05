@@ -1348,6 +1348,7 @@
   "components.MangaDetails.mangaDetails": "Manga Details",
   "components.MangaDetails.nativeTitle": "Native Title",
   "components.MangaDetails.notAvailable": "Not available",
+  "components.MangaDetails.openIssues": "Open Issues",
   "components.MangaDetails.overview": "Overview",
   "components.MangaDetails.overviewUnavailable": "Overview unavailable",
   "components.MangaDetails.rateLimited": "Too many requests right now. Try again in a moment.",
