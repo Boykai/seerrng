@@ -798,15 +798,17 @@ describe('AniList Planning list reads', () => {
           planningPage(
             [
               {
+                mediaId: 12,
                 updatedAt: 1_700_000_200,
                 media: { id: 12, format: 'MANGA', isAdult: false },
               },
               {
+                mediaId: 11,
                 updatedAt: null,
                 media: { id: 11, format: 'NOVEL', isAdult: null },
               },
               { updatedAt: 1_700_000_100, media: { id: 10, isAdult: true } },
-              { updatedAt: 1_700_000_000, media: null },
+              { mediaId: 9, updatedAt: 1_700_000_000, media: null },
               { updatedAt: 1_700_000_000, media: { id: 0 } },
               'row',
             ],
@@ -816,11 +818,12 @@ describe('AniList Planning list reads', () => {
       };
 
     const page = await api.getMangaPlanningPage(77, 2);
-    await api.getMangaPlanningPage(77, 2);
+    await api.getMangaPlanningPage(77, 3, { perPage: 48 });
 
     assert.equal(bodies.length, 2);
     assert.deepEqual(authorization, [`Bearer ${token}`, `Bearer ${token}`]);
-    assert.deepEqual(bodies[0].variables, { userId: 77, page: 2 });
+    assert.deepEqual(bodies[0].variables, { userId: 77, page: 2, perPage: 50 });
+    assert.deepEqual(bodies[1].variables, { userId: 77, page: 3, perPage: 48 });
     assert.match(bodies[0].query, /^\s*query MangaPlanningPage/);
     assert.doesNotMatch(bodies[0].query, /mutation/i);
     assert.match(
@@ -828,7 +831,8 @@ describe('AniList Planning list reads', () => {
       /mediaList\(\s*userId: \$userId\s*type: MANGA\s*status: PLANNING/
     );
     assert.match(bodies[0].query, /sort: \[UPDATED_TIME_DESC, MEDIA_ID_DESC\]/);
-    assert.match(bodies[0].query, /perPage: 50/);
+    assert.match(bodies[0].query, /Page\(page: \$page, perPage: \$perPage\)/);
+    assert.match(bodies[0].query, /\{\s*mediaId\s+updatedAt\s+media \{/);
     assert.deepEqual(page, {
       hasNextPage: true,
       entries: [
@@ -846,6 +850,8 @@ describe('AniList Planning list reads', () => {
           isAdult: true,
         },
       ],
+      // A row without usable media still has its place on the page.
+      rowIds: [12, 11, 10, 9, 0, 0],
     });
   });
 
@@ -870,6 +876,33 @@ describe('AniList Planning list reads', () => {
           error instanceof Error && error.name === 'AnilistBadResponseError'
       );
     }
+
+    // A page holds no more rows than were asked for.
+    const short = new AnilistAPI();
+    stubAnilist(short, () =>
+      planningPage(
+        Array.from({ length: 48 }, (_, index) => ({
+          mediaId: index + 1,
+          updatedAt: 1,
+          media: { id: index + 1 },
+        }))
+      )
+    );
+    await assert.rejects(
+      short.getMangaPlanningPage(77, 4, { perPage: 47 }),
+      (error: unknown) =>
+        error instanceof Error && error.name === 'AnilistBadResponseError'
+    );
+
+    const unsent = new AnilistAPI();
+    const sent = stubAnilist(unsent, () => planningPage([]));
+    for (const perPage of [0, 51, 1.5]) {
+      await assert.rejects(
+        unsent.getMangaPlanningPage(77, 1, { perPage }),
+        RangeError
+      );
+    }
+    assert.equal(sent.length, 0);
 
     const limited = new AnilistAPI();
     stubAnilist(limited, () => ({

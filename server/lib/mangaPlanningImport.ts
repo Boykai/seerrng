@@ -5,6 +5,7 @@ import {
   AnilistRateLimitedError,
 } from '@server/api/anilist/failures';
 import {
+  ANILIST_PLANNING_PAGE_SIZE,
   isAnilistMangaExcluded,
   type AnilistMangaPlanningEntry,
 } from '@server/api/anilist/manga';
@@ -37,7 +38,10 @@ const LABEL = 'AniList Planning Import';
 
 /** AniList calls one run may make: list pages, viewer lookups and adds. */
 export const PLANNING_IMPORT_RUN_BUDGET = 15;
-/** List pages of 50 read per user and run: the 200 newest changes. */
+/**
+ * List reads per user and run, of 50, 49, 48 and 47 entries that overlap:
+ * the 188 newest changes.
+ */
 export const PLANNING_IMPORT_MAX_PAGES = 4;
 /** Watchlist adds attempted per user and run. */
 export const PLANNING_IMPORT_MAX_ADDS = 10;
@@ -105,6 +109,13 @@ const compareEntries = (left: Cursor, right: Cursor): number =>
  * The user's Planning entries after `cursor`, the last entry handled, newest
  * first, up to the page cap. Undefined when the run budget ran out before the
  * read ended.
+ *
+ * Each read asks for one entry fewer than the one before, so it repeats the
+ * last entries of the previous read while the list holds still. If it lacks
+ * the previous read's last entry, entries may have left the list in between
+ * and moved others up unseen. The entries read so far are then dropped, so
+ * the cursor stays below anything that may have been missed and the next
+ * run reads it.
  */
 const readPlanning = async (
   client: AnilistAPI,
@@ -113,18 +124,28 @@ const readPlanning = async (
   run: Run
 ): Promise<AnilistMangaPlanningEntry[] | undefined> => {
   const entries = new Map<number, AnilistMangaPlanningEntry>();
+  // The media ID of the previous read's last row, or 0 if it has none.
+  let lastRowId: number | undefined;
   for (let page = 1; page <= PLANNING_IMPORT_MAX_PAGES; page++) {
     if (run.budget < 1) return undefined;
     run.budget -= 1;
     const result = await client.getMangaPlanningPage(anilistUserId, page, {
       signal: run.signal,
+      perPage: ANILIST_PLANNING_PAGE_SIZE + 1 - page,
     });
+    if (
+      lastRowId !== undefined &&
+      (lastRowId === 0 || !result.rowIds.includes(lastRowId))
+    ) {
+      entries.clear();
+    }
     for (const entry of result.entries) {
       if (compareEntries(entry, cursor) <= 0) return [...entries.values()];
       // A list that changes while it is read can repeat an entry.
       if (!entries.has(entry.anilistId)) entries.set(entry.anilistId, entry);
     }
     if (!result.hasNextPage) break;
+    lastRowId = result.rowIds.at(-1) ?? 0;
   }
   return [...entries.values()];
 };

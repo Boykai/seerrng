@@ -773,13 +773,15 @@ export const sanitizeAnilistMangaFilterOptions = (
   };
 };
 
+/** The largest Planning page AniList is asked for. */
 export const ANILIST_PLANNING_PAGE_SIZE = 50;
 
 // A read-only page of one user's Planning manga, most recently changed first.
-// It carries only what the content policy needs before any details lookup.
+// It carries only what the content policy needs before any details lookup,
+// and each row's media ID, which identifies the row across reads.
 export const MANGA_PLANNING_PAGE_QUERY = `
-  query MangaPlanningPage($userId: Int, $page: Int) {
-    Page(page: $page, perPage: ${ANILIST_PLANNING_PAGE_SIZE}) {
+  query MangaPlanningPage($userId: Int, $page: Int, $perPage: Int) {
+    Page(page: $page, perPage: $perPage) {
       pageInfo { hasNextPage }
       mediaList(
         userId: $userId
@@ -787,6 +789,7 @@ export const MANGA_PLANNING_PAGE_QUERY = `
         status: PLANNING
         sort: [UPDATED_TIME_DESC, MEDIA_ID_DESC]
       ) {
+        mediaId
         updatedAt
         media { id format isAdult }
       }
@@ -805,25 +808,40 @@ export interface AnilistMangaPlanningEntry {
 export interface AnilistMangaPlanningPage {
   hasNextPage: boolean;
   entries: AnilistMangaPlanningEntry[];
+  // The media ID of every row on the page, in list order, or 0 where the row
+  // has none. A list holds a title once, so the ID identifies the row.
+  rowIds: number[];
 }
 
 /**
- * Undefined when the reply is not a page of list entries. An entry without a
- * usable media ID is dropped, and one without a change time counts as the
- * oldest.
+ * Undefined when the reply is not a page of at most `perPage` list entries.
+ * An entry without a usable media ID is dropped, and one without a change
+ * time counts as the oldest.
  */
 export const sanitizeAnilistMangaPlanningPage = (
-  value: unknown
+  value: unknown,
+  perPage = ANILIST_PLANNING_PAGE_SIZE
 ): AnilistMangaPlanningPage | undefined => {
   if (
     !isRecord(value) ||
     !isRecord(value.pageInfo) ||
     typeof value.pageInfo.hasNextPage !== 'boolean' ||
     !Array.isArray(value.mediaList) ||
-    value.mediaList.length > ANILIST_PLANNING_PAGE_SIZE
+    value.mediaList.length > perPage
   ) {
     return undefined;
   }
+  const rowIds = value.mediaList.map((item) => {
+    if (!isRecord(item)) {
+      return 0;
+    }
+    const media = isRecord(item.media) ? item.media : {};
+    return (
+      boundedInteger(item.mediaId, 1, MAX_INT32) ??
+      boundedInteger(media.id, 1, MAX_INT32) ??
+      0
+    );
+  });
   const entries = value.mediaList.flatMap(
     (item): AnilistMangaPlanningEntry[] => {
       const media = isRecord(item) && isRecord(item.media) ? item.media : {};
@@ -841,5 +859,5 @@ export const sanitizeAnilistMangaPlanningPage = (
       ];
     }
   );
-  return { hasNextPage: value.pageInfo.hasNextPage, entries };
+  return { hasNextPage: value.pageInfo.hasNextPage, entries, rowIds };
 };

@@ -123,6 +123,8 @@ const tokenOf = (api: AnilistAPI): string | undefined =>
 /** Planning lists by AniList user ID, or the error reading one throws. */
 let lists: Map<number, AnilistMangaPlanningEntry[] | Error>;
 let reads: PageRead[];
+/** The page size each list read asked for. */
+let perPages: number[];
 /** Runs inside each list read, before it answers. */
 let onRead: ((signal?: AbortSignal) => Promise<void>) | undefined;
 let pages: { mock: { restore: () => void } };
@@ -190,6 +192,7 @@ beforeEach(() => {
 
   lists = new Map();
   reads = [];
+  perPages = [];
   onRead = undefined;
   pages = mock.method(
     AnilistAPI.prototype,
@@ -198,9 +201,11 @@ beforeEach(() => {
       this: AnilistAPI,
       anilistUserId: number,
       page: number,
-      options: { signal?: AbortSignal } = {}
+      options: { signal?: AbortSignal; perPage?: number } = {}
     ): Promise<AnilistMangaPlanningPage> {
+      const perPage = options.perPage ?? PAGE_SIZE;
       reads.push({ anilistUserId, page, token: tokenOf(this) });
+      perPages.push(perPage);
       await onRead?.(options.signal);
       const list = lists.get(anilistUserId) ?? [];
       if (list instanceof Error) throw list;
@@ -208,10 +213,12 @@ beforeEach(() => {
         (left, right) =>
           right.updatedAt - left.updatedAt || right.anilistId - left.anilistId
       );
-      const start = (page - 1) * PAGE_SIZE;
+      const start = (page - 1) * perPage;
+      const entries = newestFirst.slice(start, start + perPage);
       return {
-        hasNextPage: newestFirst.length > start + PAGE_SIZE,
-        entries: newestFirst.slice(start, start + PAGE_SIZE),
+        hasNextPage: newestFirst.length > start + perPage,
+        entries,
+        rowIds: entries.map(({ anilistId }) => anilistId),
       };
     }
   );
@@ -506,7 +513,7 @@ describe('AniList Planning import', () => {
     await link(admin, 7001);
     await link(friend, 7002);
     lists.set(7001, [entry(30301, 2000), entry(30302, 2001)]);
-    // 260 entries changed one second apart: only the newest 200 are read.
+    // 260 entries changed one second apart: only the newest 188 are read.
     lists.set(
       7002,
       range(0, 260).map((index) => entry(100000 + index, 1000 + index))
@@ -525,14 +532,16 @@ describe('AniList Planning import', () => {
       [7002, 3],
       [7002, 4],
     ]);
+    // Each read is one entry shorter, so it repeats the end of the last one.
+    assert.deepStrictEqual(perPages, [50, 50, 49, 48, 47]);
     assert.strictEqual(
       reads.length + anilistCalls.length,
       PLANNING_IMPORT_RUN_BUDGET
     );
     assert.deepStrictEqual(await watchlisted(admin), [30301, 30302]);
     // The oldest changes in the window go first, until the budget runs out.
-    assert.deepStrictEqual(await watchlisted(friend), range(100060, 8));
-    assert.deepStrictEqual(await cursorOf(friend), [1067, 100067]);
+    assert.deepStrictEqual(await watchlisted(friend), range(100072, 8));
+    assert.deepStrictEqual(await cursorOf(friend), [1079, 100079]);
     // The friend's turn was cut short, so the next run starts with them.
     assert.strictEqual(rotation.lastUserId, admin.id);
 
@@ -552,9 +561,125 @@ describe('AniList Planning import', () => {
       [7002, 4],
     ]);
     // Entries older than the first window are never imported.
-    assert.deepStrictEqual(await watchlisted(friend), range(100060, 18));
-    assert.deepStrictEqual(await cursorOf(friend), [1077, 100077]);
+    assert.deepStrictEqual(await watchlisted(friend), range(100072, 18));
+    assert.deepStrictEqual(await cursorOf(friend), [1089, 100089]);
     assert.strictEqual(rotation.lastUserId, friend.id);
+  });
+
+  it('leaves the newer entries for the next run when entries leave the list between reads', async () => {
+    const admin = await findUser('admin@seerr.dev');
+    await link(admin, 7001);
+    // 55 entries, newest first from 40054; only the five oldest are manga.
+    const list = range(0, 55).map((index) =>
+      entry(40000 + index, 1000 + index, {
+        format: index < 5 ? 'MANGA' : 'NOVEL',
+      })
+    );
+    lists.set(7001, list);
+    // After the first read, two entries above its last entry (40005) leave
+    // the list, so 40004 moves up past the start of the second read.
+    onRead = async () => {
+      if (reads.length !== 2) return;
+      lists.set(
+        7001,
+        list.filter(
+          ({ anilistId }) => anilistId !== 40030 && anilistId !== 40031
+        )
+      );
+    };
+    const rotation = { lastUserId: 0 };
+
+    assert.deepStrictEqual(await runMangaPlanningImport(rotation), {
+      users: 1,
+      added: 4,
+      skipped: 0,
+    });
+    assert.deepStrictEqual(perPages, [50, 49]);
+    // Only the entries below the change are handled.
+    assert.deepStrictEqual(await watchlisted(admin), range(40000, 4));
+    assert.deepStrictEqual(await cursorOf(admin), [1003, 40003]);
+
+    onRead = undefined;
+    reads = [];
+    perPages = [];
+    assert.deepStrictEqual(await runMangaPlanningImport(rotation), {
+      users: 1,
+      added: 1,
+      skipped: 48,
+    });
+    assert.deepStrictEqual(perPages, [50]);
+    assert.deepStrictEqual(await watchlisted(admin), range(40000, 5));
+    assert.deepStrictEqual(await cursorOf(admin), [1054, 40054]);
+  });
+
+  it('keeps the cursor when a list change leaves the next read empty', async () => {
+    const admin = await findUser('admin@seerr.dev');
+    await link(admin, 7001);
+    const list = range(0, 51).map((index) =>
+      entry(41000 + index, 2000 + index, {
+        format: index < 3 ? 'MANGA' : 'NOVEL',
+      })
+    );
+    lists.set(7001, list);
+    onRead = async () => {
+      if (reads.length !== 2) return;
+      lists.set(
+        7001,
+        list.filter(
+          ({ anilistId }) => anilistId !== 41040 && anilistId !== 41041
+        )
+      );
+    };
+    const rotation = { lastUserId: 0 };
+
+    assert.deepStrictEqual(await runMangaPlanningImport(rotation), {
+      users: 1,
+      added: 0,
+      skipped: 0,
+    });
+    assert.deepStrictEqual(perPages, [50, 49]);
+    assert.deepStrictEqual(await watchlisted(admin), []);
+    assert.deepStrictEqual(await cursorOf(admin), [null, null]);
+
+    onRead = undefined;
+    assert.deepStrictEqual(await runMangaPlanningImport(rotation), {
+      users: 1,
+      added: 3,
+      skipped: 46,
+    });
+    assert.deepStrictEqual(await watchlisted(admin), range(41000, 3));
+    assert.deepStrictEqual(await cursorOf(admin), [2050, 41050]);
+  });
+
+  it('reads on when one entry leaves the list between two reads that overlap by two', async () => {
+    const admin = await findUser('admin@seerr.dev');
+    await link(admin, 7001);
+    const manga = [42000, 42021, 42022, 42070, 42119];
+    const list = range(0, 120).map((index) =>
+      entry(42000 + index, 3000 + index, {
+        format: manga.includes(42000 + index) ? 'MANGA' : 'NOVEL',
+      })
+    );
+    lists.set(7001, list);
+    // After the second read, which ends at 42022, an entry above it leaves
+    // the list, so 42021 moves up to where the second read ended, which the
+    // third read repeats.
+    onRead = async () => {
+      if (reads.length !== 3) return;
+      lists.set(
+        7001,
+        list.filter(({ anilistId }) => anilistId !== 42100)
+      );
+    };
+
+    assert.deepStrictEqual(await runMangaPlanningImport({ lastUserId: 0 }), {
+      users: 1,
+      added: manga.length,
+      skipped: 115,
+    });
+    assert.deepStrictEqual(perPages, [50, 49, 48]);
+    assert.deepStrictEqual(await watchlisted(admin), manga);
+    assert.deepStrictEqual(await cursorOf(admin), [3119, 42119]);
   });
 
   it('resumes after the last handled entry when entries changed in the same second', async () => {

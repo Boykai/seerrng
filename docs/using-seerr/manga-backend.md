@@ -233,15 +233,17 @@ reconnected.
 
 The **AniList Planning Import** job runs at minute 23 of every hour and adds
 the Planning manga that changed on AniList since its last check. Each check
-reads at most the 200 most recently changed entries, so older entries of a
-long list are added only after they change on AniList. A run makes at most 15
-AniList calls and adds up to 10 titles per user; remaining users follow in the
-next runs. The job skips titles that are already on the watchlist, blocklisted,
-or hidden by the [Manga Content](#choose-which-titles-appear) switches. Each
-add works like an add in the app, so **Auto-Request Manga** applies. SeerrNG
-only reads the list: removing a title on AniList keeps its watchlist entry and
-any request. Nothing is imported while the Manga category is off, and while
-AniList is rate limiting or unavailable, the job tries again on its next run.
+reads at most the 188 most recently changed entries, so older entries of a
+long list are added only after they change on AniList. When entries leave the
+list while a check reads it, the check leaves the newer entries for the next
+run. A run makes at most 15 AniList calls and adds up to 10 titles per user;
+remaining users follow in the next runs. The job skips titles that are already
+on the watchlist, blocklisted, or hidden by the
+[Manga Content](#choose-which-titles-appear) switches. Each add works like an
+add in the app, so **Auto-Request Manga** applies. SeerrNG only reads the
+list: removing a title on AniList keeps its watchlist entry and any request.
+Nothing is imported while the Manga category is off, and while AniList is rate
+limiting or unavailable, the job tries again on its next run.
 
 ## Library scan
 

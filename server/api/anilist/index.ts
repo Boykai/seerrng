@@ -49,6 +49,7 @@ import {
   ANILIST_MANGA_DETAILS_TTL_SECONDS,
   ANILIST_MANGA_FILTER_OPTIONS_TTL_SECONDS,
   ANILIST_MANGA_PAGE_TTL_SECONDS,
+  ANILIST_PLANNING_PAGE_SIZE,
   MANGA_BY_IDS_QUERY,
   MANGA_DETAILS_QUERY,
   MANGA_FILTER_OPTIONS_QUERY,
@@ -619,20 +620,31 @@ class AnilistAPI extends ExternalAPI {
 
   /**
    * One page of a user's Planning manga list, read with that user's own
-   * token. It is never cached or shared with another caller.
+   * token, `perPage` rows to a page (at most 50). It is never cached or
+   * shared with another caller.
    */
   async getMangaPlanningPage(
     userId: number,
     page: number,
-    options: { signal?: AbortSignal } = {}
+    options: { signal?: AbortSignal; perPage?: number } = {}
   ): Promise<AnilistMangaPlanningPage> {
+    const perPage = options.perPage ?? ANILIST_PLANNING_PAGE_SIZE;
+    if (
+      !Number.isInteger(perPage) ||
+      perPage < 1 ||
+      perPage > ANILIST_PLANNING_PAGE_SIZE
+    ) {
+      throw new RangeError(
+        `A Planning page holds 1 to ${ANILIST_PLANNING_PAGE_SIZE} entries.`
+      );
+    }
     const data = await this.graphql<{ Page?: unknown }>(
       MANGA_PLANNING_PAGE_QUERY,
-      { userId, page },
+      { userId, page, perPage },
       0,
       options.signal
     );
-    const result = sanitizeAnilistMangaPlanningPage(data.Page);
+    const result = sanitizeAnilistMangaPlanningPage(data.Page, perPage);
     if (!result) {
       throw new AnilistBadResponseError();
     }
