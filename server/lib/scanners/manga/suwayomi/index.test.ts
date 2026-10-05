@@ -132,6 +132,41 @@ const page = (
     },
   });
 
+/**
+ * Lists `library` in one page of raw nodes. Another writer runs `write` while
+ * the first listing is taken.
+ */
+const listWhile = (
+  server: FakeSuwayomi,
+  library: FakeLibrary,
+  write: () => Promise<unknown>
+) => {
+  let pending = true;
+  server.onOperation('LibraryPage', async () => {
+    if (pending) {
+      pending = false;
+      await write();
+    }
+    return page(library.mangas.map(node), library.mangas.length);
+  });
+};
+
+/** A resolver's binding of `manga` that no listing has contained yet. */
+const unlistedBinding = (manga: FakeLibraryManga, anilistId: number) => ({
+  instanceId: 1,
+  sourceId: manga.sourceId,
+  url: manga.url,
+  urlHash: hashMangaSourceUrl(manga.url),
+  anilistId,
+  suwayomiMangaId: manga.id,
+  title: manga.title,
+  confidence: MangaBindingConfidence.HIGH,
+  matchedBy: 'title',
+  origin: 'resolver',
+  state: MangaBindingState.ACTIVE,
+  inLibrary: false,
+});
+
 const start = async (library: FakeLibrary, mode: FakeAuthMode = 'NONE') => {
   const server = await startFakeSuwayomi({
     mode,
@@ -1958,6 +1993,83 @@ describe('manga library scan: guards', () => {
     assert.equal((await candidates())[0].title, 'Edited Elsewhere');
     assert.equal(await mediaStatus(102), AVAILABLE);
   });
+
+  it('keeps a binding that dispatch adds to the library after the listing', async () => {
+    const manga = fakeLibraryManga(1);
+    const library: FakeLibrary = { mangas: [] };
+    const server = await start(library);
+    configure(instanceFor(server));
+    const repository = getRepository(MangaSourceBinding);
+    await repository.insert(unlistedBinding(manga, 101));
+    // Dispatch adds the manga once the listing is taken, so it is not listed.
+    listWhile(server, library, () =>
+      repository.update({ anilistId: 101 }, { inLibrary: true })
+    );
+
+    assert.deepEqual(await scan(), NO_CHANGES);
+    assert.deepEqual(await bound(), [
+      [1, 1, 101, MangaBindingState.ACTIVE, UNKNOWN],
+    ]);
+    assert.equal((await bindings())[0].inLibrary, true);
+
+    library.mangas = [manga];
+    assert.deepEqual(await scan(), {
+      ...NO_CHANGES,
+      bindingsUpdated: 1,
+      mediaCreated: 1,
+    });
+    assert.deepEqual(await bound(), [
+      [1, 1, 101, MangaBindingState.ACTIVE, AVAILABLE],
+    ]);
+  });
+
+  for (const [action, stored] of [
+    ['marks as in the library', true],
+    ['binds', false],
+  ] as const) {
+    it(`leaves an item that another writer ${action} during the listing to the next scan`, async () => {
+      const manga = fakeLibraryManga(1);
+      const library: FakeLibrary = { mangas: [manga] };
+      const server = await start(library);
+      configure(instanceFor(server));
+      const repository = getRepository(MangaSourceBinding);
+      const row = unlistedBinding(manga, 101);
+      if (stored) await repository.insert(row);
+      // Dispatch adds the stored binding's manga, or an admin binds the item.
+      listWhile(server, library, () =>
+        stored
+          ? repository.update({ anilistId: 101 }, { inLibrary: true })
+          : repository.insert({
+              ...row,
+              confidence: MangaBindingConfidence.MANUAL,
+              matchedBy: 'manual',
+              origin: 'admin',
+              inLibrary: true,
+            })
+      );
+
+      assert.deepEqual(await scan(), {
+        ...NO_CHANGES,
+        warnings: { ROW_CHANGED: 1 },
+      });
+      assert.equal(mangaLibraryScanner.status().running, false);
+      assert.deepEqual(await bound(), [
+        [1, 1, 101, MangaBindingState.ACTIVE, UNKNOWN],
+      ]);
+      assert.equal((await bindings())[0].inLibrary, true);
+      assert.deepEqual(await candidates(), []);
+
+      assert.deepEqual(await scan(), {
+        ...NO_CHANGES,
+        bindingsUpdated: 1,
+        mediaCreated: 1,
+      });
+      assert.deepEqual(await bound(), [
+        [1, 1, 101, MangaBindingState.ACTIVE, AVAILABLE],
+      ]);
+      assert.deepEqual(await candidates(), []);
+    });
+  }
 
   it('skips a row that hits a unique key and finishes the run', async () => {
     const server = await start({

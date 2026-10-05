@@ -41,7 +41,15 @@ import {
   runWithRequestAdmission,
 } from '@server/entity/MediaRequest';
 import MediaRequestStatusEvent from '@server/entity/MediaRequestStatusEvent';
-import { runWithMangaDispatchLock } from '@server/lib/mangaDispatch';
+import {
+  runWithMangaDispatchLock,
+  writeMangaRequestNotes,
+} from '@server/lib/mangaDispatch';
+import {
+  MANGA_CHAPTER_OWNERSHIP_KEY,
+  MANGA_REQUEST_CHAPTER_KEY,
+  skipConflictOn,
+} from '@server/lib/mangaInsertTargets';
 import {
   assertSameInstance,
   countRows,
@@ -77,12 +85,12 @@ import { IsNull, Not, type EntityManager } from 'typeorm';
  * chapters the source publishes after dispatch froze the request's scope. Per
  * instance, one at a time, the job asks Suwayomi to refresh a due manga's
  * chapter list from its source (never its metadata), adds the chapters the
- * scope admits to the frozen manifest, re-opens a completed request, and
- * queues the new chapters the way dispatch does. This is the one write path
- * that adds rows to a frozen manifest: it deliberately bypasses
- * `updateMangaRequestManifest`, which refuses frozen manifests. It never
- * removes or dequeues a row, never changes media status, never starts the
- * downloader and never changes a Suwayomi setting.
+ * scope admits to the frozen manifest, re-opens a completed request and
+ * notes it on its manga again, and queues the new chapters the way dispatch
+ * does. This is the one write path that adds rows to a frozen manifest: it
+ * deliberately bypasses `updateMangaRequestManifest`, which refuses frozen
+ * manifests. It never removes or dequeues a row, never changes media status,
+ * never starts the downloader and never changes a Suwayomi setting.
  */
 
 const LABEL = 'Manga Follow';
@@ -123,6 +131,9 @@ export type MangaFollowClient = Pick<
   | 'getDownloadedChapters'
   | 'getQueue'
   | 'enqueueChapters'
+  | 'setRequestIndex'
+  | 'getMangaDetails'
+  | 'setRequestStamp'
 >;
 
 export interface MangaFollowOptions {
@@ -851,13 +862,14 @@ const writeCheck = async (
           assertSameInstance(inst.snapshot);
 
           for (const slice of chunk(added, INSERT_SLICE)) {
-            await manager
-              .createQueryBuilder()
-              .insert()
-              .into(MangaRequestChapter)
-              .values(slice)
-              .orIgnore()
-              .execute();
+            await skipConflictOn(
+              manager
+                .createQueryBuilder()
+                .insert()
+                .into(MangaRequestChapter)
+                .values(slice),
+              MANGA_REQUEST_CHAPTER_KEY
+            ).execute();
           }
           if (reopened) {
             const result = await manager
@@ -927,6 +939,57 @@ const writeCheck = async (
     if (error instanceof FollowMovedError) return undefined;
     throw error;
   }
+};
+
+/**
+ * Notes a re-opened request on its manga again, as dispatch did; the release
+ * dropped those notes when the request completed. Takes the manga's dispatch
+ * lock after the re-open committed and releases it before the enqueue takes
+ * it again: the lock is not re-entrant. SeerrNG never acts on the notes, so
+ * a failure of this manga alone is logged and the queueing goes on.
+ */
+const noteReopened = async (
+  inst: InstanceRun,
+  manifest: MangaRequestManifest,
+  binding: MangaSourceBinding,
+  mangaId: string
+): Promise<void> => {
+  const { run } = inst;
+  let details: Record<string, unknown>;
+  try {
+    const noted = await withFollowLock(inst.instanceId, binding, () =>
+      writeMangaRequestNotes(
+        inst.client,
+        {
+          instanceId: inst.instanceId,
+          sourceId: binding.sourceId,
+          urlHash: binding.urlHash,
+          url: binding.url,
+          mangaId,
+        },
+        manifest.requestId,
+        { signal: run.signal }
+      )
+    );
+    if (noted) return;
+    details = { code: 'MANGA_FOLLOW_NOTES_MISMATCH' };
+  } catch (error) {
+    if (
+      run.signal?.aborted ||
+      !(error instanceof SuwayomiError) ||
+      isStop(run, error)
+    ) {
+      throw error;
+    }
+    details = errorDetails(error);
+  }
+  logger.warn('Manga follow could not note a re-opened request', {
+    label: LABEL,
+    instanceId: inst.instanceId,
+    requestId: manifest.requestId,
+    manifestId: manifest.id,
+    ...details,
+  });
 };
 
 /**
@@ -1013,21 +1076,22 @@ const enqueueFollowed = async (
           return false;
         }
         assertSameInstance(inst.snapshot);
-        await manager
-          .createQueryBuilder()
-          .insert()
-          .into(MangaChapterOwnership)
-          .values(
-            batch.map(({ row }) => ({
-              instanceId: inst.instanceId,
-              sourceId: key.sourceId,
-              mangaUrlHash: key.urlHash,
-              chapterUrlHash: row.urlHash,
-              chapterUrl: row.url,
-            }))
-          )
-          .orIgnore()
-          .execute();
+        await skipConflictOn(
+          manager
+            .createQueryBuilder()
+            .insert()
+            .into(MangaChapterOwnership)
+            .values(
+              batch.map(({ row }) => ({
+                instanceId: inst.instanceId,
+                sourceId: key.sourceId,
+                mangaUrlHash: key.urlHash,
+                chapterUrlHash: row.urlHash,
+                chapterUrl: row.url,
+              }))
+            ),
+          MANGA_CHAPTER_OWNERSHIP_KEY
+        ).execute();
         return true;
       });
       if (!owned) return;
@@ -1139,6 +1203,9 @@ const checkManifest = async (
   }
   if (written.stopped) {
     logSettlement(run, manifest, { kind: 'stop', reason: written.stopped });
+  }
+  if (written.reopened) {
+    await noteReopened(inst, manifest, binding, list.mangaId);
   }
   if (!written.enqueue) return;
   await enqueueFollowed(inst, manifest, key, list.mangaId);

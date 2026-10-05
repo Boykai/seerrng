@@ -36,6 +36,7 @@ import {
 } from '@server/lib/mangaResolver/errors';
 import {
   findWaitingMangaTitles,
+  isMangaTitleSearchable,
   loadMangaResolutions,
   requestMangaTitleSearch,
   resolutionKey,
@@ -88,7 +89,8 @@ const candidateView = (row: MangaSourceCandidate): MangaResolveCandidate => ({
 /**
  * A waiting title without a result shows as QUEUED, or as awaiting approval
  * while only pending requests wait and no admin search is pending; a bound
- * title as BOUND.
+ * title as BOUND. Only a waiting title that a run searches shows its next
+ * attempt.
  */
 const titleView = (
   title: WaitingMangaTitle,
@@ -128,7 +130,10 @@ const titleView = (
     attempts: row?.attempts ?? 0,
     checkedAt: iso(row?.checkedAt ?? null),
     searchedAt: iso(row?.searchedAt ?? null),
-    nextAttemptAt: iso(row?.nextAttemptAt ?? null),
+    nextAttemptAt:
+      title.waiting && isMangaTitleSearchable(title, row)
+        ? iso(row?.nextAttemptAt ?? null)
+        : null,
     searchRequestedAt: iso(row?.searchRequestedAt ?? null),
     lastError: (row?.lastError ?? null) as MangaResolveFailure | null,
   };

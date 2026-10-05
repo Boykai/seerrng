@@ -102,7 +102,10 @@ class MangaSourceBinding {
   @Column({ type: 'varchar', length: 16 })
   public state: MangaBindingState;
 
-  /** True when the latest complete listing contained the item. */
+  /**
+   * True when the latest complete listing contained the item, or when
+   * dispatch added it to the library since.
+   */
   @Column({ type: 'boolean', default: false })
   public inLibrary: boolean;
 

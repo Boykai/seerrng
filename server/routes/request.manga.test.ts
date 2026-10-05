@@ -838,6 +838,35 @@ describe('manga follow consent', () => {
     assert.strictEqual(declined.body.mangaScope.follow.enabled, false);
   });
 
+  it("refuses to turn following on while approving another user's pending request", async () => {
+    const friend = await loginAs('friend@seerr.dev');
+    const admin = await loginAs('admin@seerr.dev');
+    const pending = await requestManga(friend);
+
+    const refused = await requestManga(admin, { mangaFollow: true });
+
+    assert.strictEqual(refused.status, 403);
+    assert.strictEqual(
+      refused.body.message,
+      'Following new chapters can only be turned on by the owner of a manga request.'
+    );
+    const stored = await getRepository(MediaRequest).findOneByOrFail({
+      id: pending.body.id,
+    });
+    assert.strictEqual(stored.status, MediaRequestStatus.PENDING);
+    assert.strictEqual((await followOf(pending.body.id)).enabled, false);
+    await waitForBackgroundTasks();
+    assert.deepStrictEqual(enqueued, []);
+
+    // Without following, the administrator approves it as before.
+    const approved = await requestManga(admin);
+
+    assert.strictEqual(approved.status, 201);
+    assert.strictEqual(approved.body.id, pending.body.id);
+    assert.strictEqual(approved.body.status, MediaRequestStatus.APPROVED);
+    assert.strictEqual(approved.body.mangaScope.follow.enabled, false);
+  });
+
   it('refuses mangaFollow when editing, so an edit can never opt the owner in', async () => {
     const friend = await loginAs('friend@seerr.dev');
     const created = await requestManga(friend);

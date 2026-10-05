@@ -506,11 +506,13 @@ title's details page shows an **Availability** row:
 - **In Suwayomi Library** while no chapter is downloaded yet.
 
 The marker shows while a current match links the title to a manga in the
-Suwayomi library. Rejecting the match clears it right away, and the next
-library scan clears it once the manga has left the library or you removed the
-Suwayomi server. Everyone who can open the details page sees the row, which
-names no server, source, or address. Blocklisted titles show no availability
-row.
+Suwayomi library. When step 3 of [Dispatch](#dispatch) adds a requested
+title's manga to the library, or finds it there already, the marker shows
+right away instead of after the next library scan. Rejecting the match clears
+it right away, and the next library scan clears it once the manga has left the
+library or you removed the Suwayomi server. Everyone who can open the details
+page sees the row, which names no server, source, or address. Blocklisted
+titles show no availability row.
 
 ### Recently Added
 
@@ -603,6 +605,11 @@ title that the **Manga Content** switches allow.
 
 ### Statuses and retries
 
+The **Next search** times apply while an approved request waits for the
+title or an administrator's search request is open. Otherwise the job does
+not search the title, whatever its status, until a request is approved or an
+administrator asks for a search.
+
 | Status | Meaning | Next search |
 | --- | --- | --- |
 | **Awaiting Approval** | Only pending requests wait, and no search that an administrator asked for is open. | When a request is approved or an administrator asks for a search. |
@@ -620,7 +627,13 @@ title that the **Manga Content** switches allow.
 - A title that no selected source may search, because none of them is
   installed or **Include Adult Manga** leaves none, waits as **No Match**
   does.
-- An administrator's search request resets the wait.
+- An administrator's search request resets the wait, and the next run
+  searches the title. When that run cannot search it, the request stays open
+  and the title waits as any other does: until the next run after a rate
+  limit or when Suwayomi cannot be reached, and for an hour after an AniList
+  failure or a match that could not be saved. A search request made while a
+  run is already searching the title stays open, and the next run searches
+  the title again.
 - When a title's match is rejected or its manga leaves the server, a request
   whose chapters step 6 of [Dispatch](#dispatch) has not recorded yet waits
   for a source again, and the next run searches the title. A request whose
@@ -639,9 +652,11 @@ Like the [Manga Library page](#manga-library-page), it appears while the
 Manga category is on and a Suwayomi server is configured. The page lists the
 titles that wait for a source with their status from
 [Statuses and retries](#statuses-and-retries), a short reason, and their
-**Last Check** and **Next Check** times; filter the list by **Status**. A
-title whose details SeerrNG cannot show, for example because the **Manga
-Content** switches hide it, appears only as its AniList ID.
+**Last Check** and **Next Check** times; filter the list by **Status**.
+**Next Check** stays empty for a title whose requests are all pending with no
+open search request, because no run searches it. A title whose details
+SeerrNG cannot show, for example because the **Manga Content** switches hide
+it, appears only as its AniList ID.
 
 - **Search Now** asks the job to search the title next and resets its wait.
   The title shows **Search Queued** until the search has run. For a title
@@ -734,7 +749,8 @@ where it stopped:
 2. **Check the server:** SeerrNG checks the server's marker; see
    [Server marker](#server-marker).
 3. **Add to the library:** SeerrNG adds the manga to the Suwayomi library if it
-   is not there yet.
+   is not there yet, and the title shows as in the library; see
+   [Availability on manga pages](#availability-on-manga-pages).
 4. **Add to the category:** SeerrNG adds the manga to the **SeerrNG** category
    and notes the request on the manga.
 5. **Refresh the chapters:** SeerrNG asks the manga's source for its current
@@ -895,6 +911,8 @@ minute and doubling up to 6 hours, or waits a fixed time and lets the sweep try
 again. After 50 failed tries in a row, about 10 days, SeerrNG marks the request
 Failed. Retrying a failed request runs its steps again without repeating
 finished work in Suwayomi, and the request keeps the chapters chosen for it.
+Its history shows the retry, then each state the request reaches, such as a
+wait for a source or a step that failed.
 
 SeerrNG logs each wait and retry under the **Manga Dispatch** label with the
 request ID and one of these codes; the codes appear only in the logs. Log
@@ -947,6 +965,13 @@ stay part of the request and download like the others. Through the
 [REST API](../../seerr-api.yml), a new manga request turns following on with
 `mangaFollow: true`.
 
+When a user with **Manage Requests**, or one who may auto-approve manga,
+requests a title that already has a pending request for the same Suwayomi
+server, SeerrNG approves that request instead of adding one. With
+`mangaFollow: true`, it also turns following on when the pending request is
+the user's own. When it belongs to another user, SeerrNG refuses with HTTP
+`403` and the pending request stays as it was.
+
 Turning following on makes the request due at once. A request that is not sent
 yet is checked once its chapters are queued.
 
@@ -970,11 +995,11 @@ on that server. For each request, SeerrNG:
 Step 4 also queues a followed chapter again when it left the download queue
 without being downloaded. Chapters that following queued are handed back like
 the others when the request ends; see [When a request ends](#when-a-request-ends).
-Following never changes the library, the **SeerrNG** category, the request
-notes, the server marker, or Suwayomi's settings, and it does not need
-Suwayomi's own automatic chapter downloads. The
-[request notes](#what-seerrng-writes-to-suwayomi) can therefore leave out a
-complete request that following opened again; SeerrNG never acts on them.
+Following never changes the library, the **SeerrNG** category, the server
+marker, or Suwayomi's settings, and it does not need Suwayomi's own automatic
+chapter downloads. When step 3 opens a complete request again, SeerrNG writes
+the request's [request notes](#what-seerrng-writes-to-suwayomi) on the manga
+again before step 4; see [Complete requests](#complete-requests).
 
 Change the job's schedule or run it now under **Settings → Jobs & Cache**.
 While the Manga category is off, the job does nothing. When a server cannot be
@@ -1021,7 +1046,14 @@ Each wait gets up to 4 more hours at random, so that checks spread out.
 When a check adds chapters to a complete request, SeerrNG opens the request
 again in the same step: the request goes back to approved, its history gets an
 **Approved** entry for the new chapters, and it shows **Downloading** until
-they are delivered. The **Manga Progress** job follows the new chapters like
+they are delivered. Before it queues the new chapters, SeerrNG writes the
+request's [request notes](#what-seerrng-writes-to-suwayomi) on the manga again,
+since the **Manga Dispatch Sweep** removes them once a request completes.
+When Suwayomi reports an error, or the manga's ID now names another manga,
+SeerrNG logs `Manga follow could not note a re-opened request` under the
+**Manga Follow** label with the request ID and the code, and queues the
+chapters anyway: the notes can then leave out the request, and SeerrNG never
+acts on them. The **Manga Progress** job follows the new chapters like
 the others. Once every chapter of the request is delivered, the request
 completes again and SeerrNG sends the **Request Available** notification
 again. New chapters use the request's approval: they need no new approval and
@@ -1050,9 +1082,11 @@ one of these codes:
 
 Under the same label, SeerrNG logs `MANGA_FOLLOW_CHAPTERS_UNMAPPED` with a
 count when Suwayomi no longer lists some followed chapters, which it skips,
-`MANGA_FOLLOW_LIST_STALE` when the source's chapter list is not fresh, and
-`MANGA_FOLLOW_INSTANCE_MISMATCH` when a server carries another marker. These
-log entries contain IDs, counts, and codes only, never titles or addresses.
+`MANGA_FOLLOW_LIST_STALE` when the source's chapter list is not fresh,
+`MANGA_FOLLOW_INSTANCE_MISMATCH` when a server carries another marker, and
+`MANGA_FOLLOW_NOTES_MISMATCH` when it cannot write a re-opened request's notes
+because the manga's ID now names another manga. These log entries contain IDs,
+counts, and codes only, never titles or addresses.
 
 ## Progress and availability
 
@@ -1131,7 +1165,7 @@ A manga request's status shows one of these stages:
 | Stage | When |
 | --- | --- |
 | Requested | The request waits for approval. |
-| Approved | The request waits to be sent, or waits for a match; see [Waiting for a match](#waiting-for-a-match). |
+| Approved | The request waits to be sent, or waits for a match; see [Waiting for a source](#waiting-for-a-source). |
 | Searching | SeerrNG found the manga and works through steps 2 to 7 of [Dispatch](#dispatch). |
 | Downloading | The chapters are queued. The progress is the share of the request's chapters that are delivered. Chapters in Suwayomi's download queue show as downloads such as **Chapter 12**, with their progress. |
 | Available | Every chapter of the request is delivered, and no [code](#requests-that-need-attention) holds the request back. |

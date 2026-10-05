@@ -27,14 +27,22 @@ import MangaSourceResolution, {
 } from '@server/entity/MangaSourceResolution';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
-import { createMangaMedia, getMangaAdmissionKey } from '@server/lib/mangaMedia';
+import { findDueMangaRequestIds } from '@server/lib/mangaDispatch';
+import {
+  createMangaMedia,
+  findMangaMedia,
+  getMangaAdmissionKey,
+} from '@server/lib/mangaMedia';
 import { DEFAULT_MANGA_REQUEST_SCOPE } from '@server/lib/mangaRequests';
 import {
   MangaSourceResolver,
   mangaNoMatchDelayMs,
   type MangaResolverLimits,
 } from '@server/lib/mangaResolver';
-import { requestMangaTitleSearch } from '@server/lib/mangaResolver/titles';
+import {
+  isMangaTitleDue,
+  requestMangaTitleSearch,
+} from '@server/lib/mangaResolver/titles';
 import requestAdmissionCoordinator from '@server/lib/requestAdmission';
 import requestDispatchManager from '@server/lib/requestDispatch';
 import type { SuwayomiSettings } from '@server/lib/settings';
@@ -388,6 +396,10 @@ const manifestOf = async (requestId: number) =>
 
 const requestStatusOf = async (requestId: number) =>
   (await getRepository(MediaRequest).findOneByOrFail({ id: requestId })).status;
+
+const mediaStatusOf = async (anilistId: number) =>
+  (await findMangaMedia(dataSource.manager, [anilistId])).get(anilistId)
+    ?.status;
 
 const sorted = (values: string[]) => [...values].sort();
 
@@ -930,6 +942,101 @@ describe('manga source resolver: backoff', () => {
     await run.run();
     assert.equal(searches.length, 2);
   });
+
+  it('counts a title as due once its wait passes, asked for or not', () => {
+    const now = new Date(clock);
+    const row = (nextAttemptAt: number | null, asked: boolean) =>
+      new MangaSourceResolution({
+        instanceId: 1,
+        anilistId: T1,
+        nextAttemptAt: nextAttemptAt === null ? null : new Date(nextAttemptAt),
+        searchRequestedAt: asked ? new Date(clock - HOUR) : null,
+      });
+
+    assert.equal(isMangaTitleDue(undefined, now), true);
+    for (const asked of [false, true]) {
+      assert.equal(isMangaTitleDue(row(null, asked), now), true);
+      assert.equal(isMangaTitleDue(row(clock, asked), now), true);
+      assert.equal(isMangaTitleDue(row(clock + 1, asked), now), false);
+    }
+  });
+
+  it('waits for the retry time when a run defers an admin search', async () => {
+    const requestId = await seedRequest(T1, PENDING);
+    anilistReplies.set(T1, new Error('synthetic failure'));
+    await serve({ sources: [{ id: '1001' }] });
+    const run = resolver();
+    await requestMangaTitleSearch(1, T1);
+    advance(1);
+
+    await run.run();
+    assert.deepEqual(anilistCalls, [T1]);
+    assert.deepEqual(await stateOf(T1), {
+      status: 'QUEUED',
+      reason: null,
+      mangadexUuid: null,
+      attempts: 0,
+      nextAttemptAt: clock + HOUR,
+      lastError: 'ANILIST_FAILED',
+    });
+    assert.ok((await resolution(T1))?.searchRequestedAt);
+
+    advance(HOUR / 2);
+    await run.run();
+    assert.deepEqual(anilistCalls, [T1]);
+
+    anilistReplies.delete(T1);
+    advance(HOUR);
+    await run.run();
+    assert.deepEqual(anilistCalls, [T1, T1]);
+    assert.equal(searches.length, 2);
+    assert.equal((await stateOf(T1)).status, 'NO_MATCH');
+    assert.equal((await resolution(T1))?.searchRequestedAt, null);
+    assert.equal(await requestStatusOf(requestId), PENDING);
+  });
+
+  it('keeps a title due when an admin asks for a search during its run', async () => {
+    await seedRequest(T1);
+    await serve({ sources: [{ id: '1001' }] });
+    let asked = false;
+    mock.method(AnilistAPI.prototype, 'getMangaDetails', async (id: number) => {
+      outside('anilist');
+      anilistCalls.push(id);
+      if (!asked) {
+        asked = true;
+        await requestMangaTitleSearch(1, id);
+      }
+      return details(id);
+    });
+    // The search request carries the real time; the run starts before it.
+    clock -= 1000;
+    const run = resolver();
+
+    await run.run();
+    assert.equal(searches.length, 2);
+    assert.deepEqual(await stateOf(T1), {
+      status: 'NO_MATCH',
+      reason: 'NO_CANDIDATES',
+      mangadexUuid: null,
+      attempts: 1,
+      nextAttemptAt: null,
+      lastError: null,
+    });
+    assert.ok((await resolution(T1))?.searchRequestedAt);
+
+    advance(1);
+    await run.run();
+    assert.equal(searches.length, 4);
+    assert.deepEqual(await stateOf(T1), {
+      status: 'NO_MATCH',
+      reason: 'NO_CANDIDATES',
+      mangadexUuid: null,
+      attempts: 2,
+      nextAttemptAt: clock + 6 * HOUR,
+      lastError: null,
+    });
+    assert.equal((await resolution(T1))?.searchRequestedAt, null);
+  });
 });
 
 describe('manga source resolver: MangaDex failures', () => {
@@ -1253,6 +1360,106 @@ describe('manga source resolver: runs', () => {
     assert.equal(await resolution(T1), null);
     assert.equal(run.status().running, false);
   });
+
+  /**
+   * Cancels `run` at one point of a title's catch-up: as it asks for the
+   * instance's admission, or, once it holds it, as it reads the title's
+   * bindings to decide the media status, opens the media write, or reads the
+   * requests to sync. Returns whether the cancel happened.
+   */
+  const cancelCatchUpAt = (
+    run: MangaSourceResolver,
+    point: 'admission' | 'decision' | 'write' | 'sync'
+  ) => {
+    type Call = (...args: unknown[]) => unknown;
+    let armed = false;
+    let cancelled = false;
+    const cancelIf = (hit: boolean) => {
+      if (!armed || !hit) return;
+      armed = false;
+      cancelled = true;
+      run.cancel();
+    };
+    mock.method(requestAdmissionCoordinator, 'run', ((resources, callback) => {
+      if (resources.includes('service-config:suwayomi:1')) {
+        armed = true;
+        cancelIf(point === 'admission');
+      }
+      return observedRun(resources, callback);
+    }) as typeof requestAdmissionCoordinator.run);
+    const { manager } = dataSource;
+    const find = manager.find.bind(manager) as Call;
+    mock.method(manager, 'find', (...args: unknown[]) => {
+      cancelIf(point === 'decision' && args[0] === MangaSourceBinding);
+      return find(...args);
+    });
+    const transaction = dataSource.transaction.bind(dataSource) as Call;
+    mock.method(dataSource, 'transaction', (...args: unknown[]) => {
+      cancelIf(point === 'write');
+      return transaction(...args);
+    });
+    const builder = manager.createQueryBuilder.bind(manager) as Call;
+    mock.method(manager, 'createQueryBuilder', (...args: unknown[]) => {
+      cancelIf(point === 'sync' && args[0] === MangaRequestManifest);
+      return builder(...args);
+    });
+    return () => cancelled;
+  };
+
+  for (const { name, point, availability, synced } of [
+    {
+      name: 'writes nothing for a catch-up cancelled before it holds the instance',
+      point: 'admission',
+      availability: MediaStatus.PARTIALLY_AVAILABLE,
+      synced: false,
+    },
+    {
+      name: 'writes nothing for a catch-up cancelled while it decides the media',
+      point: 'decision',
+      availability: MediaStatus.UNKNOWN,
+      synced: false,
+    },
+    {
+      name: 'writes nothing for a catch-up cancelled as it writes the media',
+      point: 'write',
+      availability: MediaStatus.PARTIALLY_AVAILABLE,
+      synced: false,
+    },
+    {
+      name: 'queues nothing for a catch-up cancelled during its request sync',
+      point: 'sync',
+      availability: MediaStatus.UNKNOWN,
+      synced: true,
+    },
+  ] as const) {
+    it(name, async () => {
+      const requestId = await seedRequest(T1);
+      await seedBinding(T1, '/fake-title/701', { availability });
+      await serve({ sources: [{ id: '1001' }] });
+      const media = await mediaStatusOf(T1);
+      const run = resolver();
+      const cancelled = cancelCatchUpAt(run, point);
+      queued = [];
+
+      await run.run();
+
+      assert.equal(cancelled(), true);
+      assert.equal(run.status().running, false);
+      assert.equal(await mediaStatusOf(T1), media);
+      // A request sync under way finishes, and the dispatch sweep sends the
+      // request it released.
+      assert.equal(
+        await manifestOf(requestId),
+        synced ? BOUND : AWAITING_BINDING
+      );
+      assert.deepEqual(
+        await findDueMangaRequestIds(10),
+        synced ? [requestId] : []
+      );
+      assert.deepEqual(queued, []);
+      assert.equal(await resolution(T1), null);
+    });
+  }
 
   it('never inherits the async context of whoever starts it', async () => {
     await seedRequest(T1);

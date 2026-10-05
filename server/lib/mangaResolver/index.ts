@@ -293,7 +293,11 @@ export class MangaSourceResolver {
     return { running: this.controller !== undefined };
   }
 
-  /** Aborts every call in flight; nothing is written after a cancel. */
+  /**
+   * Aborts every call in flight. After a cancel the run starts no new write,
+   * except that the media and requests of a binding it already wrote still
+   * follow that binding; a write already under way finishes.
+   */
   public cancel(): void {
     this.controller?.abort();
   }
@@ -395,7 +399,11 @@ export class MangaSourceResolver {
     };
   }
 
-  /** Searches one title and records the outcome; writes nothing on cancel. */
+  /**
+   * Searches one title and records the outcome. After a cancel it starts no
+   * new write, a catch-up's included, except that the media and requests of
+   * a binding it already wrote still follow that binding.
+   */
   private async resolveTitle(
     run: RunState,
     instance: InstanceRun,
@@ -461,7 +469,7 @@ export class MangaSourceResolver {
     if (
       await hasActiveMangaBinding(dataSource.manager, anilistId, snapshot.id)
     ) {
-      await catchUpMangaResolverTitle(snapshot, anilistId);
+      await catchUpMangaResolverTitle(snapshot, anilistId, run.signal);
       return done(bound('EXISTING_BINDING'));
     }
 
@@ -897,7 +905,7 @@ export class MangaSourceResolver {
    * Stores the outcome under the title's request admission. A title that
    * gained an ACTIVE binding meanwhile is BOUND, and a deferred title that
    * lost its binding is QUEUED; an admin search made after the title's run
-   * began stays pending.
+   * began stays pending and keeps the title due.
    */
   private async record(
     run: RunState,
@@ -956,12 +964,12 @@ export class MangaSourceResolver {
         row.lastError = next.lastError;
         row.checkedAt = new Date(this.now());
         if (next.searched) row.searchedAt = row.checkedAt;
-        if (
-          next.answered &&
-          row.searchRequestedAt &&
-          row.searchRequestedAt.getTime() <= startedAt.getTime()
-        ) {
-          row.searchRequestedAt = null;
+        if (row.searchRequestedAt) {
+          if (row.searchRequestedAt.getTime() > startedAt.getTime()) {
+            row.nextAttemptAt = null;
+          } else if (next.answered) {
+            row.searchRequestedAt = null;
+          }
         }
         await manager.save(row);
         if (next.candidates !== undefined) {

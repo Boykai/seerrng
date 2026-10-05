@@ -4397,6 +4397,10 @@ components:
           type: string
           format: date-time
           nullable: true
+          description: >-
+            The earliest time a run searches the title again. Null when the
+            title has no wait, and when no run will search it: the title is
+            bound, or only pending requests wait and no admin search is open.
         searchRequestedAt:
           type: string
           format: date-time
@@ -5204,6 +5208,10 @@ components:
         downloadCount:
           type: integer
           minimum: 0
+        chaptersVerified:
+          type: integer
+          minimum: 0
+          description: Manga only. How many of the request's chapters are verified while its queued chapters download or after one failed. Absent in every other status.
         downloadId:
           type: string
           nullable: true
@@ -16721,7 +16729,7 @@ paths:
                   $ref: '#/components/schemas/MangaRequestScopeInput'
                 mangaFollow:
                   type: boolean
-                  description: Manga only. When true, the request follows new chapters, adding them as its source lists them; omitted or false leaves following off. Only the user the request is for can turn this on, so true is refused on a request made for someone else and on other media types. Change it later with `PUT /request/{requestId}/follow`.
+                  description: Manga only. When true, the request follows new chapters, adding them as its source lists them; omitted or false leaves following off. Only the user the request is for can turn this on, so true is refused on a request made for someone else, on a request that would approve another user's pending request for the title, and on other media types. A request that approves the user's own pending request turns following on for it. Change it later with `PUT /request/{requestId}/follow`.
               required:
                 - mediaType
                 - mediaId

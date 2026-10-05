@@ -496,6 +496,10 @@ class MangaLibraryScanner
       this.warn(run, code, instanceId);
       return undefined;
     }
+    // The rows are read before the listing. A binding that dispatch marks
+    // as in the library during the listing is then never orphaned by a
+    // listing taken before the add; the write skips it as changed instead.
+    const stored = await loadRows(dataSource.manager, instanceId);
     const listing = await client.listLibrary(options);
     if (!listing.consistent) this.warn(run, 'INCONSISTENT_LISTING', instanceId);
     if (listing.skippedUrls > 0) {
@@ -506,7 +510,6 @@ class MangaLibraryScanner
       this.warn(run, 'DUPLICATE_SOURCE_URL', instanceId, count);
     }
 
-    const stored = await loadRows(dataSource.manager, instanceId);
     const rowsOf = (item: SuwayomiLibraryItem) =>
       stored.bindings.get(naturalKey(item.sourceId, item.url)) ?? [];
     let links = new Map<string, TrackerEvidence | 'unresolved'>();

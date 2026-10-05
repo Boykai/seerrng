@@ -638,19 +638,74 @@ describe('manga resolve picker: titles', () => {
     assert.equal(res.status, 200);
     assert.deepEqual(
       (res.body.results as MangaResolveTitle[]).map(
-        ({ anilistId, status, reason, lastError }) => [
+        ({ anilistId, status, reason, lastError, nextAttemptAt }) => [
           anilistId,
           status,
           reason,
           lastError,
+          nextAttemptAt,
         ]
       ),
       [
-        [T1, 'AWAITING_APPROVAL', null, 'SOURCE_SEARCH_FAILED'],
-        [T2, 'QUEUED', null, 'SOURCE_SEARCH_FAILED'],
-        [T3, 'AWAITING_APPROVAL', null, null],
-        [T4, 'QUEUED', null, 'SOURCE_SEARCH_FAILED'],
+        [T1, 'AWAITING_APPROVAL', null, 'SOURCE_SEARCH_FAILED', null],
+        [
+          T2,
+          'QUEUED',
+          null,
+          'SOURCE_SEARCH_FAILED',
+          '2030-01-01T00:00:00.000Z',
+        ],
+        [T3, 'AWAITING_APPROVAL', null, null, null],
+        [
+          T4,
+          'QUEUED',
+          null,
+          'SOURCE_SEARCH_FAILED',
+          '2030-01-01T00:00:00.000Z',
+        ],
       ]
+    );
+  });
+
+  it('shows no next search for a title that no run will search', async () => {
+    const noMatch: Partial<MangaSourceResolution> = {
+      status: MangaResolutionStatus.NO_MATCH,
+      reason: 'NO_CANDIDATES',
+      attempts: 2,
+      nextAttemptAt: new Date('2030-01-01T00:00:00.000Z'),
+    };
+    await seedRequest(T1, PENDING);
+    await seedResolution(T1, noMatch);
+    await seedRequest(T2, APPROVED, BOUND);
+    await seedResolution(T2, noMatch);
+    await seedRequest(T3);
+    await seedResolution(T3, noMatch);
+    const agent = await asAdmin();
+    const detail = async (anilistId: number) =>
+      (await agent.get(`${BASE}/${anilistId}`).query({ instanceId: 1 }))
+        .body as MangaResolveDetail;
+
+    const res = await agent.get(BASE);
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(
+      (res.body.results as MangaResolveTitle[]).map(
+        ({ anilistId, status, nextAttemptAt }) => [
+          anilistId,
+          status,
+          nextAttemptAt,
+        ]
+      ),
+      [
+        [T1, 'NO_MATCH', null],
+        [T3, 'NO_MATCH', '2030-01-01T00:00:00.000Z'],
+      ]
+    );
+    assert.equal((await detail(T1)).nextAttemptAt, null);
+    const bound = await detail(T2);
+    assert.deepEqual(
+      [bound.status, bound.reason, bound.nextAttemptAt],
+      ['BOUND', 'EXISTING_BINDING', null]
     );
   });
 });

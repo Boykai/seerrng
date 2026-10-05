@@ -107,6 +107,11 @@ export interface RequestStatusSnapshot {
   sizeLeft: number | null;
   estimatedCompletionTime: Date | null;
   downloadCount: number;
+  /**
+   * How many of a manga request's chapters are verified, while its queued
+   * chapters download or after one failed. Absent in every other status.
+   */
+  chaptersVerified?: number;
   downloadId: string | null;
   service: string | null;
   message: string;
@@ -270,6 +275,7 @@ type StageResult = {
   // Manga reads these from its manifest instead of the download queue.
   percent?: number | null;
   downloadCount?: number;
+  chaptersVerified?: number;
   needsAttention?: boolean;
   retryable?: boolean;
 };
@@ -1031,6 +1037,7 @@ const getMangaStage = (
           ) / 10
         : null,
     downloadCount: progress.chaptersQueued + progress.chaptersDownloading,
+    chaptersVerified: progress.chaptersVerified,
   };
   if (isMangaChapterRetryable(progress)) {
     return {
@@ -1364,6 +1371,9 @@ export const getRequestStatus = (
         (stage === RequestStatusStage.UNAVAILABLE &&
           request.status === MediaRequestStatus.APPROVED &&
           !hasRequestedServiceLink(request, options.mangaProgress))),
+    ...(result.chaptersVerified !== undefined
+      ? { chaptersVerified: result.chaptersVerified }
+      : {}),
     ...(options.bookImportProgresses?.length
       ? { bookImportProgresses: options.bookImportProgresses }
       : {}),
@@ -1536,13 +1546,36 @@ const makeReentryFingerprint = (
   return `${fingerprint.slice(0, 255 - suffix.length)}${suffix}`;
 };
 
+// A manga request can keep its stage and fingerprint while its message
+// changes: it waits for a match, records a dispatch error or clears one. Its
+// history records each such change once.
+const changesMangaMessage = (
+  latestEvent: Pick<StatusEventLike, 'message'>,
+  event: Pick<MediaRequestStatusEvent, 'mediaType' | 'message'>
+): boolean =>
+  event.mediaType === MediaType.MANGA &&
+  (clampText(event.message, 512) ?? null) !== (latestEvent.message ?? null);
+
+// A manga stage's default message says only that the request waits. Any
+// other message, such as a missing match or a dispatch error, says why.
+const explainsMangaStage = (
+  event: Pick<MediaRequestStatusEvent, 'mediaType' | 'stage' | 'message'>
+): boolean =>
+  event.mediaType === MediaType.MANGA &&
+  (clampText(event.message, 512) ?? null) !==
+    getMessage(event.stage as RequestStatusStage, false, MediaType.MANGA);
+
 const isLatestObservation = (
   latestEvent: StatusEventLike,
-  event: Pick<MediaRequestStatusEvent, 'stage' | 'attempt' | 'fingerprint'>
+  event: Pick<
+    MediaRequestStatusEvent,
+    'stage' | 'attempt' | 'fingerprint' | 'mediaType' | 'message'
+  >
 ): boolean => {
   if (
     latestEvent.stage !== event.stage ||
-    latestEvent.attempt !== event.attempt
+    latestEvent.attempt !== event.attempt ||
+    changesMangaMessage(latestEvent, event)
   ) {
     return false;
   }
@@ -1613,15 +1646,24 @@ export const insertRequestStatusEvent = async (
       });
       // A retry entry stays the latest event while the request waits: an
       // observation already recorded at its stage and attempt adds nothing.
+      // A manga request that says why it waits still gets its row.
       if (
         earlier &&
         RETRY_FINGERPRINT.test(latestEvent.fingerprint) &&
         latestEvent.stage === event.stage &&
-        latestEvent.attempt === event.attempt
+        latestEvent.attempt === event.attempt &&
+        !explainsMangaStage(event)
       ) {
         return;
       }
-      if (earlier && earlier.id < latestEvent.id) {
+      // A message-only change repeats the latest event's own fingerprint, so
+      // its row names that event like a return does.
+      if (
+        earlier &&
+        (earlier.id < latestEvent.id ||
+          (earlier.id === latestEvent.id &&
+            changesMangaMessage(latestEvent, event)))
+      ) {
         fingerprint = makeReentryFingerprint(fingerprint, latestEvent.id);
       }
     }
@@ -2368,12 +2410,16 @@ export const getRequestStatusPage = async (options: {
   }
 
   const requestIds = requests.map((request) => request.id);
+  // Manga states are read after the latest events, as recordRequestStatus
+  // reads them: a state read first can be older than the latest event, and
+  // the page would record its older message again.
+  const latestEventsRead = getLatestEvents(requestIds);
   const [latestEvents, pendingRequestIds, bookSearchStates, mangaProgresses] =
     await Promise.all([
-      getLatestEvents(requestIds),
+      latestEventsRead,
       getPendingDispatchRequestIds(requestIds),
       getBookSearchStates(requestIds),
-      getMangaProgresses(requests),
+      latestEventsRead.then(() => getMangaProgresses(requests)),
     ]);
 
   let resultItems: RequestStatusPageItem[] = [];

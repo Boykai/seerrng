@@ -356,6 +356,48 @@ const promotePendingRequest = async (
     return saveRequestWithFreshMedia(manager, currentRequest);
   });
 
+const MANGA_FOLLOW_OWNER_ONLY =
+  'Following new chapters can only be turned on by the owner of a manga request.';
+
+/**
+ * Turns following new chapters on for a pending manga request that its owner
+ * approves by requesting the title again, before the promotion. As on the
+ * follow route, only the owner may give this consent.
+ */
+const enableMangaFollowBeforePromotion = (
+  pendingRequest: MediaRequest,
+  actor: User
+): Promise<void> =>
+  dataSource.transaction(async (manager) => {
+    const current = await manager.getRepository(MediaRequest).findOne({
+      where: { id: pendingRequest.id },
+      relations: { requestedBy: true },
+    });
+    if (current?.status !== MediaRequestStatus.PENDING) {
+      throw new DuplicateMediaRequestError(
+        'The matching request is no longer pending approval.'
+      );
+    }
+    if (current.requestedBy.id !== actor.id) {
+      throw new RequestPermissionError(MANGA_FOLLOW_OWNER_ONLY);
+    }
+    const manifests = manager.getRepository(MangaRequestManifest);
+    const manifest = await manifests.findOne({
+      where: { requestId: current.id },
+      select: { id: true },
+    });
+    if (!manifest) {
+      throw new DuplicateMediaRequestError(
+        'This request cannot follow new chapters.'
+      );
+    }
+    await manifests.update(manifest.id, {
+      followEnabled: true,
+      followStopReason: null,
+      followNextAt: null,
+    });
+  });
+
 const resolveMusicReleaseGroupId = async (
   mediaId: string,
   listenbrainz: ListenBrainzAPI,
@@ -548,6 +590,12 @@ export class MediaRequest {
         MediaType.MANGA
       );
       if (promotablePendingRequest) {
+        if (requestBody.mangaFollow === true) {
+          await enableMangaFollowBeforePromotion(
+            promotablePendingRequest,
+            user
+          );
+        }
         return promotePendingRequest(promotablePendingRequest, user);
       }
       throw new DuplicateMediaRequestError(
@@ -694,9 +742,7 @@ export class MediaRequest {
       requestBody.mangaFollow === true &&
       (requestBody.mediaType !== MediaType.MANGA || requestUser.id !== user.id)
     ) {
-      throw new RequestPermissionError(
-        'Following new chapters can only be turned on by the owner of a manga request.'
-      );
+      throw new RequestPermissionError(MANGA_FOLLOW_OWNER_ONLY);
     }
 
     const isManagedRequestForAnotherUser =

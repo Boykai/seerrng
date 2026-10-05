@@ -15,6 +15,7 @@ import { hashMangaSourceUrl } from '@server/entity/MangaSourceBinding';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import downloadTracker from '@server/lib/downloadtracker';
 import { runWithMangaDispatchLock } from '@server/lib/mangaDispatch';
+import { MANGA_CHAPTER_OWNERSHIP_KEY } from '@server/lib/mangaInsertTargets';
 import { pollMangaProgress } from '@server/lib/mangaProgress';
 import {
   MANGA_RETRY_BATCH_SIZE,
@@ -51,6 +52,10 @@ import {
   startFakeProgressSuwayomi,
   type FakeProgressSuwayomi,
 } from '@server/test/fakeSuwayomiProgress';
+import {
+  assertConflictTargets,
+  recordInserts,
+} from '@server/test/insertConflicts';
 import { waitForBackgroundTasks } from '@server/utils/backgroundTasks';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
@@ -321,6 +326,22 @@ describe('retryMangaChapters', () => {
       MediaRequestStatus.COMPLETED
     );
     assert.deepStrictEqual(fake.enqueuedIds(), [1101]);
+  });
+
+  it('skips an ownership row only when the row repeats its unique key', async () => {
+    const { fake, requestId } = await setup(mangaWith(11, [1, 2]));
+    fake.queueItems.set(1101, { state: 'ERROR', tries: 3 });
+    await poll();
+    const inserts = recordInserts();
+
+    assert.deepStrictEqual(await retry(requestId), {
+      enqueued: 1,
+      candidates: 1,
+    });
+
+    assertConflictTargets(inserts, {
+      manga_chapter_ownership: MANGA_CHAPTER_OWNERSHIP_KEY,
+    });
   });
 
   it('records ownership before it queues a dropped chapter', async () => {

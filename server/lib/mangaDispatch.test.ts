@@ -34,6 +34,7 @@ import Media from '@server/entity/Media';
 import * as mediaRequestModule from '@server/entity/MediaRequest';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { RequestDispatchOutbox } from '@server/entity/RequestDispatchOutbox';
+import { isMangaInSuwayomiLibrary } from '@server/lib/mangaCatalog';
 import * as mangaDispatch from '@server/lib/mangaDispatch';
 import {
   MANGA_DISPATCH_SWEEP_LIMIT,
@@ -41,6 +42,12 @@ import {
   dispatchMangaRequest,
   findDueMangaRequestIds,
 } from '@server/lib/mangaDispatch';
+import {
+  MANGA_CHAPTER_OWNERSHIP_KEY,
+  MANGA_INSTANCE_MARKER_KEY,
+  MANGA_LIBRARY_OWNERSHIP_KEY,
+  MANGA_REQUEST_CHAPTER_KEY,
+} from '@server/lib/mangaInsertTargets';
 import { syncMangaRequestBindings } from '@server/lib/mangaRequestBindings';
 import {
   catchUpMangaResolverTitle,
@@ -78,6 +85,10 @@ import {
   type FakeDispatchManga,
   type FakeDispatchSuwayomi,
 } from '@server/test/fakeSuwayomiDispatch';
+import {
+  assertConflictTargets,
+  recordInserts,
+} from '@server/test/insertConflicts';
 import { waitForBackgroundTasks } from '@server/utils/backgroundTasks';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -457,6 +468,20 @@ describe('manga dispatch: a fresh request', () => {
 
     assert.strictEqual(fake.server.requests.length, sent);
     assert.deepStrictEqual(await manifestOf(requestId), before);
+  });
+
+  it('skips a row it records only when the row repeats its unique key', async () => {
+    const { fake, requestId } = await setup();
+    const inserts = recordInserts();
+
+    assert.deepStrictEqual(await run(requestId, fake), { delivered: true });
+
+    assertConflictTargets(inserts, {
+      manga_instance_marker: MANGA_INSTANCE_MARKER_KEY,
+      manga_library_ownership: MANGA_LIBRARY_OWNERSHIP_KEY,
+      manga_request_chapter: MANGA_REQUEST_CHAPTER_KEY,
+      manga_chapter_ownership: MANGA_CHAPTER_OWNERSHIP_KEY,
+    });
   });
 
   it('replays from INSTANCE_MARKED without writing anything twice', async () => {
@@ -1506,6 +1531,91 @@ describe('manga dispatch: library ownership', () => {
       [1, FAKE_SOURCE_ID, fakeMangaUrl(11), false],
     ]);
     assert.deepStrictEqual(fake.stamp(11), stampOf([requestId], false));
+  });
+});
+
+describe('manga dispatch: library flag', () => {
+  const libraryFlags = async () =>
+    (
+      await getRepository(MangaSourceBinding).find({ order: { id: 'ASC' } })
+    ).map(({ instanceId, anilistId, state, inLibrary }) => [
+      instanceId,
+      anilistId,
+      state,
+      inLibrary,
+    ]);
+
+  it('marks the title as in the library once it adds the manga', async () => {
+    const { fake, requestId } = await setup();
+    // A refused pair and another instance's binding of the same manga.
+    await seedDispatchBinding(fakeDispatchManga(11), {
+      anilistId: 9002,
+      state: MangaBindingState.REJECTED,
+    });
+    await seedDispatchBinding(fakeDispatchManga(11), { instanceId: 2 });
+    fake.fault('FindCategory', 'error');
+    assert.strictEqual(await isMangaInSuwayomiLibrary(9001), false);
+
+    assert.deepStrictEqual(await run(requestId, fake), { delivered: false });
+
+    assert.strictEqual((await manifestOf(requestId)).checkpoint, LIBRARY_ADDED);
+    assert.strictEqual(fake.manga(11).inLibrary, true);
+    assert.deepStrictEqual(await libraryFlags(), [
+      [1, 9001, MangaBindingState.ACTIVE, true],
+      [1, 9002, MangaBindingState.REJECTED, false],
+      [2, 9001, MangaBindingState.ACTIVE, false],
+    ]);
+    assert.strictEqual(await isMangaInSuwayomiLibrary(9001), true);
+  });
+
+  it('marks the title when its manga was already in the library', async () => {
+    const { fake, requestId } = await setup(
+      [fakeDispatchManga(11, { inLibrary: true })],
+      { binding: { inLibrary: false } }
+    );
+
+    assert.deepStrictEqual(await run(requestId, fake), { delivered: true });
+
+    assert.strictEqual(fake.server.operations('SetInLibrary').length, 0);
+    assert.deepStrictEqual(await libraryFlags(), [
+      [1, 9001, MangaBindingState.ACTIVE, true],
+    ]);
+  });
+
+  it('leaves the flag off until Suwayomi adds the manga', async () => {
+    const { fake, requestId } = await setup();
+    fake.fault('SetInLibrary', 'error');
+
+    assert.deepStrictEqual(await run(requestId, fake), { delivered: false });
+
+    assert.strictEqual(fake.manga(11).inLibrary, false);
+    assert.strictEqual(
+      (await manifestOf(requestId)).checkpoint,
+      INSTANCE_MARKED
+    );
+    assert.deepStrictEqual(await libraryFlags(), [
+      [1, 9001, MangaBindingState.ACTIVE, false],
+    ]);
+
+    assert.deepStrictEqual(await run(requestId, fake), { delivered: true });
+
+    assert.deepStrictEqual(await libraryFlags(), [
+      [1, 9001, MangaBindingState.ACTIVE, true],
+    ]);
+  });
+
+  it('lets a later scan that misses the manga clear the flag', async () => {
+    const { fake, requestId } = await setup();
+    stubScanLookups();
+    assert.deepStrictEqual(await run(requestId, fake), { delivered: true });
+    fake.manga(11).inLibrary = false;
+
+    await mangaLibraryScanner.run();
+
+    assert.deepStrictEqual(await libraryFlags(), [
+      [1, 9001, MangaBindingState.ORPHANED, false],
+    ]);
+    assert.strictEqual(await isMangaInSuwayomiLibrary(9001), false);
   });
 });
 

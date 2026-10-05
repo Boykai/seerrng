@@ -116,14 +116,15 @@ export const isMangaTitleSearchable = (
 /**
  * Whether the title's next search is due. A bound row has no next attempt,
  * so a title that lost its binding is due at once; a search of it that fails
- * then waits like any other.
+ * then waits like any other. An admin's search request clears the wait, and
+ * a run that began before the request keeps it clear; a run that defers the
+ * requested search keeps or sets the wait as for any other title.
  */
 export const isMangaTitleDue = (
   row: MangaSourceResolution | undefined,
   now: Date
 ): boolean =>
   !row ||
-  row.searchRequestedAt !== null ||
   row.nextAttemptAt === null ||
   row.nextAttemptAt.getTime() <= now.getTime();
 

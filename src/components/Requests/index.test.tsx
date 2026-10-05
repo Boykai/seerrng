@@ -14,11 +14,17 @@ const state = vi.hoisted(() => ({
   keys: [] as unknown[],
   responses: {} as Record<string, { data?: unknown }>,
   granted: [] as number[],
+  revalidated: [] as unknown[],
 }));
 vi.mock('swr', () => ({
   default: (key: string | null) => {
     state.keys.push(key);
-    return { ...((key && state.responses[key]) ?? {}), mutate: vi.fn() };
+    return {
+      ...((key && state.responses[key]) ?? {}),
+      mutate: vi.fn(async () => {
+        state.revalidated.push(key);
+      }),
+    };
   },
   useSWRConfig: () => ({ mutate: vi.fn(), cache: new Map() }),
 }));
@@ -177,6 +183,7 @@ beforeEach(() => {
     },
   };
   state.granted = [];
+  state.revalidated = [];
 });
 
 afterEach(async () => {
@@ -369,4 +376,27 @@ it('opens the manga edit modal from a pending request', async () => {
   expect(modal?.getAttribute('data-manga-id')).toBe('30013');
   expect(modal?.hasAttribute('data-tmdb-id')).toBe(false);
   expect(modal?.getAttribute('data-edit-request')).toBe('41');
+});
+
+it('loads the copies again when a long manga request verifies a chapter its percentage misses', async () => {
+  const downloads = '/api/v1/request/status/41/downloads';
+  state.responses[downloads] = {
+    data: { results: [{ id: 'chapter-1', name: 'Sample Manga - Ch. 1.cbz' }] },
+  };
+  // Of 1,500 chapters, 1 and 2 verified both show as 0.1%.
+  const downloading = (chaptersVerified: number): Item => {
+    const item = mangaItem({}, 'downloading');
+    return {
+      ...item,
+      status: { ...item.status, percent: 0.1, chaptersVerified },
+    };
+  };
+
+  await render(downloading(1));
+  await render(downloading(1));
+  expect(host.querySelector(`a[href="${downloads}/chapter-1"]`)).toBeTruthy();
+  expect(state.revalidated).toEqual([]);
+
+  await render(downloading(2));
+  expect(state.revalidated).toEqual([downloads]);
 });
