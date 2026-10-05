@@ -468,7 +468,9 @@ export class MangaSourceResolver {
     let details: AnilistMangaDetails | null;
     try {
       run.signal.throwIfAborted();
-      details = await run.anilist.getMangaDetails(anilistId);
+      details = await run.anilist.getMangaDetails(anilistId, {
+        signal: run.signal,
+      });
       run.signal.throwIfAborted();
     } catch (error) {
       if (run.signal.aborted) throw error;

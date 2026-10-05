@@ -234,7 +234,18 @@ class AnilistAPI extends ExternalAPI {
     // is reserved before ExternalAPI's own request interceptors. Cache hits
     // and coalesced duplicates never reach this point.
     this.axios.interceptors.request.use(async (config) => {
-      await anilistRateLimiter.acquire(this.maxRateLimitWaitMs);
+      const signal =
+        config.signal instanceof AbortSignal ? config.signal : undefined;
+      try {
+        await anilistRateLimiter.acquire(this.maxRateLimitWaitMs, signal);
+      } catch (e) {
+        // Cancelled while waiting for a slot: fail the way axios fails a
+        // request cancelled in flight.
+        if (signal?.aborted) {
+          throw new axios.CanceledError(undefined, config);
+        }
+        throw e;
+      }
       return config;
     });
   }

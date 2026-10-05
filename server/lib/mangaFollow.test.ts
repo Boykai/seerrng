@@ -1892,6 +1892,31 @@ describe('runMangaFollow: cancelling', () => {
       null
     );
   });
+
+  it('saves no check when the AniList lookup ends with the cancel', async () => {
+    const { fake, titles } = await setupTitles([
+      mangaWith(11, [1], [1]),
+      mangaWith(12, [1], [1]),
+    ]);
+    const controller = new AbortController();
+
+    await assert.rejects(
+      follow({
+        signal: controller.signal,
+        // Cancelled while it waits for an AniList request slot.
+        anilistStatus: async () => {
+          controller.abort();
+          throw controller.signal.reason;
+        },
+      }),
+      { name: 'AbortError' }
+    );
+
+    assert.deepStrictEqual(fetchedIds(fake), [11]);
+    for (const { requestId } of titles) {
+      assert.strictEqual((await manifestOf(requestId)).followNextAt, null);
+    }
+  });
 });
 
 /** Whether following is on, why it last stopped or paused, and when next. */
@@ -2306,11 +2331,13 @@ describe('mangaFollowPoller', () => {
     const { fake, requestId } = await setup();
     publish(fake, 11, 3);
     const asked: number[] = [];
+    const signals: unknown[] = [];
     mock.method(
       AnilistAPI.prototype,
       'getMangaDetails',
-      async (anilistId: number) => {
+      async (anilistId: number, options?: { signal?: AbortSignal }) => {
         asked.push(anilistId);
+        signals.push(options?.signal);
         return { status: 'RELEASING' } as AnilistMangaDetails;
       }
     );
@@ -2321,6 +2348,8 @@ describe('mangaFollowPoller', () => {
       ['debug', { label, ...ran({ added: 1, enqueued: 1 }) }],
     ]);
     assert.deepStrictEqual(asked, [9001]);
+    // The lookup stops with the run.
+    assert.ok(signals[0] instanceof AbortSignal);
     assert.deepStrictEqual(await numbersOf(requestId), [1, 2, 3]);
     assert.deepStrictEqual(fake.enqueuedIds(), [1103]);
     assert.deepStrictEqual(mangaFollowPoller.status(), { running: false });

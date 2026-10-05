@@ -1230,6 +1230,30 @@ describe('manga source resolver: runs', () => {
     assert.equal(run.status().running, false);
   });
 
+  it('cancels its AniList lookup with the run', async () => {
+    await seedRequest(T1);
+    const run = resolver();
+    await serve({ sources: [{ id: '1001' }] });
+    const signals: (AbortSignal | undefined)[] = [];
+    mock.method(
+      AnilistAPI.prototype,
+      'getMangaDetails',
+      async (_id: number, options?: { signal?: AbortSignal }) => {
+        signals.push(options?.signal);
+        run.cancel();
+        options?.signal?.throwIfAborted();
+        throw new Error('The lookup was not cancelled.');
+      }
+    );
+
+    await run.run();
+
+    assert.equal(signals.length, 1);
+    assert.equal(signals[0]?.aborted, true);
+    assert.equal(await resolution(T1), null);
+    assert.equal(run.status().running, false);
+  });
+
   it('never inherits the async context of whoever starts it', async () => {
     await seedRequest(T1);
     await serve({ sources: [{ id: '1001' }] });

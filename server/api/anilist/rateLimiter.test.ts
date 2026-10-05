@@ -149,6 +149,72 @@ describe('AniList rate limiter', () => {
   });
 });
 
+describe('AniList rate limiter cancellation', () => {
+  // A wait the caller can cancel holds until it is cancelled; any other
+  // wait passes at once.
+  const useCancellableSleep = () =>
+    resetAnilistRateLimiterForTests({
+      now: () => now,
+      sleep: (ms, signal) => {
+        sleeps.push(ms);
+        if (!signal) {
+          now += ms;
+          return Promise.resolve();
+        }
+        return new Promise<void>((_, reject) =>
+          signal.addEventListener('abort', () => reject(signal.reason), {
+            once: true,
+          })
+        );
+      },
+    });
+
+  it('stops waiting at once when the caller cancels and frees the start', async () => {
+    useCancellableSleep();
+    await anilistRateLimiter.acquire();
+    const controller = new AbortController();
+    const reason = new Error('Example cancel');
+
+    const waiting = anilistRateLimiter.acquire(10_000, controller.signal);
+    controller.abort(reason);
+
+    await assert.rejects(waiting, (error: unknown) => error === reason);
+    assert.equal(now, 1_000_000);
+
+    // The next request takes the start the cancelled one gave back.
+    await anilistRateLimiter.acquire();
+    assert.deepEqual(sleeps, [1_000, 1_000]);
+  });
+
+  it('reserves nothing for a request that is already cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await assert.rejects(
+      anilistRateLimiter.acquire(10_000, controller.signal),
+      (error: unknown) => error === controller.signal.reason
+    );
+    await anilistRateLimiter.acquire();
+    assert.deepEqual(sleeps, []);
+  });
+
+  it('ends a real wait at once when the caller cancels', async () => {
+    resetAnilistRateLimiterForTests();
+    await anilistRateLimiter.acquire();
+    const controller = new AbortController();
+    const started = performance.now();
+
+    const waiting = anilistRateLimiter.acquire(10_000, controller.signal);
+    controller.abort();
+
+    await assert.rejects(
+      waiting,
+      (error: unknown) => error === controller.signal.reason
+    );
+    assert.ok(performance.now() - started < 500);
+  });
+});
+
 describe('parseAnilistRetryAfterSeconds', () => {
   it('reads delay seconds and clamps them to one hour', () => {
     assert.equal(parseAnilistRetryAfterSeconds('120'), 120);

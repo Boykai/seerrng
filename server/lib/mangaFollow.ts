@@ -663,14 +663,19 @@ const fetchChapterList = async (
   };
 };
 
-/** AniList's status, read outside every lock; a failure counts as none. */
+/**
+ * AniList's status, read outside every lock; a failure counts as none. A
+ * lookup that ends because the run was cancelled stops the check instead, so
+ * no check is saved without the status.
+ */
 const anilistStatusOf = async (
   run: Run,
   anilistId: number
 ): Promise<AnilistMangaStatus | undefined> => {
   try {
     return await run.anilistStatus(anilistId);
-  } catch {
+  } catch (error) {
+    if (run.signal?.aborted) throw error;
     return undefined;
   }
 };
@@ -1310,8 +1315,11 @@ export const runMangaFollow = async (
     anilistStatus:
       options.anilistStatus ??
       (async (anilistId) =>
-        (await (anilist ??= new AnilistAPI()).getMangaDetails(anilistId))
-          ?.status),
+        (
+          await (anilist ??= new AnilistAPI()).getMangaDetails(anilistId, {
+            signal: options.signal,
+          })
+        )?.status),
     random: options.random ?? Math.random,
     limits: {
       perInstance:

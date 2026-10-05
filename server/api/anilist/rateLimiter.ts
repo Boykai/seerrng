@@ -1,4 +1,5 @@
 import { AnilistRateLimitedError } from '@server/api/anilist/failures';
+import { setTimeout as delay } from 'node:timers/promises';
 
 // AniList limits requests per client IP, so every AniList call in this process
 // (anime, linked accounts, OAuth and manga) shares this one budget.
@@ -9,10 +10,10 @@ export const ANILIST_DEFAULT_RETRY_AFTER_SECONDS = 60;
 export const ANILIST_MAX_RETRY_AFTER_SECONDS = 3600;
 export const ANILIST_DEFAULT_MAX_WAIT_MS = 10_000;
 
-type Sleep = (ms: number) => Promise<void>;
+/** Waits `ms`, or rejects as soon as `signal` aborts. */
+type Sleep = (ms: number, signal?: AbortSignal) => Promise<void>;
 
-const defaultSleep: Sleep = (ms) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+const defaultSleep: Sleep = (ms, signal) => delay(ms, undefined, { signal });
 
 const clampRetryAfterSeconds = (seconds: number): number =>
   Math.min(ANILIST_MAX_RETRY_AFTER_SECONDS, Math.max(1, Math.ceil(seconds)));
@@ -64,11 +65,17 @@ class AnilistRateLimiter {
 
   /**
    * Reserve the next request start. Waits up to `maxWaitMs`; a longer wait
-   * fails fast with the remaining time so callers can surface a 429.
+   * fails fast with the remaining time so callers can surface a 429. An
+   * abort ends the wait at once with the signal's reason and hands the
+   * reserved start back.
    */
-  async acquire(maxWaitMs = ANILIST_DEFAULT_MAX_WAIT_MS): Promise<void> {
+  async acquire(
+    maxWaitMs = ANILIST_DEFAULT_MAX_WAIT_MS,
+    signal?: AbortSignal
+  ): Promise<void> {
     const deadline = this.now() + Math.max(0, maxWaitMs);
     for (;;) {
+      signal?.throwIfAborted();
       const now = this.now();
       const slot = this.nextSlot(now);
       if (slot > deadline) {
@@ -82,17 +89,20 @@ class AnilistRateLimiter {
         return;
       }
       const cooldownAtReservation = this.cooldownUntil;
-      await this.sleep(slot - now);
+      try {
+        await this.sleep(slot - now, signal);
+      } catch (error) {
+        this.release(slot);
+        signal?.throwIfAborted();
+        throw error;
+      }
       if (
         this.cooldownUntil > cooldownAtReservation &&
         this.cooldownUntil > this.now()
       ) {
         // A 429 arrived while this request waited; give the slot back and
         // plan again against the new cooldown.
-        const index = this.starts.indexOf(slot);
-        if (index !== -1) {
-          this.starts.splice(index, 1);
-        }
+        this.release(slot);
         continue;
       }
       return;
@@ -109,6 +119,14 @@ class AnilistRateLimiter {
       this.cooldownUntil,
       this.now() + seconds * 1000
     );
+  }
+
+  /** Gives an unused start back to the budget. */
+  private release(slot: number): void {
+    const index = this.starts.indexOf(slot);
+    if (index !== -1) {
+      this.starts.splice(index, 1);
+    }
   }
 
   private nextSlot(now: number): number {

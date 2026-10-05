@@ -204,6 +204,38 @@ describe('AniList shared request budget', () => {
     assert.deepEqual(sleeps, [5_000]);
   });
 
+  it('stops waiting for a request slot as soon as the caller cancels', async () => {
+    let asleep!: () => void;
+    const sleeping = new Promise<void>((resolve) => (asleep = resolve));
+    resetAnilistRateLimiterForTests({
+      now: () => now,
+      // Waits until the caller cancels; no time passes.
+      sleep: (ms, signal) => {
+        sleeps.push(ms);
+        asleep();
+        return new Promise<void>((_, reject) =>
+          signal?.addEventListener('abort', () => reject(signal.reason), {
+            once: true,
+          })
+        );
+      },
+    });
+    const api = new AnilistAPI();
+    const bodies = stubAnilist(api, () => ({
+      data: { data: { Media: mangaFixture() } },
+    }));
+    await api.getMangaDetails(1);
+    const controller = new AbortController();
+
+    const waiting = api.getMangaDetails(2, { signal: controller.signal });
+    await sleeping;
+    controller.abort();
+
+    await assert.rejects(waiting, (error: unknown) => axios.isCancel(error));
+    assert.equal(bodies.length, 1);
+    assert.deepEqual(sleeps, [1_000]);
+  });
+
   it('serves repeated lookups from cache without spending budget', async () => {
     const api = new AnilistAPI();
     const bodies = stubAnilist(api, () => ({
