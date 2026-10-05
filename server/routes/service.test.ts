@@ -127,6 +127,7 @@ function createOpenApiApp() {
       validateSecurity: false,
     })
   );
+  app.use('/api/v1/service', serviceRoutes);
   app.use('/api/v1/settings/radarr', radarrRoutes);
   app.use('/api/v1/settings/sonarr', sonarrRoutes);
   app.use('/api/v1/settings/lidarr', lidarrRoutes);
@@ -276,6 +277,15 @@ beforeEach(() => {
   settings.readarr = [];
   settings.mylar = [];
   settings.kapowarr = [];
+  settings.replaceSection('readerDelivery', {
+    grimmoryUrl: '',
+    grimmoryUsername: '',
+    grimmoryPassword: '',
+    bookorbitUrl: '',
+    bookorbitUsername: '',
+    bookorbitPassword: '',
+    preferredProvider: 'grimmory',
+  });
   mock.method(settings, 'save', async () => undefined);
 });
 
@@ -1296,6 +1306,62 @@ describe('GET /service/comic', () => {
 
     assert.strictEqual(res.status, 200);
     assert.deepStrictEqual(res.body, []);
+  });
+});
+
+describe('GET /service/reader-delivery', () => {
+  it('uses the preferred OPDS service and returns Grimmory for comic clients', async () => {
+    getSettings().replaceSection('readerDelivery', {
+      grimmoryUrl: 'https://grimmory.example/library',
+      grimmoryUsername: '',
+      grimmoryPassword: '',
+      bookorbitUrl: 'https://bookorbit.example/books',
+      bookorbitUsername: '',
+      bookorbitPassword: '',
+      preferredProvider: 'bookorbit',
+    });
+
+    const res = await request(app).get('/service/reader-delivery');
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(res.body, {
+      preferredProvider: 'bookorbit',
+      provider: 'bookorbit',
+      serviceName: 'BookOrbit',
+      serviceUrl: 'https://bookorbit.example/books',
+      grimmoryUrl: 'https://grimmory.example/library',
+    });
+  });
+
+  it('falls back to BookOrbit when the preferred Grimmory address is empty', async () => {
+    getSettings().replaceSection('readerDelivery', {
+      grimmoryUrl: '',
+      grimmoryUsername: '',
+      grimmoryPassword: '',
+      bookorbitUrl: 'https://bookorbit.example/books',
+      bookorbitUsername: '',
+      bookorbitPassword: '',
+      preferredProvider: 'grimmory',
+    });
+
+    const res = await request(app).get('/service/reader-delivery');
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.preferredProvider, 'grimmory');
+    assert.strictEqual(res.body.provider, 'bookorbit');
+    assert.strictEqual(res.body.serviceUrl, 'https://bookorbit.example/books');
+    assert.strictEqual(res.body.grimmoryUrl, null);
+  });
+
+  it('matches the documented response schema', async () => {
+    const res = await request(createOpenApiApp()).get(
+      '/api/v1/service/reader-delivery'
+    );
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.preferredProvider, 'grimmory');
+    assert.strictEqual(res.body.provider, 'grimmory');
+    assert.strictEqual(res.body.grimmoryUrl, null);
   });
 });
 

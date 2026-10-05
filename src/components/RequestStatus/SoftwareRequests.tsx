@@ -56,6 +56,7 @@ const messages = defineMessages('components.RequestStatus.SoftwareRequests', {
   manageError: 'This software request could not be updated.',
   downloadCopy: 'Download copy',
   downloadCopies: 'Download copies',
+  downloadAllCopies: 'Download all files',
   downloadNamed: 'Download {name}',
   retryCheckRequired:
     'The provider cannot confirm whether the previous download started. Check the download client’s queue and history. Continue only if no matching download exists.',
@@ -117,6 +118,7 @@ interface SoftwareRequestResult {
   status: SoftwareStatus;
   message: string | null;
   assets: { id: string; name: string; size: number; url: string }[];
+  bundle?: { name: string; url: string } | null;
 }
 
 interface SoftwareRequestsResponse {
@@ -137,9 +139,11 @@ interface SoftwareRequestHistoryResponse {
 const DownloadCopies = ({
   requestId,
   assets,
+  bundle,
 }: {
   requestId: number;
   assets: SoftwareRequestResult['assets'];
+  bundle?: SoftwareRequestResult['bundle'];
 }) => {
   const intl = useIntl();
   if (assets.length === 0) return null;
@@ -174,6 +178,18 @@ const DownloadCopies = ({
         />
       </summary>
       <ol className="app-dropdown-menu app-download-menu">
+        {bundle && (
+          <li>
+            <a
+              href={bundle.url}
+              download
+              className="app-dropdown-item app-download-item"
+              aria-label={`${intl.formatMessage(messages.downloadAllCopies)}: ${bundle.name}`}
+            >
+              {intl.formatMessage(messages.downloadAllCopies)} ({bundle.name})
+            </a>
+          </li>
+        )}
         {assets.map((asset) => (
           <li key={asset.id}>
             <a
@@ -446,7 +462,7 @@ const SoftwareRequests = ({
         {intl.formatMessage(messages.title)}
       </h2>
       <div className="app-compact-request-list">
-        {data.results.map(({ request, status, message, assets }) => (
+        {data.results.map(({ request, status, message, assets, bundle }) => (
           <article
             key={request.id}
             className="refreshed-card-surface app-compact-request-card"
@@ -588,7 +604,11 @@ const SoftwareRequests = ({
                       />
                     )}
                     {status === 'available' && (
-                      <DownloadCopies requestId={request.id} assets={assets} />
+                      <DownloadCopies
+                        requestId={request.id}
+                        assets={assets}
+                        bundle={bundle}
+                      />
                     )}
                   </div>
                 </div>

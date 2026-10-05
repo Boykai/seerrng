@@ -17,6 +17,10 @@ import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import { Permission } from '@server/lib/permissions';
 import { runWithCurrentServarrService } from '@server/lib/serviceAdmission';
 import {
+  defaultReaderDeliverySettings,
+  getSettings,
+} from '@server/lib/settings';
+import {
   UserMutationActorUnauthorizedError,
   isUserSessionCredentialVersionCurrent,
   runUserSecurityMutation,
@@ -483,6 +487,36 @@ serviceRoutes.get('/readarr', async (req, res, next) => {
   } catch (error) {
     return reportServiceSummaryReadError(error, next);
   }
+});
+
+serviceRoutes.get('/reader-delivery', (_req, res) => {
+  const readerDelivery =
+    getSettings().readerDelivery ?? defaultReaderDeliverySettings();
+  const preferredProvider = readerDelivery.preferredProvider;
+  const preferredServiceUrl =
+    preferredProvider === 'grimmory'
+      ? readerDelivery.grimmoryUrl
+      : readerDelivery.bookorbitUrl;
+  const fallbackProvider =
+    preferredProvider === 'grimmory' ? 'bookorbit' : 'grimmory';
+  const fallbackServiceUrl =
+    fallbackProvider === 'grimmory'
+      ? readerDelivery.grimmoryUrl
+      : readerDelivery.bookorbitUrl;
+  let provider = preferredProvider;
+  let serviceUrl = preferredServiceUrl;
+  if (!serviceUrl && fallbackServiceUrl) {
+    provider = fallbackProvider;
+    serviceUrl = fallbackServiceUrl;
+  }
+
+  return res.status(200).json({
+    preferredProvider,
+    provider,
+    serviceName: provider === 'grimmory' ? 'Grimmory' : 'BookOrbit',
+    serviceUrl: serviceUrl || null,
+    grimmoryUrl: readerDelivery.grimmoryUrl || null,
+  });
 });
 
 serviceRoutes.get<{ readarrId: string }>(

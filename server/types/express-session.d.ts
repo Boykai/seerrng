@@ -25,5 +25,7 @@ declare module 'express-session' {
     >;
     spotifyOAuthState?: string;
     spotifyOAuthStateCreatedAt?: number;
+    steamOpenIdState?: string;
+    steamOpenIdStateCreatedAt?: number;
   }
 }

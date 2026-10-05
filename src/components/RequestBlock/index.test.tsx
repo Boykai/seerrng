@@ -1,142 +1,120 @@
-import { MangaRequestScope } from '@server/constants/mangaRequest';
-import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+import { MediaRequestStatus, MediaType } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
-import type { MangaRequestScopeSummary } from '@server/lib/mangaRequests';
-import { Permission } from '@server/lib/permissions';
 import { JSDOM } from 'jsdom';
 import React, { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import RequestBlock from '.';
+import RequestBlock from './index';
 
 const state = vi.hoisted(() => ({
-  keys: [] as unknown[],
-  responses: {} as Record<string, { data?: unknown }>,
-  granted: [] as number[],
+  modalProps: null as Record<string, unknown> | null,
 }));
-vi.mock('swr', () => ({
-  default: (key: string | null) => {
-    state.keys.push(key);
-    return (key && state.responses[key]) ?? {};
-  },
-  mutate: vi.fn(),
-}));
-vi.mock('axios', () => ({ default: { post: vi.fn(), delete: vi.fn() } }));
-vi.mock('next/link', () => ({
-  default: ({
-    href,
-    children,
-  }: {
-    href: string;
-    children: React.ReactNode;
-  }) => <a href={href}>{children}</a>,
-}));
-vi.mock('next/dynamic', () => ({
-  default:
-    () =>
-    ({
-      show,
-      type,
-      mangaId,
-      tmdbId,
+
+vi.mock('next/dynamic', async () => {
+  const ReactModule = await import('react');
+  return {
+    default: () =>
+      function RequestModalStub(props: Record<string, unknown>) {
+        state.modalProps = props;
+        return ReactModule.createElement('div', {
+          'data-testid': 'edit-request-modal',
+          'data-type': props.type,
+          'data-tmdb-id': props.tmdbId,
+        });
+      },
+  };
+});
+
+vi.mock('@app/components/Common/Badge', async () => {
+  const ReactModule = await import('react');
+  return {
+    default: ({ children }: { children: React.ReactNode }) =>
+      ReactModule.createElement('span', null, children),
+  };
+});
+vi.mock('@app/components/Common/BookFormatBadge', async () => {
+  const ReactModule = await import('react');
+  return {
+    default: ({ children }: { children?: React.ReactNode }) =>
+      ReactModule.createElement('span', null, children),
+    getRequestedBookFormat: () => 'ebook',
+  };
+});
+vi.mock('@app/components/Common/Button', async () => {
+  const ReactModule = await import('react');
+  return {
+    default: ({
+      children,
+      onClick,
+      disabled,
+      buttonType,
+      'aria-label': ariaLabel,
     }: {
-      show?: boolean;
-      type?: string;
-      mangaId?: number;
-      tmdbId?: number;
+      children: React.ReactNode;
+      onClick?: React.MouseEventHandler<HTMLButtonElement>;
+      disabled?: boolean;
+      buttonType?: string;
+      'aria-label'?: string;
     }) =>
-      show ? (
-        <div
-          data-testid="request-modal"
-          data-type={type}
-          data-manga-id={mangaId}
-          data-tmdb-id={tmdbId}
-        />
-      ) : null,
-}));
+      ReactModule.createElement(
+        'button',
+        {
+          type: 'button',
+          onClick,
+          disabled,
+          'aria-label': ariaLabel,
+          'data-button-type': buttonType,
+        },
+        children
+      ),
+  };
+});
 vi.mock('@app/components/Common/CachedImage', () => ({
   default: () => null,
 }));
-vi.mock('@app/components/Common/Tooltip', () => ({
-  default: ({
-    children,
-    content,
-  }: {
-    children: React.ReactNode;
-    content: string;
-  }) => <span title={content}>{children}</span>,
-}));
-vi.mock('@app/hooks/useUser', async () => {
-  const permissions = await import('@server/lib/permissions');
+vi.mock('@app/components/Common/MediaTypeBadge', async () => {
+  const ReactModule = await import('react');
   return {
-    Permission: permissions.Permission,
-    useUser: () => ({
-      user: { id: 7 },
-      hasPermission: (required: number) => state.granted.includes(required),
-    }),
+    default: () => ReactModule.createElement('span'),
+    getMediaTypeBadgeType: (type: string) => type,
+  };
+});
+vi.mock('@app/components/Common/Tooltip', () => ({
+  default: ({ children }: { children: React.ReactElement }) => children,
+}));
+vi.mock('@app/hooks/useRequestOverride', () => ({
+  default: () => ({}),
+}));
+vi.mock('@app/hooks/useUser', () => ({
+  useUser: () => ({ user: { id: 7 } }),
+}));
+vi.mock('next/link', async () => {
+  const ReactModule = await import('react');
+  return {
+    default: ({
+      children,
+      href,
+    }: {
+      children: React.ReactNode;
+      href: string;
+    }) => ReactModule.createElement('a', { href }, children),
   };
 });
 
-const scope = (
-  values: Partial<MangaRequestScopeSummary> = {}
-): MangaRequestScopeSummary => ({
-  scope: MangaRequestScope.ALL_AT_DISPATCH,
-  latestCount: null,
-  rangeStart: null,
-  rangeEnd: null,
-  awaitingBinding: false,
-  ...values,
-});
-
-const blockRequest = (values: Partial<MediaRequest> = {}) =>
-  ({
-    id: 41,
-    type: 'manga',
-    status: MediaRequestStatus.APPROVED,
-    is4k: false,
-    seasons: [],
-    serverId: 0,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    requestedBy: { id: 7, displayName: 'Sample Reader', avatar: '/a.png' },
-    media: {
-      id: 9,
-      tmdbId: 4242,
-      status: MediaStatus.PENDING,
-      identifiers: [{ provider: 'anilist', value: '30013' }],
-    },
-    ...values,
-  }) as unknown as MediaRequest;
-
-const withScope = (
-  value: MangaRequestScopeSummary,
-  status?: MediaRequestStatus
-) => {
-  state.responses['/api/v1/request/41'] = {
-    data: {
-      ...blockRequest(),
-      ...(status !== undefined ? { status } : {}),
-      mangaScope: value,
-    },
-  };
-};
-
-let root: Root;
-let host: HTMLDivElement;
 let dom: JSDOM;
+let root: ReturnType<typeof createRoot>;
+let host: HTMLDivElement;
 
 beforeEach(() => {
-  dom = new JSDOM('<!doctype html><html><body></body></html>');
+  state.modalProps = null;
+  dom = new JSDOM('<!doctype html><body></body>');
   vi.stubGlobal('window', dom.window);
   vi.stubGlobal('document', dom.window.document);
-  vi.stubGlobal('React', React);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
-  state.keys = [];
-  state.responses = {};
-  state.granted = [];
 });
 
 afterEach(async () => {
@@ -145,131 +123,83 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const render = async (request: MediaRequest) => {
+it('opens the movie edit modal when the detail API omits the request media back-reference', async () => {
+  const request = {
+    id: 29,
+    type: MediaType.MOVIE,
+    status: MediaRequestStatus.PENDING,
+    requestedBy: { id: 7, displayName: 'Test User', avatar: '' },
+    is4k: false,
+    createdAt: new Date('2026-10-04T12:00:00.000Z'),
+    seasons: [],
+    media: undefined,
+  } as unknown as MediaRequest;
+
   await act(async () =>
     root.render(
-      <IntlProvider locale="en" timeZone="UTC">
-        <RequestBlock request={request} />
+      <IntlProvider locale="en">
+        <RequestBlock request={request} mediaType="movie" tmdbId={1234} />
       </IntlProvider>
     )
   );
-};
 
-it('shows the waiting status in place of Approved while a source is missing', async () => {
-  withScope(
-    scope({
-      scope: MangaRequestScope.RANGE,
-      rangeStart: 10,
-      awaitingBinding: true,
-    })
+  const editButton = host.querySelector<HTMLButtonElement>(
+    'button[data-button-type="warning"]'
   );
+  expect(editButton).not.toBeNull();
 
-  await render(blockRequest());
+  await act(async () => editButton!.click());
 
-  expect(state.keys).toContain('/api/v1/request/41');
-  expect(host.textContent).toContain('Waiting for a source');
-  expect(host.textContent).not.toContain('Approved');
-  expect(host.textContent).not.toContain('administrator');
-  expect(host.textContent).toContain('Chapters10 onward');
+  expect(
+    host.querySelector('[data-testid="edit-request-modal"]')
+  ).not.toBeNull();
+  expect(state.modalProps).toMatchObject({
+    show: true,
+    type: 'movie',
+    tmdbId: 1234,
+    editRequest: request,
+  });
 });
 
-it('keeps Approved once a source is linked', async () => {
-  withScope(scope());
-
-  await render(blockRequest());
-
-  expect(host.textContent).toContain('Approved');
-  expect(host.textContent).not.toContain('Waiting for a source');
-  expect(host.textContent).toContain('ChaptersAll');
-});
-
-it('takes the status from the block, not the fetched copy', async () => {
-  withScope(scope({ awaitingBinding: true }), MediaRequestStatus.APPROVED);
-
-  await render(blockRequest({ status: MediaRequestStatus.PENDING }));
-
-  expect(host.textContent).toContain('Pending');
-  expect(host.textContent).not.toContain('Waiting for a source');
-});
-
-it('shows request managers the waiting-for-a-source hint', async () => {
-  state.granted = [Permission.MANAGE_REQUESTS];
-  withScope(scope({ awaitingBinding: true }));
-
-  await render(blockRequest());
-
-  expect(host.textContent).toContain(
-    'Waiting for a sourceSeerrNG is looking for a source; an administrator may need to choose one.'
-  );
-});
-
-const sourceLink = () =>
-  host.querySelector('a[href^="/settings/manga-sources"]');
-const withWaitingCopy = (serverId?: number) => {
-  state.responses['/api/v1/request/41'] = {
-    data: {
-      ...blockRequest({ serverId }),
-      mangaScope: scope({ awaitingBinding: true }),
-    },
-  };
-};
-
-it.each([0, 4])(
-  'links administrators from the waiting hint to instance %i',
-  async (serverId) => {
-    state.granted = [Permission.ADMIN, Permission.MANAGE_REQUESTS];
-    withWaitingCopy(serverId);
-
-    await render(blockRequest());
-
-    expect(sourceLink()?.getAttribute('href')).toBe(
-      `/settings/manga-sources?anilistId=30013&instanceId=${serverId}`
-    );
-    expect(sourceLink()?.textContent).toBe('Choose Source');
-  }
-);
-
-it.each([
-  ['request managers', [Permission.MANAGE_REQUESTS], 0],
-  [
-    'a request with no instance',
-    [Permission.ADMIN, Permission.MANAGE_REQUESTS],
-    undefined,
-  ],
-])('leaves out Choose Source for %s', async (_case, granted, serverId) => {
-  state.granted = granted;
-  withWaitingCopy(serverId);
-
-  await render(blockRequest());
-
-  expect(host.textContent).toContain(
-    'an administrator may need to choose one.'
-  );
-  expect(sourceLink()).toBeNull();
-});
-
-it('opens the manga edit modal and asks no Servarr service', async () => {
-  await render(blockRequest({ status: MediaRequestStatus.PENDING }));
+it('opens the book edit modal from the external detail identity without a media back-reference', async () => {
+  const request = {
+    id: 30,
+    type: MediaType.BOOK,
+    status: MediaRequestStatus.PENDING,
+    requestedBy: { id: 7, displayName: 'Test User', avatar: '' },
+    is4k: false,
+    createdAt: new Date('2026-10-04T12:00:00.000Z'),
+    seasons: [],
+    media: undefined,
+    bookFormat: 'audiobook',
+  } as unknown as MediaRequest;
 
   await act(async () =>
-    host
-      .querySelector('[title="Edit Request"] button')
-      ?.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+    root.render(
+      <IntlProvider locale="en">
+        <RequestBlock
+          request={request}
+          mediaType="book"
+          bookId="works/OL123W"
+        />
+      </IntlProvider>
+    )
   );
 
-  const modal = host.querySelector('[data-testid="request-modal"]');
-  expect(modal?.getAttribute('data-type')).toBe('manga');
-  expect(modal?.getAttribute('data-manga-id')).toBe('30013');
-  expect(modal?.hasAttribute('data-tmdb-id')).toBe(false);
+  const editButton = host.querySelector<HTMLButtonElement>(
+    'button[data-button-type="warning"]'
+  );
+  expect(editButton).not.toBeNull();
+
+  await act(async () => editButton!.click());
+
   expect(
-    state.keys.filter((key) => String(key).startsWith('/api/v1/service/'))
-  ).toEqual([]);
-});
-
-it('leaves other media types without the manga lookup', async () => {
-  await render(blockRequest({ type: 'movie' } as Partial<MediaRequest>));
-
-  expect(state.keys).not.toContain('/api/v1/request/41');
-  expect(state.keys).toContain('/api/v1/service/radarr');
-  expect(host.textContent).toContain('Approved');
+    host.querySelector('[data-testid="edit-request-modal"]')
+  ).not.toBeNull();
+  expect(state.modalProps).toMatchObject({
+    show: true,
+    type: 'book',
+    bookId: 'OL123W',
+    editRequest: request,
+  });
 });

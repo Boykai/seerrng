@@ -66,14 +66,54 @@ const messages = defineMessages('components.RequestBlock', {
   delete: 'Delete Request',
 });
 
+type RequestModalMediaType =
+  | 'movie'
+  | 'tv'
+  | 'collection'
+  | 'music'
+  | 'book'
+  | 'comic'
+  | 'magazine'
+  | 'manga';
+
+const getRequestModalMediaType = (
+  mediaType: string
+): RequestModalMediaType | undefined => {
+  switch (mediaType) {
+    case 'movie':
+    case 'tv':
+    case 'collection':
+    case 'music':
+    case 'book':
+    case 'comic':
+    case 'magazine':
+    case 'manga':
+      return mediaType;
+    default:
+      return undefined;
+  }
+};
+
 interface RequestBlockProps {
   request: MediaRequest;
+  mediaType?: RequestModalMediaType;
+  tmdbId?: number;
+  mbId?: string;
+  bookId?: string;
+  comicId?: string;
+  magazineTitle?: string;
   onUpdate?: () => void;
   hideDeleteAction?: boolean;
 }
 
 const RequestBlock = ({
   request,
+  mediaType: providedMediaType,
+  tmdbId: providedTmdbId,
+  mbId: providedMbId,
+  bookId: providedBookId,
+  comicId: providedComicId,
+  magazineTitle: providedMagazineTitle,
   onUpdate,
   hideDeleteAction = false,
 }: RequestBlockProps) => {
@@ -91,18 +131,49 @@ const RequestBlock = ({
   const isAwaitingSource = isAwaitingMangaSource(
     mangaRequest && { ...mangaRequest, status: request.status }
   );
+  const mediaType = getRequestModalMediaType(providedMediaType ?? request.type);
+  // Manga media rows carry a placeholder TMDB id.
+  const tmdbId =
+    providedTmdbId ??
+    (request.type === 'manga' ? undefined : request.media?.tmdbId);
   const rawBookId = request.media?.identifiers?.find(
     (identifier) => identifier.provider === 'openlibrary'
   )?.value;
-  const bookId = rawBookId ? normalizeOpenLibraryWorkId(rawBookId) : undefined;
-  const musicId = request.media?.mbId
-    ? normalizeMusicBrainzId(request.media.mbId)
-    : undefined;
-  const comicId = request.media?.identifiers?.find(
-    (identifier) => identifier.provider === 'comicvine'
-  )?.value;
+  const bookId = providedBookId
+    ? normalizeOpenLibraryWorkId(providedBookId)
+    : rawBookId
+      ? normalizeOpenLibraryWorkId(rawBookId)
+      : undefined;
+  const rawMusicId = providedMbId ?? request.media?.mbId;
+  const musicId = rawMusicId ? normalizeMusicBrainzId(rawMusicId) : undefined;
+  const comicId =
+    providedComicId ??
+    request.media?.identifiers?.find(
+      (identifier) => identifier.provider === 'comicvine'
+    )?.value;
+  const magazineTitle = providedMagazineTitle;
   const mangaId =
     request.type === 'manga' ? getMangaAniListId(request.media) : undefined;
+  const canEditRequest = (() => {
+    switch (mediaType) {
+      case 'movie':
+      case 'tv':
+      case 'collection':
+        return tmdbId !== undefined;
+      case 'music':
+        return Boolean(musicId);
+      case 'book':
+        return Boolean(bookId);
+      case 'comic':
+        return Boolean(comicId);
+      case 'magazine':
+        return Boolean(magazineTitle);
+      case 'manga':
+        return mangaId !== undefined;
+      default:
+        return false;
+    }
+  })();
   const updateRequest = async (type: 'approve' | 'decline'): Promise<void> => {
     setIsUpdating(true);
     await axios.post(`/api/v1/request/${request.id}/${type}`);
@@ -128,34 +199,16 @@ const RequestBlock = ({
 
   return (
     <div className="block">
-      {request.media && showEditModal && (
+      {showEditModal && canEditRequest && mediaType && (
         <RequestModal
           show={showEditModal}
-          tmdbId={
-            request.type === 'music' ||
-            request.type === 'book' ||
-            request.type === 'comic' ||
-            request.type === 'manga'
-              ? undefined
-              : request.media.tmdbId
-          }
-          mbId={request.type === 'music' ? musicId : undefined}
-          bookId={request.type === 'book' ? bookId : undefined}
-          comicId={request.type === 'comic' ? comicId : undefined}
+          tmdbId={tmdbId}
+          mbId={musicId}
+          bookId={bookId}
+          comicId={comicId}
+          magazineTitle={magazineTitle}
           mangaId={mangaId}
-          type={
-            request.type === 'music'
-              ? 'music'
-              : request.type === 'book'
-                ? 'book'
-                : request.type === 'comic'
-                  ? 'comic'
-                  : request.type === 'manga'
-                    ? 'manga'
-                    : request.type === 'tv'
-                      ? 'tv'
-                      : 'movie'
-          }
+          type={mediaType}
           is4k={request.is4k}
           editRequest={request}
           onCancel={() => setShowEditModal(false)}
@@ -252,15 +305,18 @@ const RequestBlock = ({
                     <XMarkIcon />
                   </Button>
                 </Tooltip>
-                <Tooltip content={intl.formatMessage(messages.edit)}>
-                  <Button
-                    buttonType="warning"
-                    onClick={() => setShowEditModal(true)}
-                    disabled={isUpdating}
-                  >
-                    <PencilIcon className="icon-sm" />
-                  </Button>
-                </Tooltip>
+                {canEditRequest && (
+                  <Tooltip content={intl.formatMessage(messages.edit)}>
+                    <Button
+                      buttonType="warning"
+                      onClick={() => setShowEditModal(true)}
+                      disabled={isUpdating}
+                      aria-label={intl.formatMessage(messages.edit)}
+                    >
+                      <PencilIcon className="icon-sm" />
+                    </Button>
+                  </Tooltip>
+                )}
               </>
             )}
             {!hideDeleteAction &&

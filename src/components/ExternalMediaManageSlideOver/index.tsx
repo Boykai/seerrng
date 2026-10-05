@@ -290,6 +290,28 @@ const ExternalMediaManageSlideOver = ({
                         <RequestBlock
                           hideDeleteAction
                           request={request}
+                          mediaType={mediaType}
+                          tmdbId={mediaInfo?.tmdbId}
+                          mbId={
+                            mediaType === MediaType.MUSIC
+                              ? externalId
+                              : undefined
+                          }
+                          bookId={
+                            mediaType === MediaType.BOOK
+                              ? externalId
+                              : undefined
+                          }
+                          comicId={
+                            mediaType === MediaType.COMIC
+                              ? externalId
+                              : undefined
+                          }
+                          magazineTitle={
+                            mediaType === MediaType.MAGAZINE
+                              ? data.title
+                              : undefined
+                          }
                           onUpdate={revalidate}
                         />
                       </li>

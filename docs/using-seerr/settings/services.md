@@ -104,6 +104,22 @@ runbook. Provider IDs are not portable; the runbook rebuilds records and can
 preserve strict matches, recover metadata, and create local records for books
 the target provider cannot import.
 
+### Audiobookshelf availability
+
+Under **Settings → Services → Audiobookshelf Availability**, you can connect
+one Audiobookshelf book library to recognize audiobooks already in your
+collection. Use an Audiobookshelf user token that can view the selected
+library. SeerrNG matches items to its book catalogue by ISBN; items without an
+ISBN are skipped. A match counts as an available audiobook only and does not
+block an ebook request.
+
+This is an inventory connection, not an acquisition service. SeerrNG does not
+add, remove, monitor, or edit Audiobookshelf items. The selected library is
+scanned with the Bookshelf availability job, and you can add an external URL to
+make matched items clickable from book details. See the
+[Bookshelf Backend](../bookshelf-backend.md#audiobookshelf-availability)
+guide for the connection behavior and limitations.
+
 ## Override Rules
 
 Override rules can assign a root folder, quality profile, or tags when a movie
@@ -112,3 +128,12 @@ rules are also applied in **Advanced Options** for movie and series requests,
 where you can review the resulting values before submission. See the
 [Override Rules guide](/using-seerr/override-rules) for setup and matching
 behavior.
+
+## Reader Apps
+
+**Settings → Services → Reader Apps** connects Grimmory or BookOrbit to your
+existing library for OPDS browsing, with additional comic and audiobook options
+depending on the service. Grimmory is selected by default. Administrators can
+also create live author and series shelves from detail pages and manage those
+shelves here. See the [reader delivery guide](/using-seerr/reader-delivery) for
+setup, supported formats, Kobo behavior, and device downloads.

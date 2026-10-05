@@ -26,6 +26,7 @@ The rules describe asset roles, not particular pages, title strings, example med
 6. Ordinary actions: the shared Button component and `app-button` plus its standard size and semantic palette. Poster actions: `poster-control`. Filter/disclosure controls: their shared segmented/filter families, not copied ordinary-button geometry.
 7. Dropdowns: the existing global dropdown, compact select, provider container and provider icon roles. Overlapping screens: `page-overlay` and `page-overlay-card`.
 8. Messages and recovery: `page-error-message` and the shared Retry action. Selection: `selection-circle`; hierarchical selection: `selection-tree` together with table/card roles.
+9. Software catalog ownership uses the catalog library badge with the shared compact badge geometry. Play-time estimates use the dedicated readable text role within the existing card-table layout.
 
 This map identifies owners, not a whitelist of every valid class. Follow the existing family for the asset and verify its cascade before proposing another family.
 

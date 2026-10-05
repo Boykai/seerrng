@@ -7,6 +7,7 @@ import Alert from '@app/components/Common/Alert';
 import FormatRequestControl from '@app/components/Common/FormatRequestControl';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import ReaderGroupingAction from '@app/components/Common/ReaderGroupingAction';
 import ThreeItemScroll from '@app/components/Common/ThreeItemScroll';
 import {
   CompactRatingSelect,
@@ -242,6 +243,13 @@ const BookSeriesDetails = ({ series }: { series?: BookSeriesDetailsType }) => {
             standalone
           />
           <div className="media-primary-action-row">
+            <ReaderGroupingAction
+              target={{
+                type: 'book-series',
+                id: data.id,
+                name: data.title,
+              }}
+            />
             <nav
               aria-label={intl.formatMessage(messages.mediaType)}
               className="flex flex-wrap gap-2"

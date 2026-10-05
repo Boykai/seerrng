@@ -224,6 +224,8 @@ const ManageSlideOver = ({
                         <RequestBlock
                           hideDeleteAction
                           request={request}
+                          mediaType={mediaType}
+                          tmdbId={data.id}
                           onUpdate={() => revalidate()}
                         />
                       </li>

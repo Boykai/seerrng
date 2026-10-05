@@ -6,6 +6,7 @@ import { syncManagedCollections } from '@server/lib/collectionSync';
 import downloadRecovery from '@server/lib/downloadRecovery';
 import downloadTracker from '@server/lib/downloadtracker';
 import episodeWatchAhead from '@server/lib/episodeWatchAhead';
+import { syncAllExternalRequestLists } from '@server/lib/externalRequestLists';
 import ImageProxy from '@server/lib/imageproxy';
 import { mangaFollowPoller } from '@server/lib/mangaFollow';
 import { mangaPlanningImporter } from '@server/lib/mangaPlanningImport';
@@ -14,6 +15,7 @@ import { mangaSourceResolver } from '@server/lib/mangaResolver';
 import refreshToken from '@server/lib/refreshToken';
 import { captureReleaseCalendarHistory } from '@server/lib/releaseCalendar/history';
 import { reconcileActiveRequests } from '@server/lib/requestStatus';
+import { audiobookshelfScanner } from '@server/lib/scanners/audiobookshelf';
 import { backissueScanner } from '@server/lib/scanners/comics/backissue';
 import { kapowarrScanner } from '@server/lib/scanners/comics/kapowarr';
 import { mylarScanner } from '@server/lib/scanners/comics/mylar';
@@ -190,6 +192,27 @@ export const startJobs = (): void => {
 
   const jobs = getSettings().jobs;
   const mediaServerType = getSettings().main.mediaServerType;
+
+  scheduledJobs.push({
+    id: 'external-request-list-sync',
+    name: 'External Request List Sync',
+    type: 'process',
+    interval: 'days',
+    cronSchedule: jobs['external-request-list-sync'].schedule,
+    job: schedule.scheduleJob(
+      jobs['external-request-list-sync'].schedule,
+      () => {
+        logger.info('Starting scheduled job: External Request List Sync', {
+          label: 'Jobs',
+        });
+        return runTrackedJob(
+          'External Request List Sync',
+          syncAllExternalRequestLists,
+          { logCompletion: true }
+        );
+      }
+    ),
+  });
 
   if (mediaServerType === MediaServerType.PLEX) {
     // Run recently added plex scan every 5 minutes
@@ -382,10 +405,17 @@ export const startJobs = (): void => {
     cronSchedule: jobs['readarr-scan'].schedule,
     job: schedule.scheduleJob(jobs['readarr-scan'].schedule, () => {
       logger.info('Starting scheduled job: Bookshelf Scan', { label: 'Jobs' });
-      return runTrackedJob('Bookshelf Scan', () => readarrScanner.run());
+      return runTrackedJob('Bookshelf Scan', async () => {
+        await readarrScanner.run();
+        await audiobookshelfScanner.run();
+      });
     }),
-    running: () => readarrScanner.status().running,
-    cancelFn: () => readarrScanner.cancel(),
+    running: () =>
+      readarrScanner.status().running || audiobookshelfScanner.status().running,
+    cancelFn: () => {
+      readarrScanner.cancel();
+      audiobookshelfScanner.cancel();
+    },
   });
 
   scheduledJobs.push({

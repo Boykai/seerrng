@@ -68,7 +68,7 @@ const messages = defineMessages('components.Settings.ReadarrModal', {
     'Hardcover is used by default for new installs. Existing Goodreads/softcover libraries remain supported. Migration to Hardcover is optional; use the migration guide if you choose to move provider-specific metadata IDs.',
   migrationGuide: 'Bookshelf Hardcover migration guide',
   apiKeyHelp:
-    'Find it in Bookshelf or Readarr: Settings > General > Security > API Key.',
+    'Find the key in Bookshelf or Readarr under Settings > General > Security > API Key. For ChaptarrNG 0.9.941+, set CHAPTARR__AUTH__SEERRAPIKEY in the ChaptarrNG container and use that SeerrNG-specific key here to limit access to book-service operations.',
   baseUrlHelp:
     'If you set a URL Base in Bookshelf, Chaptarr, or Readarr (Settings > General > Host), enter it here (e.g. /bookshelf). Leave blank otherwise. Chaptarr users do not need a provider-specific URL Base.',
   externalUrlHelp:

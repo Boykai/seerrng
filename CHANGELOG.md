@@ -170,6 +170,139 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+# Changelog
+
+# Changelog
+
+# Changelog
+
+# Changelog
+
+## [3.52.1](https://github.com/snapetech/seerrng/compare/v3.52.0..v3.52.1) - 2026-10-05
+
+### User-facing changes
+
+#### Changed
+
+- **Performance:** The English interface no longer downloads the full translation catalog during startup, trimming the initial JavaScript payload while keeping English labels available through their built-in message fallbacks.
+
+### 🐛 Bug Fixes
+- *(performance)* Reduce shared app startup bundle - ([1ab58bd](https://github.com/snapetech/seerrng/commit/1ab58bd863cf1927b4f15851b121f8471d173c64))
+
+### ⚙️ Miscellaneous Tasks
+- *(yunohost)* Align package with v3.52.0 - ([6d54a07](https://github.com/snapetech/seerrng/commit/6d54a07bce12e222096a9ba5a34add8709bd39e8))
+
+## [3.52.0](https://github.com/snapetech/seerrng/compare/v3.51.0..v3.52.0) - 2026-10-05
+
+### User-facing changes
+
+#### Added
+
+- **Games:** My Games now tracks ownership, progress, and Steam playtime alongside software requests. Link Steam to import your library, then choose which owned titles to share and find games multiple household members can play.
+  - **Action required:** Configure an optional Steam Web API key to enable imports.
+- **Requests:** Connect a public IMDb watchlist or Goodreads to-read shelf to your account. New titles are checked daily and enter your normal request flow, honoring your permissions, quotas, and approval settings.
+- **Bookshelf:** Readers can open the selected Grimmory or BookOrbit library, use its supported ebook, audiobook, comic, and PDF readers, or download available requested files to the current device. Administrators can preview and manage live author and series shelves, including public OPDS scopes and BookOrbit Kobo sync scopes.
+
+#### Changed
+
+- **Settings:** The About page and README now offer Ko-fi as SeerrNG's only development donation link.
+- **Books:** The README and Bookshelf guides now link to ChaptarrNG's fork feature overview and summarize its format-aware request tracking, restricted service key, and supported workflows.
+
+#### Fixed
+
+- **Bookshelf:** Audiobookshelf library scans now reject inconsistent, duplicate, or oversized pages before orphan cleanup runs, preventing incomplete provider responses from incorrectly removing items from SeerrNG's library index.
+- **Reader Apps:** Reader app settings now give each service room for its details and keep generated addresses separate from their copy actions, making setup easier to follow.
+- **Requests:** Pending requests can now be edited from the management panel even when the API omits the request's media back-reference, so administrators can correct routing without reopening the request.
+- **Software Search:** PC game searches now fall back to QuestarrNG’s unpaged catalog when the paged endpoint rejects a query, keeping valid game results available during provider incompatibilities.
+
+### 🚀 Features
+- Add per-user external request list sync - ([b7b01cf](https://github.com/snapetech/seerrng/commit/b7b01cf89f8fb832fa8744a4ea63562775e65702))
+- Add private game libraries and robust software search - ([a393ab9](https://github.com/snapetech/seerrng/commit/a393ab927550b5069078e24b67db2ca66c44e0cc))
+- Add Grimmory and BookOrbit reader delivery - ([23e84d7](https://github.com/snapetech/seerrng/commit/23e84d7aa462d6da6c5293fa8d84b2adfe11e282))
+
+### 🐛 Bug Fixes
+- Improve reader app settings layout - ([752e6b6](https://github.com/snapetech/seerrng/commit/752e6b651dc30cf57b7e00b5c6d3ae5a0ec1211a))
+- Preserve edit actions for requests without linked media - ([9e46eca](https://github.com/snapetech/seerrng/commit/9e46eca5d3713ad5c40334da1e67c25f25a0c07a))
+- Bound and validate Audiobookshelf library scans - ([7cfac90](https://github.com/snapetech/seerrng/commit/7cfac9071bbd30ce3ac2c947309649148117c769))
+
+### 📖 Documentation
+- Record final reader settings verification - ([532700b](https://github.com/snapetech/seerrng/commit/532700b11958e5bd3a25a5a7dbd0810f1e3317f0))
+- Record integration ledger and generated API contract - ([bace25a](https://github.com/snapetech/seerrng/commit/bace25a5e2146782a57a4268f0c60f6bcae461c3))
+- Document ChaptarrNG integration capabilities - ([f32232a](https://github.com/snapetech/seerrng/commit/f32232a58972e70e7d7862ef3199e3a33b662c50))
+
+### ⚙️ Miscellaneous Tasks
+- *(yunohost)* Align package with v3.51.0 - ([4665245](https://github.com/snapetech/seerrng/commit/4665245f97a90d546a94eb25fdcd4c91104bfd7b))
+- Use Ko-fi as the sole support link - ([b4bb494](https://github.com/snapetech/seerrng/commit/b4bb494bada4f01a9334c7e8aa303c2fab28c521))
+
+## [3.51.0](https://github.com/snapetech/seerrng/compare/v3.50.0..v3.51.0) - 2026-10-04
+
+### User-facing changes
+
+#### Changed
+
+- **Software Requests:** PC game details show IGDB community play-time estimates, and catalog availability separates QuestarrNG files, tracked games, and verified Steam library matches. Multi-file requests offer a compressed Download all files option while preserving individual downloads.
+  - **Action required:** Update QuestarrNG to request contract version 2 for play-time estimates and multi-file bundles.
+
+#### Fixed
+
+- **Requests:** The Requests badge now refreshes while SeerrNG stays open, so server-side request updates do not leave an outdated approval count in the sidebar.
+
+### 🚀 Features
+- *(integration)* Extend SeerrNG software acquisition - ([ccf9004](https://github.com/snapetech/seerrng/commit/ccf900453d63a09431b82bef635331ea9f505422))
+
+### 🐛 Bug Fixes
+- *(requests)* Refresh pending badge count - ([5c2bdd3](https://github.com/snapetech/seerrng/commit/5c2bdd3dd34c3b93225ae6295edd95f4c5b0ac25))
+
+### 🎨 Styling
+- Format ChaptarrNG integration smoke script - ([b0c8ffc](https://github.com/snapetech/seerrng/commit/b0c8ffcbf883b09ac16f2c2c6c2dd250a2a480fc))
+
+### 🧪 Testing
+- Align book API key helper assertion - ([06fbbce](https://github.com/snapetech/seerrng/commit/06fbbce72260a08f36139af5dcd94dcda0bd481f))
+
+### ⚙️ Miscellaneous Tasks
+- *(yunohost)* Align package with v3.50.0 - ([d6b11b6](https://github.com/snapetech/seerrng/commit/d6b11b6fe218e00fcc0efa586bea8a0b4e73712f))
+- Integrate latest request count refresh from main - ([9403246](https://github.com/snapetech/seerrng/commit/9403246fdbd992a9be13b26c2b7c00849a93355b))
+- Integrate latest SeerrNG main - ([98de362](https://github.com/snapetech/seerrng/commit/98de362a21c05eec96d78f47d9a3e2bf9e0c470a))
+- Integrate SeerrNG main v3.50.0 - ([8551d8b](https://github.com/snapetech/seerrng/commit/8551d8b505ade9286a4bf76e754a11367a8ea079))
+
+## [3.50.0](https://github.com/snapetech/seerrng/compare/v3.49.0..v3.50.0) - 2026-10-04
+
+### User-facing changes
+
+#### Added
+
+- **Books:** Connect a read-only Audiobookshelf book library to show ISBN-matched audiobooks as available in SeerrNG. The integration scans inventory only and never changes Audiobookshelf items.
+
+#### Changed
+
+- **Bookshelf:** Requests waiting for ChaptarrNG author preparation now show the book format, retry count, and next scheduled retry when the server provides that information. ChaptarrNG operators can also use a dedicated SeerrNG service key.
+
+#### Fixed
+
+- **Bookshelf:** SeerrNG now uses BookshelfNG's ebook and audiobook file counts independently when syncing service status, while older Readarr-compatible services keep using aggregate counts.
+
+### 🚀 Features
+- Integrate ChaptarrNG and Audiobookshelf - ([e9d2e50](https://github.com/snapetech/seerrng/commit/e9d2e50f2b446a70e01f5b16af8bc8265ed99b3e))
+
+### 🐛 Bug Fixes
+- *(release)* Pin AppImage builder version - ([b439984](https://github.com/snapetech/seerrng/commit/b439984ea5035854722ee331cc2c4c81cf3b5ce1))
+
+## [3.49.0](https://github.com/snapetech/seerrng/compare/v3.48.3..v3.49.0) - 2026-10-04
+
+### User-facing changes
+
+#### Fixed
+
+- **Bookshelf:** SeerrNG now uses BookshelfNG's ebook and audiobook file counts independently when syncing service status, while older Readarr-compatible services keep using aggregate counts.
+
+### 🚀 Features
+- *(bookshelf)* Consume format-specific availability - ([4ebf46b](https://github.com/snapetech/seerrng/commit/4ebf46b932637c87c2077274af4df94d744470ae))
+
+### ⚙️ Miscellaneous Tasks
+- *(yunohost)* Align package with v3.48.3 - ([a96fafa](https://github.com/snapetech/seerrng/commit/a96fafa07c77a2d6d95badeb9f60c32a6b4a47c9))
+
 ## [3.48.3](https://github.com/snapetech/seerrng/compare/v3.48.2..v3.48.3) - 2026-10-04
 
 ### User-facing changes

@@ -42,7 +42,14 @@ interface ChaptarrIntegrationCapabilities {
   contract?: string;
   contractVersion?: number;
   providerIdDialect?: ChaptarrDialect;
-  features?: { formatScopedFacade?: boolean };
+  features?: {
+    formatScopedFacade?: boolean;
+    pagedLibrary?: boolean;
+    providerScopedEditionIdentity?: boolean;
+    pendingAuthorImports?: boolean;
+    pendingImportCancellation?: boolean;
+    restrictedServiceApiKey?: boolean;
+  };
 }
 const CHAPTARR_REQUEST_TIMEOUT_MS = 60_000;
 const CHAPTARR_LIBRARY_PAGE_SIZE = 500;
@@ -314,6 +321,8 @@ export interface ReadarrBook extends ReadarrBookLookupResult {
   added?: string;
   statistics?: {
     bookFileCount?: number;
+    ebookFileCount?: number;
+    audiobookFileCount?: number;
     totalBookCount?: number;
   };
 }
@@ -348,9 +357,13 @@ export interface ReadarrAddBookResult extends ReadarrBookLookupResult {
 
 export interface ReadarrPendingAuthorImport {
   id: number;
+  status?: string;
   overallStatus?: string;
   ebookStatus?: string;
   audiobookStatus?: string;
+  attemptCount?: number;
+  maxAttempts?: number;
+  nextAttemptAt?: string;
   lastError?: string;
 }
 
@@ -475,6 +488,7 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
   private coverBaseUrl: string;
   private requestBaseUrl?: string;
   private chaptarrDialect?: ChaptarrDialect;
+  private chaptarrCapabilities?: ChaptarrIntegrationCapabilities;
   private detectedSystemStatus?: Pick<
     SystemStatus,
     'appName' | 'version' | 'urlBase'
@@ -528,7 +542,15 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
     }
   }
 
-  private async detectChaptarrDialect(): Promise<ChaptarrDialect> {
+  private async detectChaptarrCapabilities(): Promise<ChaptarrIntegrationCapabilities> {
+    const legacyChaptarrFeatures = {
+      formatScopedFacade: true,
+      pagedLibrary: true,
+      providerScopedEditionIdentity: true,
+      pendingAuthorImports: true,
+      pendingImportCancellation: true,
+      restrictedServiceApiKey: false,
+    };
     try {
       const response = await super.request<unknown>(
         'GET',
@@ -542,12 +564,9 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
       if (
         (capabilities?.contract === 'chaptarrng-seerr-bookshelf' ||
           capabilities?.contract === 'seerrng-bookshelf') &&
-        capabilities.contractVersion === 1 &&
-        capabilities.features?.formatScopedFacade === true &&
-        (capabilities.providerIdDialect === 'hc' ||
-          capabilities.providerIdDialect === 'gr')
+        capabilities.contractVersion === 1
       ) {
-        return capabilities.providerIdDialect;
+        return capabilities;
       }
     } catch {
       // Older Chaptarr builds have no explicit integration capability endpoint.
@@ -567,14 +586,22 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
         !Array.isArray(response.data) &&
         typeof (response.data as Record<string, unknown>).enabled === 'boolean'
       ) {
-        return (response.data as Record<string, unknown>).enabled ? 'hc' : 'gr';
+        return {
+          providerIdDialect: (response.data as Record<string, unknown>).enabled
+            ? 'hc'
+            : 'gr',
+          features: legacyChaptarrFeatures,
+        };
       }
     } catch {
       // Older Chaptarr builds do not expose the Hardcover config endpoint.
       // Their native compatibility scope defaults to Hardcover.
     }
 
-    return 'hc';
+    return {
+      providerIdDialect: 'hc',
+      features: legacyChaptarrFeatures,
+    };
   }
 
   private async ensureProvider(): Promise<void> {
@@ -601,12 +628,16 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
           this.axios.defaults.timeout ?? 0,
           CHAPTARR_REQUEST_TIMEOUT_MS
         );
-        this.chaptarrDialect = await this.detectChaptarrDialect();
-        this.requestBaseUrl = ReadarrAPI.buildChaptarrFacadeUrl(
-          this.nativeApiUrl,
-          this.mediaType,
-          this.chaptarrDialect
-        );
+        this.chaptarrCapabilities = await this.detectChaptarrCapabilities();
+        this.chaptarrDialect =
+          this.chaptarrCapabilities.providerIdDialect ?? 'hc';
+        if (this.chaptarrCapabilities.features?.formatScopedFacade === true) {
+          this.requestBaseUrl = ReadarrAPI.buildChaptarrFacadeUrl(
+            this.nativeApiUrl,
+            this.mediaType,
+            this.chaptarrDialect
+          );
+        }
       } else if (this.mediaType) {
         // BookshelfNG retains Readarr's appName for API compatibility, so
         // identify its format facade from the explicit capability contract.
@@ -622,17 +653,22 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
 
           if (
             capabilities?.contract === 'seerrng-bookshelf' &&
-            capabilities.contractVersion === 1 &&
-            capabilities.features?.formatScopedFacade === true &&
-            (capabilities.providerIdDialect === 'hc' ||
-              capabilities.providerIdDialect === 'gr')
+            capabilities.contractVersion === 1
           ) {
-            this.chaptarrDialect = capabilities.providerIdDialect;
-            this.requestBaseUrl = ReadarrAPI.buildChaptarrFacadeUrl(
-              this.nativeApiUrl,
-              this.mediaType,
-              capabilities.providerIdDialect
-            );
+            this.chaptarrCapabilities = capabilities;
+            if (
+              capabilities.providerIdDialect === 'hc' ||
+              capabilities.providerIdDialect === 'gr'
+            ) {
+              this.chaptarrDialect = capabilities.providerIdDialect;
+            }
+            if (capabilities.features?.formatScopedFacade === true) {
+              this.requestBaseUrl = ReadarrAPI.buildChaptarrFacadeUrl(
+                this.nativeApiUrl,
+                this.mediaType,
+                this.chaptarrDialect ?? 'hc'
+              );
+            }
           }
         } catch {
           // Older BookshelfNG releases continue to use the standard Readarr routes.
@@ -1052,6 +1088,16 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
   }
 
   private async getChaptarrBooks(): Promise<ReadarrBook[]> {
+    if (this.chaptarrCapabilities?.features?.pagedLibrary !== true) {
+      return sanitizeServarrRecordArray<ReadarrBook>(
+        await this.get<ReadarrBook[]>('/book', {
+          ...this.getRequestConfig(),
+          maxContentLength: MAX_SERVARR_LIBRARY_RESPONSE_BYTES,
+        }),
+        MAX_SERVARR_LIBRARY_RESULTS
+      );
+    }
+
     const books: ReadarrBook[] = [];
     let offset = 0;
     let reportedTotalCount: number | undefined;
@@ -1179,6 +1225,16 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
 
     try {
       await this.ensureProvider();
+      if (
+        this.isChaptarr() &&
+        this.chaptarrCapabilities?.features?.pagedLibrary !== true
+      ) {
+        const books = await this.getBooks();
+        return {
+          books: books.slice(safeOffset, safeOffset + safePageSize),
+          totalCount: books.length,
+        };
+      }
       const payload = await this.get<unknown>(
         '/book/paged',
         this.getRequestConfig({
@@ -1766,7 +1822,13 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
     providerEditionId?: string
   ): Promise<ReadarrBookLookupResult | undefined> {
     await this.ensureProvider();
-    const terms = [...new Set([providerBookId, providerEditionId])].filter(
+    const addressableEditionId =
+      this.isChaptarr() &&
+      this.chaptarrCapabilities?.features?.providerScopedEditionIdentity !==
+        true
+        ? undefined
+        : providerEditionId;
+    const terms = [...new Set([providerBookId, addressableEditionId])].filter(
       (term): term is string => !!term?.trim()
     );
 
@@ -1776,7 +1838,7 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
         matchesReadarrBookProviderIdentity(
           book,
           providerBookId,
-          providerEditionId
+          addressableEditionId
         )
       );
       if (match) return match;
@@ -1791,6 +1853,7 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
     await this.ensureProvider();
     if (
       !this.isChaptarr() ||
+      this.chaptarrCapabilities?.features?.pendingAuthorImports !== true ||
       !Number.isSafeInteger(pendingId) ||
       pendingId <= 0
     ) {
@@ -1809,13 +1872,24 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
         typeof value === 'string' ? value.slice(0, 10_000) : undefined;
       const status = (camel: string, pascal: string): string | undefined =>
         readText(response[camel] ?? response[pascal]);
+      const readCount = (camel: string, pascal: string): number | undefined => {
+        const value = response[camel] ?? response[pascal];
+        return Number.isSafeInteger(value) && Number(value) >= 0
+          ? Number(value)
+          : undefined;
+      };
       const responseId = Number(response.id ?? response.Id);
+      const nextAttemptAt = status('nextAttemptAt', 'NextAttemptAt');
 
       return {
         id: Number.isSafeInteger(responseId) ? responseId : pendingId,
+        status: status('status', 'Status'),
         overallStatus: status('overallStatus', 'OverallStatus'),
         ebookStatus: status('ebookStatus', 'EbookStatus'),
         audiobookStatus: status('audiobookStatus', 'AudiobookStatus'),
+        attemptCount: readCount('attemptCount', 'AttemptCount'),
+        maxAttempts: readCount('maxAttempts', 'MaxAttempts'),
+        nextAttemptAt,
         lastError: status('lastError', 'LastError'),
       };
     } catch (error) {
@@ -1834,6 +1908,7 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
     await this.ensureProvider();
     if (
       !this.isChaptarr() ||
+      this.chaptarrCapabilities?.features?.pendingImportCancellation !== true ||
       !Number.isSafeInteger(pendingId) ||
       pendingId <= 0
     ) {
@@ -2013,6 +2088,13 @@ class ReadarrAPI extends ServarrBase<ReadarrQueueItem> {
           const pendingId = Number(pendingIdValue);
           if (!Number.isSafeInteger(pendingId) || pendingId <= 0) {
             throw new Error('Chaptarr returned an invalid pending add ID.');
+          }
+          if (
+            this.chaptarrCapabilities?.features?.pendingAuthorImports !== true
+          ) {
+            throw new Error(
+              'Chaptarr queued author preparation without advertising pending-import support. Update ChaptarrNG before retrying this request.'
+            );
           }
 
           return {

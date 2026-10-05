@@ -46,6 +46,15 @@ export class BookRequestSearch {
   public pendingId?: number | null;
 
   @Column({ type: 'integer', nullable: true })
+  public pendingAttemptCount?: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  public pendingMaxAttempts?: number | null;
+
+  @DbAwareColumn({ type: 'datetime', nullable: true })
+  public pendingNextAttemptAt?: Date | null;
+
+  @Column({ type: 'integer', nullable: true })
   public authorId?: number | null;
 
   @Column({ type: 'integer', nullable: true })

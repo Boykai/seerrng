@@ -5479,6 +5479,27 @@
     font-size: 0.75rem;
   }
 
+  .software-catalog-library-badge {
+    border-color: color-mix(in srgb, var(--palette-blue) 70%, transparent);
+    background-color: color-mix(
+      in srgb,
+      var(--palette-blue-dark) 35%,
+      transparent
+    );
+    color: var(--palette-blue-light);
+  }
+
+  .software-catalog-library-badge[data-presentation='poster'] {
+    position: absolute;
+    z-index: 10;
+    inset-inline-end: var(--card-spacing);
+    inset-block-end: var(--card-spacing);
+  }
+
+  .software-catalog-playtime-value {
+    color: rgb(var(--color-gray-300));
+  }
+
   .media-type-badge-tone-movie {
     border-color: color-mix(in srgb, var(--palette-blue) 70%, transparent);
     background-color: color-mix(
@@ -6606,6 +6627,12 @@
     --selection-circle-border: rgb(var(--selection-color-bright));
     --selection-circle-surface: rgb(var(--selection-color-fill));
     color: #fff;
+  }
+
+  .game-library-sharing-label {
+    font-size: var(--card-body-font-size);
+    line-height: var(--card-copy-line-height);
+    color: rgb(var(--theme-control-text) / 0.9);
   }
 
   .selection-circle[data-partial='true'] {
@@ -7855,6 +7882,29 @@
   .settings-service-grid {
     @apply grid max-w-6xl grid-cols-1 lg:grid-cols-2 xl:grid-cols-3;
     gap: var(--card-spacing);
+  }
+
+  .reader-settings-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--card-spacing);
+  }
+
+  .reader-generated-address-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--button-content-gap);
+    width: 100%;
+    min-width: 0;
+  }
+
+  .reader-generated-address-field > input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .reader-generated-address-field > .app-button {
+    justify-self: end;
   }
 
   .settings-service-card-content {

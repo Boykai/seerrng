@@ -31,6 +31,7 @@ const configureProviders = () => {
     modern: true,
   };
   settings.softwareAcquisition = {
+    steamApiKey: '',
     romarr: {
       hostname: '127.0.0.1',
       port: 6868,
