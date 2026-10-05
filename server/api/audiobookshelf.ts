@@ -66,6 +66,15 @@ export default class AudiobookshelfAPI {
     page: number,
     limit: number
   ): Promise<AudiobookshelfLibraryItemsResponse> {
+    if (
+      !Number.isSafeInteger(page) ||
+      page < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1
+    ) {
+      throw new Error('Audiobookshelf page request is invalid.');
+    }
+
     const response = await this.get<AudiobookshelfLibraryItemsResponse>(
       `/libraries/${encodeURIComponent(libraryId)}/items`,
       { page, limit }
@@ -75,7 +84,10 @@ export default class AudiobookshelfAPI {
       !response ||
       !Array.isArray(response.results) ||
       !Number.isSafeInteger(response.total) ||
-      response.total < 0
+      response.total < 0 ||
+      response.page !== page ||
+      response.limit !== limit ||
+      response.results.length > limit
     ) {
       throw new Error('Audiobookshelf returned an invalid library page.');
     }

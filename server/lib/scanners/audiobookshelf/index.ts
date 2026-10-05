@@ -9,6 +9,12 @@ import MediaIdentifier, {
 } from '@server/entity/MediaIdentifier';
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import { normalizeValidIsbn } from '@server/lib/isbn';
+import {
+  AUDIOBOOKSHELF_MAX_LIBRARY_ITEMS,
+  AUDIOBOOKSHELF_MAX_LIBRARY_PAGES,
+  AUDIOBOOKSHELF_PAGE_SIZE,
+  getCompleteAudiobookshelfItemIds,
+} from '@server/lib/scanners/audiobookshelf/libraryScan';
 import type {
   ProcessOptions,
   RunnableScanner,
@@ -16,9 +22,6 @@ import type {
 } from '@server/lib/scanners/baseScanner';
 import BaseScanner from '@server/lib/scanners/baseScanner';
 import logger from '@server/logger';
-
-const PAGE_SIZE = 100;
-const MAX_LIBRARY_PAGES = 10_000;
 
 class AudiobookshelfScanner
   extends BaseScanner<AudiobookshelfLibraryItem>
@@ -52,16 +55,21 @@ class AudiobookshelfScanner
     try {
       const api = new AudiobookshelfAPI(settings);
       const items: AudiobookshelfLibraryItem[] = [];
-      let total = Number.POSITIVE_INFINITY;
+      let total: number | undefined;
       let firstPageTotal: number | undefined;
 
-      for (let page = 0; page < MAX_LIBRARY_PAGES; page += 1) {
+      for (let page = 0; page < AUDIOBOOKSHELF_MAX_LIBRARY_PAGES; page += 1) {
         const result = await api.getLibraryItems(
           settings.libraryId,
           page,
-          PAGE_SIZE
+          AUDIOBOOKSHELF_PAGE_SIZE
         );
         total = result.total;
+        if (total > AUDIOBOOKSHELF_MAX_LIBRARY_ITEMS) {
+          throw new Error(
+            `Audiobookshelf library exceeds the ${AUDIOBOOKSHELF_MAX_LIBRARY_ITEMS}-item scan limit. Orphan cleanup was skipped.`
+          );
+        }
         if (firstPageTotal === undefined) {
           firstPageTotal = total;
         } else if (total !== firstPageTotal) {
@@ -69,9 +77,14 @@ class AudiobookshelfScanner
             'Audiobookshelf library changed during the scan. Orphan cleanup was skipped; the next scan will retry.'
           );
         }
+        if (items.length + result.results.length > total) {
+          throw new Error(
+            'Audiobookshelf returned more items than its reported library total. Orphan cleanup was skipped.'
+          );
+        }
         items.push(...result.results);
 
-        if (items.length >= total) break;
+        if (items.length === total) break;
         if (result.results.length === 0) {
           throw new Error(
             'Audiobookshelf returned an incomplete library scan. Orphan cleanup was skipped.'
@@ -79,16 +92,18 @@ class AudiobookshelfScanner
         }
       }
 
-      if (items.length < total) {
+      const itemIds =
+        total === undefined
+          ? undefined
+          : getCompleteAudiobookshelfItemIds(items, total);
+      if (!itemIds) {
         throw new Error(
-          'Audiobookshelf library exceeds the scan page limit. Orphan cleanup was skipped.'
+          'Audiobookshelf returned an incomplete or duplicated library scan. Orphan cleanup was skipped.'
         );
       }
 
       this.items = items;
-      this.seenItemIds = new Set(
-        items.map((item) => item.id).filter((id): id is string => !!id)
-      );
+      this.seenItemIds = itemIds;
       await this.loop(this.processItem.bind(this), { sessionId });
       await this.cleanupRemovedItems();
       logger.info('Audiobookshelf library scan complete', {
