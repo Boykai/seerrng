@@ -26,7 +26,7 @@ export const DEFAULT_EXTERNAL_API_MAX_BODY_LENGTH = 1024 * 1024;
 export const MAX_PENDING_EXTERNAL_API_REQUESTS = 256;
 
 export type ExternalAPIRequestFailure = {
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   hostname: string;
   path: string;
   error: unknown;
@@ -443,7 +443,7 @@ class ExternalAPI {
   }
 
   protected async request<T>(
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     endpoint: string,
     data?: unknown,
     config?: AxiosRequestConfig
@@ -491,6 +491,8 @@ class ExternalAPI {
           // provider payloads may intentionally originate in local config.
           // codeql[js/file-access-to-http]
           return await this.axios.put<T>(requestTarget, data, config);
+        case 'PATCH':
+          return await this.axios.patch<T>(requestTarget, data, config);
         case 'DELETE':
           return await this.axios.delete<T>(requestTarget, config);
       }
