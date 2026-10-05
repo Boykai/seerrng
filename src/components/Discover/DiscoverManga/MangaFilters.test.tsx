@@ -1,3 +1,7 @@
+import { JSDOM } from 'jsdom';
+import { readFileSync } from 'node:fs';
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { IntlProvider } from 'react-intl';
 import { beforeEach, expect, it, vi } from 'vitest';
@@ -28,6 +32,7 @@ type PickerProps = {
   placeholder: string;
   isOptionDisabled: (option: { value: string }) => boolean;
   noOptionsMessage: () => string;
+  onMenuOpen: () => void;
   onChange: (options: { value: string }[]) => void;
 };
 
@@ -45,9 +50,9 @@ vi.mock('swr', () => ({
   },
 }));
 vi.mock('react-select', () => ({
-  default: (props: { 'aria-label': string }) => {
+  default: (props: { 'aria-label': string; className: string }) => {
     state.pickers.set(props['aria-label'], props);
-    return null;
+    return <div className={props.className} />;
   },
 }));
 vi.mock('@app/components/Selector', () => ({ compactSelectComponents: {} }));
@@ -142,6 +147,84 @@ it('offers AniList names and keeps chosen names that are not listed', () => {
     'Time Skip',
   ]);
   expect(markup.match(/discover-filter-control-label-active/g)).toHaveLength(2);
+});
+
+it('lets the genre and tag menus widen up to the room beside each select', async () => {
+  expect(
+    render().match(/discover-filter-control manga-filter-name-select/g)
+  ).toHaveLength(4);
+
+  const dom = new JSDOM('<!doctype html><html><body></body></html>');
+  vi.stubGlobal('window', dom.window);
+  vi.stubGlobal('document', dom.window.document);
+  vi.stubGlobal('React', React);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <IntlProvider locale="en">
+          <MangaFilters filters={{}} onChange={onChange} />
+        </IntlProvider>
+      )
+    );
+    Object.defineProperty(document.documentElement, 'clientWidth', {
+      configurable: true,
+      value: 390,
+    });
+    const control = (label: string) => {
+      const found = [
+        ...host.querySelectorAll<HTMLElement>('.manga-filter-name-select'),
+      ].find(
+        (element) =>
+          element.querySelector('.discover-filter-control-label')
+            ?.textContent === label
+      );
+      if (!found) {
+        throw new Error(`No ${label} control`);
+      }
+      return found;
+    };
+    const openMenuAt = async (label: string, left: number) => {
+      const select = control(label).querySelector('.react-select-container');
+      if (!select) {
+        throw new Error(`No ${label} select`);
+      }
+      select.getBoundingClientRect = () => ({ left }) as DOMRect;
+      await act(async () => picker(label).onMenuOpen());
+      return control(label).style.getPropertyValue('--manga-filter-menu-space');
+    };
+
+    expect(control('Tags').getAttribute('style')).toBeNull();
+    expect(await openMenuAt('Tags', 56.4)).toBe('333px');
+    expect(control('Genres').getAttribute('style')).toBeNull();
+    expect(await openMenuAt('Exclude Genres', 400)).toBe('0px');
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('sizes the genre and tag menus from that room in the shared stylesheet', () => {
+  const css = readFileSync('src/styles/globals.css', 'utf8');
+  const rule = (part: string) =>
+    css
+      .match(
+        new RegExp(
+          String.raw`\.discover-filter-control\.manga-filter-name-select\s+\.discover-compact-select\s+\.react-select__${part}\s*\{([^}]+)\}`
+        )
+      )?.[1]
+      .replace(/\s+/g, '');
+
+  expect(rule('menu')).toContain('width:max-content!important;');
+  expect(rule('menu')).toContain(
+    'max-width:min(20rem,calc(var(--manga-filter-menu-space,20rem)-var(--page-layout-margin-inline,1rem)));'
+  );
+  expect(rule('option')).toContain('overflow-wrap:anywhere;');
+  expect(css.match(/--manga-filter-menu-space/g)).toHaveLength(1);
 });
 
 it('moves a name between the include and exclude lists', () => {

@@ -1432,6 +1432,28 @@
     max-width: 100%;
   }
 
+  /* Manga genre and tag menus grow to fit long names, up to 20rem and never
+     past the page margin: MangaFilters measures the room from the select to
+     the window's right edge. The width overrides react-select's own 100%. */
+  .discover-filter-control.manga-filter-name-select
+    .discover-compact-select
+    .react-select__menu {
+    width: max-content !important;
+    max-width: min(
+      20rem,
+      calc(
+        var(--manga-filter-menu-space, 20rem) -
+          var(--page-layout-margin-inline, 1rem)
+      )
+    );
+  }
+
+  .discover-filter-control.manga-filter-name-select
+    .discover-compact-select
+    .react-select__option {
+    overflow-wrap: anywhere;
+  }
+
   .movie-summary-card {
     @apply grid min-w-0 grid-cols-[64px_minmax(0,1fr)] sm:grid-cols-[80px_minmax(0,1fr)];
     gap: var(--card-spacing);

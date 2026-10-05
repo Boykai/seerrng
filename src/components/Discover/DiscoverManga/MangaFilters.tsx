@@ -7,7 +7,7 @@ import {
 import { compactSelectComponents } from '@app/components/Selector';
 import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
 import defineMessages from '@app/utils/defineMessages';
-import { useId } from 'react';
+import { useId, useRef, useState, type CSSProperties } from 'react';
 import { useIntl, type MessageDescriptor } from 'react-intl';
 import Select from 'react-select';
 import useSWR from 'swr';
@@ -135,6 +135,8 @@ const MangaNamePicker = ({
 }) => {
   const intl = useIntl();
   const id = useId();
+  const controlRef = useRef<HTMLDivElement>(null);
+  const [menuSpace, setMenuSpace] = useState<number>();
   const selected = new Set(names);
   // Names already chosen stay listed, so they can be removed even when
   // AniList's lists are unavailable.
@@ -151,9 +153,35 @@ const MangaNamePicker = ({
             name: names[0],
             count: names.length - 1,
           });
+  // The menu widens to fit long names. It starts at the select's left edge,
+  // so the room from there to the window's right edge bounds its width.
+  const measureMenuSpace = () => {
+    const select = controlRef.current?.querySelector('.react-select-container');
+    if (select) {
+      setMenuSpace(
+        Math.max(
+          0,
+          Math.floor(
+            document.documentElement.clientWidth -
+              select.getBoundingClientRect().left
+          )
+        )
+      );
+    }
+  };
 
   return (
-    <div className="discover-filter-control">
+    <div
+      ref={controlRef}
+      className="discover-filter-control manga-filter-name-select"
+      style={
+        menuSpace === undefined
+          ? undefined
+          : ({
+              '--manga-filter-menu-space': `${menuSpace}px`,
+            } as CSSProperties)
+      }
+    >
       <span
         className={`discover-filter-control-label ${
           names.length ? 'discover-filter-control-label-active' : ''
@@ -179,6 +207,7 @@ const MangaNamePicker = ({
           names.length >= MAX_MANGA_FILTER_NAMES && !selected.has(option.value)
         }
         placeholder={summary}
+        onMenuOpen={measureMenuSpace}
         noOptionsMessage={() =>
           intl.formatMessage(
             unavailable ? messages.listsUnavailable : messages.noMatches

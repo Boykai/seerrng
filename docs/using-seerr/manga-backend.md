@@ -64,7 +64,8 @@ filtered view can be bookmarked.
 
 - **Genres** and **Tags** keep titles that AniList lists under the chosen
   names, and **Exclude Genres** and **Exclude Tags** leave them out. Each list
-  takes up to 10 names. A name can be included or excluded, not both.
+  takes up to 10 names, and its menu widens to show long names. A name can be
+  included or excluded, not both.
 - **Format**, **Status**, **Country**, and **Source Material** each match one
   value.
 - **Start Year**, **AniList Score**, **Chapters**, and **Volumes** set a range.
