@@ -4,6 +4,7 @@ import cacheManager from '@server/lib/cache';
 import { recordExternalApiCall } from '@server/lib/metrics';
 import { getAppVersion } from '@server/utils/appVersion';
 import axios from 'axios';
+import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 
 export const MANGADEX_API_URL = 'https://api.mangadex.org';
@@ -276,8 +277,9 @@ class MangaDexAPI extends ExternalAPI {
       throw new TypeError('Expected a title of 1 to 200 characters');
     }
     const cache = cacheManager.getCache('mangadex').data;
-    // Prefixed so it never collides with the bare-UUID link entries.
-    const key = `title:${text}`;
+    // A hash, so no title is kept as a key; prefixed so it never collides
+    // with the bare-UUID link entries.
+    const key = `title:${createHash('sha256').update(text).digest('hex')}`;
     const cached = cache.get<MangaDexTitleMatch[]>(key);
     if (cached !== undefined) {
       return cached;
