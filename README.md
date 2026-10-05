@@ -9,8 +9,7 @@
 </p>
 
 <p align="center">
-  Support SeerrNG development through
-  <a href="https://www.paypal.com/donate/?business=donations%40snape.tech">PayPal</a> or
+  Support SeerrNG development on
   <a href="https://ko-fi.com/snapetech">Ko-fi</a>.
 </p>
 
