@@ -1196,6 +1196,15 @@ export const canDownloadRequestCopy = (
   stage === 'available' ||
   (type === 'manga' && (stage === 'downloading' || stage === 'failed'));
 
+/**
+ * Changes whenever a request may offer new download copies. A manga request
+ * counts its verified chapters, which its rounded percentage can miss.
+ */
+export const getRequestDownloadRevision = (
+  stage: StatusStage,
+  status: Pick<RequestStatusItem['status'], 'percent' | 'chaptersVerified'>
+): string => `${stage}:${status.chaptersVerified ?? status.percent ?? ''}`;
+
 export const RequestDownloadAction = ({
   requestId,
   enabled,
@@ -2178,7 +2187,7 @@ export const RequestStatusCard = ({
           <RequestDownloadAction
             requestId={item.request.id}
             enabled={canDownloadRequestCopy(item.request.type, currentStage)}
-            revision={`${currentStage}:${current.percent ?? ''}`}
+            revision={getRequestDownloadRevision(currentStage, current)}
           />
           {episodeQueueControl}
         </div>

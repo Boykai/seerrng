@@ -5208,6 +5208,10 @@ components:
         downloadCount:
           type: integer
           minimum: 0
+        chaptersVerified:
+          type: integer
+          minimum: 0
+          description: Manga only. How many of the request's chapters are verified while its queued chapters download or after one failed. Absent in every other status.
         downloadId:
           type: string
           nullable: true

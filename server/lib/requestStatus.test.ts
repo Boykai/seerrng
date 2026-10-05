@@ -1149,3 +1149,47 @@ test('manga downloads come from the progress tracker, never the book queue', () 
     bookProgress.mock.restore();
   }
 });
+
+test('a manga snapshot counts its verified chapters while they download or after one failed', () => {
+  // At 1,500 chapters, a newly verified one can leave the percentage as is.
+  const first = mangaStatus(
+    mangaProgress({ chaptersTotal: 1_500, chaptersVerified: 1 })
+  );
+  const second = mangaStatus(
+    mangaProgress({ chaptersTotal: 1_500, chaptersVerified: 2 })
+  );
+  assert.equal(first.stage, RequestStatusStage.DOWNLOADING);
+  assert.equal(second.stage, RequestStatusStage.DOWNLOADING);
+  assert.equal(first.percent, 0.1);
+  assert.equal(second.percent, 0.1);
+  assert.equal(first.chaptersVerified, 1);
+  assert.equal(second.chaptersVerified, 2);
+
+  const failed = mangaStatus(
+    mangaProgress({
+      attentionCode: MangaAttentionCode.CHAPTER_ERROR,
+      chaptersErrored: 1,
+      chaptersQueued: 0,
+    })
+  );
+  assert.equal(failed.stage, RequestStatusStage.FAILED);
+  assert.equal(failed.chaptersVerified, 1);
+
+  for (const status of [
+    mangaStatus(mangaProgress(), { status: MediaRequestStatus.PENDING }),
+    mangaStatus(null),
+    mangaStatus(
+      mangaProgress({ checkpoint: MangaRequestCheckpoint.MANIFEST_FROZEN })
+    ),
+    mangaStatus(mangaProgress({ chaptersVerified: 4 })),
+    mangaStatus(mangaProgress(), { status: MediaRequestStatus.FAILED }),
+    getRequestStatus(request(), { downloads: [download()] }),
+  ]) {
+    assert.equal(
+      Object.hasOwn(status, 'chaptersVerified'),
+      false,
+      status.stage
+    );
+    assert.doesNotMatch(JSON.stringify(status), /chaptersVerified/);
+  }
+});

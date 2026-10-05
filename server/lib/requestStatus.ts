@@ -107,6 +107,11 @@ export interface RequestStatusSnapshot {
   sizeLeft: number | null;
   estimatedCompletionTime: Date | null;
   downloadCount: number;
+  /**
+   * How many of a manga request's chapters are verified, while its queued
+   * chapters download or after one failed. Absent in every other status.
+   */
+  chaptersVerified?: number;
   downloadId: string | null;
   service: string | null;
   message: string;
@@ -270,6 +275,7 @@ type StageResult = {
   // Manga reads these from its manifest instead of the download queue.
   percent?: number | null;
   downloadCount?: number;
+  chaptersVerified?: number;
   needsAttention?: boolean;
   retryable?: boolean;
 };
@@ -1031,6 +1037,7 @@ const getMangaStage = (
           ) / 10
         : null,
     downloadCount: progress.chaptersQueued + progress.chaptersDownloading,
+    chaptersVerified: progress.chaptersVerified,
   };
   if (isMangaChapterRetryable(progress)) {
     return {
@@ -1364,6 +1371,9 @@ export const getRequestStatus = (
         (stage === RequestStatusStage.UNAVAILABLE &&
           request.status === MediaRequestStatus.APPROVED &&
           !hasRequestedServiceLink(request, options.mangaProgress))),
+    ...(result.chaptersVerified !== undefined
+      ? { chaptersVerified: result.chaptersVerified }
+      : {}),
     ...(options.bookImportProgresses?.length
       ? { bookImportProgresses: options.bookImportProgresses }
       : {}),

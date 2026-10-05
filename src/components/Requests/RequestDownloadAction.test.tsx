@@ -5,7 +5,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { IntlProvider } from 'react-intl';
 import { SWRConfig, type Cache } from 'swr';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { RequestDownloadAction, canDownloadRequestCopy } from '.';
+import {
+  RequestDownloadAction,
+  canDownloadRequestCopy,
+  getRequestDownloadRevision,
+} from '.';
 
 const fetcher = vi.fn();
 let cache: Cache;
@@ -170,4 +174,22 @@ it('asks for nothing before the request offers copies, then loads them once', as
 
   expect(fetcher).toHaveBeenCalledTimes(1);
   expect(links()).toHaveLength(1);
+});
+
+it('changes the revision with every verified manga chapter, and with the percentage for other requests', () => {
+  // Of 1,500 chapters, each newly verified one adds less than 0.1%.
+  const revisions = Array.from({ length: 1_501 }, (_, chaptersVerified) =>
+    getRequestDownloadRevision('downloading', {
+      percent: Math.round((chaptersVerified / 1_500) * 1000) / 10,
+      chaptersVerified,
+    })
+  );
+  expect(new Set(revisions).size).toBe(1_501);
+
+  expect(getRequestDownloadRevision('available', { percent: null })).toBe(
+    'available:'
+  );
+  expect(getRequestDownloadRevision('available', { percent: 75 })).toBe(
+    'available:75'
+  );
 });
