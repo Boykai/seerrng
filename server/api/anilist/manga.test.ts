@@ -4,6 +4,7 @@ import {
   AnilistGraphQLError,
 } from '@server/api/anilist/failures';
 import type { AnilistMangaPageOptions } from '@server/api/anilist/manga';
+import { sanitizeAnilistDescription } from '@server/api/anilist/manga';
 import {
   anilistRateLimiter,
   resetAnilistRateLimiterForTests,
@@ -201,6 +202,38 @@ describe('AniList shared request budget', () => {
     );
     await client.getMangaPage(pageOptions({ page: 3 }));
     assert.deepEqual(sleeps, [5_000]);
+  });
+
+  it('stops waiting for a request slot as soon as the caller cancels', async () => {
+    let asleep!: () => void;
+    const sleeping = new Promise<void>((resolve) => (asleep = resolve));
+    resetAnilistRateLimiterForTests({
+      now: () => now,
+      // Waits until the caller cancels; no time passes.
+      sleep: (ms, signal) => {
+        sleeps.push(ms);
+        asleep();
+        return new Promise<void>((_, reject) =>
+          signal?.addEventListener('abort', () => reject(signal.reason), {
+            once: true,
+          })
+        );
+      },
+    });
+    const api = new AnilistAPI();
+    const bodies = stubAnilist(api, () => ({
+      data: { data: { Media: mangaFixture() } },
+    }));
+    await api.getMangaDetails(1);
+    const controller = new AbortController();
+
+    const waiting = api.getMangaDetails(2, { signal: controller.signal });
+    await sleeping;
+    controller.abort();
+
+    await assert.rejects(waiting, (error: unknown) => axios.isCancel(error));
+    assert.equal(bodies.length, 1);
+    assert.deepEqual(sleeps, [1_000]);
   });
 
   it('serves repeated lookups from cache without spending budget', async () => {
@@ -460,6 +493,59 @@ describe('AniList manga catalog requests', () => {
     });
   });
 
+  it('caches only usable manga details, for 12 hours', async () => {
+    const api = new AnilistAPI();
+    let reply: StubResponse = {
+      data: {
+        data: { Media: null },
+        errors: [{ message: 'Internal Server Error', status: 500 }],
+      },
+    };
+    const bodies = stubAnilist(api, () => reply);
+
+    await assert.rejects(api.getMangaDetails(30013), AnilistGraphQLError);
+    reply = { data: { data: { Media: null } } };
+    assert.equal(await api.getMangaDetails(30013), null);
+    reply = { data: { data: { Media: mangaFixture() } } };
+    const details = await api.getMangaDetails(30013);
+    reply = { status: 500, data: {} };
+    assert.deepEqual(await api.getMangaDetails(30013), details);
+
+    assert.equal(details?.id, 30013);
+    assert.equal(bodies.length, 3);
+    const cache = cacheManager.getCache('anilist').data;
+    const expiries = cache.keys().map((key) => cache.getTtl(key) ?? 0);
+    assert.equal(expiries.length, 1);
+    assert.ok(Math.abs(expiries[0] - Date.now() - 43_200_000) < 60_000);
+  });
+
+  it('shares a details read only between callers that wait alike and cannot cancel', async () => {
+    const clients = [
+      new AnilistAPI(),
+      new AnilistAPI(),
+      new AnilistAPI({ maxRateLimitWaitMs: 2_000 }),
+      new AnilistAPI(),
+    ];
+    const bodies = clients.map((api) =>
+      stubAnilist(api, () => ({ data: { data: { Media: mangaFixture() } } }))
+    );
+
+    const results = await Promise.all([
+      clients[0].getMangaDetails(30013),
+      clients[1].getMangaDetails(30013),
+      clients[2].getMangaDetails(30013),
+      clients[3].getMangaDetails(30013, {
+        signal: new AbortController().signal,
+      }),
+    ]);
+
+    assert.deepEqual(
+      bodies.map((sent) => sent.length),
+      [1, 0, 1, 1]
+    );
+    assert.ok(results.every((details) => details?.id === 30013));
+  });
+
   it('keeps anime lookups on the ANIME type', async () => {
     const api = new AnilistAPI();
     const bodies = stubAnilist(api, (body) =>
@@ -666,19 +752,19 @@ describe('AniList manga batch reads', () => {
   });
 
   it('rejects malformed batch pages and reports rate limits', async () => {
-    // Replies are cached per ID set, so each case reads its own ID.
-    for (const [id, reply] of [
-      [1, { data: { data: { Page: null } } }],
-      [2, { data: { data: { Page: {} } } }],
-      [3, { data: { data: { Page: { media: 'none' } } } }],
-    ] as const) {
+    for (const reply of [
+      { data: { data: { Page: null } } },
+      { data: { data: { Page: {} } } },
+      { data: { data: { Page: { media: 'none' } } } },
+    ]) {
       const api = new AnilistAPI();
-      stubAnilist(api, () => reply);
+      const bodies = stubAnilist(api, () => reply);
       await assert.rejects(
-        api.getMangaSummariesByIds([id]),
+        api.getMangaSummariesByIds([1]),
         (error: unknown) =>
           error instanceof Error && error.name === 'AnilistBadResponseError'
       );
+      assert.equal(bodies.length, 1);
     }
 
     const limited = new AnilistAPI();
@@ -691,6 +777,36 @@ describe('AniList manga batch reads', () => {
       limited.getMangaSummariesByIds([4]),
       rateLimited(30, true)
     );
+  });
+
+  it('caches only a usable batch, for 12 hours', async () => {
+    const api = new AnilistAPI();
+    let reply: StubResponse = {
+      data: {
+        data: { Page: { media: [] } },
+        errors: [{ message: 'Internal Server Error', status: 500 }],
+      },
+    };
+    const bodies = stubAnilist(api, () => reply);
+
+    await assert.rejects(
+      api.getMangaSummariesByIds([1, 2]),
+      AnilistGraphQLError
+    );
+    reply = mangaPage([mangaFixture({ id: 1 })]);
+    const first = await api.getMangaSummariesByIds([2, 1]);
+    reply = { status: 500, data: {} };
+    assert.deepEqual(await api.getMangaSummariesByIds([1, 2]), first);
+
+    assert.deepEqual(
+      first.map((manga) => manga.id),
+      [1]
+    );
+    assert.equal(bodies.length, 2);
+    const cache = cacheManager.getCache('anilist').data;
+    const expiries = cache.keys().map((key) => cache.getTtl(key) ?? 0);
+    assert.equal(expiries.length, 1);
+    assert.ok(Math.abs(expiries[0] - Date.now() - 43_200_000) < 60_000);
   });
 });
 
@@ -714,15 +830,17 @@ describe('AniList Planning list reads', () => {
           planningPage(
             [
               {
+                mediaId: 12,
                 updatedAt: 1_700_000_200,
                 media: { id: 12, format: 'MANGA', isAdult: false },
               },
               {
+                mediaId: 11,
                 updatedAt: null,
                 media: { id: 11, format: 'NOVEL', isAdult: null },
               },
               { updatedAt: 1_700_000_100, media: { id: 10, isAdult: true } },
-              { updatedAt: 1_700_000_000, media: null },
+              { mediaId: 9, updatedAt: 1_700_000_000, media: null },
               { updatedAt: 1_700_000_000, media: { id: 0 } },
               'row',
             ],
@@ -732,11 +850,12 @@ describe('AniList Planning list reads', () => {
       };
 
     const page = await api.getMangaPlanningPage(77, 2);
-    await api.getMangaPlanningPage(77, 2);
+    await api.getMangaPlanningPage(77, 3, { perPage: 48 });
 
     assert.equal(bodies.length, 2);
     assert.deepEqual(authorization, [`Bearer ${token}`, `Bearer ${token}`]);
-    assert.deepEqual(bodies[0].variables, { userId: 77, page: 2 });
+    assert.deepEqual(bodies[0].variables, { userId: 77, page: 2, perPage: 50 });
+    assert.deepEqual(bodies[1].variables, { userId: 77, page: 3, perPage: 48 });
     assert.match(bodies[0].query, /^\s*query MangaPlanningPage/);
     assert.doesNotMatch(bodies[0].query, /mutation/i);
     assert.match(
@@ -744,7 +863,8 @@ describe('AniList Planning list reads', () => {
       /mediaList\(\s*userId: \$userId\s*type: MANGA\s*status: PLANNING/
     );
     assert.match(bodies[0].query, /sort: \[UPDATED_TIME_DESC, MEDIA_ID_DESC\]/);
-    assert.match(bodies[0].query, /perPage: 50/);
+    assert.match(bodies[0].query, /Page\(page: \$page, perPage: \$perPage\)/);
+    assert.match(bodies[0].query, /\{\s*mediaId\s+updatedAt\s+media \{/);
     assert.deepEqual(page, {
       hasNextPage: true,
       entries: [
@@ -762,6 +882,8 @@ describe('AniList Planning list reads', () => {
           isAdult: true,
         },
       ],
+      // A row without usable media still has its place on the page.
+      rowIds: [12, 11, 10, 9, 0, 0],
     });
   });
 
@@ -787,6 +909,33 @@ describe('AniList Planning list reads', () => {
       );
     }
 
+    // A page holds no more rows than were asked for.
+    const short = new AnilistAPI();
+    stubAnilist(short, () =>
+      planningPage(
+        Array.from({ length: 48 }, (_, index) => ({
+          mediaId: index + 1,
+          updatedAt: 1,
+          media: { id: index + 1 },
+        }))
+      )
+    );
+    await assert.rejects(
+      short.getMangaPlanningPage(77, 4, { perPage: 47 }),
+      (error: unknown) =>
+        error instanceof Error && error.name === 'AnilistBadResponseError'
+    );
+
+    const unsent = new AnilistAPI();
+    const sent = stubAnilist(unsent, () => planningPage([]));
+    for (const perPage of [0, 51, 1.5]) {
+      await assert.rejects(
+        unsent.getMangaPlanningPage(77, 1, { perPage }),
+        RangeError
+      );
+    }
+    assert.equal(sent.length, 0);
+
     const limited = new AnilistAPI();
     stubAnilist(limited, () => ({
       status: 429,
@@ -797,6 +946,54 @@ describe('AniList Planning list reads', () => {
       limited.getMangaPlanningPage(77, 1),
       rateLimited(30, true)
     );
+  });
+});
+
+describe('AniList description sanitizer', () => {
+  it('leaves at most one blank line for a run of line breaks', () => {
+    assert.equal(
+      sanitizeAnilistDescription('One<br><br><br><br>Two'),
+      'One<br><br>Two'
+    );
+    assert.equal(
+      sanitizeAnilistDescription('One<br>\n <br/>\n<BR >\n<br />Two'),
+      'One<br><br>Two'
+    );
+    assert.equal(
+      sanitizeAnilistDescription('<p>One<br><br><br>Two</p><p>Three</p>'),
+      '<p>One<br><br>Two</p><p>Three</p>'
+    );
+  });
+
+  it('keeps single and double breaks and breaks between text', () => {
+    for (const html of [
+      'One<br>Two<br><br>Three',
+      'One<br>\n<br>\nTwo',
+      'One<br>.<br>.<br>Two',
+      'One<br><i> </i><br><br>Two',
+    ]) {
+      assert.equal(sanitizeAnilistDescription(html), html);
+    }
+  });
+
+  it('drops line breaks at the start and end', () => {
+    assert.equal(
+      sanitizeAnilistDescription('\n<br><br> One<br>Two <br>\n<br><br>\n'),
+      'One<br>Two'
+    );
+    assert.equal(sanitizeAnilistDescription('<br>\n<br> <br>'), undefined);
+  });
+
+  it('still strips spoilers, unsafe markup and empty values', () => {
+    assert.equal(
+      sanitizeAnilistDescription(
+        '<p onclick="alert(1)">Plot <span class="markdown_spoiler">Secret</span><a href="https://example.com/x">link</a><img src="x" onerror="alert(1)"><script>alert(1)</script> <b style="color:red">end</b></p>'
+      ),
+      '<p>Plot link <b>end</b></p>'
+    );
+    for (const value of [undefined, null, 7, '', '   ', '<script>x</script>']) {
+      assert.equal(sanitizeAnilistDescription(value), undefined);
+    }
   });
 });
 

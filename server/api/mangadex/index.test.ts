@@ -13,6 +13,7 @@ import type {
 } from 'axios';
 import axios, { AxiosError } from 'axios';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
 type StubResponse = {
@@ -430,7 +431,7 @@ describe('MangaDex title search', () => {
     );
   });
 
-  it('caches under a title key that never meets a UUID key', async () => {
+  it('caches under a hashed title key that never meets a UUID key', async () => {
     const api = new MangaDexAPI();
     const requests = stubMangaDex(api, (url) =>
       url.searchParams.has('title')
@@ -439,13 +440,15 @@ describe('MangaDex title search', () => {
     );
 
     await api.searchMangaByTitle(UUID_1);
-    assert.deepEqual(await api.searchMangaByTitle(UUID_1), [
+    assert.deepEqual(await api.searchMangaByTitle(`  ${UUID_1} `), [
       { uuid: UUID_1, anilistId: 101 },
     ]);
     assert.equal(requests.length, 1);
-    assert.deepEqual(cacheManager.getCache('mangadex').data.keys(), [
-      `title:${UUID_1}`,
+    const keys = cacheManager.getCache('mangadex').data.keys();
+    assert.deepEqual(keys, [
+      `title:${createHash('sha256').update(UUID_1).digest('hex')}`,
     ]);
+    assert.match(keys[0], /^title:[0-9a-f]{64}$/);
 
     assert.deepEqual(
       await api.getAniListLinks([UUID_1]),
