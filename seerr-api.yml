@@ -22165,7 +22165,7 @@ paths:
                         chapterCount:
                           type: integer
                           minimum: 1
-                          description: Manga chapters released on this day. Each chapter number counts once, on its earliest day within the requested dates; versions dated before those dates are not checked.
+                          description: Manga chapters released on this day. Each chapter number counts once, on its earliest day within the requested dates, and only when no matched manga of the title, on any server, has a version of it dated before those dates. Versions that Suwayomi no longer lists are not compared.
                         available:
                           type: boolean
                         is4k:

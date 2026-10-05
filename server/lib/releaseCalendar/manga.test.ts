@@ -110,6 +110,11 @@ const reads = (fake: FakeDispatchSuwayomi) =>
 const readIds = (fake: FakeDispatchSuwayomi) =>
   reads(fake).map(({ variables }) => (variables.ids as unknown[]).map(Number));
 
+const checks = (fake: FakeDispatchSuwayomi) =>
+  fake.server.operations('EarlierChapterReleases');
+
+const CHECK_FAILED = 'Earlier chapter versions could not be checked.';
+
 const uploaded = (
   id: number,
   chapterNumber: number,
@@ -275,7 +280,10 @@ describe('manga chapter releases', () => {
       partialSources: [],
       truncated: false,
     });
-    assert.deepStrictEqual(fake.operationNames(), ['ChapterReleases']);
+    assert.deepStrictEqual(fake.operationNames(), [
+      'ChapterReleases',
+      'EarlierChapterReleases',
+    ]);
     const [read] = reads(fake);
     assert.deepStrictEqual(
       {
@@ -293,6 +301,16 @@ describe('manga chapter releases', () => {
         fetchedBefore: String(Date.parse('2026-09-21T00:00:00.000Z') / 1_000),
       }
     );
+    // The check asks for the numbers counted, released before the window.
+    assert.deepStrictEqual(checks(fake)[0].variables, {
+      ids: [11],
+      match: [
+        { mangaId: { equalTo: 11 }, chapterNumber: { in: [1, 2, 3, 4, 5] } },
+      ],
+      uploadedBefore: String(Date.parse('2026-09-01T00:00:00.000Z')),
+      fetchedBefore: String(Date.parse('2026-09-01T00:00:00.000Z') / 1_000),
+      after: null,
+    });
     assert.deepStrictEqual(anilistCalls, [[9001]]);
     const body = JSON.stringify(result);
     for (const hidden of [FAKE_TITLE_PREFIX, FAKE_URL_PREFIX, 'Fake Chapter'])
@@ -575,7 +593,7 @@ describe('manga chapter releases', () => {
     );
   });
 
-  it('pages through both lists and stops at the page budget', async () => {
+  it('pages through both lists and stops at the page budget the check shares', async () => {
     const manga = fakeDispatchManga(61, {
       chapters: [1, 2, 3, 4, 5].map((number) =>
         uploaded(6100 + number, number, `2026-09-0${number}T00:00:00.000Z`)
@@ -595,9 +613,10 @@ describe('manga chapter releases', () => {
     assert.strictEqual(reads(fake).length, 2);
 
     resetMangaReleaseCalendarCache();
-    const complete = await load(september(), { limits: { pages: 3 } });
-    assert.strictEqual(complete.truncated, false);
-    assert.strictEqual(complete.results.length, 5);
+    // The read takes all three pages and leaves none for the check.
+    const unchecked = await load(september(), { limits: { pages: 3 } });
+    assert.strictEqual(unchecked.truncated, true);
+    assert.strictEqual(unchecked.results.length, 5);
     assert.deepStrictEqual(
       reads(fake)
         .slice(2)
@@ -611,6 +630,13 @@ describe('manga chapter releases', () => {
         ['6104', null],
       ]
     );
+    assert.deepStrictEqual(checks(fake), []);
+
+    // The shared read still counts its three pages.
+    const complete = await load(september(), { limits: { pages: 4 } });
+    assert.strictEqual(complete.truncated, false);
+    assert.strictEqual(complete.results.length, 5);
+    assert.deepStrictEqual([reads(fake).length, checks(fake).length], [5, 1]);
   });
 
   it('keeps to the request, library, instance, title and entry limits', async () => {
@@ -710,7 +736,7 @@ describe('manga chapter releases', () => {
     assert.deepStrictEqual(readIds(fake), [ids]);
   });
 
-  it('shares one read while it is fresh and reads again after a minute or a reset', async () => {
+  it('shares one read and check while they are fresh and makes both again after a minute or a reset', async () => {
     const manga = fakeDispatchManga(81, {
       chapters: [
         uploaded(8101, 1, '2026-08-20T00:00:00.000Z'),
@@ -719,20 +745,21 @@ describe('manga chapter releases', () => {
     });
     const fake = await start(1, [manga]);
     await request(manga, 9081);
+    const calls = () => [reads(fake).length, checks(fake).length];
 
     await load(september());
     await load(september(), { isAdmin: false });
-    assert.strictEqual(reads(fake).length, 1);
+    assert.deepStrictEqual(calls(), [1, 1]);
 
     await Promise.all([load(august()), load(august())]);
-    assert.strictEqual(reads(fake).length, 2);
+    assert.deepStrictEqual(calls(), [2, 2]);
 
     await load(september(), { now: new Date(NOW.getTime() + 61_000) });
-    assert.strictEqual(reads(fake).length, 3);
+    assert.deepStrictEqual(calls(), [3, 3]);
 
     resetMangaReleaseCalendarCache();
     await load(august());
-    assert.strictEqual(reads(fake).length, 4);
+    assert.deepStrictEqual(calls(), [4, 4]);
   });
 
   it('keeps the cache within its row and entry bounds', async () => {
@@ -774,5 +801,290 @@ describe('manga chapter releases', () => {
     assert.strictEqual(count(), 7);
     await load(september(), entries);
     assert.strictEqual(count(), 8);
+  });
+
+  it('counts a chapter number only where no matched source released it before the window', async () => {
+    const manga = fakeDispatchManga(91, {
+      chapters: [
+        uploaded(9101, 1, '2026-08-20T00:00:00.000Z'),
+        uploaded(9102, 1, '2026-09-05T00:00:00.000Z', true),
+        uploaded(9103, 2, '2026-09-02T00:00:00.000Z'),
+        uploaded(9104, 2, '2026-09-06T00:00:00.000Z'),
+        uploaded(9105, 3, '2026-09-06T00:00:00.000Z', true),
+      ],
+    });
+    const fake = await start(1, [manga]);
+    await request(manga, 9091);
+
+    assert.deepStrictEqual(await load(september()), {
+      results: [
+        entry(9091, '2026-09-02', 1, false),
+        entry(9091, '2026-09-06', 1, true),
+      ],
+      partialSources: [],
+      truncated: false,
+    });
+    assert.deepStrictEqual(
+      checks(fake).map(({ variables }) => variables.match),
+      [[{ mangaId: { equalTo: 91 }, chapterNumber: { in: [1, 2, 3] } }]]
+    );
+    assert.deepStrictEqual(days(await load(august())), ['9091:2026-08-20']);
+  });
+
+  it('drops a number that another matched source of the title released earlier, on the same server or another', async () => {
+    const requested = fakeDispatchManga(92, {
+      chapters: [
+        uploaded(9201, 1, '2026-09-03T00:00:00.000Z'),
+        uploaded(9202, 2, '2026-09-03T00:00:00.000Z'),
+        uploaded(9203, 3, '2026-09-04T00:00:00.000Z', true),
+        uploaded(9204, 4, '2026-09-04T00:00:00.000Z', true),
+      ],
+    });
+    const library = fakeDispatchManga(93, {
+      sourceId: '2002',
+      inLibrary: true,
+      chapters: [uploaded(9301, 1, '2026-08-25T00:00:00.000Z')],
+    });
+    const elsewhere = fakeDispatchManga(94, {
+      chapters: [undated(9401, 2, '2026-08-10T00:00:00.000Z')],
+    });
+    const fake = await start(1, [requested, library]);
+    const otherFake = await start(2, [elsewhere]);
+    const { media } = await request(requested, 9092);
+    await seedDispatchBinding(library, { anilistId: 9092 });
+    await request(elsewhere, 9092, { instanceId: 2, media });
+
+    assert.deepStrictEqual(
+      await load(september({ includeUnmonitored: true })),
+      {
+        results: [entry(9092, '2026-09-04', 2, true)],
+        partialSources: [],
+        truncated: false,
+      }
+    );
+    // Every matched manga is asked for every number the title counted.
+    const numbers = { chapterNumber: { in: [1, 2, 3, 4] } };
+    assert.deepStrictEqual(
+      checks(fake).map(({ variables }) => [variables.ids, variables.match]),
+      [
+        [
+          [92, 93],
+          [
+            { mangaId: { equalTo: 92 }, ...numbers },
+            { mangaId: { equalTo: 93 }, ...numbers },
+          ],
+        ],
+      ]
+    );
+    assert.deepStrictEqual(
+      checks(otherFake).map(({ variables }) => variables.match),
+      [[{ mangaId: { equalTo: 94 }, ...numbers }]]
+    );
+  });
+
+  it('asks at most 100 manga and 500 numbers a call and leaves chapters without a number out', async () => {
+    const numbers = Array.from({ length: 501 }, (_, index) => index + 1);
+    const large = fakeDispatchManga(300, {
+      inLibrary: true,
+      chapters: [
+        ...numbers.map((number) =>
+          uploaded(1_000_000 + number, number, '2026-09-02T00:00:00.000Z')
+        ),
+        uploaded(1_001_000, 501, '2026-08-30T00:00:00.000Z'),
+        uploaded(1_001_001, -1, '2026-08-30T00:00:00.000Z'),
+        uploaded(1_001_002, -1, '2026-09-03T00:00:00.000Z'),
+      ],
+    });
+    const small = Array.from({ length: 100 }, (_, index) =>
+      fakeDispatchManga(301 + index, {
+        inLibrary: true,
+        chapters: [
+          uploaded((301 + index) * 100 + 1, 1, '2026-09-02T00:00:00.000Z'),
+        ],
+      })
+    );
+    const fake = await start(1, [large, ...small]);
+    for (const manga of [large, ...small])
+      await seedDispatchBinding(manga, { anilistId: 30_000 + manga.id });
+
+    const result = await load(september({ includeUnmonitored: true }));
+
+    assert.deepStrictEqual(
+      [result.truncated, result.partialSources],
+      [false, []]
+    );
+    assert.strictEqual(result.results.length, 102);
+    assert.deepStrictEqual(
+      result.results
+        .filter(({ mangaId }) => mangaId === 30_300)
+        .map(({ startsAt, chapterCount }) => [
+          startsAt.slice(0, 10),
+          chapterCount,
+        ]),
+      [
+        ['2026-09-02', 500],
+        ['2026-09-03', 1],
+      ]
+    );
+    const calls = checks(fake).map(
+      ({ variables }) =>
+        variables.match as {
+          mangaId: { equalTo: number };
+          chapterNumber: { in: number[] };
+        }[]
+    );
+    assert.deepStrictEqual(
+      calls.map((match) => [
+        match.length,
+        match.reduce((sum, item) => sum + item.chapterNumber.in.length, 0),
+      ]),
+      [
+        [1, 500],
+        [100, 100],
+        [1, 1],
+      ]
+    );
+    assert.deepStrictEqual(calls[1][0], {
+      mangaId: { equalTo: 300 },
+      chapterNumber: { in: [501] },
+    });
+    assert.ok(
+      calls
+        .flat()
+        .every(({ chapterNumber }) =>
+          chapterNumber.in.every((number) => number >= 0)
+        )
+    );
+  });
+
+  it('checks nothing before a window that starts in 1970', async () => {
+    const manga = fakeDispatchManga(98, {
+      chapters: [uploaded(9801, 1, '1970-01-02T00:00:00.000Z')],
+    });
+    const fake = await start(1, [manga]);
+    await request(manga, 9098);
+
+    assert.deepStrictEqual(await load(month('1970-01-01', '1970-02-01')), {
+      results: [entry(9098, '1970-01-02', 1, false)],
+      partialSources: [],
+      truncated: false,
+    });
+    assert.deepStrictEqual(fake.operationNames(), ['ChapterReleases']);
+  });
+
+  it('reports a check that fails as partial, keeps the counts it could not check and checks again next time', async () => {
+    const working = fakeDispatchManga(95, {
+      chapters: [
+        uploaded(9501, 1, '2026-08-20T00:00:00.000Z'),
+        uploaded(9502, 1, '2026-09-05T00:00:00.000Z'),
+      ],
+    });
+    const failing = fakeDispatchManga(96, {
+      chapters: [
+        uploaded(9601, 1, '2026-08-20T00:00:00.000Z'),
+        uploaded(9602, 1, '2026-09-06T00:00:00.000Z'),
+        uploaded(9603, 2, '2026-09-07T00:00:00.000Z'),
+      ],
+    });
+    const workingFake = await start(1, [working]);
+    const failingFake = await start(2, [failing]);
+    await request(working, 9095);
+    await request(failing, 9096, { instanceId: 2 });
+    failingFake.server.onOperation(
+      'EarlierChapterReleases',
+      graphqlErrors([syntheticFailure()])
+    );
+
+    const admin = await load(september());
+    assert.deepStrictEqual(admin, {
+      results: [
+        entry(9096, '2026-09-06', 1, false),
+        entry(9096, '2026-09-07', 1, false),
+      ],
+      partialSources: [{ source: 'suwayomi', serverId: 2 }],
+      truncated: false,
+    });
+    const [failure] = logsOf(logs, CHECK_FAILED);
+    assert.strictEqual(failure?.[0], 'debug');
+    assert.deepStrictEqual(Object.keys(failure[1]), [
+      'label',
+      'instanceId',
+      'code',
+    ]);
+    assert.strictEqual(failure[1].instanceId, 2);
+
+    const user = await load(september(), { isAdmin: false });
+    assert.deepStrictEqual(user.partialSources, [{ source: 'suwayomi' }]);
+    assert.deepStrictEqual(days(user), days(admin));
+
+    serveFakeChapterReleases(failingFake);
+    const recovered = await load(september());
+    assert.deepStrictEqual(days(recovered), ['9096:2026-09-07']);
+    assert.deepStrictEqual(recovered.partialSources, []);
+    assert.deepStrictEqual(
+      [workingFake, failingFake].map((fake) => [
+        reads(fake).length,
+        checks(fake).length,
+      ]),
+      [
+        [1, 1],
+        [1, 3],
+      ]
+    );
+  });
+
+  it('gives the check only the time the read left of its 20 seconds', async () => {
+    const manga = fakeDispatchManga(97, {
+      chapters: [
+        uploaded(9701, 1, '2026-08-20T00:00:00.000Z'),
+        uploaded(9702, 1, '2026-09-05T00:00:00.000Z'),
+        uploaded(9703, 2, '2026-09-06T00:00:00.000Z'),
+      ],
+    });
+    const fake = await start(1, [manga]);
+    await request(manga, 9097);
+    // Each call moves the calendar's clock on by its cost; nothing waits.
+    let time = 0;
+    const cost = { ChapterReleases: 0, EarlierChapterReleases: 10_000 };
+    serveFakeChapterReleases(fake, {
+      observe: ({ operationName }) => {
+        time += cost[operationName as keyof typeof cost] ?? 0;
+      },
+    });
+    const timed = async () => {
+      const { results, partialSources } = await load(september(), {
+        clock: () => time,
+      });
+      return [days({ results }), partialSources];
+    };
+    const checked = [['9097:2026-09-06'], []];
+    const unchecked = [
+      ['9097:2026-09-05', '9097:2026-09-06'],
+      [{ source: 'suwayomi', serverId: 1 }],
+    ];
+    const calls = () => [reads(fake).length, checks(fake).length];
+
+    cost.ChapterReleases = 9_999;
+    assert.deepStrictEqual(await timed(), checked);
+
+    resetMangaReleaseCalendarCache();
+    cost.ChapterReleases = 10_000;
+    assert.deepStrictEqual(await timed(), unchecked);
+    // A shared read still counts the time it took.
+    assert.deepStrictEqual(await timed(), unchecked);
+    assert.deepStrictEqual(calls(), [2, 3]);
+
+    resetMangaReleaseCalendarCache();
+    cost.ChapterReleases = 20_000;
+    assert.deepStrictEqual(await timed(), unchecked);
+    assert.deepStrictEqual(calls(), [3, 3]);
+    assert.deepStrictEqual(
+      logsOf(logs, CHECK_FAILED).map(([, fields]) => fields),
+      Array.from({ length: 3 }, () => ({
+        label: 'Release Calendar',
+        instanceId: 1,
+        code: 'TIMEOUT',
+      }))
+    );
   });
 });

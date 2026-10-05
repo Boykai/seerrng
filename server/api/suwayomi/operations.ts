@@ -215,6 +215,45 @@ export const SUWAYOMI_OPERATIONS = {
       }
     }`
   ),
+  // Stored chapters only. Each `match` item names one manga and the chapter
+  // numbers asked of it; a row counts when it is dated before
+  // `uploadedBefore` (epoch milliseconds) or, without an upload date, was
+  // stored before `fetchedBefore` (epoch seconds).
+  EarlierChapterReleases: op(
+    'query',
+    'user',
+    `query EarlierChapterReleases(
+      $ids: [Int!]!
+      $match: [ChapterFilterInput!]!
+      $uploadedBefore: LongString!
+      $fetchedBefore: LongString!
+      $after: Cursor
+    ) {
+      chapters(
+        filter: {
+          mangaId: { in: $ids }
+          and: [
+            { or: $match }
+            {
+              or: [
+                { uploadDate: { greaterThan: "0", lessThan: $uploadedBefore } }
+                {
+                  uploadDate: { lessThanOrEqualTo: "0" }
+                  fetchedAt: { lessThan: $fetchedBefore }
+                }
+              ]
+            }
+          ]
+        }
+        order: [{ by: ID }]
+        first: 500
+        after: $after
+      ) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id mangaId chapterNumber uploadDate fetchedAt isDownloaded }
+      }
+    }`
+  ),
   LibraryPage: op(
     'query',
     'user',

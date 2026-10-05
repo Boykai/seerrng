@@ -57,10 +57,12 @@ import type {
   SuwayomiCapabilities,
   SuwayomiCategory,
   SuwayomiChapter,
+  SuwayomiChapterNumbers,
   SuwayomiChapterRelease,
   SuwayomiChapterReleases,
   SuwayomiChapterState,
   SuwayomiDetectedAuthMode,
+  SuwayomiEarlierChapterReleases,
   SuwayomiFetchResult,
   SuwayomiHealth,
   SuwayomiLibraryItem,
@@ -107,6 +109,7 @@ const THUMBNAIL_TYPES = new Set([
   'image/avif',
 ]);
 const MAX_IDS_PER_CALL = 100;
+const MAX_CHAPTER_NUMBERS_PER_CALL = 500;
 const MAX_INDEX_PAGES = 100;
 // 20,000 manga at 100 per page.
 const MAX_LIBRARY_PAGES = 200;
@@ -1009,6 +1012,125 @@ class SuwayomiAPI extends ExternalAPI {
       chapters: [...chapters.values()],
       pages,
       complete: lists.uploaded.done && lists.undated.done,
+    };
+  }
+
+  /**
+   * Which of the asked chapter numbers, of up to 100 manga and 500 numbers,
+   * have a stored version released before `before`: by the source's upload
+   * date or, for a chapter without one, by when Suwayomi stored it. Nothing
+   * here makes Suwayomi contact a source. The list is paged in ID order and
+   * stops once every asked number is found; when `maxPages` calls run out
+   * first, the result is marked incomplete. An empty, overlong or repeated
+   * cursor fails with BAD_RESPONSE.
+   */
+  async getEarlierChapterReleases(
+    chapters: readonly SuwayomiChapterNumbers[],
+    before: Date,
+    maxPages: number,
+    options: SuwayomiCallOptions = {}
+  ): Promise<SuwayomiEarlierChapterReleases> {
+    const op = 'EarlierChapterReleases';
+    const time = before instanceof Date ? before.getTime() : NaN;
+    if (
+      !Array.isArray(chapters) ||
+      !Number.isSafeInteger(time) ||
+      time <= 0 ||
+      !Number.isSafeInteger(maxPages) ||
+      maxPages < 1
+    ) {
+      invalid(op);
+    }
+    const asked = new Map<number, Set<number>>();
+    for (const item of chapters) {
+      const numbers: unknown = item?.chapterNumbers;
+      if (!Array.isArray(numbers) || numbers.length === 0) invalid(op);
+      const mangaId = intId(item.mangaId, op);
+      const wanted = asked.get(mangaId) ?? new Set<number>();
+      asked.set(mangaId, wanted);
+      for (const number of numbers as unknown[]) {
+        if (
+          typeof number !== 'number' ||
+          !Number.isFinite(number) ||
+          number < 0
+        )
+          invalid(op);
+        wanted.add(number as number);
+      }
+    }
+    let remaining = 0;
+    for (const wanted of asked.values()) remaining += wanted.size;
+    if (
+      asked.size === 0 ||
+      asked.size > MAX_IDS_PER_CALL ||
+      remaining > MAX_CHAPTER_NUMBERS_PER_CALL
+    ) {
+      invalid(op);
+    }
+    const variables = {
+      ids: [...asked.keys()],
+      match: [...asked].map(([mangaId, wanted]) => ({
+        mangaId: { equalTo: mangaId },
+        chapterNumber: { in: [...wanted] },
+      })),
+      uploadedBefore: String(time),
+      fetchedBefore: String(Math.ceil(time / 1_000)),
+    };
+    const found = new Map<number, Set<number>>();
+    const followed = new Set<string>();
+    let after: string | null = null;
+    let complete = false;
+    let pages = 0;
+    while (!complete && pages < maxPages) {
+      pages += 1;
+      const next: string | undefined = await this.run(
+        op,
+        { ...variables, after },
+        options,
+        (data): string | undefined => {
+          const connection = record(data.chapters, op);
+          for (const node of nodes(connection, op)) {
+            const chapter =
+              mapChapterRelease(node, op, false) ??
+              mapChapterRelease(node, op, true);
+            if (!chapter || chapter.releasedAt >= time) continue;
+            const mangaId = Number(chapter.mangaId);
+            const number = chapter.chapterNumber;
+            const numbers = found.get(mangaId) ?? new Set<number>();
+            if (!asked.get(mangaId)?.has(number) || numbers.has(number))
+              continue;
+            numbers.add(number);
+            found.set(mangaId, numbers);
+            remaining -= 1;
+          }
+          const pageInfo = record(connection.pageInfo, op);
+          if (typeof pageInfo.hasNextPage !== 'boolean') badResponse(op);
+          if (!pageInfo.hasNextPage) return undefined;
+          const cursor = pageInfo.endCursor;
+          if (
+            typeof cursor !== 'string' ||
+            cursor === '' ||
+            cursor.length > MAX_CURSOR_LENGTH ||
+            followed.has(cursor)
+          ) {
+            badResponse(op);
+          }
+          followed.add(cursor as string);
+          return cursor as string;
+        }
+      );
+      if (next === undefined || remaining === 0) complete = true;
+      else after = next;
+    }
+    return {
+      found: [...found].flatMap(([mangaId, numbers]) =>
+        [...numbers].map((chapterNumber) => ({
+          mangaId: String(mangaId),
+          chapterNumber,
+        }))
+      ),
+      pages,
+      complete,
     };
   }
 

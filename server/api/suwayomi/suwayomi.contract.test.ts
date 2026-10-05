@@ -786,6 +786,54 @@ describe('Suwayomi contract', { skip: !MAIN.url }, () => {
       assert.deepEqual([unknown.mangas, unknown.chapters], [[], []]);
     });
 
+    it('lists the asked chapter numbers released before a date (EarlierChapterReleases)', async () => {
+      const { id, chapters } = await loadFixtureManga();
+      const client = main();
+      const day = 86_400_000;
+      const now = realNow();
+      const numbers = [
+        ...new Set(
+          chapters
+            .map(({ chapterNumber }) => chapterNumber)
+            .filter((number) => number >= 0)
+        ),
+      ].sort((a, b) => a - b);
+      assert.ok(numbers.length > 0, 'The fixture has no numbered chapter.');
+      const asked = [
+        { mangaId: id, chapterNumbers: numbers },
+        { mangaId: MISSING_ID, chapterNumbers: numbers },
+      ];
+
+      const later = await client.getEarlierChapterReleases(
+        asked,
+        new Date(now + day),
+        5
+      );
+      assert.equal(later.complete, true);
+      assert.deepEqual(
+        later.found
+          .map(({ mangaId, chapterNumber }) => `${mangaId}:${chapterNumber}`)
+          .sort(),
+        numbers.map((number) => `${id}:${number}`).sort()
+      );
+
+      // The harness wrote every chapter just before the run, so none of
+      // them has a version released a day ago.
+      const earlier = await client.getEarlierChapterReleases(
+        asked,
+        new Date(now - day),
+        5
+      );
+      assert.deepEqual([earlier.found, earlier.complete], [[], true]);
+
+      const unasked = await client.getEarlierChapterReleases(
+        [{ mangaId: id, chapterNumbers: [numbers[numbers.length - 1] + 1] }],
+        new Date(now + day),
+        5
+      );
+      assert.deepEqual([unasked.found, unasked.complete], [[], true]);
+    });
+
     it('stores fetchedAt in seconds and keeps it, and the chapter IDs, on a refetch', async () => {
       const { id, chapters } = await loadFixtureManga();
       const client = main();
