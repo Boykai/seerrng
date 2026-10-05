@@ -612,11 +612,14 @@ export const getMangaDownloadAssetId = (
     `chapter:${copy.urlHash}`
   );
 
-/** Verified manga chapters, listed without contacting Suwayomi. */
+/**
+ * Verified manga chapters, listed without contacting Suwayomi. True when the
+ * chapters could not be read.
+ */
 const getMangaAssets = async (
   request: MediaRequest,
   assets: ResolvedAsset[]
-): Promise<void> => {
+): Promise<boolean> => {
   let copies: MangaDownloadCopy[];
   try {
     copies = await loadMangaDownloadCopies(request);
@@ -627,7 +630,7 @@ const getMangaAssets = async (
       requestId: request.id,
       ...getMangaDownloadErrorFields(error),
     });
-    return;
+    return true;
   }
   for (const copy of copies.slice(0, maxAssetsPerRequest - assets.length)) {
     assets.push({
@@ -641,6 +644,7 @@ const getMangaAssets = async (
       },
     });
   }
+  return false;
 };
 
 /**

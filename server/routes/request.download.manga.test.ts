@@ -513,9 +513,9 @@ describe('manga request download copies', () => {
         stage,
         label
       );
-      const [copy] = await requestDownloadAssets.listRequestDownloadAssets(
-        seeded.request
-      );
+      const {
+        results: [copy],
+      } = await requestDownloadAssets.listRequestDownloadAssets(seeded.request);
       assert.strictEqual(copy?.name, 'Sample Manga - Ch. 2.cbz', label);
       const listed = await list(seeded.request.id, friend);
       // Reading the stage and listing never contact Suwayomi.
@@ -562,7 +562,10 @@ describe('manga request download copies', () => {
     mock.method(
       requestDownloadAssets,
       'listRequestDownloadAssets',
-      async () => [{ id: 'movie-copy', name: 'Movie.mkv', size: 5 }]
+      async () => ({
+        results: [{ id: 'movie-copy', name: 'Movie.mkv', size: 5 }],
+        hadErrors: false,
+      })
     );
     mock.method(
       requestDownloadAssets,
@@ -583,6 +586,46 @@ describe('manga request download copies', () => {
     const shown = await send(copyPath(movie.id, 'movie-copy'), friend);
     assert.strictEqual(shown.status, 200);
     assert.strictEqual(shown.body, 'movie');
+  });
+
+  it('reports chapters it cannot read as an error, listing nothing and logging codes only', async () => {
+    const { fake, request: seeded } = await seedChapters({
+      mediaStatus: MediaStatus.AVAILABLE,
+    });
+    const friend = await cookieFor('friend@seerr.dev');
+    const readable = await send(listPath(seeded.id), friend);
+    assert.strictEqual(readable.status, 200);
+    assert.strictEqual(
+      (bodyOf(readable) as { hadErrors?: unknown }).hadErrors,
+      false
+    );
+    mock.method(mangaDownloadCopy, 'loadMangaDownloadCopies', async () => {
+      throw new Error(`${FAKE_TITLE_PREFIX} ${DOWNLOAD_TITLE}`);
+    });
+
+    const reply = await send(listPath(seeded.id), friend);
+
+    assert.strictEqual(reply.status, 200);
+    assert.deepStrictEqual(bodyOf(reply), { results: [], hadErrors: true });
+    assert.deepStrictEqual(
+      logsOf(logs, 'Unable to list manga download copies'),
+      [
+        [
+          'warn',
+          {
+            label: 'Request Downloads',
+            requestId: seeded.id,
+            errorName: 'Error',
+          },
+        ],
+      ]
+    );
+    assert.deepStrictEqual(
+      logsOf(logs, 'Something went wrong listing request download copies'),
+      []
+    );
+    // Listing never contacts Suwayomi.
+    assert.deepStrictEqual(fake.server.requests, []);
   });
 
   it('lets the requester and request managers or viewers download, and nobody else', async () => {
