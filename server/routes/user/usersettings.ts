@@ -423,6 +423,11 @@ const serializeCardTextVisibility = (
     settings?.cardTextVisibilityBook === 'hover'
       ? settings.cardTextVisibilityBook
       : undefined,
+  manga:
+    settings?.cardTextVisibilityManga === 'always' ||
+    settings?.cardTextVisibilityManga === 'hover'
+      ? settings.cardTextVisibilityManga
+      : undefined,
 });
 
 const parseCardTextVisibilityBody = (
@@ -437,7 +442,7 @@ const parseCardTextVisibilityBody = (
   const bodyObject = parsedBody.value;
   const value: UserSettingsCardTextResponse = {};
 
-  for (const key of ['movie', 'tv', 'album', 'book'] as const) {
+  for (const key of ['movie', 'tv', 'album', 'book', 'manga'] as const) {
     const fieldValue = bodyObject[key];
 
     if (fieldValue == null) {
@@ -1376,6 +1381,9 @@ userSettingsRoutes.post<
             user.settings.cardTextVisibilityBook =
               body.cardTextVisibility.book ??
               user.settings.cardTextVisibilityBook;
+            user.settings.cardTextVisibilityManga =
+              body.cardTextVisibility.manga ??
+              user.settings.cardTextVisibilityManga;
           }
 
           if (hasOwn(body, 'requestRootFolders')) {
@@ -1664,6 +1672,8 @@ userSettingsRoutes.post<
           body.album ?? user.settings.cardTextVisibilityAlbum;
         user.settings.cardTextVisibilityBook =
           body.book ?? user.settings.cardTextVisibilityBook;
+        user.settings.cardTextVisibilityManga =
+          body.manga ?? user.settings.cardTextVisibilityManga;
 
         const savedUser = await userRepository.save(user);
 

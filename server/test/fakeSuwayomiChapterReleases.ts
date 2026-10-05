@@ -46,20 +46,26 @@ const connection = (rows: Row[], after: unknown, pageSize: number) => {
  * Serves ChapterReleases from the dispatch fake's state, as Suwayomi filters
  * it: the requested manga's chapters by upload date, and undated ones by
  * when they were stored, each list in ID order with `pageSize` rows a page.
+ * EarlierChapterReleases lists the asked chapter numbers dated before
+ * `uploadedBefore` or, undated, stored before `fetchedBefore`. `observe`
+ * sees every request before it is answered, and the answer waits for it.
  */
 export const serveFakeChapterReleases = (
   fake: FakeDispatchSuwayomi,
-  { pageSize = 500 }: { pageSize?: number } = {}
+  {
+    pageSize = 500,
+    observe,
+  }: {
+    pageSize?: number;
+    observe?: (request: FakeRequest) => void | Promise<void>;
+  } = {}
 ): void => {
-  fake.server.onOperation('ChapterReleases', (request: FakeRequest) => {
-    const variables = request.variables;
-    const ids = new Set(
-      (Array.isArray(variables.ids) ? variables.ids : []).map(Number)
-    );
-    const mangas = fake.state.mangas.filter((manga) => ids.has(manga.id));
+  const rowsOf = (ids: unknown) => {
+    const wanted = new Set((Array.isArray(ids) ? ids : []).map(Number));
+    const mangas = fake.state.mangas.filter((manga) => wanted.has(manga.id));
     const rows = mangas
       .flatMap((manga) =>
-        manga.chapters.map((chapter: FakeReleaseChapter, index) => ({
+        manga.chapters.map((chapter: FakeReleaseChapter, index): Row => ({
           id: chapter.id,
           mangaId: manga.id,
           chapterNumber: chapter.chapterNumber,
@@ -69,6 +75,12 @@ export const serveFakeChapterReleases = (
         }))
       )
       .sort((left, right) => left.id - right.id);
+    return { mangas, rows };
+  };
+  fake.server.onOperation('ChapterReleases', async (request: FakeRequest) => {
+    await observe?.(request);
+    const variables = request.variables;
+    const { mangas, rows } = rowsOf(variables.ids);
     const within = (value: number, from: unknown, before: unknown) =>
       value >= Number(from) && value < Number(before);
     return graphqlData({
@@ -97,6 +109,34 @@ export const serveFakeChapterReleases = (
             )
         ),
         variables.undatedAfter,
+        pageSize
+      ),
+    });
+  });
+  fake.server.onOperation('EarlierChapterReleases', async (request) => {
+    await observe?.(request);
+    const variables = request.variables;
+    const match = (Array.isArray(variables.match) ? variables.match : []) as {
+      mangaId?: { equalTo?: unknown };
+      chapterNumber?: { in?: unknown };
+    }[];
+    const asked = (row: Row) =>
+      match.some(
+        (item) =>
+          item.mangaId?.equalTo === row.mangaId &&
+          Array.isArray(item.chapterNumber?.in) &&
+          item.chapterNumber.in.includes(row.chapterNumber)
+      );
+    return graphqlData({
+      chapters: connection(
+        rowsOf(variables.ids).rows.filter(
+          (row) =>
+            asked(row) &&
+            (row.uploadDate > 0
+              ? row.uploadDate < Number(variables.uploadedBefore)
+              : row.fetchedAt < Number(variables.fetchedBefore))
+        ),
+        variables.after,
         pageSize
       ),
     });

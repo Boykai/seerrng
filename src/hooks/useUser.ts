@@ -57,6 +57,7 @@ export interface UserSettings {
   cardTextVisibilityTv?: CardTextVisibility;
   cardTextVisibilityAlbum?: CardTextVisibility;
   cardTextVisibilityBook?: CardTextVisibility;
+  cardTextVisibilityManga?: CardTextVisibility;
   cardTextVisibility?: UserSettingsCardTextResponse;
   detailDisclosureCastPinned?: boolean;
   detailDisclosureCrewPinned?: boolean;

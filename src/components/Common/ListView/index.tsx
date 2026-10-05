@@ -381,6 +381,7 @@ const ListView = ({
                 year={title.startYear?.toString()}
                 mediaType={title.mediaType}
                 canExpand
+                showText={visibility.manga === 'always'}
               />
             );
             break;
@@ -397,6 +398,7 @@ const ListView = ({
       visibleItems,
       visibility.album,
       visibility.book,
+      visibility.manga,
       visibility.movie,
       visibility.tv,
       preferredBookFormat,

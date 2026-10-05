@@ -7,6 +7,9 @@ import { IntlProvider } from 'react-intl';
 import { beforeEach, expect, it, vi } from 'vitest';
 import ListView from '.';
 
+const state = vi.hoisted(() => ({
+  visibility: {} as Record<string, string | undefined>,
+}));
 vi.mock('@app/components/TitleCard', () => {
   const TitleCard = ({
     id,
@@ -14,17 +17,20 @@ vi.mock('@app/components/TitleCard', () => {
     mediaType,
     title,
     year,
+    showText,
   }: {
     id: number;
     image?: string;
     mediaType: string;
     title: string;
     year?: string;
+    showText?: boolean;
   }) => (
     <div
       data-card={`${mediaType}:${id}`}
       data-image={image ?? ''}
       data-year={year ?? ''}
+      data-show-text={String(Boolean(showText))}
     >
       {title}
     </div>
@@ -42,7 +48,7 @@ vi.mock('@app/components/TitleCard/TmdbTitleCard', () => ({
   default: () => null,
 }));
 vi.mock('@app/hooks/useCardTextVisibility', () => ({
-  default: () => ({ visibility: {} }),
+  default: () => ({ visibility: state.visibility }),
 }));
 vi.mock('@app/hooks/useUser', async () => {
   const { Permission } = await import('@server/lib/permissions');
@@ -71,6 +77,7 @@ const manga = (values: Partial<MangaResult> = {}): MangaResult =>
 
 beforeEach(() => {
   vi.stubGlobal('React', React);
+  state.visibility = {};
 });
 
 it('renders manga cards with proxied posters beside other media and hides blocklisted manga', () => {
@@ -106,3 +113,23 @@ it('renders manga cards with proxied posters beside other media and hides blockl
   expect(html).toContain('data-card="comic:4"');
   expect(html).not.toContain('Hidden Manga');
 });
+
+it.each([
+  [{ manga: 'always' }, 'true'],
+  [{ manga: 'hover', book: 'always' }, 'false'],
+  [{}, 'false'],
+])(
+  'passes the manga card title setting %j to manga cards',
+  (visibility, showText) => {
+    state.visibility = visibility;
+    const html = renderToStaticMarkup(
+      <IntlProvider locale="en">
+        <ListView items={[manga()]} onScrollBottom={vi.fn()} />
+      </IntlProvider>
+    );
+
+    expect(html).toContain(
+      `data-card="manga:30013" data-image="/imageproxy/anilist/file/cover.jpg" data-year="1994" data-show-text="${showText}"`
+    );
+  }
+);

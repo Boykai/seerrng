@@ -214,6 +214,9 @@ export class UserSettings {
   @Column({ type: 'varchar', nullable: true })
   public cardTextVisibilityBook?: CardTextVisibility;
 
+  @Column({ type: 'varchar', nullable: true })
+  public cardTextVisibilityManga?: CardTextVisibility;
+
   @Column({ default: false })
   public detailDisclosureCastPinned: boolean;
 
@@ -286,6 +289,7 @@ export class UserSettings {
       cardTextVisibilityTv: this.cardTextVisibilityTv,
       cardTextVisibilityAlbum: this.cardTextVisibilityAlbum,
       cardTextVisibilityBook: this.cardTextVisibilityBook,
+      cardTextVisibilityManga: this.cardTextVisibilityManga,
       detailDisclosureCastPinned: this.detailDisclosureCastPinned,
       detailDisclosureCrewPinned: this.detailDisclosureCrewPinned,
       detailDisclosureArtistsPinned: this.detailDisclosureArtistsPinned,

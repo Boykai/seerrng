@@ -6,6 +6,7 @@ import {
 } from '@server/api/anilist/manga';
 import type SuwayomiAPI from '@server/api/suwayomi';
 import { SuwayomiError } from '@server/api/suwayomi/errors';
+import type { SuwayomiChapterNumbers } from '@server/api/suwayomi/types';
 import { MangaRequestBindingState } from '@server/constants/mangaRequest';
 import { MediaRequestStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
@@ -35,19 +36,25 @@ export const MANGA_CALENDAR_LIMITS = {
   requests: 1_000,
   /** Unrequested library titles of each instance, with unmonitored titles. */
   libraryTitles: 1_000,
-  /** GraphQL calls for each instance and calendar load. */
+  /**
+   * GraphQL calls for each instance and calendar load, the check for
+   * earlier chapter versions included.
+   */
   pages: 30,
   /** Titles named through AniList, earliest release first. */
   titles: 200,
   events: 5_000,
-  /** Reduced rows the cache holds across all its entries. */
+  /** Reduced rows each of the two caches holds across all its entries. */
   cacheRows: 50_000,
+  /** Entries each of the two caches holds. */
   cacheEntries: 64,
 };
 
 export type MangaCalendarLimits = typeof MANGA_CALENDAR_LIMITS;
 
 const MANGA_IDS_PER_READ = 100;
+/** Chapter numbers asked in one check for earlier versions. */
+const MANGA_CALENDAR_CHECK_NUMBERS = 500;
 const MANGA_CALENDAR_LOOKUP_CHUNK = 500;
 const MANGA_CALENDAR_CONCURRENCY = 3;
 const MANGA_CALENDAR_DEADLINE_MS = 20_000;
@@ -59,6 +66,8 @@ export interface MangaCalendarOptions {
   now?: Date;
   /** Bounds below the defaults, for tests. */
   limits?: Partial<MangaCalendarLimits>;
+  /** A monotonic clock in milliseconds, for tests. */
+  clock?: () => number;
 }
 
 export type MangaCalendarResult = {
@@ -95,39 +104,108 @@ interface InstanceReleases {
   known: Map<number, Map<number, NumberedChapter>>;
   unknown: Map<number, Map<string, DayCount>>;
   truncated: boolean;
+  /** GraphQL calls the read made. */
+  pages: number;
+  /** How long the read took, by the calendar's clock. */
+  elapsedMs: number;
   size: number;
 }
 
-interface CacheEntry {
+/** The asked chapter numbers an instance already released before a window. */
+interface EarlierReleases {
+  found: { mangaId: number; chapterNumber: number }[];
+  truncated: boolean;
+  size: number;
+}
+
+interface CacheEntry<T> {
   expiresAt: number;
   size: number;
-  value: Promise<InstanceReleases>;
+  value: Promise<T>;
+  /** The time a read still running was given. */
+  ms?: number;
 }
 
-const cache = new Map<string, CacheEntry>();
-let cachedRows = 0;
+/**
+ * Results shared while they are fresh and within the row and entry bounds;
+ * a failed read is never kept. A read still running is shared only with
+ * callers that have no more time than it was given; any other caller starts
+ * its own read, which later callers share.
+ */
+const createCache = <T extends { size: number }>() => {
+  const entries = new Map<string, CacheEntry<T>>();
+  let rows = 0;
+
+  const drop = (key: string): void => {
+    const entry = entries.get(key);
+    if (!entry) return;
+    entries.delete(key);
+    rows -= entry.size;
+  };
+
+  const evict = (limits: MangaCalendarLimits, keep: string): void => {
+    for (const key of entries.keys()) {
+      if (entries.size <= limits.cacheEntries && rows <= limits.cacheRows)
+        return;
+      if (key !== keep) drop(key);
+    }
+  };
+
+  return {
+    reset(): void {
+      entries.clear();
+      rows = 0;
+    },
+    load(
+      key: string,
+      now: number,
+      limits: MangaCalendarLimits,
+      read: () => Promise<T>,
+      ms = 0
+    ): Promise<T> {
+      for (const [cachedKey, entry] of entries)
+        if (entry.expiresAt <= now) drop(cachedKey);
+      const hit = entries.get(key);
+      if (hit && (hit.ms ?? ms) >= ms) return hit.value;
+      drop(key);
+      const entry: CacheEntry<T> = {
+        expiresAt: now + MANGA_CALENDAR_CACHE_TTL_MS,
+        size: 0,
+        value: read(),
+        ms,
+      };
+      entries.set(key, entry);
+      evict(limits, key);
+      entry.value.then(
+        (value) => {
+          if (entries.get(key) !== entry) return;
+          delete entry.ms;
+          if (value.size > limits.cacheRows) {
+            entries.delete(key);
+            return;
+          }
+          entry.size = value.size;
+          rows += value.size;
+          evict(limits, key);
+        },
+        () => {
+          if (entries.get(key) === entry) entries.delete(key);
+        }
+      );
+      return entry.value;
+    },
+  };
+};
+
+const releaseCache = createCache<InstanceReleases>();
+const earlierCache = createCache<EarlierReleases>();
 const clientKeys = new WeakMap<SuwayomiAPI, number>();
 let nextClientKey = 0;
 
-/** Empties the chapter release cache. */
+/** Empties the chapter release caches. */
 export const resetMangaReleaseCalendarCache = (): void => {
-  cache.clear();
-  cachedRows = 0;
-};
-
-const dropEntry = (key: string): void => {
-  const entry = cache.get(key);
-  if (!entry) return;
-  cache.delete(key);
-  cachedRows -= entry.size;
-};
-
-const evict = (limits: MangaCalendarLimits, keep?: string): void => {
-  for (const key of cache.keys()) {
-    if (cache.size <= limits.cacheEntries && cachedRows <= limits.cacheRows)
-      return;
-    if (key !== keep) dropEntry(key);
-  }
+  releaseCache.reset();
+  earlierCache.reset();
 };
 
 // A changed address or login gets a new client, so its reads never reuse
@@ -145,34 +223,40 @@ const clientKey = (client: SuwayomiAPI): number => {
 const utcDay = (time: number): string =>
   new Date(time).toISOString().slice(0, 10);
 
+const hashOf = (value: string): string =>
+  createHash('sha256').update(value).digest('hex');
+
 const readInstance = async (
   client: SuwayomiAPI,
   ids: number[],
   window: { from: Date; before: Date },
   now: number,
-  limits: MangaCalendarLimits
+  limits: MangaCalendarLimits,
+  clock: () => number
 ): Promise<InstanceReleases> => {
+  const started = clock();
   const releases: InstanceReleases = {
     keys: new Map(),
     known: new Map(),
     unknown: new Map(),
     truncated: false,
+    pages: 0,
+    elapsedMs: 0,
     size: 0,
   };
   const signal = AbortSignal.timeout(MANGA_CALENDAR_DEADLINE_MS);
-  let pagesLeft = limits.pages;
   for (const slice of chunk(ids, MANGA_IDS_PER_READ)) {
-    if (pagesLeft < 1) {
+    if (releases.pages >= limits.pages) {
       releases.truncated = true;
       break;
     }
     const read = await client.getChapterReleases(
       slice.map(String),
       window,
-      pagesLeft,
+      limits.pages - releases.pages,
       { signal }
     );
-    pagesLeft -= read.pages;
+    releases.pages += read.pages;
     const requested = new Set(slice);
     for (const manga of read.mangas) {
       const id = Number(manga.id);
@@ -214,6 +298,7 @@ const readInstance = async (
   releases.size = releases.keys.size;
   for (const numbers of releases.known.values()) releases.size += numbers.size;
   for (const days of releases.unknown.values()) releases.size += days.size;
+  releases.elapsedMs = Math.ceil(clock() - started);
   return releases;
 };
 
@@ -224,43 +309,142 @@ const loadInstance = (
   ids: number[],
   window: { from: Date; before: Date },
   now: number,
-  limits: MangaCalendarLimits
-): Promise<InstanceReleases> => {
-  const key = JSON.stringify([
-    clientKey(client),
-    instanceId,
-    window.from.getTime(),
-    window.before.getTime(),
-    createHash('sha256').update(ids.join(',')).digest('hex'),
-  ]);
-  for (const [cachedKey, entry] of cache)
-    if (entry.expiresAt <= now) dropEntry(cachedKey);
-  const hit = cache.get(key);
-  if (hit) return hit.value;
-  const entry: CacheEntry = {
-    expiresAt: now + MANGA_CALENDAR_CACHE_TTL_MS,
-    size: 0,
-    value: readInstance(client, ids, window, now, limits),
-  };
-  cache.set(key, entry);
-  evict(limits, key);
-  entry.value.then(
-    (releases) => {
-      if (cache.get(key) !== entry) return;
-      if (releases.size > limits.cacheRows) {
-        cache.delete(key);
-        return;
-      }
-      entry.size = releases.size;
-      cachedRows += releases.size;
-      evict(limits, key);
-    },
-    () => {
-      if (cache.get(key) === entry) cache.delete(key);
-    }
+  limits: MangaCalendarLimits,
+  clock: () => number
+): Promise<InstanceReleases> =>
+  releaseCache.load(
+    JSON.stringify([
+      clientKey(client),
+      instanceId,
+      window.from.getTime(),
+      window.before.getTime(),
+      hashOf(ids.join(',')),
+    ]),
+    now,
+    limits,
+    () => readInstance(client, ids, window, now, limits, clock)
   );
-  return entry.value;
+
+/** Asks of each manga at most 100 manga and 500 numbers a call. */
+const checkBatches = (
+  numbers: [number, number[]][]
+): SuwayomiChapterNumbers[][] => {
+  const batches: SuwayomiChapterNumbers[][] = [];
+  let batch: SuwayomiChapterNumbers[] = [];
+  let asked = 0;
+  for (const [mangaId, chapterNumbers] of numbers) {
+    for (let next = 0; next < chapterNumbers.length;) {
+      if (
+        batch.length === MANGA_IDS_PER_READ ||
+        asked === MANGA_CALENDAR_CHECK_NUMBERS
+      ) {
+        batches.push(batch);
+        batch = [];
+        asked = 0;
+      }
+      const slice = chapterNumbers.slice(
+        next,
+        next + MANGA_CALENDAR_CHECK_NUMBERS - asked
+      );
+      batch.push({ mangaId: String(mangaId), chapterNumbers: slice });
+      asked += slice.length;
+      next += slice.length;
+    }
+  }
+  if (batch.length) batches.push(batch);
+  return batches;
 };
+
+/**
+ * Which of the numbers asked of each manga already had a version released
+ * before `before`, within the pages and time the instance's read left.
+ * Running out of time throws, so nothing of a late check is used.
+ */
+const checkInstance = async (
+  client: SuwayomiAPI,
+  numbers: [number, number[]][],
+  before: Date,
+  budget: { pages: number; ms: number },
+  clock: () => number
+): Promise<EarlierReleases> => {
+  const started = clock();
+  const outOfTime = () => {
+    if (clock() - started >= budget.ms)
+      throw new SuwayomiError('TIMEOUT', 'EarlierChapterReleases');
+  };
+  outOfTime();
+  const signal = AbortSignal.timeout(budget.ms);
+  const earlier: EarlierReleases = { found: [], truncated: false, size: 0 };
+  let pages = 0;
+  for (const batch of checkBatches(numbers)) {
+    if (pages >= budget.pages) {
+      earlier.truncated = true;
+      break;
+    }
+    outOfTime();
+    const read = await client.getEarlierChapterReleases(
+      batch,
+      before,
+      budget.pages - pages,
+      { signal }
+    );
+    pages += read.pages;
+    for (const { mangaId, chapterNumber } of read.found)
+      earlier.found.push({ mangaId: Number(mangaId), chapterNumber });
+    if (!read.complete) {
+      earlier.truncated = true;
+      break;
+    }
+  }
+  outOfTime();
+  earlier.size = earlier.found.length;
+  return earlier;
+};
+
+/** Fails with TIMEOUT when the check takes longer than `ms`. */
+const within = <T>(check: Promise<T>, ms: number): Promise<T> => {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([
+    check,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new SuwayomiError('TIMEOUT', 'EarlierChapterReleases')),
+        Math.max(ms, 0)
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+};
+
+/**
+ * One check per instance, window start, query budget and numbers while fresh.
+ * A load waits for a check another load started no longer than its own time.
+ */
+const loadEarlier = (
+  client: SuwayomiAPI,
+  instanceId: number,
+  numbers: [number, number[]][],
+  before: Date,
+  budget: { pages: number; ms: number },
+  now: number,
+  limits: MangaCalendarLimits,
+  clock: () => number
+): Promise<EarlierReleases> =>
+  within(
+    earlierCache.load(
+      JSON.stringify([
+        clientKey(client),
+        instanceId,
+        before.getTime(),
+        budget.pages,
+        hashOf(JSON.stringify(numbers)),
+      ]),
+      now,
+      limits,
+      () => checkInstance(client, numbers, before, budget, clock),
+      budget.ms
+    ),
+    budget.ms
+  );
 
 const targetKey = (
   target: Pick<Target, 'anilistId' | 'instanceId' | 'sourceId' | 'urlHash'>
@@ -438,6 +622,7 @@ export async function getMangaReleaseCalendar(
   );
   if (before <= from) return result;
   const window = { from: new Date(from), before: new Date(before) };
+  const clock = options.clock ?? (() => performance.now());
   try {
     let instances = getExternalRuntimeConfig().suwayomi;
     if (!instances.length) return result;
@@ -490,6 +675,7 @@ export async function getMangaReleaseCalendar(
           if (!client) throw new Error('The Suwayomi instance is unavailable.');
           return {
             instanceId,
+            client,
             ids,
             releases: await loadInstance(
               client,
@@ -497,7 +683,8 @@ export async function getMangaReleaseCalendar(
               [...ids.keys()].sort((a, b) => a - b),
               window,
               now,
-              limits
+              limits,
+              clock
             ),
           };
         } catch (error) {
@@ -520,6 +707,8 @@ export async function getMangaReleaseCalendar(
       { known: Map<number, NumberedChapter>; unknown: Map<string, DayCount> }
     >();
     const merged = new Set<string>();
+    // Each instance's matched manga and the titles bound to them.
+    const matched = new Map<number, Map<number, Set<number>>>();
     for (const read of reads) {
       if (!read) continue;
       const { instanceId, ids, releases } = read;
@@ -548,6 +737,13 @@ export async function getMangaReleaseCalendar(
           ]);
           if (merged.has(source)) continue;
           merged.add(source);
+          const mangas =
+            matched.get(instanceId) ?? new Map<number, Set<number>>();
+          matched.set(instanceId, mangas);
+          mangas.set(
+            suwayomiId,
+            (mangas.get(suwayomiId) ?? new Set<number>()).add(target.anilistId)
+          );
           const title = titles.get(target.anilistId) ?? {
             known: new Map(),
             unknown: new Map(),
@@ -568,6 +764,67 @@ export async function getMangaReleaseCalendar(
             addDay(title.unknown, day, count.count, count.downloaded);
         }
       }
+    }
+
+    // A number counts only where no matched manga of its title, on any
+    // instance, released a version of it before the window.
+    const checks = await mapWithConcurrency(
+      reads.filter((read) => read !== undefined),
+      MANGA_CALENDAR_CONCURRENCY,
+      async ({ instanceId, client, releases }) => {
+        const mangas = matched.get(instanceId);
+        if (!mangas || from <= 0) return undefined;
+        const numbers: [number, number[]][] = [];
+        for (const [suwayomiId, anilistIds] of [...mangas].sort(
+          ([left], [right]) => left - right
+        )) {
+          const asked = new Set<number>();
+          for (const anilistId of anilistIds)
+            for (const number of titles.get(anilistId)?.known.keys() ?? [])
+              asked.add(number);
+          if (asked.size)
+            numbers.push([suwayomiId, [...asked].sort((a, b) => a - b)]);
+        }
+        if (!numbers.length) return undefined;
+        const pages = limits.pages - releases.pages;
+        if (pages < 1) {
+          result.truncated = true;
+          return undefined;
+        }
+        try {
+          return {
+            mangas,
+            earlier: await loadEarlier(
+              client,
+              instanceId,
+              numbers,
+              window.from,
+              { pages, ms: MANGA_CALENDAR_DEADLINE_MS - releases.elapsedMs },
+              now,
+              limits,
+              clock
+            ),
+          };
+        } catch (error) {
+          logger.debug('Earlier chapter versions could not be checked.', {
+            label: 'Release Calendar',
+            instanceId,
+            ...failureFields(error),
+          });
+          result.partialSources.push({
+            source: 'suwayomi',
+            ...(isAdmin ? { serverId: instanceId } : {}),
+          });
+          return undefined;
+        }
+      }
+    );
+    for (const check of checks) {
+      if (!check) continue;
+      result.truncated ||= check.earlier.truncated;
+      for (const { mangaId, chapterNumber } of check.earlier.found)
+        for (const anilistId of check.mangas.get(mangaId) ?? [])
+          titles.get(anilistId)?.known.delete(chapterNumber);
     }
 
     const days = new Map<number, Map<string, DayCount>>();

@@ -64,7 +64,8 @@ filtered view can be bookmarked.
 
 - **Genres** and **Tags** keep titles that AniList lists under the chosen
   names, and **Exclude Genres** and **Exclude Tags** leave them out. Each list
-  takes up to 10 names. A name can be included or excluded, not both.
+  takes up to 10 names, and its menu widens to show long names. A name can be
+  included or excluded, not both.
 - **Format**, **Status**, **Country**, and **Source Material** each match one
   value.
 - **Start Year**, **AniList Score**, **Chapters**, and **Volumes** set a range.
@@ -76,6 +77,9 @@ Adult genres and tags are listed only while **Include Adult Manga** is on, and
 the **Novel** format only while **Include Novels** is on. The
 [content switches](#choose-which-titles-appear) apply to every filtered view.
 
+Each genre and tag on a manga's details page links to the manga Discover page
+filtered by that genre or tag.
+
 **Sort By** orders the results by Trending, Popular, Top Rated, Start Date, or
 Title. Selecting the active sort again reverses its direction. Keyword results
 are ordered by relevance until you choose a sort, and other filtered views by
@@ -85,6 +89,14 @@ SeerrNG loads AniList's genre and tag names when the **Filters** section opens
 and keeps them for a day. While AniList cannot be reached, the name lists are
 empty, but filters already in the page address still apply. Each page of
 results is one AniList request.
+
+Manga cards show their titles on hover until you choose otherwise. Select
+**Title View**, next to **Clear Filters**, to show the title on every manga
+card in the results, and select it again to go back to hover. The choice is
+saved to your account. It also applies to manga cards in search results, in
+watchlists, and on Discover shelves that have a **Title View** button. While
+manga is enabled, the same choice appears as **Manga** under **Card Titles** in
+your **General** settings.
 
 ## Blocklist manga
 
@@ -1331,12 +1343,15 @@ source. So when a source gives no upload dates, every earlier chapter of the
 title shows on that first day, for example the day the title joined the
 library, and later chapters show on the day Suwayomi found them.
 
-Within the dates shown, each chapter number counts once, on the earliest day
-of any version of it. Versions dated before the dates shown are not checked.
-So a chapter number that appears again later, for example through a second
-match or a second server, counts again on that later day, and a day's count
-can change when the dates shown start earlier. Chapters without a number count
-one by one.
+Each chapter number of a title counts once, on the earliest day of any version
+of it, whichever matched source or server released it. A number counts only
+when it is new: SeerrNG checks the title's matched manga on every server it
+reads and leaves the number out when one of them has a version dated before
+the dates shown. So a chapter that a second source or server releases again
+later, or that a source uploads again, does not count again. SeerrNG can
+compare only the versions that Suwayomi still lists; when Suwayomi no longer
+lists an earlier version, a later version of that number counts. Chapters
+without a number cannot be compared and count one by one.
 
 ### Available and Released
 
@@ -1350,25 +1365,31 @@ can download a copy.
 
 Each calendar load reads at most 20 Suwayomi servers, three at a time. For each
 server, SeerrNG sends at most 30 read-only queries, each covering up to 100
-titles, gives up on the server after 20 seconds, and keeps what it read for 1
-minute. It names at most 200 titles through AniList, earliest release first,
-and shows at most 5,000 manga entries. When a limit is reached, the calendar
-says that it reached its result limit and leaves the rest out.
+titles, and gives up on the server after 20 seconds. These limits cover both
+the chapters in the dates shown and the check for earlier versions, and a read
+kept from an earlier load counts with the time it first took. SeerrNG keeps
+what it read for 1 minute. It names at most 200 titles through AniList,
+earliest release first, and shows at most 5,000 manga entries. When a limit is
+reached, the calendar says that it reached its result limit and leaves the rest
+out. When the queries run out before the check for earlier versions ends, the
+numbers it did not check still count.
 
 When a Suwayomi server cannot be reached, answers with an error, or takes
 longer than 20 seconds, or when AniList cannot be reached, the calendar keeps
-every other entry and says that some services could not be reached. SeerrNG
-logs these failures at debug level under the **Release Calendar** label, with
-IDs, counts, and codes only, never titles or addresses.
+every other entry and says that some services could not be reached. When only
+the check for earlier versions fails, the calendar keeps that server's entries,
+counted without the check, and says the same. SeerrNG logs these failures at
+debug level under the **Release Calendar** label, with IDs, counts, and codes
+only, never titles or addresses.
 
 The daily **Release Calendar History** job leaves manga out, so manga entries
 show no date changes.
 
 ### What the calendar sends
 
-- To Suwayomi: read-only queries for the matched manga and their chapters in
-  the dates shown. The calendar never asks a source for chapters and changes
-  nothing in Suwayomi.
+- To Suwayomi: read-only queries for the matched manga, their chapters in the
+  dates shown, and earlier versions of those chapter numbers. The calendar
+  never asks a source for chapters and changes nothing in Suwayomi.
 - To AniList: the IDs of up to 200 titles that have chapters in the dates
   shown. These requests share SeerrNG's AniList request budget, and the answers
   are cached.

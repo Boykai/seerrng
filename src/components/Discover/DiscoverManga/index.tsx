@@ -1,4 +1,5 @@
 import Alert from '@app/components/Common/Alert';
+import CardTextVisibilityToggle from '@app/components/Common/CardTextVisibilityToggle';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -158,6 +159,7 @@ const DiscoverManga = () => {
                       });
                     }}
                   />
+                  <CardTextVisibilityToggle mediaType="manga" />
                   <form
                     className="discover-filter-control app-filter-search-control"
                     onSubmit={(event) => {

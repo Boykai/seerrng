@@ -382,3 +382,23 @@ it('shows the provider message when discovery fails', async () => {
   expect(host.textContent).toContain('AniList is unavailable.');
   expect(host.querySelector('[data-testid="list"]')).toBeNull();
 });
+
+it('offers the Title View button for manga cards next to Clear Filters', async () => {
+  state.post.mockResolvedValue({ data: { manga: 'always' } });
+  await render();
+
+  const toggle = button('Title View');
+  expect(toggle?.previousElementSibling?.textContent).toBe('Clear Filters');
+  expect(toggle?.getAttribute('aria-label')).toBe(
+    'Title View: Always show titles'
+  );
+  expect(toggle?.getAttribute('aria-pressed')).toBe('false');
+
+  await click(toggle);
+
+  expect(state.post).toHaveBeenCalledExactlyOnceWith(
+    '/api/v1/user/7/settings/card-text',
+    { manga: 'always' }
+  );
+  expect(button('Title View')?.getAttribute('aria-pressed')).toBe('true');
+});

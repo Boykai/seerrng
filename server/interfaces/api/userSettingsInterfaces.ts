@@ -51,6 +51,7 @@ export interface UserSettingsCardTextResponse {
   tv?: CardTextVisibility;
   album?: CardTextVisibility;
   book?: CardTextVisibility;
+  manga?: CardTextVisibility;
 }
 
 export type UserRequestRootFolders = Record<string, string>;

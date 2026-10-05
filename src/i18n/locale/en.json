@@ -4505,6 +4505,7 @@
   "components.UserProfile.UserSettings.UserGeneralSettings.cardTextVisibilityAlways": "Always",
   "components.UserProfile.UserSettings.UserGeneralSettings.cardTextVisibilityBook": "Books",
   "components.UserProfile.UserSettings.UserGeneralSettings.cardTextVisibilityHover": "On hover",
+  "components.UserProfile.UserSettings.UserGeneralSettings.cardTextVisibilityManga": "Manga",
   "components.UserProfile.UserSettings.UserGeneralSettings.cardTextVisibilityMovie": "Movies",
   "components.UserProfile.UserSettings.UserGeneralSettings.cardTextVisibilityTip": "Choose when each media type shows title text on poster cards.",
   "components.UserProfile.UserSettings.UserGeneralSettings.cardTextVisibilityTv": "Series",

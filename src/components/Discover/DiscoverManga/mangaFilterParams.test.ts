@@ -3,11 +3,16 @@ import {
   ANILIST_MANGA_FORMATS,
   ANILIST_MANGA_SOURCES,
   ANILIST_MANGA_STATUSES,
+  MAX_ANILIST_FILTER_NAME_LENGTH,
 } from '@server/api/anilist/manga';
-import { MAX_MANGA_FILTER_NAMES as SERVER_MAX_NAMES } from '@server/lib/mangaDiscoverFilters';
+import {
+  parseMangaDiscoverFilters,
+  MAX_MANGA_FILTER_NAMES as SERVER_MAX_NAMES,
+} from '@server/lib/mangaDiscoverFilters';
 import { expect, it } from 'vitest';
 import {
   clearedMangaFilters,
+  getMangaFilterHref,
   getMangaFilterParams,
   joinMangaFilterNames,
   MANGA_COUNTRIES,
@@ -15,6 +20,7 @@ import {
   MANGA_FORMATS,
   MANGA_SOURCES,
   MANGA_STATUSES,
+  MAX_MANGA_FILTER_NAME_LENGTH,
   MAX_MANGA_FILTER_NAMES,
   splitMangaFilterNames,
 } from './mangaFilterParams';
@@ -29,7 +35,40 @@ it('offers the values the discover API accepts', () => {
   );
   expect([...MANGA_SOURCES].sort()).toEqual([...ANILIST_MANGA_SOURCES].sort());
   expect(MAX_MANGA_FILTER_NAMES).toBe(SERVER_MAX_NAMES);
+  expect(MAX_MANGA_FILTER_NAME_LENGTH).toBe(MAX_ANILIST_FILTER_NAME_LENGTH);
 });
+
+it.each([
+  ['genres', 'Slice of Life', '/discover/manga?genres=Slice%20of%20Life'],
+  ['genres', "Boys' Love", "/discover/manga?genres=Boys'%20Love"],
+  ['tags', 'Cats & Dogs', '/discover/manga?tags=Cats%20%26%20Dogs'],
+  ['tags', 'Before/After', '/discover/manga?tags=Before%2FAfter'],
+  ['tags', 'A+B 100% #1', '/discover/manga?tags=A%2BB%20100%25%20%231'],
+  ['tags', 'Café', '/discover/manga?tags=Caf%C3%A9'],
+  ['tags', 'x'.repeat(64), `/discover/manga?tags=${'x'.repeat(64)}`],
+] as const)(
+  'links the %s name %j to a filter the page and the API read back unchanged',
+  (filter, name, expected) => {
+    const href = getMangaFilterHref(filter, name);
+    expect(href).toBe(expected);
+
+    const url = new URL(href!, 'http://localhost');
+    const query = Object.fromEntries(url.searchParams);
+    expect(url.pathname).toBe('/discover/manga');
+    expect(getMangaFilterParams(query)).toEqual({ [filter]: name });
+    expect(parseMangaDiscoverFilters(query, undefined)).toEqual({
+      value: { [filter]: [name] },
+    });
+  }
+);
+
+it.each(['', ' Drama', 'Drama ', 'Comedy, Drama', 'x'.repeat(65)])(
+  'gives no filter address to the name %j, which the list cannot carry',
+  (name) => {
+    expect(getMangaFilterHref('genres', name)).toBeUndefined();
+    expect(getMangaFilterHref('tags', name)).toBeUndefined();
+  }
+);
 
 it('splits, trims and de-duplicates name lists', () => {
   expect(splitMangaFilterNames(' Action, Drama ,,Action ')).toEqual([

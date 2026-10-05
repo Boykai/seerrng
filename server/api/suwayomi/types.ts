@@ -232,6 +232,21 @@ export interface SuwayomiChapterReleases {
   complete: boolean;
 }
 
+/** The chapter numbers to look for in one manga. */
+export interface SuwayomiChapterNumbers {
+  mangaId: string;
+  chapterNumbers: readonly number[];
+}
+
+export interface SuwayomiEarlierChapterReleases {
+  /** Each asked number with at least one version stored as released earlier. */
+  found: { mangaId: string; chapterNumber: number }[];
+  /** GraphQL calls made. */
+  pages: number;
+  /** False when the page budget ran out before the list ended. */
+  complete: boolean;
+}
+
 export interface SuwayomiChapter {
   id: string;
   mangaId: string;

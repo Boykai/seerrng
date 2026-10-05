@@ -10,6 +10,7 @@ import MediaSlider from '.';
 const state = vi.hoisted(() => ({
   pages: [] as unknown[],
   keys: [] as unknown[],
+  visibility: {} as Record<string, string | undefined>,
 }));
 vi.mock('swr/infinite', () => ({
   default: (getKey: (index: number, previous: null) => unknown) => {
@@ -30,17 +31,20 @@ vi.mock('@app/components/TitleCard', () => ({
     mediaType,
     title,
     year,
+    showText,
   }: {
     id: number;
     image?: string;
     mediaType: string;
     title: string;
     year?: string;
+    showText?: boolean;
   }) => (
     <div
       data-card={`${mediaType}:${id}`}
       data-image={image ?? ''}
       data-year={year ?? ''}
+      data-show-text={String(Boolean(showText))}
     >
       {title}
     </div>
@@ -53,13 +57,26 @@ vi.mock('@app/components/MediaSlider/ShowMoreCard', () => ({
   ),
 }));
 vi.mock('@app/components/Slider', () => ({
-  default: ({ items }: { items: React.ReactNode[] }) => <div>{items}</div>,
+  default: ({
+    heading,
+    items,
+  }: {
+    heading: React.ReactNode;
+    items: React.ReactNode[];
+  }) => (
+    <div>
+      {heading}
+      {items}
+    </div>
+  ),
 }));
 vi.mock('@app/components/Common/CardTextVisibilityToggle', () => ({
-  default: () => null,
+  default: ({ mediaType }: { mediaType: string | string[] }) => (
+    <span data-toggle={[mediaType].flat().join(',')} />
+  ),
 }));
 vi.mock('@app/hooks/useCardTextVisibility', () => ({
-  default: () => ({ visibility: {} }),
+  default: () => ({ visibility: state.visibility }),
 }));
 vi.mock('@app/hooks/useDiscoverHomeManifest', () => ({
   default: () => ({ manifest: undefined }),
@@ -113,6 +130,7 @@ const manga = (values: Partial<MangaResult> = {}): MangaResult =>
 beforeEach(() => {
   vi.stubGlobal('React', React);
   state.keys = [];
+  state.visibility = {};
 });
 
 it('renders manga cards in sliders, hides blocklisted manga and requests the sorted page', () => {
@@ -156,8 +174,39 @@ it('renders manga cards in sliders, hides blocklisted manga and requests the sor
   );
   expect(html).toContain('data-card="movie:5"');
   expect(html).not.toContain('Hidden Manga');
+  expect(html).toContain('data-toggle="movie,manga"');
   expect(state.keys[0]).toEqual([
     '/api/v1/discover/manga?page=1&sortBy=trending',
     'context',
   ]);
 });
+
+it.each([
+  [{ manga: 'always' }, 'true'],
+  [{ manga: 'hover', book: 'always' }, 'false'],
+  [{}, 'false'],
+])(
+  'passes the manga card title setting %j to manga cards',
+  (visibility, showText) => {
+    state.visibility = visibility;
+    state.pages = [
+      { page: 1, totalPages: 1, totalResults: 1, results: [manga()] },
+    ];
+
+    const html = renderToStaticMarkup(
+      <IntlProvider locale="en">
+        <MediaSlider
+          title="Trending Manga"
+          url="/api/v1/discover/manga"
+          linkUrl="/discover/manga"
+          sliderKey="manga-trending"
+        />
+      </IntlProvider>
+    );
+
+    expect(html).toContain(
+      `data-card="manga:30013" data-image="/imageproxy/anilist/file/cover.jpg" data-year="1994" data-show-text="${showText}"`
+    );
+    expect(html).toContain('data-toggle="manga"');
+  }
+);

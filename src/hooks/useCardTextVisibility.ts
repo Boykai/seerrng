@@ -23,6 +23,7 @@ const defaultCardTextVisibility: Required<UserSettingsCardTextResponse> = {
   tv: 'hover',
   album: 'always',
   book: 'always',
+  manga: 'hover',
 };
 
 const isCardTextVisibility = (value: unknown): value is CardTextVisibility =>
@@ -45,6 +46,7 @@ const readStoredVisibility = (
       tv: isCardTextVisibility(parsed.tv) ? parsed.tv : undefined,
       album: isCardTextVisibility(parsed.album) ? parsed.album : undefined,
       book: isCardTextVisibility(parsed.book) ? parsed.book : undefined,
+      manga: isCardTextVisibility(parsed.manga) ? parsed.manga : undefined,
     };
   } catch {
     return {};
@@ -75,6 +77,8 @@ const fromUserSettings = (
   album:
     settings?.cardTextVisibility?.album ?? settings?.cardTextVisibilityAlbum,
   book: settings?.cardTextVisibility?.book ?? settings?.cardTextVisibilityBook,
+  manga:
+    settings?.cardTextVisibility?.manga ?? settings?.cardTextVisibilityManga,
 });
 
 const useCardTextVisibility = () => {

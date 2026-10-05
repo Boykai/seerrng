@@ -570,6 +570,7 @@ const MediaSlider = ({
               title={title.title}
               year={title.startYear?.toString()}
               mediaType={title.mediaType}
+              showText={visibility.manga === 'always'}
               priority={prioritizeFirstRow && index < 3}
             />
           );
@@ -599,6 +600,7 @@ const MediaSlider = ({
     visibleTitles,
     visibility.album,
     visibility.book,
+    visibility.manga,
     visibility.movie,
     visibility.tv,
   ]);
@@ -614,8 +616,10 @@ const MediaSlider = ({
     return null;
   }
 
-  const visibleMediaTypes = (['movie', 'tv', 'album', 'book'] as const).filter(
-    (mediaType) => visibleTitles.some((item) => item.mediaType === mediaType)
+  const visibleMediaTypes = (
+    ['movie', 'tv', 'album', 'book', 'manga'] as const
+  ).filter((mediaType) =>
+    visibleTitles.some((item) => item.mediaType === mediaType)
   );
 
   return (

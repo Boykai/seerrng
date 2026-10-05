@@ -111,6 +111,7 @@ const messages = defineMessages(
     cardTextVisibilityTv: 'Series',
     cardTextVisibilityAlbum: 'Music',
     cardTextVisibilityBook: 'Books',
+    cardTextVisibilityManga: 'Manga',
     cardTextVisibilityHover: 'On hover',
     cardTextVisibilityAlways: 'Always',
   }
@@ -139,6 +140,10 @@ const UserGeneralSettings = () => {
   });
   const { user: currentUser, hasPermission: currentHasPermission } = useUser();
   const { currentSettings } = useSettings();
+  const mangaEnabled = isConfiguredMediaCategoryEnabled(
+    'manga',
+    currentSettings
+  );
   const {
     data,
     error,
@@ -311,6 +316,7 @@ const UserGeneralSettings = () => {
           cardTextVisibilityTv: data?.cardTextVisibility?.tv ?? 'hover',
           cardTextVisibilityAlbum: data?.cardTextVisibility?.album ?? 'always',
           cardTextVisibilityBook: data?.cardTextVisibility?.book ?? 'always',
+          cardTextVisibilityManga: data?.cardTextVisibility?.manga ?? 'hover',
           requestRootFolders: data?.requestRootFolders ?? {},
         }}
         validationSchema={UserGeneralSettingsSchema}
@@ -395,6 +401,9 @@ const UserGeneralSettings = () => {
                 tv: values.cardTextVisibilityTv,
                 album: values.cardTextVisibilityAlbum,
                 book: values.cardTextVisibilityBook,
+                manga: mangaEnabled
+                  ? values.cardTextVisibilityManga
+                  : undefined,
               },
               requestRootFolders: values.requestRootFolders,
             });
@@ -1252,7 +1261,7 @@ const UserGeneralSettings = () => {
                   </div>
                 </div>
               )}
-              {isConfiguredMediaCategoryEnabled('manga', currentSettings) &&
+              {mangaEnabled &&
                 hasPermission(
                   [Permission.AUTO_REQUEST, Permission.AUTO_REQUEST_MANGA],
                   { type: 'or' }
@@ -1299,6 +1308,14 @@ const UserGeneralSettings = () => {
                         ['cardTextVisibilityTv', 'cardTextVisibilityTv'],
                         ['cardTextVisibilityAlbum', 'cardTextVisibilityAlbum'],
                         ['cardTextVisibilityBook', 'cardTextVisibilityBook'],
+                        ...(mangaEnabled
+                          ? ([
+                              [
+                                'cardTextVisibilityManga',
+                                'cardTextVisibilityManga',
+                              ],
+                            ] as const)
+                          : []),
                       ] as const
                     ).map(([fieldName, messageKey]) => (
                       <div key={fieldName}>

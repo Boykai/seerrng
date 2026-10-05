@@ -1,4 +1,5 @@
 import SuwayomiAPI from '@server/api/suwayomi';
+import type { SuwayomiChapterNumbers } from '@server/api/suwayomi/types';
 import {
   graphqlData,
   startFakeSuwayomi,
@@ -438,5 +439,245 @@ describe('SuwayomiAPI chapter releases', () => {
       await assert.rejects(call(), { code: 'INVALID_ARGUMENT' }, label);
     }
     assert.equal(server.requests.length, 0);
+  });
+});
+
+/** One raw EarlierChapterReleases reply. */
+const earlier = (chapters: ListPage): FakeReply =>
+  graphqlData({ chapters: list(chapters) });
+
+describe('SuwayomiAPI earlier chapter releases', () => {
+  it('asks each manga for its numbers and lists each number released before the date once', async () => {
+    const server = await start();
+    server.onOperation(
+      'EarlierChapterReleases',
+      earlier({
+        nodes: [
+          dated(10, String(FROM - 1), { chapterNumber: 1 }),
+          dated(11, String(FROM - 2), { chapterNumber: 1 }),
+          // Stored half a second before the date, in whole seconds.
+          undated(12, String(Math.floor(FROM / 1_000)), { chapterNumber: 2.5 }),
+          dated(13, String(FROM), { chapterNumber: 3 }),
+          undated(14, String(Math.ceil(FROM / 1_000)), { chapterNumber: 4 }),
+          dated(15, '0', { chapterNumber: 4, fetchedAt: '0' }),
+          dated(16, String(FROM - 1), { chapterNumber: 5 }),
+          dated(17, String(FROM - 1), { mangaId: 2, chapterNumber: 1 }),
+          dated(18, String(FROM - 1), { mangaId: 3, chapterNumber: 7 }),
+        ],
+      })
+    );
+
+    const read = await connect(server).getEarlierChapterReleases(
+      [
+        { mangaId: '1', chapterNumbers: [1, 2.5, 3, 4] },
+        { mangaId: '2', chapterNumbers: [7] },
+        { mangaId: '1', chapterNumbers: [1, 0] },
+      ],
+      new Date(FROM),
+      5
+    );
+
+    assert.deepEqual(read, {
+      found: [
+        { mangaId: '1', chapterNumber: 1 },
+        { mangaId: '1', chapterNumber: 2.5 },
+      ],
+      pages: 1,
+      complete: true,
+    });
+    assert.deepEqual(server.operations('EarlierChapterReleases')[0].variables, {
+      ids: [1, 2],
+      match: [
+        { mangaId: { equalTo: 1 }, chapterNumber: { in: [1, 2.5, 3, 4, 0] } },
+        { mangaId: { equalTo: 2 }, chapterNumber: { in: [7] } },
+      ],
+      uploadedBefore: String(FROM),
+      fetchedBefore: '1700000001',
+      after: null,
+    });
+  });
+
+  it('pages in ID order and stops once every number is found', async () => {
+    const server = await start();
+    server.onOperation(
+      'EarlierChapterReleases',
+      earlier({
+        nodes: [dated(1, String(FROM - 1))],
+        hasNextPage: true,
+        endCursor: '1',
+      }),
+      earlier({
+        nodes: [dated(2, String(FROM - 1))],
+        hasNextPage: true,
+        endCursor: '2',
+      })
+    );
+
+    const read = await connect(server).getEarlierChapterReleases(
+      [{ mangaId: '1', chapterNumbers: [1, 2] }],
+      new Date(FROM),
+      5
+    );
+
+    assert.deepEqual(read, {
+      found: [
+        { mangaId: '1', chapterNumber: 1 },
+        { mangaId: '1', chapterNumber: 2 },
+      ],
+      pages: 2,
+      complete: true,
+    });
+    assert.deepEqual(
+      server
+        .operations('EarlierChapterReleases')
+        .map(({ variables }) => variables.after),
+      [null, '1']
+    );
+  });
+
+  it('stops after the page budget and reports an incomplete check', async () => {
+    const server = await start();
+    let next = 0;
+    server.onOperation('EarlierChapterReleases', () => {
+      next += 1;
+      return earlier({
+        nodes: [dated(next, String(FROM - 1))],
+        hasNextPage: true,
+        endCursor: String(next),
+      });
+    });
+
+    const read = await connect(server).getEarlierChapterReleases(
+      [{ mangaId: '1', chapterNumbers: [1, 2, 3, 4] }],
+      new Date(FROM),
+      3
+    );
+
+    assert.deepEqual(
+      [read.found.map(({ chapterNumber }) => chapterNumber), read.pages],
+      [[1, 2, 3], 3]
+    );
+    assert.equal(read.complete, false);
+    assert.equal(server.operations('EarlierChapterReleases').length, 3);
+  });
+
+  it('fails on a page list or row it cannot read', async () => {
+    const cases: [string, FakeReply[]][] = [
+      ['text hasNextPage', [earlier({ hasNextPage: 'false' })]],
+      ['missing page info', [graphqlData({ chapters: { nodes: [] } })]],
+      ['missing cursor', [earlier({ hasNextPage: true })]],
+      ['empty cursor', [earlier({ hasNextPage: true, endCursor: '' })]],
+      [
+        'oversized cursor',
+        [earlier({ hasNextPage: true, endCursor: 'c'.repeat(257) })],
+      ],
+      [
+        'repeated cursor',
+        [
+          earlier({ hasNextPage: true, endCursor: '1' }),
+          earlier({ hasNextPage: true, endCursor: '1' }),
+        ],
+      ],
+      ['missing list', [graphqlData({ chapters: null })]],
+      [
+        'text download state',
+        [
+          earlier({
+            nodes: [dated(1, String(FROM - 1), { isDownloaded: 'true' })],
+          }),
+        ],
+      ],
+      [
+        'text manga ID',
+        [earlier({ nodes: [dated(1, String(FROM - 1), { mangaId: 'one' })] })],
+      ],
+    ];
+    for (const [label, replies] of cases) {
+      const server = await start();
+      server.onOperation('EarlierChapterReleases', ...replies);
+      await assert.rejects(
+        connect(server).getEarlierChapterReleases(
+          [{ mangaId: '1', chapterNumbers: [1] }],
+          new Date(FROM),
+          5
+        ),
+        { code: 'BAD_RESPONSE' },
+        label
+      );
+    }
+  });
+
+  it('refuses invalid manga, numbers, dates and page budgets before sending', async () => {
+    const server = await start();
+    const api = connect(server);
+    const before = new Date(FROM);
+    const ask =
+      (chapters: unknown, date: unknown = before, maxPages = 5) =>
+      () =>
+        api.getEarlierChapterReleases(
+          chapters as SuwayomiChapterNumbers[],
+          date as Date,
+          maxPages
+        );
+    const range = (length: number, start = 0) =>
+      Array.from({ length }, (_, index) => start + index);
+    const calls: [string, () => Promise<unknown>][] = [
+      ['no manga', ask([])],
+      ['no list', ask(undefined)],
+      ['missing item', ask([null])],
+      [
+        '101 manga',
+        ask(
+          range(101, 1).map((id) => ({
+            mangaId: String(id),
+            chapterNumbers: [1],
+          }))
+        ),
+      ],
+      ['501 numbers', ask([{ mangaId: '1', chapterNumbers: range(501) }])],
+      [
+        '501 numbers across manga',
+        ask([
+          { mangaId: '1', chapterNumbers: range(250) },
+          { mangaId: '2', chapterNumbers: range(251) },
+        ]),
+      ],
+      ['no numbers', ask([{ mangaId: '1', chapterNumbers: [] }])],
+      ['negative number', ask([{ mangaId: '1', chapterNumbers: [-1] }])],
+      [
+        'number not finite',
+        ask([{ mangaId: '1', chapterNumbers: [Number.POSITIVE_INFINITY] }]),
+      ],
+      ['NaN number', ask([{ mangaId: '1', chapterNumbers: [Number.NaN] }])],
+      ['text number', ask([{ mangaId: '1', chapterNumbers: ['1'] }])],
+      ['text ID', ask([{ mangaId: 'one', chapterNumbers: [1] }])],
+      [
+        'invalid date',
+        ask([{ mangaId: '1', chapterNumbers: [1] }], new Date(Number.NaN)),
+      ],
+      ['no date', ask([{ mangaId: '1', chapterNumbers: [1] }], FROM)],
+      ['the epoch', ask([{ mangaId: '1', chapterNumbers: [1] }], new Date(0))],
+      ['no pages', ask([{ mangaId: '1', chapterNumbers: [1] }], before, 0)],
+      [
+        'fractional pages',
+        ask([{ mangaId: '1', chapterNumbers: [1] }], before, 1.5),
+      ],
+    ];
+    for (const [label, call] of calls) {
+      await assert.rejects(call(), { code: 'INVALID_ARGUMENT' }, label);
+    }
+    assert.equal(server.requests.length, 0);
+
+    // Repeated numbers count once toward the 500.
+    server.onOperation('EarlierChapterReleases', earlier({}));
+    await api.getEarlierChapterReleases(
+      [
+        { mangaId: '1', chapterNumbers: range(500) },
+        { mangaId: '1', chapterNumbers: range(500) },
+      ],
+      before,
+      5
+    );
+    assert.equal(server.requests.length, 1);
   });
 });

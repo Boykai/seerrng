@@ -8,6 +8,7 @@ import { MangaWaitingStatus } from '@app/components/Common/MangaRequestScope';
 import PageErrorMessage from '@app/components/Common/PageErrorMessage';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
+import { getMangaFilterHref } from '@app/components/Discover/DiscoverManga/mangaFilterParams';
 import ExternalBlocklistModal from '@app/components/ExternalBlocklistModal';
 import MangaChapterList from '@app/components/MangaDetails/MangaChapterList';
 import { getMangaAvailability } from '@app/components/MangaDetails/mangaAvailability';
@@ -43,7 +44,9 @@ import {
 import type { MangaDetails as MangaDetailsType } from '@server/models/Manga';
 import axios, { type AxiosError } from 'axios';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
+import type { ReactNode } from 'react';
 import { Fragment, useEffect, useState } from 'react';
 import type { IntlShape } from 'react-intl';
 import { useIntl } from 'react-intl';
@@ -103,7 +106,7 @@ const messages = defineMessages('components.MangaDetails', {
 });
 
 type MessageKey = keyof typeof messages;
-type DetailRow = [label: MessageKey, value?: string, wraps?: boolean];
+type DetailRow = [label: MessageKey, value?: ReactNode, wraps?: boolean];
 
 const formatMessages: Record<
   NonNullable<MangaDetailsType['format']>,
@@ -132,6 +135,29 @@ const positiveId = (value?: number): number | undefined =>
 
 const joinValues = (values: string[]): string | undefined =>
   values.length > 0 ? values.join(', ') : undefined;
+
+// Each genre or tag opens manga discovery filtered by that name.
+const linkFilterNames = (
+  filter: 'genres' | 'tags',
+  names: string[]
+): ReactNode =>
+  names.length > 0
+    ? names.map((name, index) => {
+        const href = getMangaFilterHref(filter, name);
+        return (
+          <Fragment key={`${index}-${name}`}>
+            {index > 0 && ', '}
+            {href ? (
+              <Link href={href} className="app-detail-link">
+                {name}
+              </Link>
+            ) : (
+              name
+            )}
+          </Fragment>
+        );
+      })
+    : undefined;
 
 // AniList dates may be partial: a year, a year and month, or a full date.
 const formatPartialDate = (
@@ -307,8 +333,15 @@ const MangaDetails = () => {
       ['art', joinValues(data.art.map((credit) => credit.name))],
     ],
     [
-      ['genres', joinValues(data.genres), true],
-      ['tags', joinValues(data.tags.map((tag) => tag.name)), true],
+      ['genres', linkFilterNames('genres', data.genres), true],
+      [
+        'tags',
+        linkFilterNames(
+          'tags',
+          data.tags.map((tag) => tag.name)
+        ),
+        true,
+      ],
     ],
     [
       ['romajiTitle', data.titles.romaji],
