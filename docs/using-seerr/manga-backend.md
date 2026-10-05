@@ -506,11 +506,13 @@ title's details page shows an **Availability** row:
 - **In Suwayomi Library** while no chapter is downloaded yet.
 
 The marker shows while a current match links the title to a manga in the
-Suwayomi library. Rejecting the match clears it right away, and the next
-library scan clears it once the manga has left the library or you removed the
-Suwayomi server. Everyone who can open the details page sees the row, which
-names no server, source, or address. Blocklisted titles show no availability
-row.
+Suwayomi library. When step 3 of [Dispatch](#dispatch) adds a requested
+title's manga to the library, or finds it there already, the marker shows
+right away instead of after the next library scan. Rejecting the match clears
+it right away, and the next library scan clears it once the manga has left the
+library or you removed the Suwayomi server. Everyone who can open the details
+page sees the row, which names no server, source, or address. Blocklisted
+titles show no availability row.
 
 ### Recently Added
 
@@ -734,7 +736,8 @@ where it stopped:
 2. **Check the server:** SeerrNG checks the server's marker; see
    [Server marker](#server-marker).
 3. **Add to the library:** SeerrNG adds the manga to the Suwayomi library if it
-   is not there yet.
+   is not there yet, and the title shows as in the library; see
+   [Availability on manga pages](#availability-on-manga-pages).
 4. **Add to the category:** SeerrNG adds the manga to the **SeerrNG** category
    and notes the request on the manga.
 5. **Refresh the chapters:** SeerrNG asks the manga's source for its current

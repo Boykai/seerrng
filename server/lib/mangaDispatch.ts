@@ -758,7 +758,23 @@ const addToLibrary = async (
   if (!details.inLibrary) {
     await client.setInLibrary(binding.mangaId, true, call);
   }
-  await advance(context, manifest);
+  await dataSource.transaction(async (manager) => {
+    assertSameInstance(context.snapshot);
+    // Suwayomi now has the manga in its library, so the title shows as in
+    // the library without waiting for the next scan.
+    await manager.update(
+      MangaSourceBinding,
+      {
+        instanceId: binding.instanceId,
+        sourceId: binding.sourceId,
+        urlHash: binding.urlHash,
+        state: MangaBindingState.ACTIVE,
+        inLibrary: false,
+      },
+      { inLibrary: true }
+    );
+    await advanceIn(manager, manifest);
+  });
   return undefined;
 };
 

@@ -68,8 +68,8 @@ export const getAnilistRetryAfterSeconds = (
   );
 
 /**
- * Whether a library scan found this title in an administrator's Suwayomi
- * library: an active binding the latest listing contained.
+ * Whether this title is in an administrator's Suwayomi library: an active
+ * binding that the latest library scan listed, or that dispatch added since.
  */
 export const isMangaInSuwayomiLibrary = (anilistId: number): Promise<boolean> =>
   getRepository(MangaSourceBinding).existsBy({
