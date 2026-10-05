@@ -1536,13 +1536,36 @@ const makeReentryFingerprint = (
   return `${fingerprint.slice(0, 255 - suffix.length)}${suffix}`;
 };
 
+// A manga request can keep its stage and fingerprint while its message
+// changes: it waits for a match, records a dispatch error or clears one. Its
+// history records each such change once.
+const changesMangaMessage = (
+  latestEvent: Pick<StatusEventLike, 'message'>,
+  event: Pick<MediaRequestStatusEvent, 'mediaType' | 'message'>
+): boolean =>
+  event.mediaType === MediaType.MANGA &&
+  (clampText(event.message, 512) ?? null) !== (latestEvent.message ?? null);
+
+// A manga stage's default message says only that the request waits. Any
+// other message, such as a missing match or a dispatch error, says why.
+const explainsMangaStage = (
+  event: Pick<MediaRequestStatusEvent, 'mediaType' | 'stage' | 'message'>
+): boolean =>
+  event.mediaType === MediaType.MANGA &&
+  (clampText(event.message, 512) ?? null) !==
+    getMessage(event.stage as RequestStatusStage, false, MediaType.MANGA);
+
 const isLatestObservation = (
   latestEvent: StatusEventLike,
-  event: Pick<MediaRequestStatusEvent, 'stage' | 'attempt' | 'fingerprint'>
+  event: Pick<
+    MediaRequestStatusEvent,
+    'stage' | 'attempt' | 'fingerprint' | 'mediaType' | 'message'
+  >
 ): boolean => {
   if (
     latestEvent.stage !== event.stage ||
-    latestEvent.attempt !== event.attempt
+    latestEvent.attempt !== event.attempt ||
+    changesMangaMessage(latestEvent, event)
   ) {
     return false;
   }
@@ -1613,15 +1636,24 @@ export const insertRequestStatusEvent = async (
       });
       // A retry entry stays the latest event while the request waits: an
       // observation already recorded at its stage and attempt adds nothing.
+      // A manga request that says why it waits still gets its row.
       if (
         earlier &&
         RETRY_FINGERPRINT.test(latestEvent.fingerprint) &&
         latestEvent.stage === event.stage &&
-        latestEvent.attempt === event.attempt
+        latestEvent.attempt === event.attempt &&
+        !explainsMangaStage(event)
       ) {
         return;
       }
-      if (earlier && earlier.id < latestEvent.id) {
+      // A message-only change repeats the latest event's own fingerprint, so
+      // its row names that event like a return does.
+      if (
+        earlier &&
+        (earlier.id < latestEvent.id ||
+          (earlier.id === latestEvent.id &&
+            changesMangaMessage(latestEvent, event)))
+      ) {
         fingerprint = makeReentryFingerprint(fingerprint, latestEvent.id);
       }
     }

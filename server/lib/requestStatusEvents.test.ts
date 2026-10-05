@@ -1,9 +1,14 @@
 import {
+  MangaDispatchError,
+  MangaRequestBindingState,
+} from '@server/constants/mangaRequest';
+import {
   MediaRequestStatus,
   MediaStatus,
   MediaType,
 } from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import MediaRequestStatusEvent from '@server/entity/MediaRequestStatusEvent';
@@ -11,6 +16,7 @@ import { User } from '@server/entity/User';
 import requestDispatchManager from '@server/lib/requestDispatch';
 import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
+import { seedDispatchRequest } from '@server/test/fakeSuwayomiDispatch';
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it, mock } from 'node:test';
 import type { EntityManager } from 'typeorm';
@@ -20,6 +26,7 @@ import {
   getRequestStatusHistory,
   getRequestStatusPage,
   insertRequestStatusEvent,
+  reconcileActiveRequests,
   recordRequestCancellation,
   recordRequestRetry,
   recordRequestStatus,
@@ -41,6 +48,14 @@ const APPROVED = fingerprintOf(RequestStatusStage.APPROVED);
 const FAILED = fingerprintOf(RequestStatusStage.FAILED);
 const RETRY_MESSAGE =
   'The request was retried and is waiting to be dispatched.';
+const MANGA_WAITING =
+  'Your request was approved and is waiting to be sent to the connected manga service.';
+const MANGA_PARKED =
+  "Downloads start once this title is matched on the connected manga service. You don't need to do anything.";
+const MANGA_UNREACHABLE =
+  'The connected manga service could not be reached or did not answer in time. SeerrNG tries again by itself; an administrator can check that the service is running.';
+const MANGA_REJECTED =
+  'The connected manga service could not accept this request. Check its connection and settings, then retry.';
 
 const statusEvent = (
   stage: RequestStatusStage,
@@ -88,6 +103,36 @@ const retryAfterFailure = async () => {
   const latest = await latestOf();
   await getRepository(MediaRequestStatusEvent).insert(
     statusEvent(RequestStatusStage.APPROVED, `retry:${latest?.id}:0`, {
+      message: RETRY_MESSAGE,
+    })
+  );
+  return latestOf();
+};
+
+// A manga observation, inserted after reading the latest event unless a
+// writer's earlier read is given.
+const observeManga = async (
+  stage: RequestStatusStage,
+  message: string,
+  latestEvent?: MediaRequestStatusEvent
+) =>
+  insertRequestStatusEvent(
+    statusEvent(stage, fingerprintOf(stage), {
+      mediaType: MediaType.MANGA,
+      message,
+    }),
+    { latestEvent: latestEvent ?? (await latestOf()) }
+  );
+
+// retryAfterFailure for a manga request, with the messages it records.
+const retryMangaAfterFailure = async () => {
+  await observeManga(RequestStatusStage.APPROVED, MANGA_WAITING);
+  await observeManga(RequestStatusStage.FAILED, MANGA_REJECTED);
+  await observeManga(RequestStatusStage.APPROVED, MANGA_WAITING);
+  const latest = await latestOf();
+  await getRepository(MediaRequestStatusEvent).insert(
+    statusEvent(RequestStatusStage.APPROVED, `retry:${latest?.id}:0`, {
+      mediaType: MediaType.MANGA,
       message: RETRY_MESSAGE,
     })
   );
@@ -258,6 +303,113 @@ describe('request status event inserts', () => {
     assert.deepStrictEqual(
       (await eventsOf()).slice(3).map(({ fingerprint }) => fingerprint),
       [retry?.fingerprint, `${FAILED}:after:${retry?.id}`]
+    );
+  });
+
+  for (const [reason, message] of [
+    ['waits for a match', MANGA_PARKED],
+    ['records a dispatch error', MANGA_UNREACHABLE],
+  ] as const) {
+    it(`records once that a manga request ${reason} after a retry entry`, async () => {
+      const retry = await retryMangaAfterFailure();
+
+      await observeManga(RequestStatusStage.APPROVED, message);
+      await observeManga(RequestStatusStage.APPROVED, message);
+
+      assert.deepStrictEqual(
+        (await eventsOf())
+          .slice(3)
+          .map((event) => [event.fingerprint, event.message]),
+        [
+          [retry?.fingerprint, RETRY_MESSAGE],
+          [`${APPROVED}:after:${retry?.id}`, message],
+        ]
+      );
+    });
+  }
+
+  it('keeps the retry entry latest while a retried manga request only waits', async () => {
+    const retry = await retryMangaAfterFailure();
+
+    await observeManga(RequestStatusStage.APPROVED, MANGA_WAITING);
+    await observeManga(RequestStatusStage.APPROVED, MANGA_WAITING);
+
+    const events = await eventsOf();
+    assert.strictEqual(events.length, 4);
+    assert.strictEqual(events.at(-1)?.id, retry?.id);
+  });
+
+  it('records each change of a manga message at one stage once', async () => {
+    for (const message of [
+      MANGA_WAITING,
+      MANGA_PARKED,
+      MANGA_PARKED,
+      MANGA_WAITING,
+      MANGA_PARKED,
+      MANGA_PARKED,
+    ]) {
+      await observeManga(RequestStatusStage.APPROVED, message);
+    }
+
+    const events = await eventsOf();
+    assert.deepStrictEqual(
+      events.map(({ fingerprint, message }) => [fingerprint, message]),
+      [
+        [APPROVED, MANGA_WAITING],
+        [`${APPROVED}:after:${events[0].id}`, MANGA_PARKED],
+        [`${APPROVED}:after:${events[1].id}`, MANGA_WAITING],
+        [`${APPROVED}:after:${events[2].id}`, MANGA_PARKED],
+      ]
+    );
+  });
+
+  it('writes one row for writers that saw the same manga message change', async () => {
+    await observeManga(RequestStatusStage.APPROVED, MANGA_WAITING);
+    const seen = await latestOf();
+
+    await Promise.all([
+      observeManga(RequestStatusStage.APPROVED, MANGA_PARKED, seen),
+      observeManga(RequestStatusStage.APPROVED, MANGA_PARKED, seen),
+    ]);
+    // A writer that read the latest event before the change was recorded.
+    await observeManga(RequestStatusStage.APPROVED, MANGA_WAITING, seen);
+
+    assert.deepStrictEqual(
+      (await eventsOf()).map(({ fingerprint, message }) => [
+        fingerprint,
+        message,
+      ]),
+      [
+        [APPROVED, MANGA_WAITING],
+        [`${APPROVED}:after:${seen?.id}`, MANGA_PARKED],
+      ]
+    );
+  });
+
+  it('records no message-only change of another media type', async () => {
+    const retry = await retryAfterFailure();
+    const OTHER_REQUEST_ID = REQUEST_ID + 1;
+    const observeMessage = async (requestId: number, message: string) =>
+      insertRequestStatusEvent(
+        statusEvent(RequestStatusStage.APPROVED, APPROVED, {
+          requestId,
+          message,
+        }),
+        { latestEvent: await latestOf(requestId) }
+      );
+
+    for (const message of [MANGA_WAITING, MANGA_PARKED, MANGA_WAITING]) {
+      // The messages of the manga tests, on movie events.
+      await observeMessage(REQUEST_ID, message);
+      await observeMessage(OTHER_REQUEST_ID, message);
+    }
+
+    const events = await eventsOf();
+    assert.strictEqual(events.length, 4);
+    assert.strictEqual(events.at(-1)?.id, retry?.id);
+    assert.deepStrictEqual(
+      (await eventsOf(OTHER_REQUEST_ID)).map(({ message }) => message),
+      [MANGA_WAITING]
     );
   });
 
@@ -443,4 +595,118 @@ describe('request status event inserts', () => {
       RETRY_MESSAGE
     );
   });
+});
+
+describe('manga request status history', () => {
+  const { AWAITING_BINDING, BOUND } = MangaRequestBindingState;
+  const REQUESTED_MESSAGE = 'Your request is waiting for approval.';
+
+  const setRequestStatus = (id: number, status: MediaRequestStatus) =>
+    dataSource
+      .createQueryBuilder()
+      .update(MediaRequest)
+      .set({ status })
+      .where({ id })
+      .callListeners(false)
+      .execute();
+
+  const setManifest = (
+    requestId: number,
+    values: Partial<MangaRequestManifest>
+  ) => getRepository(MangaRequestManifest).update({ requestId }, values);
+
+  // Twice through every writer that records a computed status:
+  // recordRequestStatus, which the subscriber and the request routes call,
+  // the status page with and without a filter, and Download Sync.
+  const observeEverywhere = async (requestId: number) => {
+    for (let pass = 0; pass < 2; pass += 1) {
+      await recordRequestStatus(requestId);
+      await getRequestStatusPage({ take: 10, skip: 0 });
+      await getRequestStatusPage({ take: 10, skip: 0, filter: 'active' });
+      await reconcileActiveRequests();
+    }
+  };
+
+  const historyOf = async (requestId: number) =>
+    (await eventsOf(requestId)).map(({ stage, message }) => [stage, message]);
+
+  it('records each state of a manga request once, whichever writer sees it', async () => {
+    const { request } = await seedDispatchRequest({
+      manifest: { bindingState: AWAITING_BINDING, boundAt: null },
+    });
+
+    await observeEverywhere(request.id);
+    await setManifest(request.id, { bindingState: BOUND, boundAt: new Date() });
+    await observeEverywhere(request.id);
+
+    assert.deepStrictEqual(await historyOf(request.id), [
+      [RequestStatusStage.REQUESTED, REQUESTED_MESSAGE],
+      [RequestStatusStage.APPROVED, MANGA_PARKED],
+      [RequestStatusStage.APPROVED, MANGA_WAITING],
+    ]);
+  });
+
+  it('records a manga request without a manifest once from either loader', async () => {
+    const { request } = await seedDispatchRequest();
+    await getRepository(MangaRequestManifest).delete({ requestId: request.id });
+
+    await observeEverywhere(request.id);
+
+    assert.deepStrictEqual(await historyOf(request.id), [
+      [RequestStatusStage.REQUESTED, REQUESTED_MESSAGE],
+      [RequestStatusStage.APPROVED, MANGA_WAITING],
+    ]);
+  });
+
+  for (const [reason, manifest, message] of [
+    [
+      'waits for a match',
+      { bindingState: AWAITING_BINDING, boundAt: null },
+      MANGA_PARKED,
+    ],
+    [
+      'records a dispatch error',
+      { lastError: MangaDispatchError.SUWAYOMI_UNAVAILABLE },
+      MANGA_UNREACHABLE,
+    ],
+  ] as const) {
+    it(`records once that a retried manga request ${reason}`, async () => {
+      const { request } = await seedDispatchRequest();
+      await recordRequestStatus(request.id);
+      await setRequestStatus(request.id, MediaRequestStatus.FAILED);
+      await recordRequestStatus(request.id);
+      await setRequestStatus(request.id, MediaRequestStatus.APPROVED);
+      await recordRequestStatus(request.id);
+      await recordRequestRetry(request.id);
+      await observeEverywhere(request.id);
+      const retry = await latestOf(request.id);
+
+      await setManifest(request.id, manifest);
+      await observeEverywhere(request.id);
+
+      const events = await eventsOf(request.id);
+      assert.deepStrictEqual(
+        events.map(({ stage }) => stage),
+        [
+          RequestStatusStage.REQUESTED,
+          RequestStatusStage.APPROVED,
+          RequestStatusStage.FAILED,
+          RequestStatusStage.APPROVED,
+          RequestStatusStage.APPROVED,
+          RequestStatusStage.APPROVED,
+        ]
+      );
+      // The waiting request added nothing after its retry entry.
+      assert.strictEqual(events[4].id, retry?.id);
+      assert.strictEqual(events[4].message, RETRY_MESSAGE);
+      assert.strictEqual(
+        events[5].fingerprint,
+        `${events[1].fingerprint}:after:${events[4].id}`
+      );
+      assert.strictEqual(
+        (await getRequestStatusHistory(request.id)).results[0].message,
+        message
+      );
+    });
+  }
 });

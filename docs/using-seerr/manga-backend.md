@@ -895,6 +895,8 @@ minute and doubling up to 6 hours, or waits a fixed time and lets the sweep try
 again. After 50 failed tries in a row, about 10 days, SeerrNG marks the request
 Failed. Retrying a failed request runs its steps again without repeating
 finished work in Suwayomi, and the request keeps the chapters chosen for it.
+Its history shows the retry, then each state the request reaches, such as a
+wait for a source or a step that failed.
 
 SeerrNG logs each wait and retry under the **Manga Dispatch** label with the
 request ID and one of these codes; the codes appear only in the logs. Log

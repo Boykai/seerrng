@@ -49,7 +49,10 @@ shows **Waiting for a source** instead of **Approved**; see
 choose its source on the
 [Manga Sources page](./manga-backend.md#resolve-sources-by-hand), which the
 **Choose Source** button beside the status opens. SeerrNG sends approved manga
-requests to Suwayomi; see [Dispatch](./manga-backend.md#dispatch).
+requests to Suwayomi; see [Dispatch](./manga-backend.md#dispatch). A manga
+request's **History** records each change of its status message, even when its
+stage stays the same, for example when an approved request starts waiting for
+a source.
 
 ## Follow new chapters
 
