@@ -1133,7 +1133,7 @@ A manga request's status shows one of these stages:
 | Stage | When |
 | --- | --- |
 | Requested | The request waits for approval. |
-| Approved | The request waits to be sent, or waits for a match; see [Waiting for a match](#waiting-for-a-match). |
+| Approved | The request waits to be sent, or waits for a match; see [Waiting for a source](#waiting-for-a-source). |
 | Searching | SeerrNG found the manga and works through steps 2 to 7 of [Dispatch](#dispatch). |
 | Downloading | The chapters are queued. The progress is the share of the request's chapters that are delivered. Chapters in Suwayomi's download queue show as downloads such as **Chapter 12**, with their progress. |
 | Available | Every chapter of the request is delivered, and no [code](#requests-that-need-attention) holds the request back. |
