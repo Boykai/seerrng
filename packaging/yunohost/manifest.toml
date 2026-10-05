@@ -5,7 +5,7 @@ packaging_format = 2
 id = "seerrng"
 name = "SeerrNG"
 description.en = "Media request management for movies, television, music, comics, and books"
-version = "3.51.0~ynh1"
+version = "3.52.0~ynh1"
 maintainers = ["snapetech"]
 
 [upstream]
@@ -44,10 +44,10 @@ ram.runtime = "512M"
     [resources.sources.main]
     in_subdir = true
     format = "tar.gz"
-    amd64.url = "https://github.com/snapetech/seerrng/releases/download/v3.51.0/seerrng-v3.51.0-linux-x64.tar.gz"
-    amd64.sha256 = "b70bef8b2272443b4ed1965b233ed2839bd9a1e3f430c01f1cdc17bdab306ede"
-    arm64.url = "https://github.com/snapetech/seerrng/releases/download/v3.51.0/seerrng-v3.51.0-linux-arm64.tar.gz"
-    arm64.sha256 = "ca08636e0d38220ae37f9ae7cff27438245d7e7152bc9902403e3725d26c9b3d"
+    amd64.url = "https://github.com/snapetech/seerrng/releases/download/v3.52.0/seerrng-v3.52.0-linux-x64.tar.gz"
+    amd64.sha256 = "db25b6412b293c556356790d3f69a1702f894435a23286f4a69842ba4dd975ba"
+    arm64.url = "https://github.com/snapetech/seerrng/releases/download/v3.52.0/seerrng-v3.52.0-linux-arm64.tar.gz"
+    arm64.sha256 = "33a468d2e050041218d8d2902581fb9a7a47c71917e72f52d8be01656cc9b72f"
     autoupdate.strategy = "latest_github_release"
     autoupdate.asset.amd64 = "^seerrng-v.*-linux-x64\\.tar\\.gz$"
     autoupdate.asset.arm64 = "^seerrng-v.*-linux-arm64\\.tar\\.gz$"
