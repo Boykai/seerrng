@@ -44,7 +44,8 @@ Manga requests show a **Manga** badge, and the **Manga** media filter lists
 them on their own. Each card's **Chapters** row shows the requested chapters,
 for example "All", "Latest 25", "10–20", or "10 onward". An
 approved manga request whose title has no current match on the Suwayomi server
-shows **Waiting for a source** instead of **Approved**; see
+shows **Waiting for a source** instead of **Processing** on this page and on
+request cards, and instead of **Approved** on the title's page; see
 [Manga Backend](./manga-backend.md#waiting-for-a-source). Administrators
 choose its source on the
 [Manga Sources page](./manga-backend.md#resolve-sources-by-hand), which the

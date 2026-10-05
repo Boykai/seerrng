@@ -202,11 +202,13 @@ there.
 
 ### Waiting for a source
 
-An approved request shows **Waiting for a source** instead of **Approved**
-while its title has no current match on the Suwayomi server, so SeerrNG does
-not know yet which manga in Suwayomi it belongs to; see [Matching](#matching).
-The request stays approved, and the requester does not need to do anything. It
-shows **Approved** again once the title is matched: by a library scan, on the
+An approved request shows **Waiting for a source** while its title has no
+current match on the Suwayomi server, so SeerrNG does not know yet which manga
+in Suwayomi it belongs to; see [Matching](#matching). It shows this instead of
+**Processing** on the **Requests** page and on request cards, and instead of
+**Approved** on the title's page. The request stays approved, and the requester
+does not need to do anything. It shows **Processing** or **Approved** again
+once the title is matched: by a library scan, on the
 [Manga Library page](#manga-library-page), or by the **Manga Source Resolve**
 job; see [Source resolution](#source-resolution). The job matches a title by
 itself only when it finds an exact link; otherwise an administrator chooses a
