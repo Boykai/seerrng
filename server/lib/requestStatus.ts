@@ -2410,12 +2410,16 @@ export const getRequestStatusPage = async (options: {
   }
 
   const requestIds = requests.map((request) => request.id);
+  // Manga states are read after the latest events, as recordRequestStatus
+  // reads them: a state read first can be older than the latest event, and
+  // the page would record its older message again.
+  const latestEventsRead = getLatestEvents(requestIds);
   const [latestEvents, pendingRequestIds, bookSearchStates, mangaProgresses] =
     await Promise.all([
-      getLatestEvents(requestIds),
+      latestEventsRead,
       getPendingDispatchRequestIds(requestIds),
       getBookSearchStates(requestIds),
-      getMangaProgresses(requests),
+      latestEventsRead.then(() => getMangaProgresses(requests)),
     ]);
 
   let resultItems: RequestStatusPageItem[] = [];

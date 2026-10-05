@@ -646,6 +646,58 @@ describe('manga request status history', () => {
     ]);
   });
 
+  it('records no older manga message when the state changes during a page read', async () => {
+    const { request } = await seedDispatchRequest({
+      manifest: { bindingState: AWAITING_BINDING, boundAt: null },
+    });
+    await recordRequestStatus(request.id);
+    const events = getRepository(MediaRequestStatusEvent);
+    const manifests = getRepository(MangaRequestManifest);
+    const readEvents = events.find.bind(events);
+    const readManifests = manifests.find.bind(manifests);
+    let manifestRead: Promise<unknown> | undefined;
+    let changed = false;
+    mock.method(
+      manifests,
+      'find',
+      (...args: Parameters<typeof manifests.find>) =>
+        (manifestRead = readManifests(...args))
+    );
+    mock.method(
+      events,
+      'find',
+      async (...args: Parameters<typeof events.find>) => {
+        if (!changed) {
+          changed = true;
+          // The page starts every read that doesn't wait for this one.
+          await Promise.resolve();
+          await manifestRead;
+          // The title is matched, and its writer records that, between the
+          // page's reads.
+          await setManifest(request.id, {
+            bindingState: BOUND,
+            boundAt: new Date(),
+          });
+          await recordRequestStatus(request.id);
+        }
+        return readEvents(...args);
+      }
+    );
+
+    try {
+      await getRequestStatusPage({ take: 10, skip: 0 });
+    } finally {
+      mock.restoreAll();
+    }
+
+    assert.strictEqual(changed, true);
+    assert.deepStrictEqual(await historyOf(request.id), [
+      [RequestStatusStage.REQUESTED, REQUESTED_MESSAGE],
+      [RequestStatusStage.APPROVED, MANGA_PARKED],
+      [RequestStatusStage.APPROVED, MANGA_WAITING],
+    ]);
+  });
+
   it('records a manga request without a manifest once from either loader', async () => {
     const { request } = await seedDispatchRequest();
     await getRepository(MangaRequestManifest).delete({ requestId: request.id });
