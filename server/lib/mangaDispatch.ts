@@ -43,6 +43,13 @@ import { MediaRequest } from '@server/entity/MediaRequest';
 import { RequestDispatchOutbox } from '@server/entity/RequestDispatchOutbox';
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import {
+  MANGA_CHAPTER_OWNERSHIP_KEY,
+  MANGA_INSTANCE_MARKER_KEY,
+  MANGA_LIBRARY_OWNERSHIP_KEY,
+  MANGA_REQUEST_CHAPTER_KEY,
+  skipConflictOn,
+} from '@server/lib/mangaInsertTargets';
+import {
   buildMangaRequestChapterRows,
   getNextMangaRequestCheckpoint,
   selectMangaManifestChapters,
@@ -588,13 +595,14 @@ const verifyInstanceMarker = async (
     if (current === undefined) {
       await dataSource.transaction(async (manager) => {
         assertSameInstance(context.snapshot);
-        await manager
-          .createQueryBuilder()
-          .insert()
-          .into(MangaInstanceMarker)
-          .values({ instanceId, marker: randomUUID() })
-          .orIgnore()
-          .execute();
+        await skipConflictOn(
+          manager
+            .createQueryBuilder()
+            .insert()
+            .into(MangaInstanceMarker)
+            .values({ instanceId, marker: randomUUID() }),
+          MANGA_INSTANCE_MARKER_KEY
+        ).execute();
       });
       const created = await markers.findOneOrFail({ where: { instanceId } });
       await client.setInstanceMarker(created.marker, call);
@@ -736,19 +744,16 @@ const addToLibrary = async (
   }
   await dataSource.transaction(async (manager) => {
     assertSameInstance(context.snapshot);
-    await manager
-      .createQueryBuilder()
-      .insert()
-      .into(MangaLibraryOwnership)
-      .values({
+    await skipConflictOn(
+      manager.createQueryBuilder().insert().into(MangaLibraryOwnership).values({
         instanceId: binding.instanceId,
         sourceId: binding.sourceId,
         urlHash: binding.urlHash,
         url: binding.url,
         addedBySeerrng: !details.inLibrary,
-      })
-      .orIgnore()
-      .execute();
+      }),
+      MANGA_LIBRARY_OWNERSHIP_KEY
+    ).execute();
   });
   if (!details.inLibrary) {
     await client.setInLibrary(binding.mangaId, true, call);
@@ -905,13 +910,14 @@ const freezeManifest = async (
       }
       assertSameInstance(context.snapshot);
       for (const slice of chunk(rows, INSERT_SLICE)) {
-        await manager
-          .createQueryBuilder()
-          .insert()
-          .into(MangaRequestChapter)
-          .values(slice)
-          .orIgnore()
-          .execute();
+        await skipConflictOn(
+          manager
+            .createQueryBuilder()
+            .insert()
+            .into(MangaRequestChapter)
+            .values(slice),
+          MANGA_REQUEST_CHAPTER_KEY
+        ).execute();
       }
       if (!(await advanceIn(manager, current, true))) {
         throw new ManifestMovedError();
@@ -988,21 +994,22 @@ const enqueueChapters = async (
     context.signal?.throwIfAborted();
     await dataSource.transaction(async (manager) => {
       assertSameInstance(context.snapshot);
-      await manager
-        .createQueryBuilder()
-        .insert()
-        .into(MangaChapterOwnership)
-        .values(
-          batch.map(({ row }) => ({
-            instanceId: binding.instanceId,
-            sourceId: binding.sourceId,
-            mangaUrlHash: binding.urlHash,
-            chapterUrlHash: row.urlHash,
-            chapterUrl: row.url,
-          }))
-        )
-        .orIgnore()
-        .execute();
+      await skipConflictOn(
+        manager
+          .createQueryBuilder()
+          .insert()
+          .into(MangaChapterOwnership)
+          .values(
+            batch.map(({ row }) => ({
+              instanceId: binding.instanceId,
+              sourceId: binding.sourceId,
+              mangaUrlHash: binding.urlHash,
+              chapterUrlHash: row.urlHash,
+              chapterUrl: row.url,
+            }))
+          ),
+        MANGA_CHAPTER_OWNERSHIP_KEY
+      ).execute();
     });
     await client.enqueueChapters(
       batch.map(({ chapterId }) => chapterId),

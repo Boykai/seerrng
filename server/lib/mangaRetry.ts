@@ -16,6 +16,10 @@ import MangaSourceBinding, {
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { runWithMangaDispatchLock } from '@server/lib/mangaDispatch';
 import {
+  MANGA_CHAPTER_OWNERSHIP_KEY,
+  skipConflictOn,
+} from '@server/lib/mangaInsertTargets';
+import {
   assertSameInstance,
   countRows,
   isSameManga,
@@ -183,21 +187,22 @@ const retryUnderLock = async (
     // Recorded before the enqueue, so L11's release can dequeue them later.
     await dataSource.transaction(async (manager) => {
       assertSameInstance(snapshot);
-      await manager
-        .createQueryBuilder()
-        .insert()
-        .into(MangaChapterOwnership)
-        .values(
-          batch.map(({ row }) => ({
-            instanceId: manifest.instanceId,
-            sourceId,
-            mangaUrlHash: urlHash,
-            chapterUrlHash: row.urlHash,
-            chapterUrl: row.url,
-          }))
-        )
-        .orIgnore()
-        .execute();
+      await skipConflictOn(
+        manager
+          .createQueryBuilder()
+          .insert()
+          .into(MangaChapterOwnership)
+          .values(
+            batch.map(({ row }) => ({
+              instanceId: manifest.instanceId,
+              sourceId,
+              mangaUrlHash: urlHash,
+              chapterUrlHash: row.urlHash,
+              chapterUrl: row.url,
+            }))
+          ),
+        MANGA_CHAPTER_OWNERSHIP_KEY
+      ).execute();
     });
     await client.enqueueChapters(batch.map(({ chapterId }) => chapterId));
   }

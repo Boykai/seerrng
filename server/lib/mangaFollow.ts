@@ -43,6 +43,11 @@ import {
 import MediaRequestStatusEvent from '@server/entity/MediaRequestStatusEvent';
 import { runWithMangaDispatchLock } from '@server/lib/mangaDispatch';
 import {
+  MANGA_CHAPTER_OWNERSHIP_KEY,
+  MANGA_REQUEST_CHAPTER_KEY,
+  skipConflictOn,
+} from '@server/lib/mangaInsertTargets';
+import {
   assertSameInstance,
   countRows,
   isSameManga,
@@ -851,13 +856,14 @@ const writeCheck = async (
           assertSameInstance(inst.snapshot);
 
           for (const slice of chunk(added, INSERT_SLICE)) {
-            await manager
-              .createQueryBuilder()
-              .insert()
-              .into(MangaRequestChapter)
-              .values(slice)
-              .orIgnore()
-              .execute();
+            await skipConflictOn(
+              manager
+                .createQueryBuilder()
+                .insert()
+                .into(MangaRequestChapter)
+                .values(slice),
+              MANGA_REQUEST_CHAPTER_KEY
+            ).execute();
           }
           if (reopened) {
             const result = await manager
@@ -1013,21 +1019,22 @@ const enqueueFollowed = async (
           return false;
         }
         assertSameInstance(inst.snapshot);
-        await manager
-          .createQueryBuilder()
-          .insert()
-          .into(MangaChapterOwnership)
-          .values(
-            batch.map(({ row }) => ({
-              instanceId: inst.instanceId,
-              sourceId: key.sourceId,
-              mangaUrlHash: key.urlHash,
-              chapterUrlHash: row.urlHash,
-              chapterUrl: row.url,
-            }))
-          )
-          .orIgnore()
-          .execute();
+        await skipConflictOn(
+          manager
+            .createQueryBuilder()
+            .insert()
+            .into(MangaChapterOwnership)
+            .values(
+              batch.map(({ row }) => ({
+                instanceId: inst.instanceId,
+                sourceId: key.sourceId,
+                mangaUrlHash: key.urlHash,
+                chapterUrlHash: row.urlHash,
+                chapterUrl: row.url,
+              }))
+            ),
+          MANGA_CHAPTER_OWNERSHIP_KEY
+        ).execute();
         return true;
       });
       if (!owned) return;

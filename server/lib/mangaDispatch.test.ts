@@ -41,6 +41,12 @@ import {
   dispatchMangaRequest,
   findDueMangaRequestIds,
 } from '@server/lib/mangaDispatch';
+import {
+  MANGA_CHAPTER_OWNERSHIP_KEY,
+  MANGA_INSTANCE_MARKER_KEY,
+  MANGA_LIBRARY_OWNERSHIP_KEY,
+  MANGA_REQUEST_CHAPTER_KEY,
+} from '@server/lib/mangaInsertTargets';
 import { syncMangaRequestBindings } from '@server/lib/mangaRequestBindings';
 import {
   catchUpMangaResolverTitle,
@@ -78,6 +84,10 @@ import {
   type FakeDispatchManga,
   type FakeDispatchSuwayomi,
 } from '@server/test/fakeSuwayomiDispatch';
+import {
+  assertConflictTargets,
+  recordInserts,
+} from '@server/test/insertConflicts';
 import { waitForBackgroundTasks } from '@server/utils/backgroundTasks';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -457,6 +467,20 @@ describe('manga dispatch: a fresh request', () => {
 
     assert.strictEqual(fake.server.requests.length, sent);
     assert.deepStrictEqual(await manifestOf(requestId), before);
+  });
+
+  it('skips a row it records only when the row repeats its unique key', async () => {
+    const { fake, requestId } = await setup();
+    const inserts = recordInserts();
+
+    assert.deepStrictEqual(await run(requestId, fake), { delivered: true });
+
+    assertConflictTargets(inserts, {
+      manga_instance_marker: MANGA_INSTANCE_MARKER_KEY,
+      manga_library_ownership: MANGA_LIBRARY_OWNERSHIP_KEY,
+      manga_request_chapter: MANGA_REQUEST_CHAPTER_KEY,
+      manga_chapter_ownership: MANGA_CHAPTER_OWNERSHIP_KEY,
+    });
   });
 
   it('replays from INSTANCE_MARKED without writing anything twice', async () => {

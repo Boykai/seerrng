@@ -48,6 +48,10 @@ import {
   type MangaFollowCounts,
   type MangaFollowOptions,
 } from '@server/lib/mangaFollow';
+import {
+  MANGA_CHAPTER_OWNERSHIP_KEY,
+  MANGA_REQUEST_CHAPTER_KEY,
+} from '@server/lib/mangaInsertTargets';
 import { pollMangaProgress } from '@server/lib/mangaProgress';
 import type {
   MangaChapterCandidate,
@@ -86,6 +90,10 @@ import {
   startFakeProgressSuwayomi,
   type FakeProgressSuwayomi,
 } from '@server/test/fakeSuwayomiProgress';
+import {
+  assertConflictTargets,
+  recordInserts,
+} from '@server/test/insertConflicts';
 import { waitForBackgroundTasks } from '@server/utils/backgroundTasks';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -843,6 +851,20 @@ describe('runMangaFollow: checks', () => {
         },
       ],
     ]);
+  });
+
+  it('skips a row it records only when the row repeats its unique key', async () => {
+    const { fake, requestId } = await setup();
+    await setManifest(requestId, { progressSignature: 'seen' });
+    publish(fake, 11, 3, 4);
+    const inserts = recordInserts();
+
+    assert.deepStrictEqual(await follow(), ran({ added: 2, enqueued: 2 }));
+
+    assertConflictTargets(inserts, {
+      manga_request_chapter: MANGA_REQUEST_CHAPTER_KEY,
+      manga_chapter_ownership: MANGA_CHAPTER_OWNERSHIP_KEY,
+    });
   });
 
   it('changes nothing but the next check when the source lists nothing new', async () => {
