@@ -5,6 +5,7 @@ import AnilistAPI from '@server/api/anilist';
 import { AnilistRateLimitedError } from '@server/api/anilist/failures';
 import type { AnilistMangaDetails } from '@server/api/anilist/manga';
 import ExternalAPI from '@server/api/externalapi';
+import { MangaFollowStopReason } from '@server/constants/mangaFollow';
 import {
   MangaRequestBindingState,
   MangaRequestScope,
@@ -491,6 +492,76 @@ describe('manga requests', () => {
     assert.strictEqual(await getRepository(MediaRequest).count(), 1);
     assert.strictEqual(await getRepository(MangaRequestManifest).count(), 1);
     await assertQueued([pending.id]);
+  });
+
+  it('lets an owner who approves their own pending request turn following on', async () => {
+    const owner = await requester();
+    const pending = await requestManga(owner);
+    await getRepository(MangaRequestManifest).update(
+      { requestId: pending.id },
+      {
+        followStopReason: MangaFollowStopReason.REQUEST_DECLINED,
+        followNextAt: new Date(),
+      }
+    );
+    await getRepository(User).update(owner.id, {
+      permissions: Permission.REQUEST_MANGA + Permission.AUTO_APPROVE_MANGA,
+    });
+
+    const promoted = await requestManga(owner, { mangaFollow: true });
+
+    assert.strictEqual(promoted.id, pending.id);
+    assert.strictEqual(promoted.status, MediaRequestStatus.APPROVED);
+    const manifest = await manifestOf(pending);
+    assert.strictEqual(manifest.followEnabled, true);
+    assert.strictEqual(manifest.followStopReason, null);
+    assert.strictEqual(manifest.followNextAt, null);
+    assert.strictEqual(await getRepository(MediaRequest).count(), 1);
+    await assertQueued([pending.id]);
+  });
+
+  it("refuses to turn following on while promoting another user's request", async () => {
+    const pending = await requestManga(await requester());
+    const approver = await admin();
+
+    await assert.rejects(
+      () => requestManga(approver, { mangaFollow: true }),
+      (error: unknown) =>
+        error instanceof RequestPermissionError &&
+        error.message ===
+          'Following new chapters can only be turned on by the owner of a manga request.'
+    );
+
+    assert.strictEqual(
+      (await reload(pending)).status,
+      MediaRequestStatus.PENDING
+    );
+    assert.strictEqual((await manifestOf(pending)).followEnabled, false);
+    assert.strictEqual(await getRepository(MediaRequest).count(), 1);
+    assert.deepStrictEqual(notifications, [Notification.MEDIA_PENDING]);
+    await assertNotQueued();
+  });
+
+  it('refuses to turn following on for a pending request without a manifest', async () => {
+    const owner = await requester();
+    const pending = await requestManga(owner);
+    await getRepository(MangaRequestManifest).delete({ requestId: pending.id });
+    await getRepository(User).update(owner.id, {
+      permissions: Permission.REQUEST_MANGA + Permission.AUTO_APPROVE_MANGA,
+    });
+
+    await assert.rejects(
+      () => requestManga(owner, { mangaFollow: true }),
+      (error: unknown) =>
+        error instanceof DuplicateMediaRequestError &&
+        error.message === 'This request cannot follow new chapters.'
+    );
+
+    assert.strictEqual(
+      (await reload(pending)).status,
+      MediaRequestStatus.PENDING
+    );
+    await assertNotQueued();
   });
 
   it('refuses blocklisted and available titles', async () => {

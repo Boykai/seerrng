@@ -67,9 +67,11 @@ shows **Downloading** again while new chapters arrive, and SeerrNG sends the
 use the request's approval and do not count against your request quota.
 
 Only the requester can turn following on, while the request is pending,
-approved, or complete. The requester or a user with the **Manage Requests**
-permission can turn it off. Turning it off stops further additions; chapters
-already added still download.
+approved, or complete. If you approve a pending request by requesting the same
+title with following on, the pending request must be your own; otherwise
+SeerrNG refuses and changes nothing. The requester or a user with the
+**Manage Requests** permission can turn it off. Turning it off stops further
+additions; chapters already added still download.
 
 When following stops or pauses, the request card and the request's window say
 why. It stops when the request is declined or fails, when the requester can no

@@ -952,6 +952,13 @@ stay part of the request and download like the others. Through the
 [REST API](../../seerr-api.yml), a new manga request turns following on with
 `mangaFollow: true`.
 
+When a user with **Manage Requests**, or one who may auto-approve manga,
+requests a title that already has a pending request for the same Suwayomi
+server, SeerrNG approves that request instead of adding one. With
+`mangaFollow: true`, it also turns following on when the pending request is
+the user's own. When it belongs to another user, SeerrNG refuses with HTTP
+`403` and the pending request stays as it was.
+
 Turning following on makes the request due at once. A request that is not sent
 yet is checked once its chapters are queued.
 
