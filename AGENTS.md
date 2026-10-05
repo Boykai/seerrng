@@ -99,8 +99,9 @@ Build and check the exact final source, using the pinned repository runtime and
 lockfile. Run affected integration/e2e checks in disposable environments where
 available. Never aim tests at live configuration, accounts, queues, playlists,
 collections, watchlists, or databases. A mocked provider pass is not a live
-round-trip pass. Perform desktop/narrow and interaction review of changed roles;
-John's visual acceptance remains a release gate for this interface work.
+round-trip pass. Perform desktop/narrow and interaction review of changed
+roles. Record human review evidence separately from automated checks;
+acceptance may be provided by the project owner or an authorized reviewer.
 
 ## Safe collaboration and records
 

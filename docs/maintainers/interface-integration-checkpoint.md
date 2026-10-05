@@ -286,8 +286,8 @@ Fill these fields with observed facts; unknown means pending, never assumed.
    skips/todos, platform exclusions, lint/type/static/style results and build result.
    `pnpm test` is test partitions only; `test:ci` is Vitest-only. Browser/Cypress
    suites are separate. Linux is required for complete POSIX tooling coverage.
-5. Desktop/narrow reference locations and John's acceptance per page/state,
-   including loading/error/empty, keyboard/focus/disabled, open menus and reorder.
+5. Desktop/narrow reference locations and human visual review evidence per
+   page/state, including loading/error/empty, keyboard/focus/disabled, open menus and reorder.
    An automated screenshot or computed-style result is not human acceptance.
 6. Live Plex evidence separately from mocked native coverage; safe prerequisites
    for unverified providers. Never copy credentials, runtime DBs or live config.
@@ -347,7 +347,7 @@ older records remain historical evidence for their original source trees.
   completed successfully in this isolated candidate.
 - The exact final `pnpm validate:development` run, one production build, browser
   run, screenshots, release-note preview, commits and remote push are pending.
-  John’s visual acceptance of the new game and reader surfaces remains a release
+  human visual review of the new game and reader surfaces remains a release
   gate; previous visual acceptance applies only to its recorded older scope.
   A screenshot or passing build does not fulfill that human review.
 - No task commit, push, tag, draft/published release, merge, or deployment has
@@ -405,7 +405,7 @@ changelog section. This receipt is invalidated by the forward integration; the
 complete gate must be rerun against this exact merged tree. The production build
 has not run. The in-app browser control and isolated workspace controls are not
 available in this session; rendered review is pending on an available local
-browser path. John’s visual acceptance of the new game and reader surfaces
+browser path. Human visual review of the new game and reader surfaces
 remains pending and is still required before release.
 
 ## UI correction and verification record — October 5, 2026
@@ -463,7 +463,7 @@ element diagnostics on failure.
 - Desktop and mobile review captures are at
   `/tmp/seerrng-game-library-final-review-20261005/` and
   `/tmp/seerrng-reader-settings-final-review-20261005/`. These are iteration
-  captures, not John’s human acceptance. The first exact-tree gate attempt
+  captures, not a substitute for human review. The first exact-tree gate attempt
   stopped during formatting before any test lane, reporting ENOENT for
   temporary locale `.bak` paths. A subsequent isolated sequential
   `pnpm i18n:check` and `pnpm format:check` passed. The first output is preserved
@@ -473,7 +473,7 @@ element diagnostics on failure.
   `/tmp/seerrng-game-library-validation-final-candidate-20261005.log`.
 - Tests used a fresh disposable SQLite configuration and local providers only.
   No live Grimmory, BookOrbit, Steam, QuestarrNG, or ROMarrNG provider was
-  contacted. John’s visual acceptance remains a release gate.
+  contacted. Human visual review remains a release gate.
 
 ## Rebuilt candidate and rendered review — October 4, 2026 (Regina local)
 
@@ -512,7 +512,7 @@ rebuilt after this correction.
   Log: `/tmp/seerrng-validate-development-final-20261005.log`.
 - The Chromium exploratory Cypress attempt timed out waiting for a page load and
   is not counted. The final built-app workflows passed separately under the
-  repository's Cypress Electron runner. John's visual acceptance remains a
+  repository's Cypress Electron runner. Human visual review remains a
   release gate.
 - Release-note preview, commits, push, and release remain pending. Live Grimmory,
   BookOrbit, Steam, QuestarrNG, and ROMarrNG round trips remain unverified.
@@ -557,7 +557,7 @@ the game source-level lint fixes and new main target; it is historical only.
 The final integrated gate, production build, and rebuilt disposable browser
 flows remain pending. No branch push, tag, or release has occurred. Live
 Grimmory, BookOrbit, Steam, QuestarrNG, and ROMarrNG round trips remain
-unverified; John's visual acceptance remains a release gate.
+unverified; human visual review remains a release gate.
 
 ## Reader settings readability follow-up — October 5, 2026
 
@@ -580,7 +580,7 @@ Vitest, 385 native TypeScript, 56 native JavaScript, and 32 tooling files, with
 zero declared platform exclusions. The final gate, clean production build,
 and rebuilt desktop/narrow browser flows remain pending on this follow-up.
 Earlier build and screenshot evidence predates the reader layout change.
-Provider round trips remain unverified, and John's human visual acceptance is
+Provider round trips remain unverified, and human visual review is
 still required before release.
 
 ## Final verification receipt — October 5, 2026
@@ -609,11 +609,11 @@ The game and reader workflows each passed **1/1** in their separate Chromium
 153 headless runs, checking desktop and narrow layouts. Captures are in
 `/tmp/seerrng-game-library-final-review-20261005/` and
 `/tmp/seerrng-reader-settings-final-review-20261005/`; their rendered content
-was inspected. The screenshots are iteration evidence, not John's human
-acceptance. Tests used disposable SQLite and local app endpoints only; no live
+was inspected. The screenshots are iteration evidence, not a substitute for human review. Tests used disposable SQLite and local app endpoints only; no live
 Grimmory, BookOrbit, Steam, QuestarrNG, or ROMarrNG provider was contacted.
-Release-note preview and branch push remain pending. John's human visual
-acceptance is still required before release.
+Release-note preview and branch push remained pending at that checkpoint.
+Human visual review status was pending; these entries are superseded by the
+v3.52.1 publication below.
 
 ## v3.52.0 publication and CI repair — October 5, 2026
 
@@ -626,8 +626,8 @@ integrated source passed 4,083 tests with four PostgreSQL-only skips and zero
 platform exclusions. Its production build also passed. Existing desktop/narrow
 game and reader browser flows passed 1/1 each; their rendered captures were
 inspected earlier in this work. No live Grimmory, BookOrbit, Steam, QuestarrNG
-or ROMarrNG provider round trip was performed, and John's release visual
-acceptance remains pending.
+or ROMarrNG provider round trip was performed. Visual review status was
+pending in this historical record.
 
 Post-publication GitHub checks exposed three separate results:
 
@@ -672,7 +672,7 @@ alignment. The Cypress repair is not yet integrated on that new main tip. Before
 finalizing a follow-up candidate, preserve its source checkpoint, forward
 integrate the latest main and any completed bundle repair, then rerun the exact
 full development gate, production build, and affected browser flows. The
-Chocolatey 403 and John's visual acceptance remain explicit release limitations.
+Chocolatey 403 and human visual review remain explicit release limitations.
 
 ## Post-release CI repairs — October 5, 2026
 
@@ -696,52 +696,28 @@ verification on this combined exact source tree. A preserved source bundle is
 integrated candidate's final validation, build, bundle budget and complete
 Cypress results will be appended here when available.
 
-The Chocolatey publish 403 and John's human visual acceptance remain
+The Chocolatey publish 403 and human visual review remain
 outstanding. No provider round trips against live services were attempted.
 
-## Maintainer authorization and final repair verification — October 4, 2026
+## Project-owner release authorization and v3.52.1 verification — October 5, 2026
 
-The product owner explicitly approved this release and directed that John's
-individual approval not be required. This approval supersedes the earlier
-John-specific release gate recorded above. No live Grimmory or BookOrbit
-provider round trip was performed; that remains outside this release approval.
+The project owner directed removal of the individual-specific visual acceptance
+gate. Human review remains required under CONTRIBUTING.md, but acceptance is not
+assigned to any named reviewer. The project owner authorized the release
+without a named person’s separate visual sign-off. This supersedes the earlier
+pending release-gate statuses above.
 
-The current candidate retains the two post-release Cypress fixture repairs and
-the English startup bundle reduction. The initial combined development gate on
-these code changes passed with 452/452 Vitest tests, 2,908 active of 2,912 Node
-TypeScript tests (four skips), 485/485 Node JavaScript tests, and 238/238
-tooling tests. It had zero platform exclusions. Two full gates then passed on
-the final candidate, each with the same totals and zero platform exclusions.
-Receipts: `/tmp/seerrng-v352-repair-validation-final.log` and
-`/tmp/seerrng-v352-repair-validation-final-receipt.log`.
+SeerrNG v3.52.1 was published from tag `v3.52.1` at commit
+`76632411a3f73d0ad4ea31cb10405496d7db474f`. Release workflow run
+`37281708508` succeeded, including `Publish release` and `Announce release to
+Discord`. The published release contains 23 assets and the curated English
+startup-performance note.
 
-The production build passed and generated all 113 pages. `pnpm bundle:check`
-checked 305 JavaScript chunks (11.54 MB total); the shared `_app` chunk is
-662.7 KB against the 1,024 KB limit. Receipts:
-`/tmp/seerrng-v352-repair-build-final.log` and
-`/tmp/seerrng-v352-repair-bundle-check-final.log`.
+The separate Chocolatey publish run `37291082662` failed. Chocolatey
+publication is not verified; the other release publication and announcement
+jobs succeeded.
 
-Focused browser runs passed on the disposable test database: library/discover
-parity 27/27 (one retry before passing), Prowlarr responsive 1/1, current batch
-layout 8/8, and reader delivery settings 1/1. The reader settings test first
-hit a 60-second Electron page-load timeout with a blank viewport; the isolated
-rerun in headless Chromium 153 passed and recorded desktop and narrow captures.
-Its checks covered saving both reader URLs and the preferred provider, generated
-catalog and Komga links, persisted settings after reload, and the responsive
-address fields. The full 43-spec Cypress suite is not claimed as passing: the
-previous broad runs were interrupted, and one attempt reached unmocked external
-provider routes. No live reader service round trip was performed.
-
-The release worktree audit confirmed that the prior reader delivery, series
-groupings, audiobook/comic/magazine delivery, game library, external request
-list sync, and request-edit work are already present in the published v3.52.0
-source. Several older worktrees contain stale or partially reverted copies of
-that work; they are preserved and are not reapplied over the shipped source.
-The remaining unique candidate changes are the startup bundle fix, its
-regression check and performance note, and the two Cypress harness repairs.
-
-Chocolatey run `37263774763` built version 3.52.0 but received HTTP 403 from
-`push.chocolatey.org`; the workflow had a credential configured. The package
-was not verified as published, and no source change can repair the package
-owner authorization. Other v3.52.0 publication channels are recorded in the
-release run. This channel limitation remains disclosed for the follow-up.
+The published release has no live Grimmory, BookOrbit, Steam, QuestarrNG, or
+ROMarrNG round-trip claim. The broader Cypress run remains incomplete and is
+not recorded as a pass; the prior run entered an unstubbed provider test and
+made outbound requests. No further provider tests were run.

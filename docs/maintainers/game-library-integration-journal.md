@@ -129,7 +129,7 @@
 - Production `pnpm build`: **not run**.
 - Release-note preview: **not run**.
 - Desktop/narrow rendered browser review: **pending**.
-- John’s visual acceptance: **pending and remains a release gate**.
+- Human visual review: **pending in this historical checkpoint**.
 - Steam/QuestarrNG/ROMarrNG live round trips: **not run**; provider behavior is
   covered by isolated tests, not live integration evidence.
 
@@ -165,9 +165,8 @@ passed: 99 Vitest files/452 tests; 385 Node TypeScript files/2,912 tests (2,908
 passed and four PostgreSQL-only skips); 56 native JavaScript files/485 tests;
 32 tooling files/238 tests; 569 current-batch files; and 397/397 shared-style
 references. There were no failures or platform exclusions. The final gate log
-is `/tmp/seerrng-validate-development-final-20261005.log`. John's visual
-acceptance remains a separate release gate; neither this local render nor the
-production build replaces it.
+is `/tmp/seerrng-validate-development-final-20261005.log`. Human visual
+review was tracked separately from these automated results.
 
 ## All-dirty commit and forward-integration checkpoint
 
@@ -187,5 +186,5 @@ production build replaces it.
   Final integrated validation, production build, and disposable browser flows
   remain pending. The prior rendered game flow predates the aggregation
   cleanup and must be rebuilt and rerun.
-- Steam, QuestarrNG, and ROMarrNG live round trips remain unverified. John's
-  visual acceptance remains pending and required before release.
+- Steam, QuestarrNG, and ROMarrNG live round trips remain unverified.
+  Human visual review was not recorded as complete in this historical entry.

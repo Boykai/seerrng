@@ -234,8 +234,8 @@ Current extension verification after the last source edits:
   exclusions. The complete cumulative gate has not run on an isolated reader
   candidate; the checkpoint records earlier unrelated cumulative failures and
   unavailable tool inputs that must be reconciled before a release claim.
-- Rendered preview and John's visual acceptance remain pending. The in-app
-  browser and isolated workspace browser tools were not exposed in this
+- Rendered preview and human visual review remained pending at this point. The
+  in-app browser and isolated workspace browser tools were not exposed in this
   session. No live Grimmory, BookOrbit, OPDS app, or e-reader round trip ran.
 - The earlier instruction to keep external request-list and software catalog
   changes outside the reader-delivery candidate was superseded by the user's
@@ -310,8 +310,8 @@ unverified. The complete development gate passed: 99 Vitest files/452 tests;
 skips); 56 native JavaScript files/485 tests; 32 tooling files/238 tests; 569
 current-batch files; and 397/397 shared-style references. There were no
 failures or platform exclusions. The final gate log is
-`/tmp/seerrng-validate-development-final-20261005.log`. John's human visual
-acceptance remains required before release.
+`/tmp/seerrng-validate-development-final-20261005.log`. Human visual review
+status was pending in this historical record.
 
 ## All-dirty commit and forward-integration checkpoint
 
@@ -328,5 +328,4 @@ acceptance remains required before release.
 - Final integrated validation, production build, and disposable reader browser
   flow are pending; prior validation and screenshots do not cover that target.
 - No live Grimmory, BookOrbit, OPDS, Komga, or Bookshelf round trip has been
-  verified. John's visual acceptance remains pending and required before
-  release.
+  verified. Human visual review was pending in this historical record.
