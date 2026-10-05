@@ -115,6 +115,33 @@ const checks = (fake: FakeDispatchSuwayomi) =>
 
 const CHECK_FAILED = 'Earlier chapter versions could not be checked.';
 
+/** Holds the first check `fake` gets open until `release` is called. */
+const holdFirstCheck = (fake: FakeDispatchSuwayomi) => {
+  let reached!: () => void;
+  const checking = new Promise<void>((resolve) => {
+    reached = () => resolve();
+  });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  serveFakeChapterReleases(fake, {
+    observe: async ({ operationName }) => {
+      if (operationName !== 'EarlierChapterReleases' || checks(fake).length > 1)
+        return;
+      reached();
+      await held;
+    },
+  });
+  return { checking, release };
+};
+
+/** A calendar clock that moves on by `ms` once a read has started. */
+const readTaking = (ms: number) => {
+  let calls = 0;
+  return () => (calls++ ? ms : 0);
+};
+
 const uploaded = (
   id: number,
   chapterNumber: number,
@@ -1087,4 +1114,85 @@ describe('manga chapter releases', () => {
       }))
     );
   });
+
+  it(
+    'waits for a check another load started no longer than its own time',
+    { timeout: 10_000 },
+    async () => {
+      const manga = fakeDispatchManga(99, {
+        chapters: [
+          uploaded(9901, 1, '2026-08-20T00:00:00.000Z'),
+          uploaded(9902, 1, '2026-09-05T00:00:00.000Z'),
+          uploaded(9903, 2, '2026-09-06T00:00:00.000Z'),
+        ],
+      });
+      const fake = await start(1, [manga]);
+      await request(manga, 9099);
+      const { checking, release } = holdFirstCheck(fake);
+
+      // The first read took none of its 20 seconds, and its check is held.
+      const first = load(september(), { clock: readTaking(0) });
+      await checking;
+      // A shorter window reads again and asks the same check, with 50 ms left.
+      const second = await load(month('2026-09-01', '2026-09-15'), {
+        clock: readTaking(19_950),
+      });
+      assert.deepStrictEqual(
+        [days(second), second.partialSources],
+        [
+          ['9099:2026-09-05', '9099:2026-09-06'],
+          [{ source: 'suwayomi', serverId: 1 }],
+        ]
+      );
+      assert.deepStrictEqual([reads(fake).length, checks(fake).length], [2, 1]);
+
+      release();
+      const done = await first;
+      assert.deepStrictEqual(
+        [days(done), done.partialSources],
+        [['9099:2026-09-06'], []]
+      );
+      assert.deepStrictEqual(
+        logsOf(logs, CHECK_FAILED).map(([, fields]) => fields),
+        [{ label: 'Release Calendar', instanceId: 1, code: 'TIMEOUT' }]
+      );
+    }
+  );
+
+  it(
+    'shares a running check with loads that have no more time and a kept one with every load',
+    { timeout: 10_000 },
+    async () => {
+      const manga = fakeDispatchManga(89, {
+        chapters: [
+          uploaded(8901, 1, '2026-08-20T00:00:00.000Z'),
+          uploaded(8902, 1, '2026-09-05T00:00:00.000Z'),
+          uploaded(8903, 2, '2026-09-06T00:00:00.000Z'),
+        ],
+      });
+      const fake = await start(1, [manga]);
+      await request(manga, 9089);
+      const { checking, release } = holdFirstCheck(fake);
+      const checked = [['9089:2026-09-06'], []];
+      const shorter = () => month('2026-09-01', '2026-09-15');
+      const calls = () => [reads(fake).length, checks(fake).length];
+
+      // The first read took half of its 20 seconds, and its check is held.
+      const first = load(september(), { clock: readTaking(10_000) });
+      await checking;
+      // A load with all 20 seconds checks again rather than wait on it.
+      const second = await load(shorter(), { clock: readTaking(0) });
+      assert.deepStrictEqual([days(second), second.partialSources], checked);
+      assert.deepStrictEqual(calls(), [2, 2]);
+      release();
+      const done = await first;
+      assert.deepStrictEqual([days(done), done.partialSources], checked);
+
+      resetMangaReleaseCalendarCache();
+      await load(september(), { clock: readTaking(15_000) });
+      const kept = await load(shorter(), { clock: readTaking(0) });
+      assert.deepStrictEqual([days(kept), kept.partialSources], checked);
+      assert.deepStrictEqual(calls(), [4, 3]);
+    }
+  );
 });

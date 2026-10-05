@@ -48,14 +48,17 @@ const connection = (rows: Row[], after: unknown, pageSize: number) => {
  * when they were stored, each list in ID order with `pageSize` rows a page.
  * EarlierChapterReleases lists the asked chapter numbers dated before
  * `uploadedBefore` or, undated, stored before `fetchedBefore`. `observe`
- * sees every request before it is answered.
+ * sees every request before it is answered, and the answer waits for it.
  */
 export const serveFakeChapterReleases = (
   fake: FakeDispatchSuwayomi,
   {
     pageSize = 500,
     observe,
-  }: { pageSize?: number; observe?: (request: FakeRequest) => void } = {}
+  }: {
+    pageSize?: number;
+    observe?: (request: FakeRequest) => void | Promise<void>;
+  } = {}
 ): void => {
   const rowsOf = (ids: unknown) => {
     const wanted = new Set((Array.isArray(ids) ? ids : []).map(Number));
@@ -74,8 +77,8 @@ export const serveFakeChapterReleases = (
       .sort((left, right) => left.id - right.id);
     return { mangas, rows };
   };
-  fake.server.onOperation('ChapterReleases', (request: FakeRequest) => {
-    observe?.(request);
+  fake.server.onOperation('ChapterReleases', async (request: FakeRequest) => {
+    await observe?.(request);
     const variables = request.variables;
     const { mangas, rows } = rowsOf(variables.ids);
     const within = (value: number, from: unknown, before: unknown) =>
@@ -110,8 +113,8 @@ export const serveFakeChapterReleases = (
       ),
     });
   });
-  fake.server.onOperation('EarlierChapterReleases', (request: FakeRequest) => {
-    observe?.(request);
+  fake.server.onOperation('EarlierChapterReleases', async (request) => {
+    await observe?.(request);
     const variables = request.variables;
     const match = (Array.isArray(variables.match) ? variables.match : []) as {
       mangaId?: { equalTo?: unknown };

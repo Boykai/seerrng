@@ -122,11 +122,15 @@ interface CacheEntry<T> {
   expiresAt: number;
   size: number;
   value: Promise<T>;
+  /** The time a read still running was given. */
+  ms?: number;
 }
 
 /**
  * Results shared while they are fresh and within the row and entry bounds;
- * a failed read is never kept.
+ * a failed read is never kept. A read still running is shared only with
+ * callers that have no more time than it was given; any other caller starts
+ * its own read, which later callers share.
  */
 const createCache = <T extends { size: number }>() => {
   const entries = new Map<string, CacheEntry<T>>();
@@ -156,22 +160,26 @@ const createCache = <T extends { size: number }>() => {
       key: string,
       now: number,
       limits: MangaCalendarLimits,
-      read: () => Promise<T>
+      read: () => Promise<T>,
+      ms = 0
     ): Promise<T> {
       for (const [cachedKey, entry] of entries)
         if (entry.expiresAt <= now) drop(cachedKey);
       const hit = entries.get(key);
-      if (hit) return hit.value;
+      if (hit && (hit.ms ?? ms) >= ms) return hit.value;
+      drop(key);
       const entry: CacheEntry<T> = {
         expiresAt: now + MANGA_CALENDAR_CACHE_TTL_MS,
         size: 0,
         value: read(),
+        ms,
       };
       entries.set(key, entry);
       evict(limits, key);
       entry.value.then(
         (value) => {
           if (entries.get(key) !== entry) return;
+          delete entry.ms;
           if (value.size > limits.cacheRows) {
             entries.delete(key);
             return;
@@ -393,7 +401,24 @@ const checkInstance = async (
   return earlier;
 };
 
-/** One check per instance, window start, budget and numbers while fresh. */
+/** Fails with TIMEOUT when the check takes longer than `ms`. */
+const within = <T>(check: Promise<T>, ms: number): Promise<T> => {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([
+    check,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new SuwayomiError('TIMEOUT', 'EarlierChapterReleases')),
+        Math.max(ms, 0)
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+};
+
+/**
+ * One check per instance, window start, query budget and numbers while fresh.
+ * A load waits for a check another load started no longer than its own time.
+ */
 const loadEarlier = (
   client: SuwayomiAPI,
   instanceId: number,
@@ -404,17 +429,21 @@ const loadEarlier = (
   limits: MangaCalendarLimits,
   clock: () => number
 ): Promise<EarlierReleases> =>
-  earlierCache.load(
-    JSON.stringify([
-      clientKey(client),
-      instanceId,
-      before.getTime(),
-      budget.pages,
-      hashOf(JSON.stringify(numbers)),
-    ]),
-    now,
-    limits,
-    () => checkInstance(client, numbers, before, budget, clock)
+  within(
+    earlierCache.load(
+      JSON.stringify([
+        clientKey(client),
+        instanceId,
+        before.getTime(),
+        budget.pages,
+        hashOf(JSON.stringify(numbers)),
+      ]),
+      now,
+      limits,
+      () => checkInstance(client, numbers, before, budget, clock),
+      budget.ms
+    ),
+    budget.ms
   );
 
 const targetKey = (
