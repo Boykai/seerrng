@@ -1000,6 +1000,32 @@ describe('Suwayomi contract', { skip: !MAIN.url }, () => {
         );
       }
     );
+
+    it(
+      'confirms an enqueue by its response and leaves the archives alone',
+      { timeout: 150_000 },
+      async () => {
+        const fixture = readFixture();
+        const { downloaded, pending } = await loadFixtureManga();
+        const client = main();
+        assert.deepEqual(await client.enqueueChapters([pending.id]), {
+          confirmedBy: 'response',
+        });
+        // Suwayomi drops this local-source chapter from its queue within about
+        // a second without downloading it. A dequeue that arrives after that
+        // waits 30 s for a queue change, and a readback then confirms it.
+        await client.dequeueChapters([pending.id]);
+        assert.deepEqual((await client.getQueue()).items, []);
+        await assert.rejects(
+          client.headChapterArchive(pending.id),
+          failsWith('NOT_DOWNLOADED')
+        );
+        assert.deepEqual(await client.headChapterArchive(downloaded.id), {
+          contentLength: fixture.archiveBytes,
+          contentType: 'application/vnd.comicbook+zip',
+        });
+      }
+    );
   });
 
   describe('token renewal', () => {
