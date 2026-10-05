@@ -1199,10 +1199,13 @@ and codes only, never titles or addresses.
 | `MANGA_CHAPTER_NOT_QUEUED` | Some chapters were neither downloaded nor queued in two checks in a row, for example because they were taken off the queue, or because their address changed before SeerrNG queued them. | [Retry](#retry-chapters) the request. |
 
 Of these codes, only `MANGA_CHAPTER_ERROR` and `MANGA_CHAPTER_NOT_QUEUED` make
-a request show **Failed**, which the **Needs Attention** filter on the
-**Requests** page counts. A request with any other code keeps its stage,
-usually **Downloading**, so that filter does not count it; its status still
-explains the code.
+a request show **Failed**. A request with any other code keeps its stage,
+usually **Downloading**, and its status explains the code. Either way, the
+**Needs Attention** filter on the **Requests** page lists and counts the
+request until the code clears, and the **Active** filter leaves it out. The
+same applies while a step of [Dispatch](#dispatch) has failed for an approved
+request and waits to be tried again; see
+[Dispatch sweep and retries](#dispatch-sweep-and-retries).
 
 ### Retry chapters
 

@@ -23,8 +23,12 @@ const application = setupPostgresApplication();
 // The application is loaded only after it points at this run's database.
 const loadModules = async () => {
   const { default: AnilistAPI } = await import('@server/api/anilist');
-  const { MangaDispatchError, MangaRequestCheckpoint } =
-    await import('@server/constants/mangaRequest');
+  const {
+    MangaAttentionCode,
+    MangaDispatchError,
+    MangaRequestBindingState,
+    MangaRequestCheckpoint,
+  } = await import('@server/constants/mangaRequest');
   const { MediaRequestStatus, MediaStatus, MediaType } =
     await import('@server/constants/media');
   const { default: dataSource, getRepository } =
@@ -54,7 +58,9 @@ const loadModules = async () => {
     await import('@server/utils/backgroundTasks');
   return {
     AnilistAPI,
+    MangaAttentionCode,
     MangaDispatchError,
+    MangaRequestBindingState,
     MangaRequestCheckpoint,
     MediaRequestStatus,
     MediaStatus,
@@ -688,6 +694,113 @@ describe('request retries on PostgreSQL', () => {
         `${events[1].fingerprint}:after:${events[2].id}`
       );
       assertRetryEntry(events[4], events[3]);
+    }
+  );
+});
+
+describe('request status counts on PostgreSQL', () => {
+  postgresIt(
+    'counts a manga request whose code needs attention as attention',
+    async (t) => {
+      const { dataSource, getRepository, MangaRequestManifest } = modules;
+      const { Media, MediaRequest, MediaRequestStatus, MediaType } = modules;
+      const { MangaAttentionCode, MangaRequestBindingState } = modules;
+      const { MangaRequestCheckpoint } = modules;
+      const { RequestStatusStage, getRequestStatusPage } =
+        modules.requestStatus;
+      const settings = modules.getSettings();
+      const savedSuwayomi = settings.suwayomi;
+      const savedCategories = settings.main.enabledMediaCategories;
+      settings.suwayomi = [suwayomiServer()];
+      settings.main.enabledMediaCategories = {
+        ...savedCategories,
+        manga: true,
+      };
+      t.after(() => {
+        settings.suwayomi = savedSuwayomi;
+        settings.main.enabledMediaCategories = savedCategories;
+      });
+      mock.method(
+        modules.AnilistAPI.prototype,
+        'getMangaDetails',
+        async (anilistId: number) => mangaDetails(anilistId)
+      );
+      mock.method(
+        modules.notificationManager,
+        'sendNotificationIntent',
+        async () => undefined
+      );
+      mock.method(
+        modules.requestDispatchManager,
+        'enqueue',
+        async () => undefined
+      );
+      const friend = await loginAs('friend@seerr.dev');
+      const created = await friend
+        .post('/request')
+        .send({ mediaType: MediaType.MANGA, mediaId: MANGA_TITLE });
+      assert.strictEqual(created.status, 201);
+      const admin = await loginAs('admin@seerr.dev');
+      const approved = await admin.post(`/request/${created.body.id}/approve`);
+      assert.strictEqual(approved.status, 200);
+      // Dispatch queued the chapters; the poll then lost the match.
+      await getRepository(MangaRequestManifest).update(
+        { requestId: created.body.id },
+        {
+          bindingState: MangaRequestBindingState.BOUND,
+          boundAt: new Date(),
+          checkpoint: MangaRequestCheckpoint.CHAPTERS_ENQUEUED,
+          checkpointAt: new Date(),
+          frozenAt: new Date(),
+          attentionCode: MangaAttentionCode.BINDING_ORPHANED,
+          chaptersTotal: 2,
+          chaptersQueued: 2,
+        }
+      );
+      // An approved movie its service tracks, with nothing downloading.
+      const movie = await createMovieRequest(92061);
+      await getRepository(Media).update(movie.media.id, {
+        serviceId: 0,
+        externalServiceId: 20,
+      });
+      await dataSource
+        .createQueryBuilder()
+        .update(MediaRequest)
+        .set({ status: MediaRequestStatus.APPROVED })
+        .where({ id: movie.id })
+        .callListeners(false)
+        .execute();
+
+      const attention = await getRequestStatusPage({
+        take: 10,
+        skip: 0,
+        filter: 'attention',
+      });
+      const processing = await getRequestStatusPage({
+        take: 10,
+        skip: 0,
+        filter: 'processing',
+      });
+
+      assert.deepStrictEqual(
+        attention.results.map(({ request, status }) => [
+          request.id,
+          status.stage,
+        ]),
+        [[created.body.id, RequestStatusStage.DOWNLOADING]]
+      );
+      assert.deepStrictEqual(
+        processing.results.map(({ request, status }) => [
+          request.id,
+          status.stage,
+        ]),
+        [[movie.id, RequestStatusStage.SEARCHING]]
+      );
+      const { total, active, attention: attentionCount } = processing.counts;
+      assert.deepStrictEqual(
+        { total, active, attention: attentionCount },
+        { total: 2, active: 1, attention: 1 }
+      );
     }
   );
 });

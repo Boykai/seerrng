@@ -52,7 +52,10 @@ choose its source on the
 requests to Suwayomi; see [Dispatch](./manga-backend.md#dispatch). A manga
 request's **History** records each change of its status message, even when its
 stage stays the same, for example when an approved request starts waiting for
-a source.
+a source. A manga request whose status says that it needs an administrator
+counts under **Needs Attention** instead of **Active**, even while it shows
+**Downloading**; see
+[Requests that need attention](./manga-backend.md#requests-that-need-attention).
 
 ## Follow new chapters
 
