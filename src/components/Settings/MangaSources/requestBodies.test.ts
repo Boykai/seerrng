@@ -38,7 +38,8 @@ describe('manga source request helpers', () => {
     assert.equal(isAnilistId(0), false);
     assert.equal(isAnilistId(1), true);
     assert.equal(isListStatus('QUEUED'), true);
-    assert.equal(isListStatus('BOUND'), false);
+    assert.equal(isListStatus('BOUND'), true);
+    assert.equal(isListStatus('ACTIVE'), false);
   });
 
   it('copies the server control-character check exactly', () => {

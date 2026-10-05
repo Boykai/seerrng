@@ -3992,6 +3992,17 @@ components:
             onUserWatchlist:
               type: boolean
               description: True when the title is on the requesting user's watchlist.
+            mediaInfo:
+              allOf:
+                - $ref: '#/components/schemas/MediaInfo'
+                - type: object
+                  properties:
+                    issues:
+                      type: array
+                      readOnly: true
+                      description: Issues reported for this title, newest first. Users without permission to view issues get only the issues they reported.
+                      items:
+                        $ref: '#/components/schemas/Issue'
     MangaSummariesResponse:
       type: object
       required:
@@ -4285,6 +4296,7 @@ components:
             - MANGA_CANDIDATE_NOT_FOUND
             - MANGA_ITEM_NOT_FOUND
             - MANGA_ALREADY_BOUND
+            - MANGA_BINDING_NOT_ACTIVE
             - MANGA_CANDIDATE_GONE
             - MANGA_ITEM_BOUND_ELSEWHERE
             - MANGA_UNSUPPORTED_SERVER
@@ -4545,6 +4557,12 @@ components:
         title:
           $ref: '#/components/schemas/MangaResolveTitle'
       required: [outcome, binding, title]
+    MangaResolveUnbindResponse:
+      type: object
+      properties:
+        title:
+          $ref: '#/components/schemas/MangaResolveTitle'
+      required: [title]
     AuthorResult:
       type: object
       properties:
@@ -14825,8 +14843,9 @@ paths:
       description: >-
         Lists requested manga titles whose requests wait for a Suwayomi source
         binding, with the source resolver's progress, oldest request first.
-        Requires the `ADMIN` permission; returns 404 while the manga category
-        is disabled.
+        The `BOUND` status lists the titles whose open requests all have a
+        binding instead. Requires the `ADMIN` permission; returns 404 while
+        the manga category is disabled.
       tags:
         - admin
       parameters:
@@ -14848,7 +14867,8 @@ paths:
           name: status
           schema:
             type: string
-            enum: [QUEUED, NEEDS_PICK, NO_MATCH, EXCLUDED, AWAITING_APPROVAL]
+            enum:
+              [QUEUED, NEEDS_PICK, NO_MATCH, EXCLUDED, BOUND, AWAITING_APPROVAL]
       responses:
         '200':
           description: Titles returned, oldest request first
@@ -15162,6 +15182,81 @@ paths:
                 $ref: '#/components/schemas/MangaResolveError'
         '502':
           description: The Suwayomi lookup failed; nothing was written
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+  /manga/resolve/{anilistId}/unbind:
+    post:
+      summary: Remove a requested manga title's source match
+      description: >-
+        Rejects one of the title's ACTIVE bindings on the instance, as the
+        library review's reject does, without contacting Suwayomi. No step
+        binds the pair again by itself; a manual bind still can. Requests
+        whose chapters dispatch has not recorded yet wait for a source again
+        unless another ACTIVE binding on the instance remains. Requests whose
+        chapters dispatch recorded keep the binding and do not complete until
+        it is ACTIVE again. Requires the `ADMIN` permission.
+      tags:
+        - admin
+      parameters:
+        - in: path
+          name: anilistId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                instanceId:
+                  type: integer
+                  minimum: 0
+                  maximum: 2147483647
+                bindingId:
+                  type: integer
+                  minimum: 1
+                  maximum: 2147483647
+              required: [instanceId, bindingId]
+      responses:
+        '200':
+          description: The binding is rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveUnbindResponse'
+        '400':
+          description: >-
+            Invalid request (`MANGA_INVALID_REQUEST`). A value outside this
+            schema gets the generic error body instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '403':
+          description: The user is not an admin
+        '404':
+          description: >-
+            No open manga request for the title on the instance, or no such
+            instance (`MANGA_RESOLVE_TITLE_NOT_FOUND`,
+            `MANGA_INSTANCE_NOT_FOUND`). While the manga category is
+            disabled, every route returns 404 with the generic error body
+            instead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MangaResolveError'
+        '409':
+          description: >-
+            The title has no such ACTIVE binding on the instance
+            (`MANGA_BINDING_NOT_ACTIVE`), or the binding or the instance
+            changed
           content:
             application/json:
               schema:

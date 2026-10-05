@@ -503,6 +503,7 @@ describe('MangaSources', () => {
       'Needs Pick',
       'No Match',
       'Excluded',
+      'Bound',
     ]);
 
     state.responses.set(`${LIST}&status=NEEDS_PICK`, page([title(9001)]));
@@ -511,6 +512,22 @@ describe('MangaSources', () => {
     expect(state.keys).toContain(`${LIST}&status=NEEDS_PICK`);
     expect(state.updateQuery).toHaveBeenCalledWith('page', undefined);
     expect(rows()).toHaveLength(1);
+  });
+
+  it('lists bound titles under their own filter, without Search Now', async () => {
+    await render();
+    state.responses.set(
+      `${LIST}&status=BOUND`,
+      page([title(9001, { status: 'BOUND', reason: 'ADMIN_BIND' })])
+    );
+    await change(statusFilter(), 'BOUND');
+
+    expect(state.keys).toContain(`${LIST}&status=BOUND`);
+    expect(rows()).toHaveLength(1);
+    expect(cells(0)[1].textContent).toBe('BoundChosen by an Admin');
+    expect(
+      [...cells(0)[4].querySelectorAll('button')].map((b) => b.textContent)
+    ).toEqual(['Open']);
   });
 
   it('tells an empty list from an empty filter', async () => {

@@ -431,12 +431,53 @@ const hasReachedMangaCheckpoint = (
  * holds back its completion, which `completeMangaRequest` requires too.
  */
 const isMangaProgressComplete = (
-  progress: MangaProgressLike | null | undefined
+  progress:
+    | Pick<
+        MangaProgressLike,
+        'checkpoint' | 'attentionCode' | 'chaptersTotal' | 'chaptersVerified'
+      >
+    | null
+    | undefined
 ): boolean =>
   progress?.checkpoint === MangaRequestCheckpoint.CHAPTERS_ENQUEUED &&
   progress.attentionCode == null &&
   progress.chaptersTotal > 0 &&
   progress.chaptersVerified >= progress.chaptersTotal;
+
+/**
+ * The code that makes an approved manga request need an administrator while
+ * it is still under way. The poll owns the attention code, dispatch owns
+ * lastError.
+ */
+const getMangaAttentionCode = (
+  requestStatus: MediaRequestStatus,
+  progress:
+    | Pick<
+        MangaProgressLike,
+        | 'bindingState'
+        | 'checkpoint'
+        | 'lastError'
+        | 'attentionCode'
+        | 'chaptersTotal'
+        | 'chaptersVerified'
+      >
+    | null
+    | undefined
+): string | null => {
+  if (
+    requestStatus !== MediaRequestStatus.APPROVED ||
+    !progress ||
+    progress.bindingState === MangaRequestBindingState.AWAITING_BINDING ||
+    isMangaProgressComplete(progress)
+  ) {
+    return null;
+  }
+  const enqueued =
+    progress.checkpoint === MangaRequestCheckpoint.CHAPTERS_ENQUEUED;
+  return (
+    (enqueued ? progress.attentionCode : null) ?? progress.lastError ?? null
+  );
+};
 
 /**
  * Whether an administrator's retry can queue an enqueued manga request's
@@ -1010,8 +1051,7 @@ const getMangaStage = (
 
   const enqueued =
     progress.checkpoint === MangaRequestCheckpoint.CHAPTERS_ENQUEUED;
-  // The poll owns the attention code, dispatch owns lastError.
-  const code = (enqueued ? progress.attentionCode : null) ?? progress.lastError;
+  const code = getMangaAttentionCode(request.status, progress);
   const flagged = code
     ? { needsAttention: true, message: getMangaCodeMessage(code) }
     : {};
@@ -2107,22 +2147,29 @@ const mapRequestStatusItem = async (
 const stageMatchesFilter = (
   stage: RequestStatusStage,
   filter: string | undefined,
-  request: MediaRequest
+  request: MediaRequest,
+  needsAttention = false
 ): boolean => {
+  // A manga request's code can need an administrator while its stage is still
+  // under way; it then counts as needing attention, not as in progress.
+  const flaggedManga = request.type === MediaType.MANGA && needsAttention;
   switch (filter) {
     case 'pending':
       return request.status === MediaRequestStatus.PENDING;
     case 'processing':
-      return [
-        RequestStatusStage.SEARCHING,
-        RequestStatusStage.DOWNLOADING,
-        RequestStatusStage.IMPORTING,
-        RequestStatusStage.LIBRARY,
-      ].includes(stage);
+      return (
+        !flaggedManga &&
+        [
+          RequestStatusStage.SEARCHING,
+          RequestStatusStage.DOWNLOADING,
+          RequestStatusStage.IMPORTING,
+          RequestStatusStage.LIBRARY,
+        ].includes(stage)
+      );
     case 'deleted':
       return getRequestedMediaStatus(request) === MediaStatus.DELETED;
     case 'active':
-      return ACTIVE_STAGES.includes(stage);
+      return !flaggedManga && ACTIVE_STAGES.includes(stage);
     case 'incomplete':
       return isIncompleteRequestStatus(
         stage,
@@ -2130,12 +2177,15 @@ const stageMatchesFilter = (
         getRequestedMediaStatus(request)
       );
     case 'attention':
-      return [
-        RequestStatusStage.UNAVAILABLE,
-        RequestStatusStage.FAILED,
-        RequestStatusStage.DECLINED,
-        RequestStatusStage.CANCELLED,
-      ].includes(stage);
+      return (
+        flaggedManga ||
+        [
+          RequestStatusStage.UNAVAILABLE,
+          RequestStatusStage.FAILED,
+          RequestStatusStage.DECLINED,
+          RequestStatusStage.CANCELLED,
+        ].includes(stage)
+      );
     case 'completed':
       return request.status === MediaRequestStatus.COMPLETED;
     case 'available':
@@ -2172,13 +2222,25 @@ const getRequestStatusCounts = async (options: {
       'latestStatusCount',
       'latestStatusCount.id = "latestStatusCountId"."eventId"'
     )
+    .leftJoin(
+      MangaRequestManifest,
+      'manifestCount',
+      'manifestCount.requestId = requestCount.id'
+    )
     .select('requestCount.status', 'requestStatus')
     .addSelect('latestStatusCount.stage', 'stage')
     .addSelect('requestCount.type', 'mediaType')
     .addSelect(
       'CASE WHEN requestCount.is4k THEN mediaCount.status4k ELSE mediaCount.status END',
       'mediaStatus'
-    );
+    )
+    .addSelect('manifestCount.id', 'mangaManifestId')
+    .addSelect('manifestCount.bindingState', 'mangaBindingState')
+    .addSelect('manifestCount.checkpoint', 'mangaCheckpoint')
+    .addSelect('manifestCount.lastError', 'mangaLastError')
+    .addSelect('manifestCount.attentionCode', 'mangaAttentionCode')
+    .addSelect('manifestCount.chaptersTotal', 'mangaChaptersTotal')
+    .addSelect('manifestCount.chaptersVerified', 'mangaChaptersVerified');
   query.setParameters(latestEventQuery.getParameters());
   if (options.ownerId) {
     query.andWhere('requestedByCount.id = :countOwnerId', {
@@ -2216,6 +2278,13 @@ const getRequestStatusCounts = async (options: {
     stage?: string | null;
     mediaType: MediaType;
     mediaStatus: string | number;
+    mangaManifestId: string | number | null;
+    mangaBindingState: MangaRequestBindingState | null;
+    mangaCheckpoint: MangaRequestCheckpoint | null;
+    mangaLastError: string | null;
+    mangaAttentionCode: string | null;
+    mangaChaptersTotal: string | number | null;
+    mangaChaptersVerified: string | number | null;
   }>();
   let active = 0;
   let incomplete = 0;
@@ -2238,7 +2307,20 @@ const getRequestStatusCounts = async (options: {
                 ? RequestStatusStage.AVAILABLE
                 : RequestStatusStage.APPROVED;
     }
+    // As in the attention filter, from the manifest the stage comes from.
+    const flaggedManga =
+      row.mediaType === MediaType.MANGA &&
+      row.mangaManifestId !== null &&
+      getMangaAttentionCode(Number(row.requestStatus), {
+        bindingState: row.mangaBindingState as MangaRequestBindingState,
+        checkpoint: row.mangaCheckpoint,
+        lastError: row.mangaLastError,
+        attentionCode: row.mangaAttentionCode,
+        chaptersTotal: Number(row.mangaChaptersTotal),
+        chaptersVerified: Number(row.mangaChaptersVerified),
+      }) !== null;
     if (
+      flaggedManga ||
       stage === RequestStatusStage.UNAVAILABLE ||
       stage === RequestStatusStage.FAILED ||
       stage === RequestStatusStage.DECLINED ||
@@ -2438,7 +2520,12 @@ export const getRequestStatusPage = async (options: {
 
   if (hasStatusFilter) {
     resultItems = resultItems.filter(({ status, request }) =>
-      stageMatchesFilter(status.stage, options.filter, request)
+      stageMatchesFilter(
+        status.stage,
+        options.filter,
+        request,
+        status.needsAttention
+      )
     );
     requestCount = resultItems.length;
   }

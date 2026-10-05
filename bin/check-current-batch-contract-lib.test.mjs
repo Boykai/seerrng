@@ -280,6 +280,42 @@ test('current shared owners pass their checks and functional mutations fail', ()
       '<details\n          id={listId}',
       'request download copies must not open as a floating menu that the request card clips',
     ],
+    [
+      'src/styles/globals.css',
+      '  .media-chapter-list {\n    container: media-chapter-list / inline-size;',
+      '  .media-chapter-list {\n    container-type: normal;',
+      'the manga chapter list must be the size container its narrow layout follows',
+    ],
+    [
+      'src/styles/globals.css',
+      '    .media-chapter-table .media-chapter-date-column {\n      display: none;',
+      '    .media-chapter-table .media-chapter-date-column {\n      display: table-cell;',
+      'a narrow manga chapter list must drop the Uploaded column so Status and the action column fit',
+    ],
+    [
+      'src/styles/globals.css',
+      '      min-width: 17.5rem;',
+      '      min-width: 28rem;',
+      'a narrow manga chapter list must drop the Uploaded column so Status and the action column fit',
+    ],
+    [
+      'src/components/MangaDetails/MangaChapterList.tsx',
+      '<Table.TD className="media-chapter-date-column">',
+      '<Table.TD>',
+      'a narrow manga chapter list must drop the Uploaded column so Status and the action column fit',
+    ],
+    [
+      'src/components/MangaDetails/index.tsx',
+      '<ul className="card-list">',
+      '<ul className="flex flex-col gap-2">',
+      'manga Open Issues must follow the Chapters card as a shared inset card listing the shared issue cards',
+    ],
+    [
+      'src/components/Settings/MangaSources/TitleDetail.tsx',
+      'buttonType="danger"\n            buttonSize="standard"\n            disabled={busy}\n            aria-describedby',
+      'buttonType="default"\n            buttonSize="standard"\n            disabled={busy}\n            aria-describedby',
+      'Remove Match must be a standard-size danger button in the shared inset entry layout',
+    ],
   ];
   for (const [fileName, original, replacement, reason] of cases) {
     const source = readFileSync(

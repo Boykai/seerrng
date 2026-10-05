@@ -72,6 +72,11 @@ export const messages = defineMessages('components.Settings.MangaSources', {
     'Suwayomi no longer has this suggestion. Search again for new suggestions.',
   errorBoundElsewhere:
     'This manga is matched to another title. Reject that match on the Manga Library page first.',
+  removeMatch: 'Remove Match',
+  unbindConfirm: 'Remove this match?',
+  unbindWarning:
+    'SeerrNG never matches this manga to the title again by itself, and nothing changes in Suwayomi. Requests whose chapters are not chosen yet wait for a source again unless the title has another match. Requests whose chapters are chosen keep this match and need attention until it is active again. A manga in the Suwayomi library returns to the Manga Library review queue.',
+  matchRemoved: 'Match removed.',
 });
 
 // Ids shared with other screens. The text is identical, so the catalogue
@@ -195,6 +200,10 @@ const errorHandling: Record<MangaResolveErrorCode, ErrorHandling> = {
   },
   MANGA_ITEM_NOT_FOUND: { message: messages.errorItemNotFound },
   MANGA_ALREADY_BOUND: { message: messages.errorAlreadyBound, reload: true },
+  MANGA_BINDING_NOT_ACTIVE: {
+    message: libraryMessages.errorChanged,
+    reload: true,
+  },
   MANGA_CANDIDATE_GONE: {
     message: messages.errorCandidateGone,
     reload: true,

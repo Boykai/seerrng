@@ -1,3 +1,4 @@
+import { IssueStatus } from '@server/constants/issue';
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import { UserType } from '@server/constants/user';
 import { Permission } from '@server/lib/permissions';
@@ -120,6 +121,30 @@ vi.mock('@app/components/MediaDetails/MediaDetailArtwork', () => ({
 vi.mock('@app/components/MangaDetails/MangaChapterList', () => ({
   default: ({ mangaId }: { mangaId: number }) => (
     <div data-testid="chapter-list" data-manga-id={mangaId} />
+  ),
+}));
+vi.mock('@app/components/IssueBlock', () => ({
+  default: ({
+    issue,
+  }: {
+    issue: {
+      id: number;
+      media: {
+        id: number;
+        mediaType: string;
+        identifiers: { provider: string; value: string }[];
+      };
+    };
+  }) => (
+    <div
+      data-testid="issue-block"
+      data-issue-id={issue.id}
+      data-media={JSON.stringify([
+        issue.media.id,
+        issue.media.mediaType,
+        issue.media.identifiers,
+      ])}
+    />
   ),
 }));
 vi.mock('@app/components/Common/Tooltip', () => ({
@@ -849,6 +874,85 @@ it.each([
   expect(chapterList()?.getAttribute('data-manga-id') ?? null).toBe(
     shown ? '30013' : null
   );
+});
+
+const withIssues = () =>
+  details({
+    mediaInfo: {
+      id: 11,
+      mediaType: 'manga',
+      status: MediaStatus.AVAILABLE,
+      issues: [
+        { id: 5, status: IssueStatus.OPEN },
+        { id: 6, status: IssueStatus.RESOLVED },
+        { id: 7, status: IssueStatus.OPEN },
+      ],
+    } as unknown as MangaDetailsType['mediaInfo'],
+  });
+
+const openIssuesSection = () =>
+  host.querySelector('section[aria-labelledby="manga-open-issues-heading"]');
+
+it.each([
+  ['issue viewers', Permission.VIEW_ISSUES],
+  ['issue managers', Permission.MANAGE_ISSUES],
+])(
+  'lists the open issues after the chapters for %s',
+  async (_case, permission) => {
+    state.granted = [permission];
+    state.settings = { suwayomiEnabled: true };
+    state.swr = { data: withIssues() };
+    await render();
+
+    const section = openIssuesSection();
+    expect(section?.querySelector('h2')?.textContent).toBe('Open Issues');
+    expect(
+      chapterList()!.compareDocumentPosition(section!) &
+        dom.window.Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(section?.nextElementSibling).toBeNull();
+    // Each card gets the title's media back, with the AniList id it links by.
+    expect(
+      [...section!.querySelectorAll('[data-testid="issue-block"]')].map(
+        (block) => [
+          block.getAttribute('data-issue-id'),
+          JSON.parse(block.getAttribute('data-media')!),
+        ]
+      )
+    ).toEqual(
+      ['5', '7'].map((id) => [
+        id,
+        [11, 'manga', [{ provider: 'anilist', value: '30013' }]],
+      ])
+    );
+  }
+);
+
+it.each([
+  [
+    'users who cannot view issues',
+    [Permission.REQUEST, Permission.CREATE_ISSUES],
+    withIssues(),
+  ],
+  [
+    'a title whose issues are all resolved',
+    [Permission.VIEW_ISSUES],
+    details({
+      mediaInfo: {
+        id: 11,
+        status: MediaStatus.AVAILABLE,
+        issues: [{ id: 6, status: IssueStatus.RESOLVED }],
+      } as unknown as MangaDetailsType['mediaInfo'],
+    }),
+  ],
+])('shows no open issues for %s', async (_case, granted, data) => {
+  state.granted = granted;
+  state.swr = { data };
+  await render();
+
+  expect(openIssuesSection()).toBeNull();
+  expect(host.querySelector('[data-testid="issue-block"]')).toBeNull();
+  expect(host.textContent).not.toContain('Open Issues');
 });
 
 const buttonLabels = () =>

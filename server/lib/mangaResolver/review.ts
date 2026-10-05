@@ -23,10 +23,12 @@ import type {
   MangaResolveReason,
   MangaResolveTitle,
   MangaResolveTitlesResponse,
+  MangaResolveUnbindResponse,
 } from '@server/interfaces/api/mangaResolveInterfaces';
 import {
   linkMangaLibraryItem,
   readMangaLibraryItem,
+  rejectMangaLibraryPair,
 } from '@server/lib/mangaLibraryReview';
 import { getMangaAdmissionKey } from '@server/lib/mangaMedia';
 import { writeMangaResolverBinding } from '@server/lib/mangaResolver/bind';
@@ -172,7 +174,10 @@ const countCandidates = async (
   return counts;
 };
 
-/** Titles whose requests wait for a binding, oldest request first. */
+/**
+ * Titles whose requests wait for a binding, oldest request first. The BOUND
+ * filter lists the titles whose open requests all have one instead.
+ */
 export const listMangaResolveTitles = async ({
   status,
   take,
@@ -183,11 +188,13 @@ export const listMangaResolveTitles = async ({
   skip: number;
 }): Promise<MangaResolveTitlesResponse> => {
   const { manager } = dataSource;
-  const waiting = await findWaitingMangaTitles(manager);
-  const rows = await loadMangaResolutions(manager, waiting);
+  const titles = await findWaitingMangaTitles(manager, {
+    bound: status === MangaResolutionStatus.BOUND,
+  });
+  const rows = await loadMangaResolutions(manager, titles);
   const rowOf = (title: WaitingMangaTitle) =>
     rows.get(resolutionKey(title.instanceId, title.anilistId));
-  const matching = waiting
+  const matching = titles
     .map((title) => ({ title, view: titleView(title, rowOf(title), 0) }))
     .filter(({ view }) => status === undefined || view.status === status);
   const page = matching.slice(skip, skip + take);
@@ -285,6 +292,40 @@ export const requestMangaResolveSearch = async (
     dataSource.manager,
     await findTitle(dataSource.manager, instanceId, anilistId)
   );
+};
+
+/**
+ * Rejects one of the title's ACTIVE matches on the instance, as the library
+ * review's Reject does: requests whose chapters dispatch has not recorded
+ * wait for a source again, and the others keep their match. Touches only
+ * the database.
+ */
+export const unbindMangaResolveTitle = async (
+  anilistId: number,
+  { instanceId, bindingId }: { instanceId: number; bindingId: number }
+): Promise<MangaResolveUnbindResponse> => {
+  await findTitle(dataSource.manager, instanceId, anilistId);
+  findSnapshot(instanceId);
+  const binding = await dataSource.manager.findOneBy(MangaSourceBinding, {
+    id: bindingId,
+    instanceId,
+    anilistId,
+    state: MangaBindingState.ACTIVE,
+  });
+  if (!binding) throw new MangaResolveError('MANGA_BINDING_NOT_ACTIVE');
+  await rejectMangaLibraryPair(
+    { instanceId, sourceId: binding.sourceId, url: binding.url },
+    anilistId,
+    { activeBindingId: binding.id }
+  ).catch((error: unknown) => {
+    throw asMangaResolveError(error);
+  });
+  return {
+    title: await loadView(
+      dataSource.manager,
+      await findTitle(dataSource.manager, instanceId, anilistId)
+    ),
+  };
 };
 
 export type MangaResolveLookup =

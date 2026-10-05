@@ -31,6 +31,7 @@ import {
   resolveDetailKey,
   searchBody,
   selectBody,
+  unbindBody,
 } from '@app/components/Settings/MangaSources/requestBodies';
 import {
   CheckDate,
@@ -46,6 +47,7 @@ import {
   ArrowPathIcon,
   CheckIcon,
   MagnifyingGlassIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/solid';
 import type { MangaLibraryBinding } from '@server/interfaces/api/mangaLibraryInterfaces';
 import type {
@@ -53,6 +55,7 @@ import type {
   MangaResolveCandidate,
   MangaResolveDetail,
   MangaResolveSearchResponse,
+  MangaResolveUnbindResponse,
 } from '@server/interfaces/api/mangaResolveInterfaces';
 import type { SuwayomiSettingsView } from '@server/interfaces/api/suwayomiInterfaces';
 import axios from 'axios';
@@ -78,7 +81,7 @@ const FOCUSABLE = [
 const dialogIn = (backdrop: HTMLElement | null): HTMLElement | null =>
   backdrop?.querySelector<HTMLElement>('[role="dialog"]') ?? null;
 
-type Area = 'status' | 'suggestions' | 'hand';
+type Area = 'status' | 'matches' | 'suggestions' | 'hand';
 
 interface Failure {
   area: Area;
@@ -88,7 +91,14 @@ interface Failure {
 }
 
 type Confirm =
-  { kind: 'search' } | { kind: 'select'; candidate: MangaResolveCandidate };
+  | { kind: 'search' }
+  | { kind: 'select'; candidate: MangaResolveCandidate }
+  | { kind: 'unbind'; binding: MangaLibraryBinding };
+
+const isActiveBinding = (binding: MangaLibraryBinding): boolean => {
+  const state: string = binding.state;
+  return state === 'ACTIVE';
+};
 
 interface SourceOption {
   id: string;
@@ -183,32 +193,58 @@ const ConfirmPanel = ({
 const BindingCard = ({
   binding,
   source,
+  busy,
+  onRemove,
+  children,
 }: {
   binding: MangaLibraryBinding;
   source: string;
+  busy: boolean;
+  /** Only an ACTIVE match can be removed. */
+  onRemove?: (trigger: HTMLElement) => void;
+  children?: ReactNode;
 }) => {
   const intl = useIntl();
+  const id = useId();
   const status = bindingStatus(binding);
 
   return (
     <li className="settings-library-card">
-      <div className="settings-manga-sources-item-body">
-        {binding.title && (
-          <span className="settings-manga-sources-item-title">
-            {binding.title}
-          </span>
-        )}
-        <dl className="settings-service-details">
-          <dt>{intl.formatMessage(sourceMessages.source)}</dt>
-          <dd>{source}</dd>
-        </dl>
-        <div className="settings-service-badges">
-          <MatchedBy binding={binding} />
-          <AvailabilityValue tone={status.tone}>
-            {intl.formatMessage(status.message)}
-          </AvailabilityValue>
+      <div className="settings-manga-sources-item">
+        <div className="settings-manga-sources-item-body">
+          {binding.title && (
+            <span
+              id={`${id}-title`}
+              className="settings-manga-sources-item-title"
+            >
+              {binding.title}
+            </span>
+          )}
+          <dl className="settings-service-details">
+            <dt>{intl.formatMessage(sourceMessages.source)}</dt>
+            <dd>{source}</dd>
+          </dl>
+          <div className="settings-service-badges">
+            <MatchedBy binding={binding} />
+            <AvailabilityValue tone={status.tone}>
+              {intl.formatMessage(status.message)}
+            </AvailabilityValue>
+          </div>
         </div>
+        {onRemove && (
+          <Button
+            buttonType="danger"
+            buttonSize="standard"
+            disabled={busy}
+            aria-describedby={binding.title ? `${id}-title` : undefined}
+            onClick={(event) => onRemove(event.currentTarget)}
+          >
+            <XMarkIcon />
+            <span>{intl.formatMessage(messages.removeMatch)}</span>
+          </Button>
+        )}
       </div>
+      {children}
     </li>
   );
 };
@@ -462,8 +498,9 @@ interface TitleDetailProps {
 }
 
 /**
- * One parked title: its status, live matches and suggestions, a search and
- * a match by hand. Confirms are inline, so the dialog never nests another.
+ * One title: its status, live matches and suggestions, a search, a match by
+ * hand and removing a match. Confirms are inline, so the dialog never nests
+ * another.
  */
 const TitleDetail = ({
   anilistId,
@@ -514,7 +551,14 @@ const TitleDetail = ({
       (candidate) => candidate.id === confirm.candidate.id
     ) ??
       false);
-  const confirmVisible = searchConfirmVisible || selectConfirmVisible;
+  const unbindConfirmVisible =
+    confirm?.kind === 'unbind' &&
+    (data?.bindings.some(
+      (binding) => binding.id === confirm.binding.id && isActiveBinding(binding)
+    ) ??
+      false);
+  const confirmVisible =
+    searchConfirmVisible || selectConfirmVisible || unbindConfirmVisible;
 
   // Focus enters the dialog on open, returns to a closed confirm's trigger,
   // and comes back into the dialog after a write disabled the focused
@@ -677,6 +721,26 @@ const TitleDetail = ({
     if (result) saved();
   };
 
+  // The title stays open: its requests may wait for a source again.
+  const unbind = async (binding: MangaLibraryBinding) => {
+    const result = await run<MangaResolveUnbindResponse>(
+      'matches',
+      `unbind-${binding.id}`,
+      () =>
+        axios.post(
+          `${RESOLVE_API}/${anilistId}/unbind`,
+          unbindBody(instanceId, binding.id)
+        ),
+      () => void unbind(binding)
+    );
+    if (!result) return;
+    addToast(intl.formatMessage(messages.matchRemoved), {
+      appearance: 'success',
+      autoDismiss: true,
+    });
+    closeConfirm();
+  };
+
   const refresh = () => {
     setFailure(null);
     void Promise.allSettled([detail.mutate(), onListChange()]);
@@ -694,11 +758,7 @@ const TitleDetail = ({
   const sources = allowed?.length
     ? allowed.map((source) => ({ id: source, label: sourceName(source) }))
     : undefined;
-  const hasActiveBinding =
-    data?.bindings.some((binding) => {
-      const state: string = binding.state;
-      return state === 'ACTIVE';
-    }) ?? false;
+  const hasActiveBinding = data?.bindings.some(isActiveBinding) ?? false;
 
   const refreshButton = (
     <Button
@@ -807,18 +867,21 @@ const TitleDetail = ({
               )}
               <div className="settings-page-actions">
                 {refreshButton}
-                <Button
-                  buttonType="primary"
-                  buttonSize="standard"
-                  disabled={busy}
-                  onClick={(event) => searchNow(event.currentTarget)}
-                >
-                  <MagnifyingGlassIcon />
-                  <span>{intl.formatMessage(messages.searchNow)}</span>
-                </Button>
+                {/* A bound title waits for nothing to search. */}
+                {data.status !== 'BOUND' && (
+                  <Button
+                    buttonType="primary"
+                    buttonSize="standard"
+                    disabled={busy}
+                    onClick={(event) => searchNow(event.currentTarget)}
+                  >
+                    <MagnifyingGlassIcon />
+                    <span>{intl.formatMessage(messages.searchNow)}</span>
+                  </Button>
+                )}
               </div>
             </section>
-            {data.bindings.length > 0 && (
+            {(data.bindings.length > 0 || failure?.area === 'matches') && (
               <section
                 className="settings-group-card"
                 aria-labelledby={`${id}-matches`}
@@ -826,15 +889,45 @@ const TitleDetail = ({
                 <h4 id={`${id}-matches`} className="settings-group-heading">
                   {intl.formatMessage(libraryMessages.matches)}
                 </h4>
-                <ul className="settings-manga-sources-list">
-                  {data.bindings.map((binding) => (
-                    <BindingCard
-                      key={binding.id}
-                      binding={binding}
-                      source={sourceName(binding.sourceId)}
-                    />
-                  ))}
-                </ul>
+                {failure?.area === 'matches' && (
+                  <FailureRow failure={failure} busy={busy} />
+                )}
+                {data.bindings.length > 0 && (
+                  <ul className="settings-manga-sources-list">
+                    {data.bindings.map((binding) => (
+                      <BindingCard
+                        key={binding.id}
+                        binding={binding}
+                        source={sourceName(binding.sourceId)}
+                        busy={busy}
+                        onRemove={
+                          isActiveBinding(binding)
+                            ? (trigger) =>
+                                openConfirm(
+                                  { kind: 'unbind', binding },
+                                  trigger
+                                )
+                            : undefined
+                        }
+                      >
+                        {confirm?.kind === 'unbind' &&
+                          confirm.binding.id === binding.id &&
+                          isActiveBinding(binding) && (
+                            <ConfirmPanel
+                              text={intl.formatMessage(messages.unbindConfirm)}
+                              warning={intl.formatMessage(
+                                messages.unbindWarning
+                              )}
+                              busy={busy}
+                              panelRef={confirmPanelRef}
+                              onConfirm={() => void unbind(binding)}
+                              onCancel={closeConfirm}
+                            />
+                          )}
+                      </BindingCard>
+                    ))}
+                  </ul>
+                )}
               </section>
             )}
             <section

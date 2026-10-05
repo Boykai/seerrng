@@ -8169,6 +8169,10 @@
     width: 14rem;
   }
 
+  .media-chapter-list {
+    container: media-chapter-list / inline-size;
+  }
+
   /* Chapter rows wrap long names inside the scroller instead of widening it. */
   .app-data-table.media-chapter-table {
     min-width: 28rem;
@@ -8192,6 +8196,18 @@
 
   .media-chapter-actions-column {
     width: 2.5rem;
+  }
+
+  /* A card too narrow for every column drops the upload date, so Status and
+     the download action stay in view beside a 4rem name column. */
+  @container media-chapter-list (max-width: 28rem) {
+    .app-data-table.media-chapter-table {
+      min-width: 17.5rem;
+    }
+
+    .media-chapter-table .media-chapter-date-column {
+      display: none;
+    }
   }
 
   .settings-manga-sources-stack,

@@ -65,7 +65,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useInView } from 'react-intersection-observer';
 import { useIntl } from 'react-intl';
-import useSWR, { mutate } from 'swr';
+import useSWR, { mutate, useSWRConfig } from 'swr';
 
 const RequestModal = dynamic(() => import('@app/components/RequestModal'), {
   ssr: false,
@@ -484,13 +484,21 @@ const RequestCard = ({
     'approve' | 'decline' | null
   >(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const { cache } = useSWRConfig();
+  const requestKey = `/api/v1/request/${request.id}`;
   const {
     data: requestData,
     error: requestError,
     isLoading: isRequestLoading,
     mutate: revalidate,
-  } = useSWR<MangaScopedRequest>(`/api/v1/request/${request.id}`, {
+  } = useSWR<MangaScopedRequest>(requestKey, {
     fallbackData: request,
+    // Request lists send manga cards their identifiers and chapter scope. A
+    // manga card fetches its request on mount only to replace a copy that
+    // another view cached, as that copy can be older than the list.
+    ...(request.type === 'manga'
+      ? { revalidateOnMount: cache.get(requestKey)?.data !== undefined }
+      : {}),
     refreshInterval: refreshIntervalHelper(
       {
         downloadStatus: request.media.downloadStatus,
@@ -507,8 +515,8 @@ const RequestCard = ({
   const comicId = request.type === 'comic' ? getComicId(request) : undefined;
   const magazineId =
     request.type === 'magazine' ? getMagazineId(request) : undefined;
-  // The user request list sends manga media without identifiers, so the
-  // AniList ID can arrive with the request detail instead.
+  // A list item without identifiers can still take the AniList ID from a
+  // request fetched later.
   const mangaId =
     request.type === 'manga'
       ? (getMangaAniListId(request.media) ??

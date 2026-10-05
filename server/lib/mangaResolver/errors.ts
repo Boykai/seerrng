@@ -17,6 +17,10 @@ const ERRORS: Record<MangaResolveErrorCode, [status: number, message: string]> =
     MANGA_CANDIDATE_NOT_FOUND: [404, 'The candidate was not found.'],
     MANGA_ITEM_NOT_FOUND: [404, 'Suwayomi does not know the manga.'],
     MANGA_ALREADY_BOUND: [409, 'The title is already bound on the instance.'],
+    MANGA_BINDING_NOT_ACTIVE: [
+      409,
+      'The title has no such active match on the instance.',
+    ],
     MANGA_CANDIDATE_GONE: [409, 'Suwayomi no longer has the candidate.'],
     MANGA_ITEM_BOUND_ELSEWHERE: [
       409,

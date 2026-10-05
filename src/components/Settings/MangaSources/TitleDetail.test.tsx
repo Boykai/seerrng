@@ -582,6 +582,118 @@ describe('TitleDetail', () => {
     expect(state.post).not.toHaveBeenCalled();
   });
 
+  it('offers Remove Match on an active match only', async () => {
+    state.responses.set(
+      DETAIL,
+      detail({
+        bindings: [
+          binding(),
+          binding({
+            id: 32,
+            title: 'Synthetic Orphaned Manga',
+            state: 'ORPHANED',
+          }),
+        ],
+      })
+    );
+    await render();
+
+    const remove = buttonIn(cardFor('Synthetic Bound Manga'), 'Remove Match')!;
+    const name = cardFor('Synthetic Bound Manga')!.querySelector(
+      '.settings-manga-sources-item-title'
+    )!;
+    expect(remove.getAttribute('aria-describedby')).toBe(name.id);
+    expect(
+      buttonIn(cardFor('Synthetic Orphaned Manga'), 'Remove Match')
+    ).toBeUndefined();
+  });
+
+  it('confirms a removal inline, then removes the match and stays open', async () => {
+    state.responses.set(
+      DETAIL,
+      detail({ status: 'BOUND', reason: 'ADMIN_BIND', bindings: [binding()] })
+    );
+    await render();
+    // A bound title has nothing to search.
+    expect(buttonIn(section('Status'), 'Search Now')).toBeUndefined();
+
+    await click(buttonIn(cardFor('Synthetic Bound Manga'), 'Remove Match'));
+    const panel = confirmPanel()!;
+    expect(cardFor('Synthetic Bound Manga')!.contains(panel)).toBe(true);
+    expect(document.activeElement).toBe(panel);
+    expect(panel.querySelector('p')?.textContent).toBe('Remove this match?');
+    expect(panel.querySelector('.warning')?.textContent).toBe(
+      'SeerrNG never matches this manga to the title again by itself, and nothing changes in Suwayomi. Requests whose chapters are not chosen yet wait for a source again unless the title has another match. Requests whose chapters are chosen keep this match and need attention until it is active again. A manga in the Suwayomi library returns to the Manga Library review queue.'
+    );
+    expect(
+      [...panel.querySelectorAll('button')].map((item) => item.textContent)
+    ).toEqual(['Cancel', 'Confirm']);
+
+    // Cancel gives the focus back to Remove Match.
+    const trigger = buttonIn(cardFor('Synthetic Bound Manga'), 'Remove Match')!;
+    await click(buttonIn(panel, 'Cancel'));
+    expect(confirmPanel()).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(state.post).not.toHaveBeenCalled();
+
+    state.post.mockImplementation(() => {
+      // The reload finds the title waiting again, without the match.
+      state.responses.set(
+        DETAIL,
+        detail({ status: 'QUEUED', reason: null, bindings: [] })
+      );
+      return Promise.resolve({ data: { title: detail().data } });
+    });
+    await click(trigger);
+    await click(buttonIn(confirmPanel()!, 'Confirm'));
+
+    expect(state.post).toHaveBeenCalledTimes(1);
+    expect(state.post).toHaveBeenCalledWith(`${API}/9001/unbind`, {
+      instanceId: 0,
+      bindingId: 31,
+    });
+    expect(state.mutate).toHaveBeenCalled();
+    expect(state.onListChange).toHaveBeenCalled();
+    expect(state.addToast).toHaveBeenCalledWith('Match removed.', {
+      appearance: 'success',
+      autoDismiss: true,
+    });
+    expect(state.onClose).not.toHaveBeenCalled();
+    expect(confirmPanel()).toBeNull();
+    expect(section('Library Matches')).toBeUndefined();
+    expect(buttonIn(section('Status'), 'Search Now')).toBeTruthy();
+    expect(dialog().contains(document.activeElement)).toBe(true);
+  });
+
+  it('keeps a failed removal under Library Matches', async () => {
+    state.responses.set(DETAIL, detail({ bindings: [binding()] }));
+    state.post.mockImplementation(() => {
+      // Someone else removed the match first.
+      state.responses.set(DETAIL, detail({ bindings: [] }));
+      return Promise.reject(
+        rejected(409, {
+          code: 'MANGA_BINDING_NOT_ACTIVE',
+          message: 'Not active',
+        })
+      );
+    });
+    await render();
+
+    await click(buttonIn(cardFor('Synthetic Bound Manga'), 'Remove Match'));
+    await click(buttonIn(confirmPanel()!, 'Confirm'));
+
+    expect(confirmPanel()).toBeNull();
+    const matches = section('Library Matches')!;
+    expect(matches.querySelector('li')).toBeNull();
+    expect(matches.querySelector('[role="alert"]')?.textContent).toBe(
+      'This title changed in the meantime. Check the refreshed list and try again.'
+    );
+    expect(buttonIn(matches, 'Retry')).toBeUndefined();
+    expect(state.addToast).not.toHaveBeenCalled();
+    expect(state.onClose).not.toHaveBeenCalled();
+    expect(dialog().contains(document.activeElement)).toBe(true);
+  });
+
   it('searches an approved title at once', async () => {
     state.post.mockResolvedValue({
       data: { title: detail().data, runStarted: true },

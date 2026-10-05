@@ -26,7 +26,8 @@ export const getMangaContentPolicy = (): AnilistMangaContentPolicy => {
 
 export const findMangaMediaByAnilistIds = async (
   anilistIds: number[],
-  user?: User
+  user?: User,
+  options: { includeIssues?: boolean } = {}
 ): Promise<Map<number, Media>> => {
   const values = [...new Set(anilistIds)].map(String);
   if (!values.length) {
@@ -47,7 +48,8 @@ export const findMangaMediaByAnilistIds = async (
   );
   const media = await hydrateMediaSummaryRelations(
     linked.map((identifier) => identifier.media),
-    user
+    user,
+    options
   );
   const mediaById = new Map(media.map((item) => [item.id, item]));
 

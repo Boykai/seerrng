@@ -226,6 +226,27 @@ it('shows the number, name, upload date and state of each chapter', async () => 
   expect(host.querySelector('a')).toBeNull();
 });
 
+it('marks the list and the upload date column so a narrow card drops the date', async () => {
+  state.byKey[key()] = {
+    data: chapterPage([chapter(), chapter({ number: 13, uploadedAt: null })]),
+  };
+  await render();
+
+  const list = host.querySelector('section > .media-chapter-list');
+  expect(list?.querySelector('table.media-chapter-table')).toBeTruthy();
+  expect(list?.querySelector('[data-testid="pagination"]')).toBeTruthy();
+  expect(
+    [...host.querySelectorAll('.media-chapter-date-column')].map((cell) => [
+      cell.tagName,
+      cell.textContent,
+    ])
+  ).toEqual([
+    ['TH', 'Uploaded'],
+    ['TD', 'Jan 15, 2026'],
+    ['TD', '—'],
+  ]);
+});
+
 it('renders only the chapter fields it knows', async () => {
   state.byKey[key()] = {
     data: chapterPage([
