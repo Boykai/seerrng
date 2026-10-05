@@ -1248,6 +1248,10 @@ problem with an **Available** or **Partially Available** manga with **Report an
 Issue** on its details page. Manga reports use the **Other** issue type. While
 the Manga category is on, the **Issues** page has a **Manga** filter.
 
+Users with the **View Issues** or **Manage Issues** permission see a manga's
+open issues in an **Open Issues** card at the end of its details page.
+Resolved issues are not listed there.
+
 ## Chapter list
 
 While a Suwayomi server is configured, a manga's details page shows a
@@ -1274,6 +1278,10 @@ A **Downloaded** chapter has a download button only when one of those requests
 offers the chapter as a verified [Download copy](#download-copy) that you may
 download under that section's rules. The button starts the same download as
 the request's **Request Status** card; the list adds no other way to download.
+
+On a narrow screen, where the list has too little room for every column, it
+leaves out the dates, so each chapter's state and download button stay in
+view.
 
 When a current match links the title to a manga that the Suwayomi library
 holds, the list shows the chapters that Suwayomi has stored for that manga.
