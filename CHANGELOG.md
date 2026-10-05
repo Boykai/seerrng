@@ -178,6 +178,22 @@ that are not called out here.
 
 # Changelog
 
+# Changelog
+
+## [3.52.1](https://github.com/snapetech/seerrng/compare/v3.52.0..v3.52.1) - 2026-10-05
+
+### User-facing changes
+
+#### Changed
+
+- **Performance:** The English interface no longer downloads the full translation catalog during startup, trimming the initial JavaScript payload while keeping English labels available through their built-in message fallbacks.
+
+### 🐛 Bug Fixes
+- *(performance)* Reduce shared app startup bundle - ([1ab58bd](https://github.com/snapetech/seerrng/commit/1ab58bd863cf1927b4f15851b121f8471d173c64))
+
+### ⚙️ Miscellaneous Tasks
+- *(yunohost)* Align package with v3.52.0 - ([6d54a07](https://github.com/snapetech/seerrng/commit/6d54a07bce12e222096a9ba5a34add8709bd39e8))
+
 ## [3.52.0](https://github.com/snapetech/seerrng/compare/v3.51.0..v3.52.0) - 2026-10-05
 
 ### User-facing changes
