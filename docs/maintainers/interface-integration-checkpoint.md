@@ -463,9 +463,13 @@ element diagnostics on failure.
 - Desktop and mobile review captures are at
   `/tmp/seerrng-game-library-final-review-20261005/` and
   `/tmp/seerrng-reader-settings-final-review-20261005/`. These are iteration
-  captures, not John’s human acceptance. The exact-tree
-  `pnpm validate:development` run follows this ledger update before the UI-fix
-  commit; its receipt is
+  captures, not John’s human acceptance. The first exact-tree gate attempt
+  stopped during formatting before any test lane, reporting ENOENT for
+  temporary locale `.bak` paths. A subsequent isolated sequential
+  `pnpm i18n:check` and `pnpm format:check` passed. The first output is preserved
+  at `/tmp/seerrng-game-library-validation-format-failure-20261005.log`. The
+  complete exact-tree `pnpm validate:development` run follows this ledger
+  update before the UI-fix commit; its receipt is
   `/tmp/seerrng-game-library-validation-final-candidate-20261005.log`.
 - Tests used a fresh disposable SQLite configuration and local providers only.
   No live Grimmory, BookOrbit, Steam, QuestarrNG, or ROMarrNG provider was
@@ -554,3 +558,59 @@ The final integrated gate, production build, and rebuilt disposable browser
 flows remain pending. No branch push, tag, or release has occurred. Live
 Grimmory, BookOrbit, Steam, QuestarrNG, and ROMarrNG round trips remain
 unverified; John's visual acceptance remains a release gate.
+
+## Reader settings readability follow-up — October 5, 2026
+
+After the integrated gate and production build, the reader settings browser
+review identified cramped service cards and generated-address controls. The
+follow-up is committed on top of `origin/main`
+`4665245f97a90d546a94eb25fdcd4c91104bfd7b`. It gives each reader
+service and shelf card a full-width row, places address copy actions below the
+generated value, and adds desktop and mobile layout assertions to the reader
+Cypress flow. The structured note is
+`release-notes/2026-10-04-reader-settings-readability.md`.
+
+A separate candidate's first validation attempt stopped at formatting before
+any test lane because parallel locale checks removed temporary `.bak` files;
+it is retained at
+`/tmp/seerrng-game-library-validation-format-failure-20261005.log` and is not
+counted. Its isolated sequential i18n and format checks passed, but they do not
+replace the complete gate. The refreshed plan for this candidate selects 99
+Vitest, 385 native TypeScript, 56 native JavaScript, and 32 tooling files, with
+zero declared platform exclusions. The final gate, clean production build,
+and rebuilt desktop/narrow browser flows remain pending on this follow-up.
+Earlier build and screenshot evidence predates the reader layout change.
+Provider round trips remain unverified, and John's human visual acceptance is
+still required before release.
+
+## Final verification receipt — October 5, 2026
+
+The full gate on the committed reader-layout source passed. Its inventory was
+99 Vitest files/452 tests, 385 native TypeScript files/2,912 tests (2,908
+passed and four PostgreSQL-only skips), 56 native JavaScript files/485 tests,
+and 32 tooling files/238 tests. Totals: 4,083 passed, zero failed, four
+skipped, and zero platform exclusions. The 569-file current-batch check and
+397/397 shared-style inspection passed. Log:
+`/tmp/seerrng-game-library-validation-final-candidate-20261005.log`.
+
+The production build and separate Chromium 153 Cypress runs used the disposable
+worktree `/tmp/seerrng-reader-settings-layout-build`, based at
+`bace25a5e2146782a57a4268f0c60f6bcae461c3` with only the reader-layout source
+changes unstaged. `cmp` verified that the three changed source/test files in
+that worktree are byte-for-byte identical to commit
+`752e6b651dc30cf57b7e00b5c6d3ae5a0ec1211a`; the remaining commit differences
+are the release fragment and evidence documentation. The build generated
+`/games`, `/settings/services`, and `/qa-request-edit`. Logs:
+`/tmp/seerrng-reader-settings-layout-build-20261005.log`,
+`/tmp/seerrng-final-ui-game-cypress-20261005.log`, and
+`/tmp/seerrng-final-ui-reader-cypress-20261005.log`.
+
+The game and reader workflows each passed **1/1** in their separate Chromium
+153 headless runs, checking desktop and narrow layouts. Captures are in
+`/tmp/seerrng-game-library-final-review-20261005/` and
+`/tmp/seerrng-reader-settings-final-review-20261005/`; their rendered content
+was inspected. The screenshots are iteration evidence, not John's human
+acceptance. Tests used disposable SQLite and local app endpoints only; no live
+Grimmory, BookOrbit, Steam, QuestarrNG, or ROMarrNG provider was contacted.
+Release-note preview and branch push remain pending. John's human visual
+acceptance is still required before release.
