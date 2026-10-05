@@ -11,7 +11,7 @@ const summaryFallback =
 const mediaFallback = ':where(.media-detail-card:not(.app-card-main))';
 
 // These source contracts protect a mechanical migration of established values.
-// They are not computed-style checks or John's visual approval.
+// They are not computed-style checks or human visual approval.
 const verifyShellOwners = (source) => {
   const contract = styleContract(source);
   const value = (selector, property) =>

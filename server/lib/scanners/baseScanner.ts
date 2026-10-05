@@ -88,6 +88,7 @@ export interface ProcessOptions {
     value: string;
   }[];
   bookServiceType?: 'ebook' | 'audiobook';
+  audiobookLibrarySource?: { serviceId: number; itemId: string };
   comicServiceType?: 'mylar' | 'kapowarr' | 'backissue';
   mutationGuard?: <Result>(callback: () => Promise<Result>) => Promise<Result>;
   outerMutationGuard?: <Result>(
@@ -590,6 +591,7 @@ class BaseScanner<T> {
       hasFile = true,
       secondaryIdentifiers = [],
       bookServiceType = 'ebook',
+      audiobookLibrarySource,
       mutationGuard,
       outerMutationGuard,
     }: ProcessOptions = {}
@@ -665,10 +667,12 @@ class BaseScanner<T> {
                     previousStatus === MediaStatus.AVAILABLE &&
                     processing &&
                     (bookServiceType === 'audiobook'
-                      ? existing.serviceId !== null &&
-                        existing.externalServiceId !== null
-                      : existing.audiobookServiceId !== null &&
-                        existing.audiobookExternalServiceId !== null);
+                      ? existing.serviceId != null &&
+                        existing.externalServiceId != null
+                      : (existing.audiobookServiceId != null &&
+                          existing.audiobookExternalServiceId != null) ||
+                        (existing.audiobookLibraryServiceId != null &&
+                          existing.audiobookLibraryItemId != null));
 
                   existing.status =
                     !processing && hasFile
@@ -743,6 +747,20 @@ class BaseScanner<T> {
                     existing.externalServiceSlug !== externalServiceSlug
                   ) {
                     existing.externalServiceSlug = externalServiceSlug;
+                    changedExisting = true;
+                  }
+
+                  if (
+                    audiobookLibrarySource &&
+                    (existing.audiobookLibraryServiceId !==
+                      audiobookLibrarySource.serviceId ||
+                      existing.audiobookLibraryItemId !==
+                        audiobookLibrarySource.itemId)
+                  ) {
+                    existing.audiobookLibraryServiceId =
+                      audiobookLibrarySource.serviceId;
+                    existing.audiobookLibraryItemId =
+                      audiobookLibrarySource.itemId;
                     changedExisting = true;
                   }
 
@@ -832,6 +850,9 @@ class BaseScanner<T> {
                         bookServiceType === 'audiobook'
                           ? externalServiceSlug
                           : undefined,
+                      audiobookLibraryServiceId:
+                        audiobookLibrarySource?.serviceId,
+                      audiobookLibraryItemId: audiobookLibrarySource?.itemId,
                       status:
                         !processing && hasFile
                           ? MediaStatus.AVAILABLE

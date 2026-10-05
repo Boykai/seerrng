@@ -12,6 +12,8 @@ import IndexerSearchLink from '@app/components/Common/IndexerSearchLink';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import MediaServerPlayButton from '@app/components/Common/MediaServerPlayButton';
 import PageTitle from '@app/components/Common/PageTitle';
+import ReaderDeliveryLink from '@app/components/Common/ReaderDeliveryLink';
+import RequestDownloadAction from '@app/components/Common/RequestDownloadAction';
 import Tooltip from '@app/components/Common/Tooltip';
 import IssueBlock from '@app/components/IssueBlock';
 import BulkRequestModal from '@app/components/RequestModal/BulkRequestModal';
@@ -266,10 +268,13 @@ const BookDetails = () => {
     data.mediaInfo.externalServiceId !== null &&
     data.mediaInfo.externalServiceId !== undefined;
   const hasAudiobookServiceLink =
-    data.mediaInfo?.audiobookServiceId !== null &&
-    data.mediaInfo?.audiobookServiceId !== undefined &&
-    data.mediaInfo.audiobookExternalServiceId !== null &&
-    data.mediaInfo.audiobookExternalServiceId !== undefined;
+    (data.mediaInfo?.audiobookServiceId !== null &&
+      data.mediaInfo?.audiobookServiceId !== undefined &&
+      data.mediaInfo.audiobookExternalServiceId !== null &&
+      data.mediaInfo.audiobookExternalServiceId !== undefined) ||
+    (data.mediaInfo?.audiobookLibraryServiceId !== null &&
+      data.mediaInfo?.audiobookLibraryServiceId !== undefined &&
+      !!data.mediaInfo?.audiobookLibraryItemId);
   const activeBookRequests =
     data.mediaInfo?.requests?.filter(
       (request) =>
@@ -322,6 +327,14 @@ const BookDetails = () => {
     format: 'ebook' | 'audiobook',
     destination: typeof ebookDestination
   ) => {
+    if (
+      format === 'audiobook' &&
+      data.mediaInfo?.status === MediaStatus.AVAILABLE &&
+      data.mediaInfo.audiobookLibraryItemId
+    ) {
+      return true;
+    }
+
     const externalServiceId =
       format === 'ebook'
         ? data.mediaInfo?.externalServiceId
@@ -570,6 +583,22 @@ const BookDetails = () => {
             <EyeSlashIcon />
           </Button>
         </Tooltip>
+      )}
+      <ReaderDeliveryLink target="ebooks" />
+      <ReaderDeliveryLink target="audiobooks" />
+      {data.mediaInfo?.id && ebookCategoryEnabled && (
+        <RequestDownloadAction
+          mediaId={data.mediaInfo.id}
+          mediaType={MediaType.BOOK}
+          bookFormat="ebook"
+        />
+      )}
+      {data.mediaInfo?.id && audiobookCategoryEnabled && (
+        <RequestDownloadAction
+          mediaId={data.mediaInfo.id}
+          mediaType={MediaType.BOOK}
+          bookFormat="audiobook"
+        />
       )}
       {canUseManage && (
         <Tooltip

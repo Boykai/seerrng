@@ -41,6 +41,8 @@ interface BaseMedia {
     externalServiceId?: number | null;
     audiobookServiceId?: number | null;
     audiobookExternalServiceId?: number | null;
+    audiobookLibraryServiceId?: number | null;
+    audiobookLibraryItemId?: string | null;
     requests?: {
       status: MediaRequestStatus;
       bookFormat?: 'ebook' | 'audiobook' | 'both' | null;
@@ -75,10 +77,13 @@ const hasLinkedBookFormat = (
 ) => {
   if (format === 'audiobook') {
     return (
-      mediaInfo.audiobookServiceId !== null &&
-      mediaInfo.audiobookServiceId !== undefined &&
-      mediaInfo.audiobookExternalServiceId !== null &&
-      mediaInfo.audiobookExternalServiceId !== undefined
+      (mediaInfo.audiobookServiceId !== null &&
+        mediaInfo.audiobookServiceId !== undefined &&
+        mediaInfo.audiobookExternalServiceId !== null &&
+        mediaInfo.audiobookExternalServiceId !== undefined) ||
+      (mediaInfo.audiobookLibraryServiceId !== null &&
+        mediaInfo.audiobookLibraryServiceId !== undefined &&
+        !!mediaInfo.audiobookLibraryItemId)
     );
   }
 

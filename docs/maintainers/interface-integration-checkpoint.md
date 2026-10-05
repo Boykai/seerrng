@@ -286,8 +286,8 @@ Fill these fields with observed facts; unknown means pending, never assumed.
    skips/todos, platform exclusions, lint/type/static/style results and build result.
    `pnpm test` is test partitions only; `test:ci` is Vitest-only. Browser/Cypress
    suites are separate. Linux is required for complete POSIX tooling coverage.
-5. Desktop/narrow reference locations and John's acceptance per page/state,
-   including loading/error/empty, keyboard/focus/disabled, open menus and reorder.
+5. Desktop/narrow reference locations and human visual review evidence per
+   page/state, including loading/error/empty, keyboard/focus/disabled, open menus and reorder.
    An automated screenshot or computed-style result is not human acceptance.
 6. Live Plex evidence separately from mocked native coverage; safe prerequisites
    for unverified providers. Never copy credentials, runtime DBs or live config.
@@ -299,3 +299,425 @@ Fill these fields with observed facts; unknown means pending, never assumed.
 The contributor and Keith's AI must use the same checked-in instructions and
 gate, adapted to the newer target without discarding its valid security/backend
 fixes. If the target advances, pin the new head and repeat invalidated checks.
+
+## Expanded SeerrNG feature candidate — October 4, 2026
+
+The current task supersedes the older bounded-scope publication status above
+for this contribution: the user explicitly requested implementation of game
+library and household play tracking, repair of the other existing dirty work,
+the complete validation gate and build, commits, a push, and a release. The
+older records remain historical evidence for their original source trees.
+
+- Candidate: `/tmp/seerrng-reader-groupings`, branch
+  `codex/reader-groupings-20261004`, initially based on
+  `06fbbce72260a08f36139af5dcd94dcda0bd481f`. Final validation found that
+  `origin/main` had advanced through the v3.51.0 release; the current candidate
+  is now fast-forwarded through `f32232a58972e70e7d7862ef3199e3a33b662c50`.
+  The candidate retains the Audiobookshelf/ChaptarrNG integration at
+  `e9d2e50f2b446a70e01f5b16af8bc8265ed99b3e` in its ancestry.
+- Recovery: source snapshot `/tmp/seerrng-pre-game-20261004`; original recovery
+  stash `3b4e8dfbf9dbc20b1fc444650c3243f9b37a4d5f`; integration checkpoints
+  `527b16ec5367eeaf122705bc61d086bfdd9016ad` and
+  `d3344bed33786af95d5b4b4a3003e604aea8265c` remain available. No stash or
+  recovery ref has been dropped.
+- Current work includes private per-user game libraries, Steam account linking
+  and import, progress and opt-in household sharing, the Play Together overlap
+  view, and software-request links; Grimmory/BookOrbit delivery and managed
+  reader shelves; per-user external request lists; software catalog fallback;
+  and the request-count refresh repair. Earlier Request Status, shared heading,
+  layout, poster, and control work in the integrated tree is retained.
+- Reader shelf settings now use the shared `SettingsField` checkbox adapter;
+  reader service settings, managed shelf API paths and response shapes are
+  documented in `seerr-api.yml`. Mock-backed client/route coverage and migration
+  coverage are included. No provider was contacted live.
+- Latest completed UI batch evidence: current-batch contract 567 files passed;
+  shared stylesheet audit inspected 395/395 components; button geometry 68/68
+  passed. A focused reader provider/route run passed 17/17 before adding the
+  remote-shelf recovery regression; that updated selection still needs to run.
+  Server and client type checks passed before the latest checkbox-adapter edit;
+  rerun on the final source.
+- Before the current-main forward integration, the final-gate plan selected 97
+  Vitest files, 384 native TypeScript files, 56 native JavaScript files and 32
+  tooling files (569 total, zero declared platform exclusions). That inventory
+  is historical; the integrated tree has a fresh plan below.
+- Prerequisites were checked against the complete non-shallow Git checkout:
+  Node.js 24.15.0, pnpm 10.24.0, Git 2.55.0, Python 3.14.7, SQLite 3.53.4,
+  PostgreSQL client 18.6, installed dependencies, all 29 GitHub workflow files,
+  and the selected deployment test fixtures. The frozen lockfile install already
+  completed successfully in this isolated candidate.
+- The exact final `pnpm validate:development` run, one production build, browser
+  run, screenshots, release-note preview, commits and remote push are pending.
+  human visual review of the new game and reader surfaces remains a release
+  gate; previous visual acceptance applies only to its recorded older scope.
+  A screenshot or passing build does not fulfill that human review.
+- No task commit, push, tag, draft/published release, merge, or deployment has
+  occurred. The user authorized pushing this work and cutting a release after
+  its required verification/review gates.
+
+## Complete dirty-worktree inclusion — October 4, 2026
+
+The user reaffirmed that every distinct dirty and unrelated change must be
+included. The candidate inventory covered all registered repository
+worktrees, all dirty and staged paths, and saved worktree stashes. It now
+contains the reader shelves, Grimmory/BookOrbit delivery, household game
+library, external request lists, software catalog fallback, request-count
+repair, donation-link update, Audiobookshelf scan hardening, request-edit
+identity repair, and the discover OpenAPI regression test. Each feature remains
+separately attributable in its release fragment and integration record.
+
+The Audiobookshelf scan hardening was recovered from preserved stash
+`d377f690ddda68b0d15bf4bb8ef9a246e51b31bc`. A complete candidate snapshot
+before that consolidation remains as stash
+`057219485a063805eea0aabf4f1a0ef652842e6c`; no source worktree or stash was
+dropped. The original Cypress-prep, magazine, failed-download, Questarr-help,
+and request-count changes had already reached the candidate, so their duplicate
+dirty snapshots were not copied twice.
+
+The unique added focused checks pass: Audiobookshelf scan helper/scanner/API
+and discover contract **12/12 Node tests**; RequestBlock edit identity
+**2/2 Vitest tests**; server/client TypeScript, focused ESLint, i18n and
+formatting also pass. Full cumulative validation and a production build remain
+pending on this expanded candidate. Rendered desktop/narrow review and John's
+visual acceptance remain release gates.
+
+## Current main integration and gate follow-up — October 4, 2026
+
+The candidate initially started at `06fbbce72260a08f36139af5dcd94dcda0bd481f`
+while `origin/main` had advanced to `f32232a58972e70e7d7862ef3199e3a33b662c50`
+through the v3.51.0 release. The first complete validation run correctly failed
+`scripts/check-changelog-tags.mjs` because the stale source lacked the v3.51.0
+changelog section. It was not a candidate feature defect. Before integration,
+the entire dirty and untracked candidate was saved in recovery stash
+`55bb13aa1a5f5a988457919ed8a5433fab5519bf`; no recovery stash was dropped.
+
+The branch fast-forwarded to current `origin/main`, then the saved changes were
+restored with `git stash apply --index`. Two overlaps were resolved by retaining
+both sides: `src/components/SoftwareCatalog/index.tsx` keeps upstream QuestarrNG
+ownership and play-time estimates alongside the private My Games actions, and
+`src/i18n/locale/en.json` keeps both upstream and game-library messages. The
+release-tag check now covers all 141 SeerrNG tags. The fresh development plan
+selects 99 Vitest files, 385 native TypeScript files, 56 native JavaScript files
+and 32 tooling files (572 total), with zero declared platform exclusions.
+
+The prior stale-source cumulative run completed all selected lanes but failed
+one tooling test: `scripts/release-notes.test.mjs` could not find the 3.51.0
+changelog section. This receipt is invalidated by the forward integration; the
+complete gate must be rerun against this exact merged tree. The production build
+has not run. The in-app browser control and isolated workspace controls are not
+available in this session; rendered review is pending on an available local
+browser path. Human visual review of the new game and reader surfaces
+remains pending and is still required before release.
+
+## UI correction and verification record — October 5, 2026
+
+The first production screenshot review found that GameLibrary rendered a second
+`main.page-layout` inside the shared application page shell. Removed the nested
+shell so the page uses the shared content width and applies the fixed-search-bar
+offset once. No global styles or unrelated page owners changed. The Cypress
+flow now checks horizontal bounds at 1280px desktop and 390px mobile, with
+element diagnostics on failure.
+
+- The complete v3.51 integrated-tree gate passed before the page-shell and
+  Cypress diagnostic correction: 99 Vitest files/452 tests; 385 Node TypeScript
+  files/2,912 discovered (2,908 active); 56 Node JavaScript files/485 tests;
+  and 32 tooling files/238 tests. Four PostgreSQL-only migration cases were
+  skipped because PostgreSQL was not configured. The prior log is
+  `/tmp/seerrng-game-library-validation-v351-integrated-20261004.log`; its pass
+  is historical, not final-candidate evidence.
+- Production builds passed both before and after the page-shell correction;
+  the post-correction build log is
+  `/tmp/seerrng-game-library-build-post-layout-fix-20261004.log`.
+- Against the built candidate and disposable SQLite configuration, the game
+  library Cypress flow passed 1/1 in Chromium at 1280px desktop and 390px
+  mobile. The reader settings flow passed 1/1 in Chromium after it was rerun
+  alone with the server lifecycle tied to its test command. These were mocked
+  local-provider checks; no external provider was contacted.
+- A combined multi-spec Cypress invocation passed the game flow but navigated
+  the reader spec to the cached `/offline.html` fallback while the disposable
+  server remained healthy. Both specs passed in separate fresh Chromium
+  processes against the same build and database. This cross-spec service-worker
+  behavior is recorded separately from product-provider integration.
+- Final screenshot inspection found the new ownership/sharing captions were
+  using browser-default black text. Added the scoped
+  `.game-library-sharing-label` role in `src/styles/globals.css`, applied it in
+  GameLibrary, and added a computed-color browser assertion. The first
+  incremental build artifact did not include the new rule. A clean build from
+  the exact source emitted it, and the browser assertion now verifies the
+  rendered caption color.
+- The rebuilt reader settings screenshot exposed cramped side-by-side service
+  cards and narrow generated-address controls. Reader service and shelf cards
+  now use one column; each generated address fills its row, with its copy action
+  below it. The Cypress flow checks card order, address width, and action bounds
+  at desktop and mobile sizes.
+- A clean production build passed with the tracked source changes applied to a
+  detached build worktree. It generated `/games`, `/settings/services`, and
+  `/qa-request-edit`; CSS includes the game caption and reader layout roles.
+  Log: `/tmp/seerrng-reader-settings-layout-build-20261005.log`.
+- The Game Library browser flow passed **1/1** in Chromium 153 against that
+  build at 1280×900 and 390×844 CSS viewports. It covers manual ownership,
+  household sharing, Play Together, and horizontal bounds. The reader settings
+  flow passed **1/1** at the same viewports, covering saved URLs, preference,
+  generated links, service-card width, and non-overlapping copy actions. Logs:
+  `/tmp/seerrng-final-ui-game-cypress-20261005.log` and
+  `/tmp/seerrng-final-ui-reader-cypress-20261005.log`.
+- Desktop and mobile review captures are at
+  `/tmp/seerrng-game-library-final-review-20261005/` and
+  `/tmp/seerrng-reader-settings-final-review-20261005/`. These are iteration
+  captures, not a substitute for human review. The first exact-tree gate attempt
+  stopped during formatting before any test lane, reporting ENOENT for
+  temporary locale `.bak` paths. A subsequent isolated sequential
+  `pnpm i18n:check` and `pnpm format:check` passed. The first output is preserved
+  at `/tmp/seerrng-game-library-validation-format-failure-20261005.log`. The
+  complete exact-tree `pnpm validate:development` run follows this ledger
+  update before the UI-fix commit; its receipt is
+  `/tmp/seerrng-game-library-validation-final-candidate-20261005.log`.
+- Tests used a fresh disposable SQLite configuration and local providers only.
+  No live Grimmory, BookOrbit, Steam, QuestarrNG, or ROMarrNG provider was
+  contacted. Human visual review remains a release gate.
+
+## Rebuilt candidate and rendered review — October 4, 2026 (Regina local)
+
+The follow-up screenshot review found `GameLibrary` rendering a second
+`main.page-layout` inside the shared application page shell. The page now uses
+the shared shell once, preserving the fixed search-header offset without a
+second page-width wrapper. The change stays within the GameLibrary consumer;
+no shared CSS or unrelated page owners changed. The built server and app were
+rebuilt after this correction.
+
+- `pnpm build` passed on the corrected application source and generated the
+  `/games`, `/settings/services`, and `/qa-request-edit` routes. Log:
+  `/tmp/seerrng-production-build-final-20261005.log`.
+- Game-library Cypress flow passed **1/1** after the rebuild at 1280×900 and
+  390×844 CSS viewports. It exercises manual ownership, sharing and the
+  household overlap view; visible bounds and document/body widths are checked.
+- Reader settings Cypress flow passed **1/1** after the rebuild at 1280×900 and
+  390×844 CSS viewports. It saves Grimmory and BookOrbit addresses, saves the
+  preferred reader, verifies generated OPDS/Komga links, reloads to verify
+  persistence, and checks page width.
+- Cypress screenshot files are captured at 1280×720 desktop and 390×720 narrow
+  in the available headless Electron runner despite the larger verified CSS
+  viewport heights. The images were inspected at
+  `/tmp/seerrng-rendered-review-20261005/`; they remain iteration evidence.
+- Tests used the freshly seeded disposable SQLite database at
+  `/tmp/seerrng-cypress-reader-groupings.vlwN0R`, with reader/provider calls
+  limited to local app settings and media-service addresses constrained to
+  loopback. No live Grimmory, BookOrbit, Steam, QuestarrNG, or ROMarrNG provider
+  was contacted.
+- The complete development gate passed after the application and Cypress
+  corrections: current-batch contract 569 files; shared-style audit 397/397;
+  formatting, lint and both TypeScript checks; Vitest 99 files/452 tests;
+  Node TypeScript 385 files/2,912 tests (2,908 passed, four PostgreSQL-only
+  skips); native JavaScript 56 files/485 tests; tooling 32 files/238 tests.
+  Totals: 4,083 passed, zero failed, four skipped, and zero platform exclusions.
+  Log: `/tmp/seerrng-validate-development-final-20261005.log`.
+- The Chromium exploratory Cypress attempt timed out waiting for a page load and
+  is not counted. The final built-app workflows passed separately under the
+  repository's Cypress Electron runner. Human visual review remains a
+  release gate.
+- Release-note preview, commits, push, and release remain pending. Live Grimmory,
+  BookOrbit, Steam, QuestarrNG, and ROMarrNG round trips remain unverified.
+
+## All-dirty commits and forward rebase — October 4, 2026
+
+Every inventoried dirty feature and unrelated change is represented in these
+separate commits, retaining the existing recovery stashes:
+
+- `f1b69beda9ac8400dae12183c32c547fc3191e40` reader delivery and managed shelves.
+- `4d2e6572a232ddb41adc3b8fbdaca6442df240b6` private games, Steam, and catalog fallback.
+- `88eefe3deace753d569284f102f7f00c7daa45b3` per-user external request lists.
+- `884259ab5612fff76339d4fafe7e265a7b9bd141` Audiobookshelf scan hardening.
+- `ecf3019630e9fe3fc9f3e9ffd6002226b4f3e6ad` request-edit identity repair.
+- `14b3c6775dfa45df34ee6e607ebbaba1fb7b17b1` Ko-fi support link update.
+
+All source commits passed the repository attribution and staged Prettier/ESLint
+hooks. The first game commit attempt was stopped by ESLint; its seven findings
+were fixed at source and the required hook then passed. No hook was bypassed.
+The generated OpenAPI file and all integration records are included in the
+documentation/API commit.
+
+A fresh fetch advanced `origin/main` from
+`f32232a58972e70e7d7862ef3199e3a33b662c50` to
+`4665245f97a90d546a94eb25fdcd4c91104bfd7b`. Its sole change relative to the
+candidate base is the YunoHost manifest update. The seven candidate commits
+were rebased onto that target without conflicts; recovery ref
+`recovery/all-dirty-before-main-4665245` preserves the original candidate tip.
+The source commits after rebase are:
+
+- `23e84d7aa462d6da6c5293fa8d84b2adfe11e282` reader delivery and shelves.
+- `a393ab927550b5069078e24b67db2ca66c44e0cc` game library and catalog fallback.
+- `b7b01cf89f8fb832fa8744a4ea63562775e65702` per-user request lists.
+- `7cfac9071bbd30ce3ac2c947309649148117c769` Audiobookshelf scan hardening.
+- `9e46eca5d3713ad5c40334da1e67c25f25a0c07a` request-edit identity repair.
+- `b4bb494bada4f01a9334c7e8aa303c2fab28c521` Ko-fi support link update.
+
+`pnpm validate:development --plan` on the rebased tree selected 99 Vitest
+files, 385 native TypeScript files, 56 native JavaScript files, and 32 tooling
+files, with zero declared platform exclusions. The prior full gate predates
+the game source-level lint fixes and new main target; it is historical only.
+The final integrated gate, production build, and rebuilt disposable browser
+flows remain pending. No branch push, tag, or release has occurred. Live
+Grimmory, BookOrbit, Steam, QuestarrNG, and ROMarrNG round trips remain
+unverified; human visual review remains a release gate.
+
+## Reader settings readability follow-up — October 5, 2026
+
+After the integrated gate and production build, the reader settings browser
+review identified cramped service cards and generated-address controls. The
+follow-up is committed on top of `origin/main`
+`4665245f97a90d546a94eb25fdcd4c91104bfd7b`. It gives each reader
+service and shelf card a full-width row, places address copy actions below the
+generated value, and adds desktop and mobile layout assertions to the reader
+Cypress flow. The structured note is
+`release-notes/2026-10-04-reader-settings-readability.md`.
+
+A separate candidate's first validation attempt stopped at formatting before
+any test lane because parallel locale checks removed temporary `.bak` files;
+it is retained at
+`/tmp/seerrng-game-library-validation-format-failure-20261005.log` and is not
+counted. Its isolated sequential i18n and format checks passed, but they do not
+replace the complete gate. The refreshed plan for this candidate selects 99
+Vitest, 385 native TypeScript, 56 native JavaScript, and 32 tooling files, with
+zero declared platform exclusions. The final gate, clean production build,
+and rebuilt desktop/narrow browser flows remain pending on this follow-up.
+Earlier build and screenshot evidence predates the reader layout change.
+Provider round trips remain unverified, and human visual review is
+still required before release.
+
+## Final verification receipt — October 5, 2026
+
+The full gate on the committed reader-layout source passed. Its inventory was
+99 Vitest files/452 tests, 385 native TypeScript files/2,912 tests (2,908
+passed and four PostgreSQL-only skips), 56 native JavaScript files/485 tests,
+and 32 tooling files/238 tests. Totals: 4,083 passed, zero failed, four
+skipped, and zero platform exclusions. The 569-file current-batch check and
+397/397 shared-style inspection passed. Log:
+`/tmp/seerrng-game-library-validation-final-candidate-20261005.log`.
+
+The production build and separate Chromium 153 Cypress runs used the disposable
+worktree `/tmp/seerrng-reader-settings-layout-build`, based at
+`bace25a5e2146782a57a4268f0c60f6bcae461c3` with only the reader-layout source
+changes unstaged. `cmp` verified that the three changed source/test files in
+that worktree are byte-for-byte identical to commit
+`752e6b651dc30cf57b7e00b5c6d3ae5a0ec1211a`; the remaining commit differences
+are the release fragment and evidence documentation. The build generated
+`/games`, `/settings/services`, and `/qa-request-edit`. Logs:
+`/tmp/seerrng-reader-settings-layout-build-20261005.log`,
+`/tmp/seerrng-final-ui-game-cypress-20261005.log`, and
+`/tmp/seerrng-final-ui-reader-cypress-20261005.log`.
+
+The game and reader workflows each passed **1/1** in their separate Chromium
+153 headless runs, checking desktop and narrow layouts. Captures are in
+`/tmp/seerrng-game-library-final-review-20261005/` and
+`/tmp/seerrng-reader-settings-final-review-20261005/`; their rendered content
+was inspected. The screenshots are iteration evidence, not a substitute for human review. Tests used disposable SQLite and local app endpoints only; no live
+Grimmory, BookOrbit, Steam, QuestarrNG, or ROMarrNG provider was contacted.
+Release-note preview and branch push remained pending at that checkpoint.
+Human visual review status was pending; these entries are superseded by the
+v3.52.1 publication below.
+
+## v3.52.0 publication and CI repair — October 5, 2026
+
+This entry supersedes the earlier pending-release status above. The integrated
+feature candidate was released as `v3.52.0` from
+`fb50d1f70fdbe44579d89386d70bc50e9f181063`; the GitHub release is published and
+the release workflow's Discord announcement job succeeded. The release-note
+preview and changelog-tag check passed. The complete development gate on that
+integrated source passed 4,083 tests with four PostgreSQL-only skips and zero
+platform exclusions. Its production build also passed. Existing desktop/narrow
+game and reader browser flows passed 1/1 each; their rendered captures were
+inspected earlier in this work. No live Grimmory, BookOrbit, Steam, QuestarrNG
+or ROMarrNG provider round trip was performed. Visual review status was
+pending in this historical record.
+
+Post-publication GitHub checks exposed three separate results:
+
+1. SeerrNG CI run `37258284100` failed the bundle budget at
+   `.next/static/chunks/pages/_app-98ffa76db6165a35.js` (1027.1 KB against
+   1024.0 KB). Its unit, i18n, security, and deployment jobs succeeded. A
+   separate isolated candidate removes the eager English catalog from the
+   shared app entry and has passed its complete `pnpm validate:development`
+   gate on the `fb50d1f` base (receipt:
+   `/tmp/seerrng-bundle-budget-validation-final3.log`). That candidate has not
+   yet been integrated here; its production build and `pnpm bundle:check` are
+   still pending.
+2. Cypress run `37258284096` failed two settings assertions. The Lidarr help
+   copy was present in the rendered modal, but its Cypress query was not scoped
+   to that dialog and could select the background service form. The Prowlarr
+   responsive spec returned an array for the new reader-settings API route,
+   although the rendered settings component requires the object response shape.
+   The specs now scope field-copy checks to the open dialog and return the
+   reader-settings object plus an empty grouping list from the Prowlarr fixture.
+   On the exact `v3.52.0` production build with a disposable seeded config, the
+   affected run passed 27/27 discovery tests and 1/1 Prowlarr test, with no
+   final failures, skips, or pending cases. The reader settings flow also
+   passed 1/1. One discovery test needed a retry before passing; it remains
+   recorded in `/tmp/seerrng-v352-cypress-repaired-focused.log`.
+3. Chocolatey publish run `37263774763` built the package but received HTTP 403
+   from `push.chocolatey.org`. The repository cannot establish package-owner
+   authorization through a source change. This channel is not verified as
+   published.
+
+The Cypress repairs are test-harness changes only; the visible settings UI did
+not change. They are recorded in
+`cypress/e2e/library-discover-parity.cy.ts` and
+`cypress/e2e/settings/prowlarr-responsive.cy.ts`. The follow-up Cypress checks
+used `/tmp/seerrng-v352-prowlarr-isolated`, a disposable seeded test config.
+The production server ran from the isolated build worktree
+`/home/keith/.cache/seerrng-v352-cypress-repro` at the release commit; no live
+service credentials or databases were used.
+
+After publication, `origin/main` advanced to
+`6d54a07bce12e222096a9ba5a34add8709bd39e8` for an internal YunoHost manifest
+alignment. The Cypress repair is not yet integrated on that new main tip. Before
+finalizing a follow-up candidate, preserve its source checkpoint, forward
+integrate the latest main and any completed bundle repair, then rerun the exact
+full development gate, production build, and affected browser flows. The
+Chocolatey 403 and human visual review remain explicit release limitations.
+
+## Post-release CI repairs — October 5, 2026
+
+The repair candidate is now based on the current `origin/main` tip,
+`6d54a07bce12e222096a9ba5a34add8709bd39e8`. It combines the English startup
+bundle reduction from the separately validated candidate with both Cypress
+harness fixes described above. The candidate bundle patch is present in
+`src/pages/_app.tsx`, its focused regression is in
+`src/components/ManageSlideOver/manageActions.test.mjs`, and the user-facing
+performance note is `release-notes/initial-load-performance.md`. The Cypress
+fixes are in `cypress/e2e/library-discover-parity.cy.ts` and
+`cypress/e2e/settings/prowlarr-responsive.cy.ts`.
+
+The bundle candidate's full development gate passed on its pre-integration
+`fb50d1f` base (4,083 passed, four PostgreSQL-only skips, zero failures and
+platform exclusions). The Cypress repair passed the 28 affected assertions and
+the reader-delivery settings flow on the published `v3.52.0` build, with a
+disposable seeded config. These are component evidence only; they do not replace
+verification on this combined exact source tree. A preserved source bundle is
+`/tmp/seerrng-reader-groupings-before-v352-forward-integration.bundle`; the
+integrated candidate's final validation, build, bundle budget and complete
+Cypress results will be appended here when available.
+
+The Chocolatey publish 403 and human visual review remain
+outstanding. No provider round trips against live services were attempted.
+
+## Project-owner release authorization and v3.52.1 verification — October 5, 2026
+
+The project owner directed removal of the individual-specific visual acceptance
+gate. Human review remains required under CONTRIBUTING.md, but acceptance is not
+assigned to any named reviewer. The project owner authorized the release
+without a named person’s separate visual sign-off. This supersedes the earlier
+pending release-gate statuses above.
+
+SeerrNG v3.52.1 was published from tag `v3.52.1` at commit
+`76632411a3f73d0ad4ea31cb10405496d7db474f`. Release workflow run
+`37281708508` succeeded, including `Publish release` and `Announce release to
+Discord`. The published release contains 23 assets and the curated English
+startup-performance note.
+
+The separate Chocolatey publish run `37291082662` failed. Chocolatey
+publication is not verified; the other release publication and announcement
+jobs succeeded.
+
+The published release has no live Grimmory, BookOrbit, Steam, QuestarrNG, or
+ROMarrNG round-trip claim. The broader Cypress run remains incomplete and is
+not recorded as a pass; the prior run entered an unstubbed provider test and
+made outbound requests. No further provider tests were run.

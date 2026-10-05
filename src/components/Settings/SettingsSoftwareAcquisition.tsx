@@ -70,6 +70,14 @@ const messages = defineMessages('components.SettingsSoftwareAcquisition', {
   emulationCatalog: 'Emulation catalog source',
   emulationCatalogDescription:
     'QuestarrNG is the default. Choose ROMarrNG only when its connection test reports the SeerrNG IGDB catalog capability. ROMarrNG still acquires ROM requests; PC game requests always use QuestarrNG.',
+  steamLibraryTitle: 'Steam Library Import',
+  steamLibraryDescription:
+    'Users can privately import their owned Steam games and playtime after linking their account. Steam Game Details must be public for library sync to work.',
+  steamWebApiKey: 'Steam Web API Key',
+  steamWebApiKeyHelp:
+    'Create a Steam Web API key for this SeerrNG server. The key stays on the server and is never shown to users.',
+  steamWebApiKeySaved: 'A key is saved. Leave this blank to keep using it.',
+  clearSteamWebApiKey: 'Remove saved Steam key',
 });
 
 interface ProviderSettings {
@@ -87,6 +95,8 @@ interface SoftwareSettingsResponse {
   questarr: Omit<ProviderSettings, 'clearApiKey'>;
   emulationSystemGroups: Record<string, EmulationSystemGroup>;
   emulationCatalogProvider: 'questarr' | 'romarr';
+  steamApiKey: string;
+  steamApiKeyConfigured: boolean;
 }
 
 interface EmulationSystem {
@@ -145,6 +155,8 @@ const SettingsSoftwareAcquisition = () => {
   const [emulationCatalogProvider, setEmulationCatalogProvider] = useState<
     'questarr' | 'romarr'
   >('questarr');
+  const [steamApiKey, setSteamApiKey] = useState('');
+  const [clearSteamApiKey, setClearSteamApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<'romarr' | 'questarr' | null>(null);
   const [testState, setTestState] = useState<TestState | null>(null);
@@ -159,6 +171,8 @@ const SettingsSoftwareAcquisition = () => {
     setQuestarr(toProviderState(data.questarr));
     setEmulationCatalogProvider(data.emulationCatalogProvider ?? 'questarr');
     setSystemGroups(data.emulationSystemGroups ?? {});
+    setSteamApiKey('');
+    setClearSteamApiKey(false);
   }, [data]);
 
   const updateProvider = (
@@ -265,6 +279,11 @@ const SettingsSoftwareAcquisition = () => {
         questarr: getProviderPayload(questarr),
         emulationCatalogProvider,
         emulationSystemGroups: systemGroups,
+        ...(clearSteamApiKey
+          ? { steamApiKey: '' }
+          : steamApiKey
+            ? { steamApiKey }
+            : {}),
       });
       await Promise.all([
         mutate('/api/v1/settings/software-acquisition'),
@@ -467,6 +486,55 @@ const SettingsSoftwareAcquisition = () => {
               <option value="romarr">ROMarrNG</option>
             </select>
           </label>
+        </section>
+
+        <section className="app-card-main card-layout">
+          <h4 className="card-title">
+            {intl.formatMessage(messages.steamLibraryTitle)}
+          </h4>
+          <p className="card-body-text">
+            {intl.formatMessage(messages.steamLibraryDescription)}
+          </p>
+          <div className="form-row">
+            <label htmlFor="steamApiKey" className="text-label">
+              {intl.formatMessage(messages.steamWebApiKey)}
+            </label>
+            <div className="form-input-area">
+              <div className="form-input-field">
+                <input
+                  id="steamApiKey"
+                  type="password"
+                  value={steamApiKey}
+                  onChange={(event) => {
+                    setSteamApiKey(event.target.value);
+                    setClearSteamApiKey(false);
+                  }}
+                  placeholder={
+                    data.steamApiKeyConfigured
+                      ? intl.formatMessage(messages.steamWebApiKeySaved)
+                      : ''
+                  }
+                  autoComplete="new-password"
+                />
+              </div>
+              <p className="settings-form-row-description">
+                {intl.formatMessage(messages.steamWebApiKeyHelp)}
+              </p>
+            </div>
+          </div>
+          {data.steamApiKeyConfigured && (
+            <div className="app-action-row">
+              <SelectionCircle
+                label={intl.formatMessage(messages.clearSteamWebApiKey)}
+                selected={clearSteamApiKey}
+                onClick={() => {
+                  setClearSteamApiKey((current) => !current);
+                  setSteamApiKey('');
+                }}
+              />
+              <span>{intl.formatMessage(messages.clearSteamWebApiKey)}</span>
+            </div>
+          )}
         </section>
 
         <section className="mt-8 rounded-lg border border-gray-700 bg-gray-800/50 p-4 sm:p-5">

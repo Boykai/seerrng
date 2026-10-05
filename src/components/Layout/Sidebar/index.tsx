@@ -19,6 +19,7 @@ import {
   MagnifyingGlassIcon,
   MusicalNoteIcon,
   NewspaperIcon,
+  PuzzlePieceIcon,
   SparklesIcon,
   SpeakerWaveIcon,
   Square3Stack3DIcon,
@@ -37,6 +38,7 @@ export const menuMessages = defineMessages('components.Layout.Sidebar', {
   calendar: 'Calendar',
   downloads: 'Download Inbox',
   library: 'My Library',
+  gamesLibrary: 'My Games',
   indexerSearch: 'Indexer Search',
   browsemovies: 'Movies',
   browsemusic: 'Music',
@@ -86,6 +88,12 @@ const SidebarLinks: SidebarLinkProps[] = [
     messagesKey: 'library',
     svgIcon: <BookOpenIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/library$/,
+  },
+  {
+    href: '/games',
+    messagesKey: 'gamesLibrary',
+    svgIcon: <PuzzlePieceIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/games(?:\/|$)/,
   },
   {
     href: '/downloads',

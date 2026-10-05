@@ -212,7 +212,14 @@ class ReadarrScanner
           )
       );
 
-      const hasFile = (readarrBook.statistics?.bookFileCount ?? 0) > 0;
+      const serviceType = this.currentServer.serviceType ?? 'ebook';
+      const bookFileCount =
+        (serviceType === 'audiobook'
+          ? readarrBook.statistics?.audiobookFileCount
+          : readarrBook.statistics?.ebookFileCount) ??
+        readarrBook.statistics?.bookFileCount ??
+        0;
+      const hasFile = bookFileCount > 0;
       const totalBooks = readarrBook.statistics?.totalBookCount ?? 1;
 
       if (!readarrBook.monitored) {
@@ -228,7 +235,7 @@ class ReadarrScanner
           hasFile: false,
           secondaryIdentifiers,
           processing: false,
-          bookServiceType: this.currentServer.serviceType ?? 'ebook',
+          bookServiceType: serviceType,
           mutationGuard: (callback) =>
             runWithServarrServiceSnapshot(
               'readarr',
@@ -249,12 +256,10 @@ class ReadarrScanner
           : undefined,
         hasFile,
         secondaryIdentifiers,
-        bookServiceType: this.currentServer.serviceType ?? 'ebook',
+        bookServiceType: serviceType,
         processing:
           readarrBook.monitored &&
-          (readarrBook.statistics
-            ? (readarrBook.statistics.bookFileCount ?? 0) < totalBooks
-            : !hasFile),
+          (readarrBook.statistics ? bookFileCount < totalBooks : !hasFile),
         mutationGuard: (callback) =>
           runWithServarrServiceSnapshot(
             'readarr',

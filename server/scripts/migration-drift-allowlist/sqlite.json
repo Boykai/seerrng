@@ -156,6 +156,36 @@
       }
     },
     {
+      "reason": "Nullability only: CreateExternalRequestLists1791010000000 creates userId as NOT NULL, while the entity's @ManyToOne relation does not set nullable: false, so synchronize() leaves the join column nullable. The column type is the same on both sides.",
+      "side": "entities",
+      "record": {
+        "kind": "column",
+        "table": "external_request_list",
+        "name": "userId",
+        "type": "integer",
+        "nullable": true,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
+      "reason": "Nullability only: CreateExternalRequestLists1791010000000 creates userId as NOT NULL, while the entity's @ManyToOne relation does not set nullable: false, so synchronize() leaves the join column nullable. The column type is the same on both sides.",
+      "side": "migrations",
+      "record": {
+        "kind": "column",
+        "table": "external_request_list",
+        "name": "userId",
+        "type": "integer",
+        "nullable": false,
+        "default": null,
+        "primary": false,
+        "generated": null,
+        "unique": false
+      }
+    },
+    {
       "reason": "No migration creates the partial unique index the entity declares for comicvine identifiers, so databases built by the migrations lack it. Adding it is a comic-specific migration outside the manga work.",
       "side": "entities",
       "record": {

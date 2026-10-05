@@ -151,8 +151,15 @@ platform before showing each page. This requires the selected catalog provider
 to support SeerrNG's paged catalog endpoints. Older provider builds continue
 to show the first available catalog window until upgraded.
 
-Catalog cards show **In library**, **Tracked**, or **Downloading** when the
-acquisition service reports a title. ROM availability is shown for the exact
+Catalog cards show **In library**, **Owned in QuestarrNG**, **Tracked**, or
+**Downloading** when the acquisition service reports a title. **In library**
+means QuestarrNG can deliver at least one registered file; **Owned in
+QuestarrNG** means the linked account tracks the game but has no deliverable
+file. PC game cards can also show **Steam library** when QuestarrNG verifies a
+match in the public Steam library linked to its account. Steam ownership is a
+separate signal: it does not imply that QuestarrNG has a local game file, and
+private or unavailable Steam profiles do not produce an ownership badge. ROM
+availability is shown for the exact
 emulation system, including in the request target picker. If ROMarrNG is still
 loading its library or only has a partial cache, an unmatched title shows
 **Availability unknown** rather than being treated as absent. These indicators
@@ -161,9 +168,12 @@ title-and-platform lookup; older builds leave availability unknown until
 upgraded.
 
 Open a title's cover or name to see its summary, genres, release date, and
-supported request targets. When IGDB supplies them, the detail view also shows
-a rating, screenshots, developer names, and links to game videos. Screenshots
-load only when the detail view opens. The title URL can be copied and reopened directly;
+supported request targets. PC game cards and details show IGDB's community
+play-time estimates when available: quick completion, main story, and full
+completion, in hours. These are community estimates, so some games have no
+values. When IGDB supplies them, the detail view also shows a rating,
+screenshots, developer names, and links to game videos. Screenshots load only
+when the detail view opens. The title URL can be copied and reopened directly;
 users without request permission can still inspect its details.
 
 When requesting an emulation title, choose one of the supported systems shown
@@ -206,7 +216,7 @@ SeerrNG, so the status page can be reopened after a restart.
 | Searching | The provider is looking for an acquisition source. |
 | Downloading | The provider reports that a download is in progress. |
 | Verifying import | The provider reports acquisition, but SeerrNG is still waiting for an imported file. |
-| Available | The provider reports the requested game in its library. A **Download copy** action appears only when SeerrNG can verify and stream a request-scoped local file. |
+| Available | The provider reports the requested game in its collection. A **Download copy** action appears only when SeerrNG can verify and stream a request-scoped local file. |
 | Failed | The provider reports that acquisition failed. The requester or an authorized administrator may be able to retry. |
 | Declined | An administrator declined the request. |
 | Withdrawn | The requester withdrew the request before approval. |
@@ -255,7 +265,8 @@ request-scoped provider record.
 
 When SeerrNG can verify an imported file, the software request shows **Download
 copy**. If the provider reports several files, **Download copies** opens a
-file list so the user can choose the intended file. The browser downloads the
+file list with **Download all files** as a compressed `.tar.gz` archive, plus
+individual links so the user can choose the intended files. The browser downloads the
 selected file through SeerrNG, which checks request access and current
 availability again when the transfer starts.
 

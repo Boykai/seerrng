@@ -73,6 +73,7 @@ const providerSettings = () => {
     },
     emulationCatalogProvider: 'questarr',
     emulationSystemGroups: { nes: 'retro' },
+    steamApiKey: '',
   };
 };
 
@@ -560,6 +561,45 @@ describe('software request routes', () => {
     assert.strictEqual(oldCamelCasePath.status, 404);
   });
 
+  it('redacts the Steam Web API key from software settings responses', async () => {
+    const app = createOpenApiValidatedSettingsApp();
+    getSettings().softwareAcquisition.steamApiKey = 'steam-private-test-key';
+
+    const response = await request(app).get(
+      '/api/v1/settings/software-acquisition'
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.steamApiKey, '[REDACTED]');
+    assert.equal(response.body.steamApiKeyConfigured, true);
+    assert.doesNotMatch(
+      JSON.stringify(response.body),
+      /steam-private-test-key/
+    );
+  });
+
+  it('saves and clears the Steam Web API key without returning its value', async () => {
+    const app = createOpenApiValidatedSettingsApp();
+    const saved = await request(app)
+      .put('/api/v1/settings/software-acquisition')
+      .send({ steamApiKey: 'steam-new-private-key' });
+
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.steamApiKey, '[REDACTED]');
+    assert.equal(saved.body.steamApiKeyConfigured, true);
+    assert.equal(
+      getSettings().softwareAcquisition.steamApiKey,
+      'steam-new-private-key'
+    );
+
+    const cleared = await request(app)
+      .put('/api/v1/settings/software-acquisition')
+      .send({ steamApiKey: '' });
+    assert.equal(cleared.status, 200);
+    assert.equal(cleared.body.steamApiKey, '');
+    assert.equal(cleared.body.steamApiKeyConfigured, false);
+  });
+
   it('accepts the current QuestarrNG handshake without optional capabilities', async () => {
     const app = createOpenApiValidatedSettingsApp();
     mock.method(QuestarrNGAPI.prototype, 'getHandshake', async () => ({
@@ -1044,6 +1084,70 @@ describe('software request routes', () => {
       response.body.results.map((game: { igdbId: number }) => game.igdbId),
       [100]
     );
+  });
+
+  it('uses unpaged game results when QuestarrNG paged search fails', async () => {
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 6, name: 'PC (Microsoft Windows)' },
+    ]);
+    const pagedSearch = mock.method(
+      QuestarrNGAPI.prototype,
+      'searchCatalogPage',
+      async () => {
+        throw Object.assign(new AxiosError('Bad gateway'), {
+          response: { status: 502 },
+        });
+      }
+    );
+    const unpagedSearch = mock.method(
+      QuestarrNGAPI.prototype,
+      'searchCatalog',
+      async () => [
+        {
+          ...pcGame,
+          igdbId: 2650,
+          id: 'igdb-2650',
+          title: 'Prison Architect',
+        },
+      ]
+    );
+
+    const response = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'game', q: 'Prison Architect' });
+
+    assert.strictEqual(response.status, 200);
+    assert.deepStrictEqual(
+      response.body.results.map((game: SoftwareCatalogGame) => game.title),
+      ['Prison Architect']
+    );
+    assert.strictEqual(response.body.nextCursor, null);
+    assert.strictEqual(pagedSearch.mock.callCount(), 1);
+    assert.deepStrictEqual(unpagedSearch.mock.calls[0].arguments, [
+      'Prison Architect',
+      50,
+    ]);
+  });
+
+  it('does not hide QuestarrNG search transport errors with unpaged results', async () => {
+    mock.method(QuestarrNGAPI.prototype, 'getCatalogPlatforms', async () => [
+      { id: 6, name: 'PC (Microsoft Windows)' },
+    ]);
+    mock.method(QuestarrNGAPI.prototype, 'searchCatalogPage', async () => {
+      throw new AxiosError('Network Error');
+    });
+    const unpagedSearch = mock.method(
+      QuestarrNGAPI.prototype,
+      'searchCatalog',
+      async () => [pcGame]
+    );
+
+    const response = await request(createApp())
+      .get('/request/software/catalog/search')
+      .query({ category: 'game', q: 'Prison Architect' });
+
+    assert.notStrictEqual(response.status, 200);
+    assert.strictEqual(unpagedSearch.mock.callCount(), 0);
   });
 
   it('uses the selected ROMarr catalog for emulation and keeps Questarr for PC games', async () => {

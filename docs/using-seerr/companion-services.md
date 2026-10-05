@@ -44,7 +44,7 @@ Use these container images when adding the forks directly to Compose:
 | Fork | SeerrNG-specific behavior | Container image | Container port |
 | --- | --- | --- | --- |
 | [BookshelfNG](https://github.com/snapetech/bookshelfng) | Readarr-compatible book manager with the Hardcover-backed image; one instance can serve ebooks and audiobooks through separate SeerrNG service entries. | `ghcr.io/snapetech/bookshelfng:hardcover` | `8787` |
-| [ChaptarrNG](https://github.com/snapetech/chaptarrng) | Alternative book manager that preserves ebook/audiobook routing and tracks pending author imports for SeerrNG requests. | `ghcr.io/snapetech/chaptarrng:latest` | `8789` |
+| [ChaptarrNG](https://github.com/snapetech/chaptarrng) | Alternative book manager with format-aware requests, pending-import progress and safe cancellation, paged library scans, and an optional restricted SeerrNG key. | `ghcr.io/snapetech/chaptarrng:latest` | `8789` |
 | [QuestarrNG](https://github.com/snapetech/QuestarrNG) | Provides PC game acquisition and SeerrNG's IGDB catalog integration. | `ghcr.io/snapetech/questarrng:latest` | `5000` |
 | [ROMarrNG](https://github.com/snapetech/ROMarrNG) | Provides supported emulation systems and ROM acquisition; it can also provide the IGDB catalog when configured. Assign each system to Retro or Modern in SeerrNG. | `ghcr.io/snapetech/romarrng:latest` | `6868` |
 

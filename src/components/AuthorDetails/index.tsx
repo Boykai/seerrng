@@ -2,6 +2,7 @@ import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import ReaderGroupingAction from '@app/components/Common/ReaderGroupingAction';
 import BulkRequestModal from '@app/components/RequestModal/BulkRequestModal';
 import TitleCard from '@app/components/TitleCard';
 import { Permission, useUser } from '@app/hooks/useUser';
@@ -118,6 +119,11 @@ const AuthorDetails = () => {
               </Button>
             </div>
           )}
+          <div className="mt-5">
+            <ReaderGroupingAction
+              target={{ type: 'author', id: data.id, name: data.name }}
+            />
+          </div>
         </div>
       </div>
       <section>

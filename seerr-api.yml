@@ -46,6 +46,8 @@ tags:
     description: Cross-medium related media graph endpoints.
   - name: playlist
     description: Endpoints for importing Spotify and YouTube playlists as music requests.
+  - name: game library
+    description: Personal game progress, optional household sharing, and Steam library import.
   - name: native desktop
     description: Optional protocol-v1 Jellyfin playback for compatible native desktop clients.
   - name: indexer search
@@ -58,6 +60,546 @@ servers:
 
 components:
   schemas:
+    ReaderDeliverySettings:
+      type: object
+      required:
+        [
+          grimmoryUrl,
+          grimmoryUsername,
+          grimmoryPassword,
+          bookorbitUrl,
+          bookorbitUsername,
+          bookorbitPassword,
+          preferredProvider,
+        ]
+      properties:
+        grimmoryUrl:
+          type: string
+          maxLength: 2048
+        grimmoryUsername:
+          type: string
+          maxLength: 256
+        grimmoryPassword:
+          type: string
+          maxLength: 2048
+          description: Responses always redact configured passwords. Send the redacted marker to preserve a saved password.
+        bookorbitUrl:
+          type: string
+          maxLength: 2048
+        bookorbitUsername:
+          type: string
+          maxLength: 256
+        bookorbitPassword:
+          type: string
+          maxLength: 2048
+          description: Responses always redact configured passwords. Send the redacted marker to preserve a saved password.
+        preferredProvider:
+          type: string
+          enum: [grimmory, bookorbit]
+        clearGrimmoryCredentials:
+          type: boolean
+          description: Set true to remove the saved Grimmory username and password.
+        clearBookorbitCredentials:
+          type: boolean
+          description: Set true to remove the saved BookOrbit username and password.
+    ReaderGroupingTarget:
+      type: object
+      additionalProperties: false
+      required: [type, id, name]
+      properties:
+        type:
+          type: string
+          enum: [author, book-series, comic-series]
+        id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+    ReaderGroupingRule:
+      type: object
+      required: [field, operator, value]
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+        value:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+    ReaderGroupingFilter:
+      type: object
+      required: [type, join, rules]
+      properties:
+        type:
+          type: string
+          enum: [group]
+        join:
+          type: string
+          enum: [and, AND]
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReaderGroupingRule'
+    ReaderDeliveryGrouping:
+      type: object
+      required:
+        [
+          id,
+          provider,
+          targetType,
+          targetId,
+          targetName,
+          groupName,
+          remoteGroupId,
+          isPublic,
+          syncToKobo,
+          status,
+          lastMatchCount,
+          countVerified,
+          lastError,
+          lastSyncedAt,
+          serviceUrl,
+        ]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        provider:
+          type: string
+          enum: [grimmory, bookorbit]
+        targetType:
+          type: string
+          enum: [author, book-series, comic-series]
+        targetId:
+          type: string
+        targetName:
+          type: string
+        groupName:
+          type: string
+        remoteGroupId:
+          type: string
+          nullable: true
+        isPublic:
+          type: boolean
+        syncToKobo:
+          type: boolean
+        status:
+          type: string
+          enum: [pending, ready, error]
+        lastMatchCount:
+          type: integer
+          minimum: 0
+        countVerified:
+          type: boolean
+        lastError:
+          type: string
+          nullable: true
+        lastSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+        serviceUrl:
+          type: string
+          format: uri
+          nullable: true
+    ReaderGroupingPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [provider, target]
+      properties:
+        provider:
+          type: string
+          enum: [grimmory, bookorbit]
+        target:
+          $ref: '#/components/schemas/ReaderGroupingTarget'
+    ReaderGroupingPreview:
+      type: object
+      required:
+        [provider, target, rule, ruleSummary, matchedCount, sampleTitles]
+      properties:
+        provider:
+          type: string
+          enum: [grimmory, bookorbit]
+        target:
+          $ref: '#/components/schemas/ReaderGroupingTarget'
+        rule:
+          $ref: '#/components/schemas/ReaderGroupingFilter'
+        ruleSummary:
+          type: string
+        matchedCount:
+          type: integer
+          minimum: 0
+        sampleTitles:
+          type: array
+          maxItems: 5
+          items:
+            type: string
+    ReaderGroupingSaveRequest:
+      type: object
+      additionalProperties: false
+      required: [provider, target]
+      properties:
+        provider:
+          type: string
+          enum: [grimmory, bookorbit]
+        target:
+          $ref: '#/components/schemas/ReaderGroupingTarget'
+        isPublic:
+          type: boolean
+        syncToKobo:
+          type: boolean
+        allowEmpty:
+          type: boolean
+          description: Must be true to create a rule when the current preview has no matches.
+    ReaderGroupingSaveResponse:
+      type: object
+      required: [grouping, previewCount, sampleTitles, ruleSummary]
+      properties:
+        grouping:
+          $ref: '#/components/schemas/ReaderDeliveryGrouping'
+        previewCount:
+          type: integer
+          minimum: 0
+        sampleTitles:
+          type: array
+          maxItems: 5
+          items:
+            type: string
+        ruleSummary:
+          type: string
+        warning:
+          type: string
+    ReaderGroupingConnectionTest:
+      type: object
+      required: [connected, provider, existingGroupingCount]
+      properties:
+        connected:
+          type: boolean
+        provider:
+          type: string
+          enum: [grimmory, bookorbit]
+        existingGroupingCount:
+          type: integer
+          minimum: 0
+    ReaderGroupingDeleteResponse:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
+          type: boolean
+    GameLibraryEntry:
+      type: object
+      required:
+        [
+          id,
+          externalKey,
+          catalogId,
+          category,
+          title,
+          status,
+          isOwned,
+          steamAppId,
+          steamOwned,
+          playtimeMinutes,
+          storeName,
+          platformName,
+          shareWithHousehold,
+          source,
+          lastSyncedAt,
+        ]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        externalKey:
+          type: string
+        catalogId:
+          type: integer
+          nullable: true
+        category:
+          type: string
+          enum: [game, retro, modern]
+        title:
+          type: string
+        summary:
+          type: string
+        coverUrl:
+          type: string
+        releaseDate:
+          type: string
+        status:
+          type: string
+          enum: [backlog, playing, played, completed, paused, dropped]
+        isOwned:
+          type: boolean
+        steamAppId:
+          type: integer
+          nullable: true
+        steamOwned:
+          type: boolean
+        playtimeMinutes:
+          type: integer
+          minimum: 0
+        storeName:
+          type: string
+        platformName:
+          type: string
+        shareWithHousehold:
+          type: boolean
+        source:
+          type: string
+          enum: [manual, steam]
+        lastSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        request:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: integer
+            status:
+              type: string
+    GameLibraryPage:
+      type: object
+      required: [total, nextOffset, results]
+      properties:
+        total:
+          type: integer
+        nextOffset:
+          type: integer
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GameLibraryEntry'
+    SharedGameLibraryPage:
+      type: object
+      required: [total, nextOffset, results]
+      properties:
+        total:
+          type: integer
+        nextOffset:
+          type: integer
+          nullable: true
+        results:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                key,
+                catalogId,
+                category,
+                title,
+                owners,
+                ownerCount,
+                steamAppId,
+                playtimeMinutes,
+              ]
+            properties:
+              key:
+                type: string
+              catalogId:
+                type: integer
+                nullable: true
+              category:
+                type: string
+                enum: [game, retro, modern]
+              title:
+                type: string
+              summary:
+                type: string
+              coverUrl:
+                type: string
+              ownerCount:
+                type: integer
+              owners:
+                type: array
+                items:
+                  type: object
+                  required:
+                    [
+                      id,
+                      displayName,
+                      status,
+                      storeName,
+                      platformName,
+                      playtimeMinutes,
+                    ]
+                  properties:
+                    id:
+                      type: integer
+                    displayName:
+                      type: string
+                    avatar:
+                      type: string
+                    status:
+                      type: string
+                      enum:
+                        [backlog, playing, played, completed, paused, dropped]
+                    storeName:
+                      type: string
+                    platformName:
+                      type: string
+                    playtimeMinutes:
+                      type: integer
+                      minimum: 0
+              steamAppId:
+                type: integer
+                nullable: true
+              playtimeMinutes:
+                type: integer
+                minimum: 0
+    GameLibraryMutation:
+      type: object
+      additionalProperties: false
+      required: [category, catalogId]
+      properties:
+        category:
+          type: string
+          enum: [game, retro, modern]
+        catalogId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        status:
+          type: string
+          enum: [backlog, playing, played, completed, paused, dropped]
+        isOwned:
+          type: boolean
+        storeName:
+          type: string
+          maxLength: 120
+        platformName:
+          type: string
+          maxLength: 120
+        shareWithHousehold:
+          type: boolean
+    GameLibraryManualMutation:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        category:
+          type: string
+          enum: [game, retro, modern]
+          default: game
+        title:
+          type: string
+          minLength: 1
+          maxLength: 512
+        status:
+          type: string
+          enum: [backlog, playing, played, completed, paused, dropped]
+        isOwned:
+          type: boolean
+        storeName:
+          type: string
+          maxLength: 120
+        platformName:
+          type: string
+          maxLength: 120
+        shareWithHousehold:
+          type: boolean
+    GameLibraryPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        status:
+          type: string
+          enum: [backlog, playing, played, completed, paused, dropped]
+        isOwned:
+          type: boolean
+        storeName:
+          type: string
+          maxLength: 120
+        platformName:
+          type: string
+          maxLength: 120
+        shareWithHousehold:
+          type: boolean
+    GameLibraryMutationResponse:
+      type: object
+      required: [entry]
+      properties:
+        entry:
+          $ref: '#/components/schemas/GameLibraryEntry'
+    GameLibraryErrorResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
+    ExternalRequestList:
+      type: object
+      required: [id, provider, sourceUrl]
+      properties:
+        id:
+          type: integer
+        provider:
+          type: string
+          enum: [imdb, goodreads]
+        sourceUrl:
+          type: string
+          format: uri
+        lastSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastSyncError:
+          type: string
+          nullable: true
+    ExternalRequestListSyncResult:
+      type: object
+      required:
+        - listId
+        - provider
+        - sourceItems
+        - requested
+        - alreadyRequested
+        - unmatched
+        - failed
+        - lastSyncedAt
+      properties:
+        listId:
+          type: integer
+        provider:
+          type: string
+          enum: [imdb, goodreads]
+        sourceItems:
+          type: integer
+        requested:
+          type: integer
+        alreadyRequested:
+          type: integer
+        unmatched:
+          type: integer
+        failed:
+          type: integer
+        lastSyncedAt:
+          type: string
+          format: date-time
+        error:
+          type: string
     SoftwareProviderSettingsInput:
       type: object
       properties:
@@ -1724,6 +2266,61 @@ components:
         - hostname
         - port
         - apiKey
+    AudiobookshelfSettings:
+      type: object
+      description: Read-only Audiobookshelf book library connection used for audiobook availability.
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          maxLength: 128
+        hostname:
+          type: string
+          maxLength: 512
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        useSsl:
+          type: boolean
+        apiKey:
+          type: string
+          description: User API token. Responses redact this value.
+        baseUrl:
+          type: string
+          maxLength: 512
+        externalUrl:
+          type: string
+          maxLength: 512
+        libraryId:
+          type: string
+          maxLength: 256
+        libraryName:
+          type: string
+          maxLength: 256
+        syncEnabled:
+          type: boolean
+      required:
+        - name
+        - hostname
+        - port
+        - apiKey
+        - libraryId
+        - libraryName
+        - syncEnabled
+    AudiobookshelfLibrary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        numBooks:
+          type: integer
+          minimum: 0
+      required: [id, name]
     RadarrSettings:
       type: object
       properties:
@@ -7932,7 +8529,7 @@ paths:
   /settings/software-acquisition:
     get:
       summary: Get software acquisition provider settings
-      description: Returns ROMarrNG and QuestarrNG connection settings with API keys redacted, the selected emulation catalog provider, and administrator-assigned Retro and Modern system groups.
+      description: Returns ROMarrNG, QuestarrNG, and Steam connection state with API keys redacted, the selected emulation catalog provider, and administrator-assigned Retro and Modern system groups.
       tags:
         - settings
       responses:
@@ -7955,9 +8552,14 @@ paths:
                     additionalProperties:
                       type: string
                       enum: [retro, modern]
+                  steamApiKey:
+                    type: string
+                    description: Always empty or redacted; never returns the configured secret.
+                  steamApiKeyConfigured:
+                    type: boolean
     put:
       summary: Update software acquisition settings
-      description: Updates provider connections, the selected emulation IGDB catalog, and per-system emulation groups. API keys stay server-side and are redacted in responses.
+      description: Updates provider connections, the selected emulation IGDB catalog, per-system emulation groups, and the Steam Web API key. API keys stay server-side and are redacted in responses; omit an unchanged secret to keep it.
       tags:
         - settings
       requestBody:
@@ -7979,6 +8581,9 @@ paths:
                   additionalProperties:
                     type: string
                     enum: [retro, modern]
+                steamApiKey:
+                  type: string
+                  maxLength: 2048
       responses:
         '200':
           description: Software acquisition settings updated
@@ -7999,6 +8604,10 @@ paths:
                     additionalProperties:
                       type: string
                       enum: [retro, modern]
+                  steamApiKey:
+                    type: string
+                  steamApiKeyConfigured:
+                    type: boolean
         '400':
           description: Invalid provider or system-group settings
   /settings/software-acquisition/test/{provider}:
@@ -8039,6 +8648,165 @@ paths:
           description: Invalid provider settings
         '502':
           description: Provider did not return a supported integration contract
+  /settings/reader-delivery:
+    get:
+      summary: Get reader app connection and shelf-management settings
+      description: Returns administrator-configured service addresses and usernames. Passwords are redacted and can be preserved by sending the redacted marker back unchanged.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Reader app settings returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderDeliverySettings'
+    put:
+      summary: Update reader app connection and shelf-management settings
+      description: Stores administrator credentials in protected application settings for live shelf management. OPDS reader credentials remain configured in the reader service. Passwords are redacted on reads; clear flags remove the saved account credentials.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReaderDeliverySettings'
+      responses:
+        '200':
+          description: Reader app settings updated with secrets redacted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderDeliverySettings'
+        '400':
+          description: Invalid service URL, provider, or credentials
+        '403':
+          description: Administrator permission required
+  /settings/reader-delivery/connection-test:
+    post:
+      summary: Test reader service account access
+      description: Logs in with saved administrator credentials and verifies that SeerrNG can list the service's existing managed grouping collection.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider]
+              properties:
+                provider:
+                  type: string
+                  enum: [grimmory, bookorbit]
+      responses:
+        '200':
+          description: Reader service login and grouping access verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderGroupingConnectionTest'
+        '400':
+          description: Provider is invalid or required account settings are missing
+        '403':
+          description: Administrator permission required
+        '502':
+          description: Reader service could not be reached or rejected the account
+  /settings/reader-delivery/groupings:
+    get:
+      summary: List SeerrNG-managed reader shelves
+      description: Returns only the reader grouping mappings created and managed by SeerrNG. It does not import unmanaged service groupings.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Managed reader shelves returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReaderDeliveryGrouping'
+    post:
+      summary: Create or update a rule-based reader shelf
+      description: Previews the rule, requires explicit allowEmpty consent for zero current matches, and then creates or updates the SeerrNG-managed shelf in the selected reader service.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReaderGroupingSaveRequest'
+      responses:
+        '200':
+          description: Reader shelf saved; countVerified indicates whether the provider confirmed its final item count
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderGroupingSaveResponse'
+        '400':
+          description: Invalid provider, target, or option
+        '403':
+          description: Administrator permission required
+        '409':
+          description: Empty match requires opt-in, a concurrent update is in progress, or provider visibility is immutable
+        '502':
+          description: Reader service could not complete the grouping operation
+  /settings/reader-delivery/groupings/preview:
+    post:
+      summary: Preview a reader shelf rule
+      description: Checks current matches and returns a provider-specific live grouping filter with a bounded title sample.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReaderGroupingPreviewRequest'
+      responses:
+        '200':
+          description: Rule preview returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderGroupingPreview'
+        '400':
+          description: Invalid provider, target, or missing service credentials
+        '403':
+          description: Administrator permission required
+        '502':
+          description: Reader service could not return a rule preview
+  /settings/reader-delivery/groupings/{id}:
+    delete:
+      summary: Remove a SeerrNG-managed reader shelf
+      description: Deletes the mapped shelf in the reader service and removes its SeerrNG mapping. It does not delete library books or files.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Managed shelf and mapping removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderGroupingDeleteResponse'
+        '400':
+          description: Invalid grouping ID or missing service credentials
+        '403':
+          description: Administrator permission required
+        '404':
+          description: Managed shelf not found
+        '502':
+          description: Reader service could not delete the managed shelf
   /settings/prowlarr:
     get:
       summary: Get Prowlarr connection settings
@@ -14591,6 +15359,42 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/LidarrSettings'
+  /service/reader-delivery:
+    get:
+      summary: Get the preferred reader catalog and Grimmory comic-reader URL
+      tags:
+        - service
+      responses:
+        '200':
+          description: Configured reader delivery addresses returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - preferredProvider
+                  - provider
+                  - serviceName
+                  - serviceUrl
+                  - grimmoryUrl
+                properties:
+                  preferredProvider:
+                    type: string
+                    enum: [grimmory, bookorbit]
+                  provider:
+                    type: string
+                    enum: [grimmory, bookorbit]
+                  serviceName:
+                    type: string
+                    enum: [Grimmory, BookOrbit]
+                  serviceUrl:
+                    type: string
+                    nullable: true
+                    format: uri
+                  grimmoryUrl:
+                    type: string
+                    nullable: true
+                    format: uri
   /service/lidarr/{lidarrId}:
     get:
       summary: Get Lidarr service details
@@ -15059,6 +15863,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReadarrSettings'
+  /settings/audiobookshelf:
+    get:
+      summary: Get Audiobookshelf availability settings
+      description: Returns the configured read-only book library connection, with its API token redacted, or null when not configured.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Audiobookshelf availability settings returned
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/AudiobookshelfSettings'
+                nullable: true
+    put:
+      summary: Save Audiobookshelf availability settings
+      description: Configures a read-only Audiobookshelf book library. SeerrNG matches books by ISBN and never modifies Audiobookshelf items.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudiobookshelfSettings'
+      responses:
+        '200':
+          description: Audiobookshelf availability settings saved with the API token redacted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudiobookshelfSettings'
+        '400':
+          description: Invalid Audiobookshelf settings
+    delete:
+      summary: Remove Audiobookshelf availability settings
+      description: Removes the configured library and clears linked Audiobookshelf availability from books.
+      tags:
+        - settings
+      responses:
+        '204':
+          description: Audiobookshelf availability settings removed
+  /settings/audiobookshelf/test:
+    post:
+      summary: Test Audiobookshelf connection
+      description: Lists available Audiobookshelf book libraries without changing them.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServarrConnectionSettings'
+      responses:
+        '200':
+          description: Available book libraries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [libraries]
+                properties:
+                  libraries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AudiobookshelfLibrary'
+        '400':
+          description: Invalid connection settings
+        '502':
+          description: Audiobookshelf connection failed
   /settings/mylar:
     get:
       summary: Get Mylar settings
@@ -15592,6 +16468,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuwayomiError'
+  /request/lists:
+    get:
+      summary: Get the signed-in user's external request lists
+      tags:
+        - request
+      responses:
+        '200':
+          description: External request lists returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExternalRequestList'
+    post:
+      summary: Add a public IMDb or Goodreads list for recurring requests
+      tags:
+        - request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                  maxLength: 2048
+                  example: https://www.imdb.com/user/ur12345678/watchlist/
+      responses:
+        '201':
+          description: External request list saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalRequestList'
+  /request/lists/{listId}/sync:
+    post:
+      summary: Sync a configured public list now
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: listId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: List synchronization results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalRequestListSyncResult'
+  /request/lists/{listId}:
+    delete:
+      summary: Remove a configured external request list
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: listId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '204':
+          description: External request list removed
   /request:
     get:
       summary: Get all requests
@@ -16078,6 +17026,568 @@ paths:
           description: Title not found in the selected category
         '503':
           description: Selected emulation catalog is unavailable or unconfigured
+  /game-library:
+    get:
+      summary: List the signed-in user's personal game library
+      description: Returns only the caller's entries, progress, ownership facts, private sharing setting, and the caller's own latest software request state.
+      tags: [game library]
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+            maxLength: 120
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [backlog, playing, played, completed, paused, dropped]
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum: [game, retro, modern]
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 48
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 9999999
+            default: 0
+      responses:
+        '200':
+          description: Personal game library page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryPage'
+        '400':
+          description: Invalid filter or pagination input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '401':
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '403':
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+    post:
+      summary: Add a catalog title to the caller's personal game library
+      description: Adds a private backlog entry by default. Existing progress, ownership, and sharing choices are preserved when a title is already tracked. Requires a signed-in browser session.
+      tags: [game library]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GameLibraryMutation'
+      responses:
+        '200':
+          description: Existing library entry returned after refreshing catalog metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryMutationResponse'
+        '400':
+          description: Invalid game or library state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '403':
+          description: A browser session is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '502':
+          description: The configured catalog could not confirm the title
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+  /game-library/manual:
+    post:
+      summary: Add a game that is missing from the catalog
+      description: Creates a private personal entry without requiring a catalog or acquisition provider. Requires a signed-in browser session.
+      tags: [game library]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GameLibraryManualMutation'
+      responses:
+        '201':
+          description: Manual game added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryMutationResponse'
+        '200':
+          description: Matching manual entry already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryMutationResponse'
+        '400':
+          description: Invalid game title or library state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '403':
+          description: A browser session is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+  /game-library/shared:
+    get:
+      summary: Browse games explicitly shared by household members
+      description: Returns only entries whose owners opted in and marked them owned. Owner names, progress, store, and playtime are visible only for a shared owned title.
+      tags: [game library]
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+            maxLength: 120
+        - in: query
+          name: minOwners
+          description: Use 2 to show titles shared by at least two owners.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 48
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 9999999
+            default: 0
+      responses:
+        '200':
+          description: Shared game library page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SharedGameLibraryPage'
+        '400':
+          description: Invalid filter or pagination input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '401':
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '403':
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+  /game-library/lookup:
+    get:
+      summary: Check whether the caller tracks a catalog game
+      description: The response contains only the caller's own entry and does not reveal household data.
+      tags: [game library]
+      parameters:
+        - in: query
+          name: category
+          required: true
+          schema:
+            type: string
+            enum: [game, retro, modern]
+        - in: query
+          name: catalogId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      responses:
+        '200':
+          description: Caller-specific tracked entry, if present
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entry]
+                properties:
+                  entry:
+                    type: object
+                    nullable: true
+                    properties:
+                      id:
+                        type: integer
+                        minimum: 1
+        '400':
+          description: Invalid catalog lookup
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '403':
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+  /game-library/{id}:
+    patch:
+      summary: Update the caller's game progress and sharing choices
+      description: Only the owner can update an entry. Sharing requires the caller to mark the game owned.
+      tags: [game library]
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GameLibraryPatch'
+      responses:
+        '200':
+          description: Updated personal entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryMutationResponse'
+        '400':
+          description: Invalid state or sharing an unowned title
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '403':
+          description: A browser session is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '404':
+          description: Entry not owned by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+    delete:
+      summary: Remove one of the caller's game library entries
+      tags: [game library]
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '204':
+          description: Entry removed
+        '403':
+          description: A browser session is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '404':
+          description: Entry not owned by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+  /game-library/{id}/match:
+    post:
+      summary: Match an imported game to a software catalog title
+      description: Explicitly links one of the caller's unmatched Steam or manual titles to QuestarrNG's PC game catalog, without automatic title guessing.
+      tags: [game library]
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GameLibraryMutation'
+      responses:
+        '200':
+          description: Catalog match applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryMutationResponse'
+        '400':
+          description: Invalid catalog match
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '403':
+          description: A browser session is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '404':
+          description: Entry not owned by the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '409':
+          description: Entry is already matched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '502':
+          description: Catalog provider unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+  /game-library/steam/status:
+    get:
+      summary: Get the caller's Steam link and sync status
+      tags: [game library]
+      responses:
+        '200':
+          description: Private caller-specific Steam status; never returns the administrator API key
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  [connected, lastSyncedAt, lastSyncCount, apiKeyConfigured]
+                properties:
+                  connected:
+                    type: boolean
+                  lastSyncedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  lastSyncCount:
+                    type: integer
+                  apiKeyConfigured:
+                    type: boolean
+        '403':
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+  /game-library/steam/connect:
+    get:
+      summary: Start the Steam OpenID account linking flow
+      description: Starts a one-use, session-bound Steam identity verification. Requires a configured SeerrNG application URL and a signed-in browser session.
+      tags: [game library]
+      security:
+        - cookieAuth: []
+      responses:
+        '302':
+          description: Redirect to Steam to authenticate the account
+        '400':
+          description: Application URL is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '403':
+          description: A browser session is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+  /game-library/steam/callback:
+    get:
+      summary: Complete the Steam OpenID account linking flow
+      description: Validates the session state, exact callback URL, Steam issuer, signed identity assertion, and Steam's check_authentication response before linking an account.
+      tags: [game library]
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: state
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-f0-9]{64}$
+        - in: query
+          name: openid.ns
+          schema:
+            type: string
+        - in: query
+          name: openid.mode
+          schema:
+            type: string
+        - in: query
+          name: openid.op_endpoint
+          schema:
+            type: string
+        - in: query
+          name: openid.claimed_id
+          schema:
+            type: string
+        - in: query
+          name: openid.identity
+          schema:
+            type: string
+        - in: query
+          name: openid.return_to
+          schema:
+            type: string
+        - in: query
+          name: openid.response_nonce
+          schema:
+            type: string
+        - in: query
+          name: openid.assoc_handle
+          schema:
+            type: string
+        - in: query
+          name: openid.signed
+          schema:
+            type: string
+        - in: query
+          name: openid.sig
+          schema:
+            type: string
+        - in: query
+          name: openid.invalidate_handle
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect back to My Games with a connection result
+        '403':
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+  /game-library/steam/sync:
+    post:
+      summary: Synchronize the caller's public Steam game library
+      description: Imports owned Steam titles and playtime. Unmatched Steam games remain private; sync never changes manual progress, and missing titles are no longer treated as Steam-owned. Requires a signed-in browser session and an administrator-configured API key.
+      tags: [game library]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Sync counts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [imported, updated, total]
+                properties:
+                  imported:
+                    type: integer
+                  updated:
+                    type: integer
+                  total:
+                    type: integer
+        '403':
+          description: A browser session is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '409':
+          description: Steam account is not linked or game details are private
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '413':
+          description: Steam returned more titles than the sync limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '503':
+          description: Steam API key is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '502':
+          description: Steam is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+        '429':
+          description: Steam sync rate limit reached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
+  /game-library/steam:
+    delete:
+      summary: Unlink Steam from the caller's game library
+      description: Removes the account link, preserves imported titles and playtime, and clears verified Steam ownership and household sharing for entries not manually marked owned.
+      tags: [game library]
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Steam account unlinked
+        '403':
+          description: A browser session is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameLibraryErrorResponse'
   /request/software/status:
     get:
       summary: List software request status
@@ -16429,6 +17939,12 @@ paths:
             type: number
             minimum: 1
         - in: query
+          name: mediaId
+          description: Restrict results to requests for one internal media record.
+          schema:
+            type: number
+            minimum: 1
+        - in: query
           name: bookFormat
           description: Restrict book requests to ebook-compatible or audiobook-compatible requests.
           schema:
@@ -16615,8 +18131,15 @@ paths:
                           type: integer
                           minimum: 0
                           description: Size in bytes when known. Manga chapters omit it.
+                        format:
+                          type: string
+                          description: Book file format; omitted for non-book assets.
+                          enum: [ebook, audiobook]
                       required: [id, name]
-                required: [results]
+                  hadErrors:
+                    type: boolean
+                    description: True when one or more provider lookups failed; results may still contain usable files.
+                required: [results, hadErrors]
         '403':
           description: Caller may not view this request
         '404':

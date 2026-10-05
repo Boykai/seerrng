@@ -84,6 +84,10 @@ const messages = defineMessages('components.SoftwareCatalog', {
   noCategories: 'No software categories are currently available.',
   titleUnavailable: 'This catalog title could not be loaded.',
   available: 'In library',
+  owned: 'Owned in QuestarrNG',
+  steamOwned: 'Steam Library',
+  steamOwnedDescription:
+    'QuestarrNG found this game in its linked public Steam library. It may not be installed or available as a local QuestarrNG file.',
   tracked: 'Tracked',
   downloading: 'Downloading',
   availabilityUnknown: 'Availability unknown',
@@ -91,6 +95,19 @@ const messages = defineMessages('components.SoftwareCatalog', {
   watchVideo: 'Watch {name}',
   gameVideo: 'Game video',
   rating: 'Rating: {rating}/10',
+  estimatedPlayTime: 'Estimated Play Time',
+  quickFinish: 'Quick Finish',
+  mainStoryLabel: 'Main Story',
+  mainStoryEstimate: 'Main Story: {hours} h',
+  completionist: 'Completionist',
+  hoursValue: '{hours} h',
+  addToMyGames: 'Add to My Games',
+  alreadyInMyGames: 'Already in My Games',
+  gameAddedToLibrary: 'Added as a private backlog game.',
+  gameLibraryAddError: 'This game could not be added to My Games.',
+  openMyGames: 'Open My Games',
+  gameLibraryDescription:
+    'Add it to your private game library, then track progress and choose whether to share it with your household.',
 });
 
 type Category = 'retro' | 'modern' | 'game';
@@ -122,15 +139,22 @@ interface CatalogGame {
   platforms: string[];
   platformOptions: { id: number; name: string }[];
   genres: string[];
+  steamAppId?: number | null;
+  steamOwned?: boolean;
   emulationSystems?: EmulationSystemOption[];
   availability?:
-    'available' | 'tracked' | 'downloading' | 'missing' | 'unknown';
+    'available' | 'owned' | 'tracked' | 'downloading' | 'missing' | 'unknown';
   availableSystems?: string[];
   rating?: number | null;
   publishers?: string[];
   developers?: string[];
   screenshots?: string[];
   videos?: { name: string; videoId: string }[];
+  timeToBeat?: {
+    hastily?: number;
+    normally?: number;
+    completely?: number;
+  } | null;
 }
 
 interface CatalogResponse {
@@ -177,6 +201,8 @@ const SoftwareCatalog = ({
   const [requestError, setRequestError] = useState('');
   const [requestSuccess, setRequestSuccess] = useState('');
   const [requesting, setRequesting] = useState(false);
+  const [addingToLibrary, setAddingToLibrary] = useState(false);
+  const [gameLibraryFeedback, setGameLibraryFeedback] = useState('');
   const hydratedGameId = useRef<number | undefined>(undefined);
   const openedFromCatalog = useRef(false);
   const linkedCategory =
@@ -196,10 +222,20 @@ const SoftwareCatalog = ({
       ? `/api/v1/request/software/catalog/games/${linkedGameId}?category=${linkedCategory}`
       : null
   );
-
   useEffect(() => {
     if (router.isReady && linkedCategory) setCategory(linkedCategory);
   }, [linkedCategory, router.isReady]);
+
+  const linkedSearchQuery =
+    typeof router.query.q === 'string' ? router.query.q : undefined;
+  useEffect(() => {
+    if (!router.isReady || externalQuery !== undefined || !linkedSearchQuery) {
+      return;
+    }
+    setCategory(linkedCategory ?? 'game');
+    setSearchInput(linkedSearchQuery);
+    setSubmittedQuery(linkedSearchQuery);
+  }, [externalQuery, linkedCategory, linkedSearchQuery, router.isReady]);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -231,6 +267,12 @@ const SoftwareCatalog = ({
   const selectedCategory = visibleCategories.includes(category)
     ? category
     : (visibleCategories[0] ?? category);
+  const gameLibraryLookupKey = selectedGame
+    ? `/api/v1/game-library/lookup?category=${selectedCategory}&catalogId=${selectedGame.igdbId}`
+    : null;
+  const { data: gameLibraryLookup, mutate: mutateGameLibraryLookup } = useSWR<{
+    entry: { id: number } | null;
+  }>(gameLibraryLookupKey);
   const { data: systemCatalog } = useSWR<{ results: CatalogSystemOption[] }>(
     selectedCategory !== 'game' && visibleCategories.length
       ? '/api/v1/request/software/catalog/systems'
@@ -433,6 +475,24 @@ const SoftwareCatalog = ({
     }
   };
 
+  const addToMyGames = async () => {
+    if (!selectedGame || !user) return;
+    setAddingToLibrary(true);
+    setGameLibraryFeedback('');
+    try {
+      await axios.post('/api/v1/game-library', {
+        category: selectedCategory,
+        catalogId: selectedGame.igdbId,
+      });
+      await mutateGameLibraryLookup();
+      setGameLibraryFeedback(intl.formatMessage(messages.gameAddedToLibrary));
+    } catch {
+      setGameLibraryFeedback(intl.formatMessage(messages.gameLibraryAddError));
+    } finally {
+      setAddingToLibrary(false);
+    }
+  };
+
   const categoryTitle = intl.formatMessage(
     selectedCategory === 'game'
       ? messages.games
@@ -443,13 +503,15 @@ const SoftwareCatalog = ({
   const availabilityLabel = (game: CatalogGame) =>
     game.availability === 'available'
       ? intl.formatMessage(messages.available)
-      : game.availability === 'tracked'
-        ? intl.formatMessage(messages.tracked)
-        : game.availability === 'downloading'
-          ? intl.formatMessage(messages.downloading)
-          : game.availability === 'unknown'
-            ? intl.formatMessage(messages.availabilityUnknown)
-            : '';
+      : game.availability === 'owned'
+        ? intl.formatMessage(messages.owned)
+        : game.availability === 'tracked'
+          ? intl.formatMessage(messages.tracked)
+          : game.availability === 'downloading'
+            ? intl.formatMessage(messages.downloading)
+            : game.availability === 'unknown'
+              ? intl.formatMessage(messages.availabilityUnknown)
+              : '';
 
   return (
     <>
@@ -651,6 +713,20 @@ const SoftwareCatalog = ({
                           {availabilityLabel(game)}
                         </span>
                       )}
+                      {game.steamOwned && (
+                        <span
+                          className="software-catalog-library-badge media-type-badge media-type-badge-compact"
+                          data-presentation="poster"
+                          aria-label={intl.formatMessage(
+                            messages.steamOwnedDescription
+                          )}
+                          title={intl.formatMessage(
+                            messages.steamOwnedDescription
+                          )}
+                        >
+                          {intl.formatMessage(messages.steamOwned)}
+                        </span>
+                      )}
                       <button
                         type="button"
                         className="relative block h-full w-full"
@@ -679,6 +755,19 @@ const SoftwareCatalog = ({
                         {game.releaseDate ||
                           game.genres.slice(0, 2).join(' · ')}
                       </p>
+                      {selectedCategory === 'game' &&
+                        game.timeToBeat?.normally != null && (
+                          <p className="software-catalog-playtime-value card-table-value card-spacing-before">
+                            {intl.formatMessage(messages.mainStoryEstimate, {
+                              hours: intl.formatNumber(
+                                game.timeToBeat.normally,
+                                {
+                                  maximumFractionDigits: 1,
+                                }
+                              ),
+                            })}
+                          </p>
+                        )}
                       <p className="mt-2 line-clamp-2 min-h-8 text-xs text-gray-300">
                         {selectedCategory === 'game'
                           ? game.platforms
@@ -780,6 +869,18 @@ const SoftwareCatalog = ({
                       {availabilityLabel(selectedGame)}
                     </p>
                   )}
+                  {selectedGame.steamOwned && (
+                    <p
+                      className="software-catalog-library-badge media-type-badge media-type-badge-compact"
+                      data-presentation="inline"
+                      aria-label={intl.formatMessage(
+                        messages.steamOwnedDescription
+                      )}
+                      title={intl.formatMessage(messages.steamOwnedDescription)}
+                    >
+                      {intl.formatMessage(messages.steamOwned)}
+                    </p>
+                  )}
                   {selectedGame.summary && <p>{selectedGame.summary}</p>}
                   {selectedGame.releaseDate && (
                     <p className="mt-2 text-gray-400">
@@ -805,6 +906,104 @@ const SoftwareCatalog = ({
                   ) : null}
                 </div>
               </div>
+              {selectedCategory === 'game' &&
+                selectedGame.timeToBeat &&
+                (selectedGame.timeToBeat.hastily != null ||
+                  selectedGame.timeToBeat.normally != null ||
+                  selectedGame.timeToBeat.completely != null) && (
+                  <section
+                    aria-label={intl.formatMessage(messages.estimatedPlayTime)}
+                    className="app-card-inset refreshed-inset-surface"
+                  >
+                    <h3 className="media-inset-heading card-spacing-after">
+                      {intl.formatMessage(messages.estimatedPlayTime)}
+                    </h3>
+                    <dl className="card-table detail-paired-columns">
+                      {selectedGame.timeToBeat.hastily != null && (
+                        <>
+                          <dt className="card-table-heading">
+                            {intl.formatMessage(messages.quickFinish)}
+                          </dt>
+                          <dd className="card-table-value">
+                            {intl.formatMessage(messages.hoursValue, {
+                              hours: intl.formatNumber(
+                                selectedGame.timeToBeat.hastily,
+                                { maximumFractionDigits: 1 }
+                              ),
+                            })}
+                          </dd>
+                        </>
+                      )}
+                      {selectedGame.timeToBeat.normally != null && (
+                        <>
+                          <dt className="card-table-heading">
+                            {intl.formatMessage(messages.mainStoryLabel)}
+                          </dt>
+                          <dd className="card-table-value">
+                            {intl.formatMessage(messages.hoursValue, {
+                              hours: intl.formatNumber(
+                                selectedGame.timeToBeat.normally,
+                                { maximumFractionDigits: 1 }
+                              ),
+                            })}
+                          </dd>
+                        </>
+                      )}
+                      {selectedGame.timeToBeat.completely != null && (
+                        <>
+                          <dt className="card-table-heading">
+                            {intl.formatMessage(messages.completionist)}
+                          </dt>
+                          <dd className="card-table-value">
+                            {intl.formatMessage(messages.hoursValue, {
+                              hours: intl.formatNumber(
+                                selectedGame.timeToBeat.completely,
+                                { maximumFractionDigits: 1 }
+                              ),
+                            })}
+                          </dd>
+                        </>
+                      )}
+                    </dl>
+                  </section>
+                )}
+              {user && (
+                <section className="app-card-inset card-layout">
+                  <p className="card-body-text">
+                    {intl.formatMessage(messages.gameLibraryDescription)}
+                  </p>
+                  <div className="app-action-row">
+                    <Button
+                      buttonType="default"
+                      buttonSize="sm"
+                      disabled={
+                        addingToLibrary || Boolean(gameLibraryLookup?.entry)
+                      }
+                      onClick={() => void addToMyGames()}
+                    >
+                      {gameLibraryLookup?.entry
+                        ? intl.formatMessage(messages.alreadyInMyGames)
+                        : addingToLibrary
+                          ? intl.formatMessage(globalMessages.loading)
+                          : intl.formatMessage(messages.addToMyGames)}
+                    </Button>
+                    {gameLibraryLookup?.entry && (
+                      <Button
+                        buttonType="default"
+                        buttonSize="sm"
+                        onClick={() => void router.push('/games')}
+                      >
+                        {intl.formatMessage(messages.openMyGames)}
+                      </Button>
+                    )}
+                  </div>
+                  {gameLibraryFeedback && (
+                    <p className="page-status" role="status">
+                      {gameLibraryFeedback}
+                    </p>
+                  )}
+                </section>
+              )}
               {(selectedGame.screenshots?.length ?? 0) > 0 && (
                 <div>
                   <h3 className="mb-2 font-semibold text-white">

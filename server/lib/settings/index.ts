@@ -123,6 +123,7 @@ export type EmulationSystemGroup = 'retro' | 'modern';
 export interface SoftwareAcquisitionSettings {
   romarr: SoftwareProviderSettings;
   questarr: SoftwareProviderSettings;
+  steamApiKey: string;
   emulationCatalogProvider: 'questarr' | 'romarr';
   emulationSystemGroups: Record<string, EmulationSystemGroup>;
 }
@@ -178,6 +179,20 @@ export interface ReadarrSettings extends DVRSettings {
   activeMetadataProfileId?: number;
   activeMetadataProfileName?: string;
   serviceType?: 'ebook' | 'audiobook';
+}
+
+export interface AudiobookshelfSettings {
+  id: number;
+  name: string;
+  hostname: string;
+  port: number;
+  apiKey: string;
+  useSsl: boolean;
+  baseUrl?: string;
+  externalUrl?: string;
+  libraryId: string;
+  libraryName: string;
+  syncEnabled: boolean;
 }
 
 export interface CollectorServiceSettings {
@@ -554,6 +569,7 @@ export type JobId =
   | 'image-cache-cleanup'
   | 'release-calendar-history'
   | 'availability-sync'
+  | 'external-request-list-sync'
   | 'process-blocklisted-tags';
 
 export interface DiscoveryIntegrationsSettings {
@@ -562,6 +578,28 @@ export interface DiscoveryIntegrationsSettings {
   simkl: { clientId: string };
   mdblist: { apiKey: string };
 }
+
+export type ReaderDeliveryProvider = 'grimmory' | 'bookorbit';
+
+export interface ReaderDeliverySettings {
+  grimmoryUrl: string;
+  grimmoryUsername: string;
+  grimmoryPassword: string;
+  bookorbitUrl: string;
+  bookorbitUsername: string;
+  bookorbitPassword: string;
+  preferredProvider: ReaderDeliveryProvider;
+}
+
+export const defaultReaderDeliverySettings = (): ReaderDeliverySettings => ({
+  grimmoryUrl: '',
+  grimmoryUsername: '',
+  grimmoryPassword: '',
+  bookorbitUrl: '',
+  bookorbitUsername: '',
+  bookorbitPassword: '',
+  preferredProvider: 'grimmory',
+});
 
 export const defaultDiscoveryIntegrations =
   (): DiscoveryIntegrationsSettings => ({
@@ -585,6 +623,7 @@ export interface AllSettings {
   sonarr: SonarrSettings[];
   lidarr: LidarrSettings[];
   readarr: ReadarrSettings[];
+  audiobookshelf?: AudiobookshelfSettings | null;
   mylar: MylarSettings[];
   kapowarr: KapowarrSettings[];
   backissue: BackIssueSettings[];
@@ -593,6 +632,7 @@ export interface AllSettings {
   softwareAcquisition: SoftwareAcquisitionSettings;
   prowlarr: ProwlarrSettings;
   discoveryIntegrations: DiscoveryIntegrationsSettings;
+  readerDelivery: ReaderDeliverySettings;
   public: PublicSettings;
   notifications: NotificationSettings;
   jobs: Record<JobId, JobSettings>;
@@ -704,12 +744,14 @@ class Settings {
       sonarr: [],
       lidarr: [],
       readarr: [],
+      audiobookshelf: null,
       mylar: [],
       kapowarr: [],
       backissue: [],
       lazylibrarian: [],
       suwayomi: [],
       discoveryIntegrations: defaultDiscoveryIntegrations(),
+      readerDelivery: defaultReaderDeliverySettings(),
       softwareAcquisition: {
         romarr: {
           hostname: '',
@@ -725,6 +767,7 @@ class Settings {
           baseUrl: '',
           apiKey: '',
         },
+        steamApiKey: '',
         emulationCatalogProvider: 'questarr',
         emulationSystemGroups: {},
       },
@@ -856,6 +899,9 @@ class Settings {
         },
         'plex-watchlist-sync': {
           schedule: '0 */3 * * * *',
+        },
+        'external-request-list-sync': {
+          schedule: '0 0 3 * * *',
         },
         'plex-refresh-token': {
           schedule: '0 0 5 * * *',
@@ -1197,6 +1243,18 @@ class Settings {
 
   set readarr(data: ReadarrSettings[]) {
     this.data.readarr = data;
+  }
+
+  get audiobookshelf(): AudiobookshelfSettings | null {
+    return this.data.audiobookshelf ?? null;
+  }
+
+  set audiobookshelf(data: AudiobookshelfSettings | null) {
+    this.data.audiobookshelf = data;
+  }
+
+  get readerDelivery(): ReaderDeliverySettings {
+    return this.data.readerDelivery;
   }
 
   get sonarr(): SonarrSettings[] {
@@ -1608,12 +1666,14 @@ class Settings {
       sonarr: [],
       lidarr: [],
       readarr: [],
+      audiobookshelf: null,
       mylar: [],
       kapowarr: [],
       backissue: [],
       lazylibrarian: [],
       suwayomi: [],
       discoveryIntegrations: defaultDiscoveryIntegrations(),
+      readerDelivery: defaultReaderDeliverySettings(),
       softwareAcquisition: {
         romarr: {
           hostname: '',
@@ -1629,6 +1689,7 @@ class Settings {
           baseUrl: '',
           apiKey: '',
         },
+        steamApiKey: '',
         emulationCatalogProvider: 'questarr',
         emulationSystemGroups: {},
       },
@@ -1759,6 +1820,9 @@ class Settings {
         },
         'plex-watchlist-sync': {
           schedule: '0 */3 * * * *',
+        },
+        'external-request-list-sync': {
+          schedule: '0 0 3 * * *',
         },
         'plex-refresh-token': {
           schedule: '0 0 5 * * *',

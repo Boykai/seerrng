@@ -103,8 +103,11 @@ describe('manga request download assets', () => {
       media: first.media,
     });
 
-    const listed = await listRequestDownloadAssets(first.request);
+    const { results: listed, hadErrors } = await listRequestDownloadAssets(
+      first.request
+    );
 
+    assert.strictEqual(hadErrors, false);
     assert.deepStrictEqual(
       listed.map(({ name }) => name),
       ['Sample Manga - Ch. 2.cbz', 'Sample Manga - Ch. 1.cbz']
@@ -113,15 +116,16 @@ describe('manga request download assets', () => {
       assert.match(asset.id, ASSET_ID);
       // Suwayomi is not asked for sizes: listing never contacts it.
       assert.strictEqual(asset.size, undefined);
+      assert.strictEqual(asset.format, undefined);
     }
     assert.notStrictEqual(listed[0].id, listed[1].id);
-    assert.deepStrictEqual(
-      await listRequestDownloadAssets(first.request),
-      listed
-    );
+    assert.deepStrictEqual(await listRequestDownloadAssets(first.request), {
+      results: listed,
+      hadErrors: false,
+    });
 
     // The same chapters of another request carry other IDs.
-    const other = await listRequestDownloadAssets(second.request);
+    const { results: other } = await listRequestDownloadAssets(second.request);
     assert.deepStrictEqual(
       other.map(({ name }) => name),
       listed.map(({ name }) => name)
@@ -139,7 +143,9 @@ describe('manga request download assets', () => {
   it('finds the chapter an ID names, and nothing for an unknown or malformed ID', async () => {
     const { manga } = await start();
     const { request } = await seedDeliveredRequest(manga);
-    const [newest] = await listRequestDownloadAssets(request);
+    const {
+      results: [newest],
+    } = await listRequestDownloadAssets(request);
 
     const found = await findMangaDownloadAsset(request, newest.id);
 
@@ -170,13 +176,13 @@ describe('manga request download assets', () => {
       manifest.id,
       Array.from({ length: 999 }, (_, index) => index + 2)
     );
-    const full = await listRequestDownloadAssets(request);
+    const { results: full } = await listRequestDownloadAssets(request);
     assert.strictEqual(full.length, 1_000);
     const oldest = full[full.length - 1];
     assert.strictEqual(oldest.name, 'Sample Manga - Ch. 1.cbz');
 
     await addDeliveredRows(manifest.id, [1_001]);
-    const capped = await listRequestDownloadAssets(request);
+    const { results: capped } = await listRequestDownloadAssets(request);
 
     assert.strictEqual(capped.length, 1_000);
     assert.strictEqual(capped[0].name, 'Sample Manga - Ch. 1001.cbz');
@@ -198,7 +204,9 @@ describe('manga request download assets', () => {
     });
 
     assert.deepStrictEqual(
-      (await listRequestDownloadAssets(request)).map(({ name }) => name),
+      (await listRequestDownloadAssets(request)).results.map(
+        ({ name }) => name
+      ),
       ['Sample Manga - Ch. 2.cbz', 'Sample Manga - Ch. 1.cbz']
     );
   });
@@ -206,7 +214,9 @@ describe('manga request download assets', () => {
   it('never opens a manga chapter through the local-file path', async () => {
     const { fake, manga } = await start();
     const { request } = await seedDeliveredRequest(manga);
-    const [asset] = await listRequestDownloadAssets(request);
+    const {
+      results: [asset],
+    } = await listRequestDownloadAssets(request);
 
     assert.strictEqual(
       await openRequestDownloadAsset(request, asset.id),
@@ -215,14 +225,17 @@ describe('manga request download assets', () => {
     assert.strictEqual(fake.server.requests.length, 0);
   });
 
-  it('lists nothing and logs codes only when the chapters cannot be read', async () => {
+  it('lists nothing, reports an error and logs codes only when the chapters cannot be read', async () => {
     const { manga } = await start();
     const { request } = await seedDeliveredRequest(manga);
     mock.method(datasource, 'getRepository', () => {
       throw new Error(`${DOWNLOAD_TITLE} at ${manga.url}`);
     });
 
-    assert.deepStrictEqual(await listRequestDownloadAssets(request), []);
+    assert.deepStrictEqual(await listRequestDownloadAssets(request), {
+      results: [],
+      hadErrors: true,
+    });
     assert.deepStrictEqual(
       logsOf(logs, 'Unable to list manga download copies'),
       [

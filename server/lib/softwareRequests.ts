@@ -34,6 +34,7 @@ export type PcGameVariant = {
 export interface SoftwareRequestView {
   request: SoftwareRequest;
   assets: SoftwareAsset[];
+  bundleName?: string | null;
   status: SoftwareRequestStatus;
   message: string | null;
   actions?: SoftwareProviderActions | null;
@@ -140,6 +141,26 @@ const sanitizeSoftwareAssets = (value: unknown): SoftwareAsset[] => {
       // same-origin SeerrNG request-scoped download route.
       url: '',
     }));
+};
+
+const sanitizeBundleName = (
+  value: unknown,
+  assets: SoftwareAsset[]
+): string | null => {
+  if (!isRecord(value) || value.bundleSupported !== true || assets.length < 2) {
+    return null;
+  }
+  const name =
+    typeof value.bundleName === 'string'
+      ? value.bundleName
+      : 'software-files.tar.gz';
+  const safeName = name
+    .replace(/[\\/\r\n\0"<>:|?*]/g, '_')
+    .trim()
+    .slice(0, 180);
+  return safeName.endsWith('.tar.gz')
+    ? safeName
+    : `${safeName || 'software-files'}.tar.gz`;
 };
 
 const mapProviderStatus = (
@@ -337,6 +358,7 @@ export const refreshSoftwareRequest = async (
     return {
       request,
       assets: [],
+      bundleName: null,
       status: request.status,
       message: request.errorMessage ?? null,
       actions: { retry: false, cancel: false },
@@ -346,27 +368,11 @@ export const refreshSoftwareRequest = async (
   try {
     const providerRequest = await getProviderRequest(request, true);
     let assets: SoftwareAsset[] = [];
+    let bundleName: string | null = null;
     if (providerRequest.status === 'available') {
       const response = await getAssets(request);
-      assets = (Array.isArray(response?.assets) ? response.assets : [])
-        .slice(0, 100)
-        .filter(
-          (asset) =>
-            typeof asset.id === 'string' &&
-            asset.id.length > 0 &&
-            asset.id.length <= 256 &&
-            typeof asset.name === 'string' &&
-            asset.name.length > 0 &&
-            asset.name.length <= 512 &&
-            Number.isSafeInteger(asset.size) &&
-            asset.size >= 0
-        )
-        .map(({ id, name, size }) => ({
-          id,
-          name: name.replace(/[\r\n\0]/g, '_'),
-          size,
-          url: '',
-        }));
+      assets = sanitizeSoftwareAssets(response);
+      bundleName = sanitizeBundleName(response, assets);
     }
 
     const nextStatus = mapProviderStatus(providerRequest);
@@ -391,6 +397,7 @@ export const refreshSoftwareRequest = async (
     return {
       request,
       assets,
+      bundleName,
       status: nextStatus,
       message: request.errorMessage ?? null,
       actions: resolveProviderActions(
@@ -556,10 +563,14 @@ export const retrySoftwareRequest = async (
   const saveProviderStatus = async (
     providerRequest: SoftwareProviderRequest
   ): Promise<SoftwareRequestView> => {
-    const assets =
+    const assetResponse =
       providerRequest.status === 'available'
-        ? sanitizeSoftwareAssets(await getAssets(request))
-        : [];
+        ? await getAssets(request)
+        : undefined;
+    const assets = assetResponse ? sanitizeSoftwareAssets(assetResponse) : [];
+    const bundleName = assetResponse
+      ? sanitizeBundleName(assetResponse, assets)
+      : null;
     const nextStatus = mapProviderStatus(providerRequest);
     request.attempt += 1;
     request.status = nextStatus;
@@ -573,6 +584,7 @@ export const retrySoftwareRequest = async (
     return {
       request,
       assets,
+      bundleName,
       status: nextStatus,
       message: request.errorMessage,
       actions: resolveProviderActions(
@@ -645,6 +657,16 @@ export const streamSoftwareRequestAsset = async (
     );
   }
   return getRomarr().streamAsset(request.externalRequestId, asset.id, range);
+};
+
+export const streamSoftwareRequestBundle = async (
+  request: SoftwareRequest,
+  range?: string
+): Promise<SoftwareAssetStream> => {
+  if (request.provider !== 'questarr') {
+    throw new Error('This software provider does not support bundles.');
+  }
+  return getQuestarr().streamBundle(request.externalRequestId, range);
 };
 
 export const refreshSoftwareRequests = async (

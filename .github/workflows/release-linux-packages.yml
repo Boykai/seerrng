@@ -210,9 +210,9 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y libfuse2 curl
-          appimagetool_url='https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage'
+          appimagetool_url='https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage'
           curl -fsSL --retry 5 "$appimagetool_url" -o appimagetool
-          echo 'a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0  appimagetool' | sha256sum -c -
+          echo 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool' | sha256sum -c -
           node_version='24.21.0'
           node_archive="node-v${node_version}-linux-x64.tar.xz"
           node_base_url="https://nodejs.org/dist/v${node_version}"

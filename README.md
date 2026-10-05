@@ -9,8 +9,7 @@
 </p>
 
 <p align="center">
-  Support SeerrNG development through
-  <a href="https://www.paypal.com/donate/?business=donations%40snape.tech">PayPal</a> or
+  Support SeerrNG development on
   <a href="https://ko-fi.com/snapetech">Ko-fi</a>.
 </p>
 
@@ -29,6 +28,8 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
   - [Software requests: ROMs and PC games](./docs/using-seerr/software-acquisition.md)
   - [Request Status and Download copy](./docs/using-seerr/request-status.md)
   - [Books, authors, and series](./docs/using-seerr/books-and-series.md)
+  - [ChaptarrNG Bookshelf integration](./docs/using-seerr/bookshelf-backend.md#chaptarrng)
+  - [Read-only Audiobookshelf availability](./docs/using-seerr/bookshelf-backend.md#audiobookshelf-availability)
   - [Move Bookshelf media paths](./docs/using-seerr/bookshelf-media-path-migration.md)
   - [Configure comics](./docs/using-seerr/comics-backend.md)
   - [Configure magazines](./docs/using-seerr/magazines-backend.md)
@@ -68,6 +69,13 @@ This fork is maintained by snapetech. Upstream Seerr remains the base project fo
   When both formats are enabled, their separate SeerrNG service entries can
   point to the same BookshelfNG URL and API key; separate app instances are
   not required.
+- ChaptarrNG requests preserve the selected book format, show author-preparation
+  progress and retry timing, and resume after imports complete. Pending imports
+  are cancelled only when no other active request still needs them; ChaptarrNG
+  `0.9.941+` also supports a restricted SeerrNG service key.
+- Optional read-only Audiobookshelf library scanning marks ISBN-matched items
+  as available audiobooks without sending acquisition requests or changing
+  Audiobookshelf data.
 - Catalog browsing and requests for Retro and Modern emulation systems and PC games for Windows, Linux, and macOS, with QuestarrNG and ROMarrNG handling acquisition.
 - Administrator-controlled availability switches for each supported category, including separate ebook, audiobook, Retro, Modern, and PC Games controls.
 - Bookshelf backend diagnostics that classify Hardcover, softcover/Goodreads, and unknown metadata providers.
@@ -112,6 +120,7 @@ SeerrNG documentation is maintained in the [docs folder](https://github.com/snap
 - [Install SeerrNG](./docs/getting-started/index.mdx)
 - [Install on Unraid](./docs/getting-started/third-parties/unraid.mdx)
 - [Find books, authors, and series](./docs/using-seerr/books-and-series.md)
+- [ChaptarrNG fork changes and capabilities](https://github.com/snapetech/chaptarrng/blob/main/docs/FORK_FEATURES.md)
 - [Discover and request comics](./docs/using-seerr/comics-backend.md)
 - [Discover and request magazines](./docs/using-seerr/magazines-backend.md)
 - [Discover manga](./docs/using-seerr/manga-backend.md)
@@ -217,6 +226,7 @@ Books:
 
 - Bookshelf or another Readarr-compatible service configured in **Settings > Services**. New deployments should use the Hardcover-backed Bookshelf image.
 - One BookshelfNG instance can manage both ebooks and audiobooks. Add two SeerrNG service entries with the same connection details and mark one as ebook-capable and one as audiobook-capable.
+- Audiobookshelf can be connected separately under **Settings > Services > Audiobookshelf Availability** to detect existing audiobooks. It is read-only and matches books by ISBN.
 - Separate defaults for ebook and audiobook so **Both** format requests can route to each format.
 - Existing Readarr or softcover/Goodreads libraries should be migrated before switching to Hardcover metadata. The service settings modal links directly to the Bookshelf Hardcover migration runbook.
 

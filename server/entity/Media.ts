@@ -1,3 +1,4 @@
+import AudiobookshelfAPI from '@server/api/audiobookshelf';
 import BackIssueAPI from '@server/api/comics/backissue';
 import KapowarrAPI from '@server/api/comics/kapowarr';
 import MylarAPI from '@server/api/comics/mylar';
@@ -319,6 +320,12 @@ class Media {
   @Column({ nullable: true, type: 'varchar' })
   public audiobookExternalServiceSlug?: string | null;
 
+  @Column({ nullable: true, type: 'int' })
+  public audiobookLibraryServiceId?: number | null;
+
+  @Column({ nullable: true, type: 'varchar' })
+  public audiobookLibraryItemId?: string | null;
+
   // Comics reuse the generic serviceId/externalServiceId/externalServiceSlug
   // columns above (like MOVIE/TV/MUSIC do) rather than needing their own set,
   // since a comic only ever has one destination. This column exists purely to
@@ -410,6 +417,8 @@ class Media {
     this.audiobookServiceId = null;
     this.audiobookExternalServiceId = null;
     this.audiobookExternalServiceSlug = null;
+    this.audiobookLibraryServiceId = null;
+    this.audiobookLibraryItemId = null;
   }
 
   @AfterLoad()
@@ -563,6 +572,19 @@ class Media {
       }
 
       if (
+        this.audiobookLibraryServiceId !== null &&
+        this.audiobookLibraryServiceId !== undefined &&
+        this.audiobookLibraryItemId !== null &&
+        this.audiobookLibraryItemId !== undefined
+      ) {
+        const audiobookshelf = getSettings().audiobookshelf;
+        if (audiobookshelf?.id === this.audiobookLibraryServiceId) {
+          this.audiobookServiceUrl = AudiobookshelfAPI.buildItemUrl(
+            audiobookshelf,
+            this.audiobookLibraryItemId
+          );
+        }
+      } else if (
         this.audiobookServiceId !== null &&
         this.audiobookExternalServiceSlug !== null
       ) {

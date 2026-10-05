@@ -33,6 +33,12 @@ type MockableReadarr = {
     data?: Record<string, unknown>,
     options?: { params?: Record<string, unknown> }
   ) => Promise<ReadarrBook>;
+  request: (
+    method: string,
+    endpoint: string,
+    data?: unknown,
+    config?: unknown
+  ) => Promise<{ data: unknown }>;
 };
 
 describe('ReadarrAPI.getReleaseCalendar', () => {
@@ -978,7 +984,14 @@ describe('ReadarrAPI Chaptarr compatibility', () => {
             contractVersion: 1,
             providerIdDialect: 'gr',
             mediaTypes: ['ebook', 'audiobook'],
-            features: { formatScopedFacade: true },
+            features: {
+              formatScopedFacade: true,
+              pagedLibrary: true,
+              providerScopedEditionIdentity: true,
+              pendingAuthorImports: true,
+              pendingImportCancellation: true,
+              restrictedServiceApiKey: true,
+            },
           });
           return;
         }
@@ -1016,7 +1029,7 @@ describe('ReadarrAPI Chaptarr compatibility', () => {
     }
   });
 
-  it('falls back to the provider setting unless the format facade is advertised', async () => {
+  it('keeps using the native API when the contract does not advertise a format facade', async () => {
     const requestedPaths: string[] = [];
     const server = createServer((request, response) => {
       void (async () => {
@@ -1042,11 +1055,6 @@ describe('ReadarrAPI Chaptarr compatibility', () => {
           return;
         }
 
-        if (parsedUrl.pathname === '/api/v1/config/hardcover') {
-          writeJson(response, 200, { enabled: true });
-          return;
-        }
-
         writeJson(response, 404, { message: 'not found' });
       })().catch(() => writeJson(response, 500, { message: 'handler failed' }));
     });
@@ -1068,11 +1076,8 @@ describe('ReadarrAPI Chaptarr compatibility', () => {
       const internalApi = api as unknown as {
         requestBaseUrl?: string;
       };
-      assert.equal(
-        internalApi.requestBaseUrl,
-        `http://127.0.0.1:${address.port}/readarr/hc/ebook/api/v1`
-      );
-      assert.ok(requestedPaths.includes('/api/v1/config/hardcover'));
+      assert.equal(internalApi.requestBaseUrl, undefined);
+      assert.ok(!requestedPaths.includes('/api/v1/config/hardcover'));
     } finally {
       server.close();
       await once(server, 'close');
@@ -1101,7 +1106,14 @@ describe('ReadarrAPI Chaptarr compatibility', () => {
             contractVersion: 1,
             providerIdDialect: 'gr',
             mediaTypes: ['ebook', 'audiobook'],
-            features: { formatScopedFacade: true },
+            features: {
+              formatScopedFacade: true,
+              pagedLibrary: true,
+              providerScopedEditionIdentity: true,
+              pendingAuthorImports: true,
+              pendingImportCancellation: true,
+              restrictedServiceApiKey: false,
+            },
           });
           return;
         }
@@ -1146,12 +1158,18 @@ describe('ReadarrAPI Chaptarr compatibility', () => {
     });
     const internalApi = api as unknown as {
       detectedSystemStatus?: { appName?: string; version?: string };
+      chaptarrCapabilities?: {
+        features?: { pendingAuthorImports?: boolean };
+      };
       ensureProvider: () => Promise<void>;
       findExistingBookForAdd: (
         options: ReadarrBookOptions
       ) => Promise<undefined>;
     };
     internalApi.detectedSystemStatus = { appName: 'Chaptarr' };
+    internalApi.chaptarrCapabilities = {
+      features: { pendingAuthorImports: true },
+    };
     mock.method(internalApi, 'ensureProvider', async () => undefined);
     mock.method(internalApi, 'findExistingBookForAdd', async () => undefined);
     const postMock = mock.method(
@@ -1183,18 +1201,34 @@ describe('ReadarrAPI Chaptarr compatibility', () => {
     });
     const internalApi = api as unknown as {
       detectedSystemStatus?: { appName?: string; version?: string };
+      chaptarrCapabilities?: {
+        features?: {
+          pendingAuthorImports?: boolean;
+          pendingImportCancellation?: boolean;
+        };
+      };
       ensureProvider: () => Promise<void>;
     };
     internalApi.detectedSystemStatus = { appName: 'Chaptarr' };
+    internalApi.chaptarrCapabilities = {
+      features: {
+        pendingAuthorImports: true,
+        pendingImportCancellation: true,
+      },
+    };
     mock.method(internalApi, 'ensureProvider', async () => undefined);
     const getMock = mock.method(
       api as unknown as MockableReadarr,
       'get',
       async () => ({
         Id: 901,
+        Status: 'InProgress',
         OverallStatus: 'InProgress',
         EbookStatus: 'Retrying',
         AudiobookStatus: 'NotRequested',
+        AttemptCount: 2,
+        MaxAttempts: 8,
+        NextAttemptAt: '2026-10-04T18:00:00.000Z',
         LastError: 'Author metadata is not available yet.',
       })
     );
@@ -1202,9 +1236,13 @@ describe('ReadarrAPI Chaptarr compatibility', () => {
 
     assert.deepEqual(pendingImport, {
       id: 901,
+      status: 'InProgress',
       overallStatus: 'InProgress',
       ebookStatus: 'Retrying',
       audiobookStatus: 'NotRequested',
+      attemptCount: 2,
+      maxAttempts: 8,
+      nextAttemptAt: '2026-10-04T18:00:00.000Z',
       lastError: 'Author metadata is not available yet.',
     });
     assert.equal(
@@ -1230,6 +1268,106 @@ describe('ReadarrAPI Chaptarr compatibility', () => {
     assert.equal(
       requestMock.mock.calls[0].arguments[1],
       '/pendingauthorimport/901'
+    );
+  });
+
+  it('does not call pending-import endpoints when the capability is absent', async () => {
+    const api = new ReadarrAPI({
+      url: 'http://localhost:8787/api/v1',
+      apiKey: 'key',
+      mediaType: 'ebook',
+    });
+    const internalApi = api as unknown as {
+      detectedSystemStatus?: { appName?: string };
+      chaptarrCapabilities?: {
+        features?: {
+          pendingAuthorImports?: boolean;
+          pendingImportCancellation?: boolean;
+        };
+      };
+      ensureProvider: () => Promise<void>;
+    };
+    internalApi.detectedSystemStatus = { appName: 'Chaptarr' };
+    internalApi.chaptarrCapabilities = { features: {} };
+    mock.method(internalApi, 'ensureProvider', async () => undefined);
+    const getMock = mock.method(
+      api as unknown as MockableReadarr,
+      'get',
+      async () => ({})
+    );
+    const requestMock = mock.method(
+      api as unknown as MockableReadarr,
+      'request',
+      async () => ({ data: {} })
+    );
+
+    assert.equal(await api.getPendingAuthorImport(901), undefined);
+    await api.cancelPendingAuthorImport(901);
+    assert.equal(getMock.mock.callCount(), 0);
+    assert.equal(requestMock.mock.callCount(), 0);
+  });
+
+  it('uses the complete library endpoint when paging is not advertised', async () => {
+    const api = new ReadarrAPI({
+      url: 'http://localhost:8787/api/v1',
+      apiKey: 'key',
+      mediaType: 'ebook',
+    });
+    const internalApi = api as unknown as {
+      detectedSystemStatus?: { appName?: string };
+      chaptarrCapabilities?: { features?: { pagedLibrary?: boolean } };
+      ensureProvider: () => Promise<void>;
+    };
+    internalApi.detectedSystemStatus = { appName: 'Chaptarr' };
+    internalApi.chaptarrCapabilities = { features: { pagedLibrary: false } };
+    mock.method(internalApi, 'ensureProvider', async () => undefined);
+    const getMock = mock.method(
+      api as unknown as MockableReadarr,
+      'get',
+      async () => [{ id: 3, title: 'Unpaged book', foreignBookId: 'hc:3' }]
+    );
+
+    const books = await api.getBooks();
+
+    assert.equal(books[0]?.id, 3);
+    assert.equal(getMock.mock.calls[0].arguments[0], '/book');
+  });
+
+  it('does not trust edition IDs when the provider-scoped identity capability is absent', async () => {
+    const api = new ReadarrAPI({
+      url: 'http://localhost:8787/api/v1',
+      apiKey: 'key',
+      mediaType: 'ebook',
+    });
+    const internalApi = api as unknown as {
+      detectedSystemStatus?: { appName?: string };
+      chaptarrCapabilities?: {
+        features?: { providerScopedEditionIdentity?: boolean };
+      };
+      ensureProvider: () => Promise<void>;
+    };
+    internalApi.detectedSystemStatus = { appName: 'Chaptarr' };
+    internalApi.chaptarrCapabilities = {
+      features: { providerScopedEditionIdentity: false },
+    };
+    mock.method(internalApi, 'ensureProvider', async () => undefined);
+    mock.method(api as unknown as MockableReadarr, 'get', async () => [
+      {
+        title: 'Different work',
+        foreignBookId: 'hc:other-work',
+        author: { foreignAuthorId: 'hc:author', authorName: 'Author' },
+        editions: [
+          { foreignEditionId: 'hc:requested-edition', title: 'Edition' },
+        ],
+      },
+    ]);
+
+    assert.equal(
+      await api.lookupBookByProviderIdentity(
+        'hc:requested-work',
+        'hc:requested-edition'
+      ),
+      undefined
     );
   });
 

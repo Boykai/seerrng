@@ -27,8 +27,19 @@ export interface SoftwareCatalogPopularPage {
   nextOffset: number | null;
 }
 
+export interface SoftwareBundleStream {
+  stream: Readable;
+  filename?: string;
+  contentLength?: number;
+  contentType?: string;
+  rangeSupported: boolean;
+  statusCode: number;
+  contentRange?: string;
+}
+
 export interface QuestarrLibraryLookup {
-  games: { igdbId: number; status: string }[];
+  games: { igdbId: number; status: string; deliverable?: boolean }[];
+  steamGames?: { steamAppId: number; owned: boolean | null }[];
 }
 
 export interface SoftwareAssetStream {
@@ -71,8 +82,9 @@ export class QuestarrNGAPI extends ExternalAPI {
   }
 
   public async getHandshake(): Promise<QuestarrHandshake> {
+    let handshake: QuestarrHandshake;
     try {
-      return await this.get<QuestarrHandshake>(
+      handshake = await this.get<QuestarrHandshake>(
         '/api/integration/seerrng/v1/ping',
         {},
         0
@@ -81,8 +93,26 @@ export class QuestarrNGAPI extends ExternalAPI {
       if (!axios.isAxiosError(error) || error.response?.status !== 404) {
         throw error;
       }
-      return this.get<QuestarrHandshake>('/api/integration/ping', {}, 0);
+      handshake = await this.get<QuestarrHandshake>(
+        '/api/integration/ping',
+        {},
+        0
+      );
     }
+    if (handshake.apiVersion !== 1) {
+      throw new Error(
+        `QuestarrNG API v${handshake.apiVersion} is not supported`
+      );
+    }
+    if (
+      handshake.requestContractVersion !== undefined &&
+      ![1, 2].includes(handshake.requestContractVersion)
+    ) {
+      throw new Error(
+        `QuestarrNG request contract v${handshake.requestContractVersion} is not supported`
+      );
+    }
+    return handshake;
   }
 
   public searchCatalog(
@@ -165,10 +195,18 @@ export class QuestarrNGAPI extends ExternalAPI {
     );
   }
 
-  public lookupLibrary(igdbIds: number[]): Promise<QuestarrLibraryLookup> {
+  public lookupLibrary(
+    igdbIds: number[],
+    steamAppIds: number[] = []
+  ): Promise<QuestarrLibraryLookup> {
     return this.get(
       '/api/integration/seerrng/v1/library/lookup',
-      { params: { igdbIds: igdbIds.join(',') } },
+      {
+        params: {
+          igdbIds: igdbIds.join(','),
+          ...(steamAppIds.length ? { steamAppIds: steamAppIds.join(',') } : {}),
+        },
+      },
       60
     );
   }
@@ -268,6 +306,47 @@ export class QuestarrNGAPI extends ExternalAPI {
       statusCode: response.status,
       contentRange: response.headers['content-range'],
     };
+  }
+
+  public async streamBundle(
+    externalRequestId: string,
+    range?: string
+  ): Promise<SoftwareBundleStream> {
+    const response = await this.request<Readable>(
+      'GET',
+      `/api/integration/seerrng/v1/requests/${encodeURIComponent(externalRequestId)}/assets/bundle`,
+      undefined,
+      {
+        responseType: 'stream',
+        headers: range ? { Range: range } : undefined,
+        validateStatus: (status) => status >= 200 && status < 300,
+      }
+    );
+    return {
+      stream: response.data,
+      filename: this.getFilenameFromDisposition(
+        response.headers['content-disposition']
+      ),
+      contentLength: Number(response.headers['content-length']) || undefined,
+      contentType:
+        typeof response.headers['content-type'] === 'string'
+          ? response.headers['content-type']
+          : undefined,
+      rangeSupported: response.headers['accept-ranges'] === 'bytes',
+      statusCode: response.status,
+      contentRange: response.headers['content-range'],
+    };
+  }
+
+  private getFilenameFromDisposition(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    const match = /filename\*=UTF-8''([^;]+)/i.exec(value);
+    if (!match) return undefined;
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return undefined;
+    }
   }
 }
 
