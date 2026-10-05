@@ -71,6 +71,7 @@ import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
 import {
   DISPATCH_ALLOWED_OPERATIONS,
+  FAKE_SOURCE_ID,
   FAKE_TITLE_PREFIX,
   FAKE_URL_PREFIX,
   dispatchClientFor,
@@ -78,6 +79,7 @@ import {
   fakeChapterUrl,
   fakeDispatchChapters,
   fakeDispatchManga,
+  fakeMangaUrl,
   loadDispatchRequest,
   seedDispatchBinding,
   seedDispatchRequest,
@@ -120,7 +122,10 @@ const FOLLOW_OPERATIONS: ReadonlySet<string> = new Set([
   'EnqueueChapters',
   'FetchMangaAndChapters',
   'InstanceMarker',
+  'MangaDetails',
   'Queue',
+  'SetRequestIndex',
+  'SetRequestStamp',
 ]);
 
 /** What a check that adds chapters and queues them sends. */
@@ -184,6 +189,9 @@ const clientWith = (
   getDownloadedChapters: base.getDownloadedChapters.bind(base),
   getQueue: base.getQueue.bind(base),
   enqueueChapters: base.enqueueChapters.bind(base),
+  setRequestIndex: base.setRequestIndex.bind(base),
+  getMangaDetails: base.getMangaDetails.bind(base),
+  setRequestStamp: base.setRequestStamp.bind(base),
   ...overrides,
 });
 
@@ -215,6 +223,25 @@ const follow = (options: MangaFollowOptions = {}) =>
     random: () => 0,
     ...options,
   });
+
+/** Fails work that would wait forever, such as a lock taken inside itself. */
+const settleWithin = async <Result>(
+  work: Promise<Result>,
+  milliseconds = 10_000
+): Promise<Result> => {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Still running after ${milliseconds} ms`)),
+      milliseconds
+    );
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
 
 const libraryManga = (id: number, overrides: Partial<FakeDispatchManga> = {}) =>
   fakeDispatchManga(id, { inLibrary: true, ...overrides });
@@ -1120,107 +1147,132 @@ describe('runMangaFollow: conditions inside the write', () => {
 });
 
 describe('runMangaFollow: lock order', () => {
-  it('calls Suwayomi and AniList holding nothing, and takes no admission under the lock', async () => {
-    const { fake, requestId } = await setup();
-    publish(fake, 11, 3);
-    const depth = {
-      transaction: 0,
-      instance: 0,
-      request: 0,
-      edit: 0,
-      media: 0,
-    };
-    const held = () => Object.values(depth).some((count) => count > 0);
-    const entries: { name: string; locked: boolean }[] = [];
-    const enter = (name: string) =>
-      entries.push({ name, locked: isInsideMangaFollowLock() });
+  // Closures: the completed setup is declared further down.
+  for (const { checking, seed, counts, noted } of [
+    {
+      checking: 'an approved request',
+      seed: () => setup(),
+      counts: () => ran({ added: 1, enqueued: 1 }),
+      noted: false,
+    },
+    {
+      checking: 'a completed request it re-opens and notes again',
+      seed: () => setupCompleted(),
+      counts: () => ran({ added: 1, reopened: 1, enqueued: 1 }),
+      noted: true,
+    },
+  ]) {
+    it(`calls Suwayomi and AniList holding nothing, and takes no admission under the lock, checking ${checking}`, async () => {
+      const { fake, requestId } = await seed();
+      publish(fake, 11, 3);
+      const depth = {
+        transaction: 0,
+        instance: 0,
+        request: 0,
+        edit: 0,
+        media: 0,
+      };
+      const held = () => Object.values(depth).some((count) => count > 0);
+      const entries: { name: string; locked: boolean }[] = [];
+      const enter = (name: string) =>
+        entries.push({ name, locked: isInsideMangaFollowLock() });
 
-    const transaction = dataSource.transaction.bind(dataSource) as (
-      ...args: unknown[]
-    ) => Promise<unknown>;
-    const transactions = mock.method(
-      dataSource,
-      'transaction',
-      async (...args: unknown[]) => {
-        depth.transaction += 1;
-        try {
-          return await transaction(...args);
-        } finally {
-          depth.transaction -= 1;
+      const transaction = dataSource.transaction.bind(dataSource) as (
+        ...args: unknown[]
+      ) => Promise<unknown>;
+      const transactions = mock.method(
+        dataSource,
+        'transaction',
+        async (...args: unknown[]) => {
+          depth.transaction += 1;
+          try {
+            return await transaction(...args);
+          } finally {
+            depth.transaction -= 1;
+          }
         }
-      }
-    );
-    const instanceOriginal = instanceAdmission.runWithSuwayomiInstanceAdmission;
-    mock.method(instanceAdmission, 'runWithSuwayomiInstanceAdmission', (async (
-      snapshot,
-      callback
-    ) => {
-      enter('instance');
-      depth.instance += 1;
-      try {
-        return await instanceOriginal(snapshot, callback);
-      } finally {
-        depth.instance -= 1;
-      }
-    }) as typeof instanceOriginal);
-    const requestOriginal = mediaRequestModule.runWithRequestAdmission;
-    const request = mock.method(
-      mediaRequestModule,
-      'runWithRequestAdmission',
-      (async (keys, callback) => {
-        enter('request');
-        const edit = keys.some((key) => key.startsWith('request-edit:'))
-          ? 1
-          : 0;
-        depth.request += 1;
-        depth.edit += edit;
-        try {
-          return await requestOriginal(keys, callback);
-        } finally {
-          depth.request -= 1;
-          depth.edit -= edit;
-        }
-      }) as typeof requestOriginal
-    );
-    const mediaOriginal = mediaMutation.runMediaEntityMutation;
-    const media = mock.method(mediaMutation, 'runMediaEntityMutation', (async (
-      target,
-      callback
-    ) => {
-      enter('media');
-      depth.media += 1;
-      try {
-        return await mediaOriginal(target, callback);
-      } finally {
-        depth.media -= 1;
-      }
-    }) as typeof mediaOriginal);
-    const inside: string[] = [];
-    fake.observe((sent) => {
-      if (held()) inside.push(sent.operationName ?? sent.method);
+      );
+      const instanceOriginal =
+        instanceAdmission.runWithSuwayomiInstanceAdmission;
+      mock.method(
+        instanceAdmission,
+        'runWithSuwayomiInstanceAdmission',
+        (async (snapshot, callback) => {
+          enter('instance');
+          depth.instance += 1;
+          try {
+            return await instanceOriginal(snapshot, callback);
+          } finally {
+            depth.instance -= 1;
+          }
+        }) as typeof instanceOriginal
+      );
+      const requestOriginal = mediaRequestModule.runWithRequestAdmission;
+      const request = mock.method(
+        mediaRequestModule,
+        'runWithRequestAdmission',
+        (async (keys, callback) => {
+          enter('request');
+          const edit = keys.some((key) => key.startsWith('request-edit:'))
+            ? 1
+            : 0;
+          depth.request += 1;
+          depth.edit += edit;
+          try {
+            return await requestOriginal(keys, callback);
+          } finally {
+            depth.request -= 1;
+            depth.edit -= edit;
+          }
+        }) as typeof requestOriginal
+      );
+      const mediaOriginal = mediaMutation.runMediaEntityMutation;
+      const media = mock.method(
+        mediaMutation,
+        'runMediaEntityMutation',
+        (async (target, callback) => {
+          enter('media');
+          depth.media += 1;
+          try {
+            return await mediaOriginal(target, callback);
+          } finally {
+            depth.media -= 1;
+          }
+        }) as typeof mediaOriginal
+      );
+      const inside: string[] = [];
+      fake.observe((sent) => {
+        if (held()) inside.push(sent.operationName ?? sent.method);
+      });
+
+      assert.deepStrictEqual(
+        await settleWithin(
+          follow({
+            anilistStatus: async () => {
+              if (held() || isInsideMangaFollowLock()) inside.push('AniList');
+              return 'RELEASING';
+            },
+          })
+        ),
+        counts()
+      );
+
+      assert.deepStrictEqual(await numbersOf(requestId), [1, 2, 3]);
+      assert.strictEqual(
+        fake.operationNames().includes('SetRequestIndex'),
+        noted
+      );
+      assert.deepStrictEqual(inside, []);
+      assert.deepStrictEqual(
+        entries.filter(({ locked }) => locked),
+        [],
+        'an admission was entered under the dispatch lock'
+      );
+      assert.strictEqual(media.mock.callCount(), 0);
+      assert.ok(request.mock.callCount() > 0);
+      assert.ok(transactions.mock.callCount() > 0);
     });
-
-    assert.deepStrictEqual(
-      await follow({
-        anilistStatus: async () => {
-          if (held() || isInsideMangaFollowLock()) inside.push('AniList');
-          return 'RELEASING';
-        },
-      }),
-      ran({ added: 1, enqueued: 1 })
-    );
-
-    assert.deepStrictEqual(await numbersOf(requestId), [1, 2, 3]);
-    assert.deepStrictEqual(inside, []);
-    assert.deepStrictEqual(
-      entries.filter(({ locked }) => locked),
-      [],
-      'an admission was entered under the dispatch lock'
-    );
-    assert.strictEqual(media.mock.callCount(), 0);
-    assert.ok(request.mock.callCount() > 0);
-    assert.ok(transactions.mock.callCount() > 0);
-  });
+  }
 });
 
 const setMediaStatus = (id: number, status: MediaStatus) =>
@@ -1489,6 +1541,232 @@ describe('runMangaFollow: release', () => {
     assert.deepStrictEqual(dequeued(fake), [[1103]]);
     assert.deepStrictEqual(fake.state.queue, [1104]);
     assert.deepStrictEqual(await ownedChapterUrls(), []);
+  });
+});
+
+/** The request's index entry and the stamp of manga 11, parsed. */
+const notesOf = (fake: FakeProgressSuwayomi, requestId: number) => ({
+  index: fake.indexEntry(requestId),
+  stamp: fake.stamp(11),
+});
+
+/** The index entry dispatch writes for a request on manga 11. */
+const INDEX_OF_11 = {
+  sourceId: FAKE_SOURCE_ID,
+  url: fakeMangaUrl(11),
+  mangaId: 11,
+};
+
+/** The stamp of manga 11 when it names `requestIds`. */
+const stampOf11 = (...requestIds: number[]) => ({
+  v: 1,
+  requestIds,
+  addedBySeerrng: false,
+  anilistId: 9001,
+});
+
+/**
+ * A request dispatch delivered on manga 11, completed with every chapter
+ * downloaded, then handed back by the release: its index entry is gone and
+ * the stamp names no request.
+ */
+const setupReleased = async () => {
+  allowed = DISPATCH_ALLOWED_OPERATIONS;
+  const manga = mangaWith(11, [1, 2]);
+  const fake = await start([manga]);
+  configure(dispatchInstanceFor(fake.server));
+  await seedDispatchBinding(manga);
+  const { request, manifest } = await seedDispatchRequest({
+    manifest: { followEnabled: true },
+  });
+  const requestId = request.id;
+  await forgetSeeding(requestId);
+  const client = dispatchClientFor(fake.server);
+  assert.deepStrictEqual(
+    await dispatchMangaRequest(await loadDispatchRequest(requestId), {
+      clientFor: () => client,
+    }),
+    { delivered: true }
+  );
+  assert.deepStrictEqual(notesOf(fake, requestId), {
+    index: INDEX_OF_11,
+    stamp: stampOf11(requestId),
+  });
+  downloadChapter(fake, 11, 1, 2);
+  await deliverAll(requestId);
+  await setStatus(requestId, COMPLETED);
+  const release = () => releaseMangaDispatch({ clientFor: () => client });
+  await release();
+  assert.deepStrictEqual(notesOf(fake, requestId), {
+    index: undefined,
+    stamp: stampOf11(),
+  });
+  return { fake, requestId, manifestId: manifest.id, release };
+};
+
+describe('runMangaFollow: notes of a re-opened request', () => {
+  it('notes a request it re-opens on its manga again, as dispatch did, without waiting on its own lock', async () => {
+    const { fake, requestId } = await setupReleased();
+    publish(fake, 11, 3);
+    const sent = fake.operationNames().length;
+    let statusWhenNoted: Promise<MediaRequestStatus> | undefined;
+    fake.observe(({ operationName }) => {
+      if (operationName === 'SetRequestIndex') {
+        statusWhenNoted ??= statusOf(requestId);
+      }
+    });
+
+    assert.deepStrictEqual(
+      await settleWithin(follow()),
+      ran({ added: 1, reopened: 1, enqueued: 1 })
+    );
+
+    // Noted after the re-open committed, so a later release keeps the notes.
+    assert.strictEqual(await statusWhenNoted, APPROVED);
+    assert.strictEqual(await statusOf(requestId), APPROVED);
+    assert.deepStrictEqual(fake.operationNames().slice(sent), [
+      'InstanceMarker',
+      'FetchMangaAndChapters',
+      'SetRequestIndex',
+      'MangaDetails',
+      'SetRequestStamp',
+      'ChaptersToDownload',
+      'DownloadedChapters',
+      'Queue',
+      'EnqueueChapters',
+    ]);
+    assert.deepStrictEqual(enqueuedBatches(fake), [[1101, 1102], [1103]]);
+    assert.deepStrictEqual(notesOf(fake, requestId), {
+      index: INDEX_OF_11,
+      stamp: stampOf11(requestId),
+    });
+  });
+
+  it('keeps the notes through a release that runs after the re-open', async () => {
+    const { fake, requestId, release } = await setupReleased();
+    publish(fake, 11, 3);
+    assert.deepStrictEqual(
+      await settleWithin(follow()),
+      ran({ added: 1, reopened: 1, enqueued: 1 })
+    );
+
+    await release();
+
+    assert.deepStrictEqual(notesOf(fake, requestId), {
+      index: INDEX_OF_11,
+      stamp: stampOf11(requestId),
+    });
+    assert.deepStrictEqual(dequeued(fake), []);
+    assert.deepStrictEqual(fake.state.queue, [1103]);
+  });
+
+  it('still queues the new chapters when the notes fail, and logs the failure', async () => {
+    const { fake, requestId, manifestId } = await setupReleased();
+    publish(fake, 11, 3);
+    fake.fault('SetRequestIndex', 'error');
+
+    assert.deepStrictEqual(
+      await settleWithin(follow()),
+      ran({ added: 1, reopened: 1, enqueued: 1 })
+    );
+
+    assert.strictEqual(await statusOf(requestId), APPROVED);
+    assert.deepStrictEqual(enqueuedBatches(fake), [[1101, 1102], [1103]]);
+    assert.deepStrictEqual(notesOf(fake, requestId), {
+      index: undefined,
+      stamp: stampOf11(),
+    });
+    assert.deepStrictEqual(
+      logged('Manga follow could not note a re-opened request'),
+      [
+        [
+          'warn',
+          {
+            label,
+            instanceId: 1,
+            requestId,
+            manifestId,
+            suwayomiCode: 'UPSTREAM_ERROR',
+            operation: 'SetRequestIndex',
+          },
+        ],
+      ]
+    );
+    assert.deepStrictEqual(logged('Manga follow skipped a manga'), []);
+  });
+
+  it('writes no stamp when the manga ID names another manga, and still queues', async () => {
+    const { fake, requestId, manifestId } = await setupReleased();
+    publish(fake, 11, 3);
+    wrapClient((base) => ({
+      getMangaDetails: async (mangaId, call) => ({
+        ...(await base.getMangaDetails(mangaId, call)),
+        url: fakeMangaUrl(12),
+      }),
+    }));
+    const stamps = fake.server.operations('SetRequestStamp').length;
+
+    assert.deepStrictEqual(
+      await settleWithin(follow()),
+      ran({ added: 1, reopened: 1, enqueued: 1 })
+    );
+
+    assert.deepStrictEqual(enqueuedBatches(fake), [[1101, 1102], [1103]]);
+    // The index entry goes first, as in dispatch; the stamp waits for a match.
+    assert.deepStrictEqual(notesOf(fake, requestId), {
+      index: INDEX_OF_11,
+      stamp: stampOf11(),
+    });
+    assert.strictEqual(
+      fake.server.operations('SetRequestStamp').length,
+      stamps
+    );
+    assert.deepStrictEqual(
+      logged('Manga follow could not note a re-opened request'),
+      [
+        [
+          'warn',
+          {
+            label,
+            instanceId: 1,
+            requestId,
+            manifestId,
+            code: 'MANGA_FOLLOW_NOTES_MISMATCH',
+          },
+        ],
+      ]
+    );
+  });
+
+  it('stops when cancelled while noting, leaving the queueing to the next check', async () => {
+    const { fake, requestId } = await setupReleased();
+    publish(fake, 11, 3);
+    const controller = new AbortController();
+    wrapClient((base) => ({
+      setRequestIndex: (...args) => {
+        controller.abort();
+        return base.setRequestIndex(...args);
+      },
+    }));
+
+    await assert.rejects(settleWithin(follow({ signal: controller.signal })), {
+      code: 'ABORTED',
+    });
+
+    assert.strictEqual(await statusOf(requestId), APPROVED);
+    assert.deepStrictEqual(enqueuedBatches(fake), [[1101, 1102]]);
+    assert.deepStrictEqual(notesOf(fake, requestId), {
+      index: undefined,
+      stamp: stampOf11(),
+    });
+    assert.deepStrictEqual(
+      logged('Manga follow could not note a re-opened request'),
+      []
+    );
+
+    await makeDue(requestId);
+    assert.deepStrictEqual(await follow(), ran({ enqueued: 1 }));
+    assert.deepStrictEqual(enqueuedBatches(fake), [[1101, 1102], [1103]]);
   });
 });
 

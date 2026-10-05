@@ -779,10 +779,37 @@ const addToLibrary = async (
 };
 
 /**
- * Step 4: the category, then the request index, then the stamp. The index
- * goes first so the release can always find a manga whose stamp names the
- * request.
+ * Notes the request on its manga: the request index first, so the release
+ * can always find a manga whose stamp names the request, then the stamp.
+ * Returns false, with no stamp written, when the manga ID names another
+ * manga. The caller holds the manga's dispatch lock.
  */
+export const writeMangaRequestNotes = async (
+  client: Pick<
+    SuwayomiAPI,
+    'setRequestIndex' | 'getMangaDetails' | 'setRequestStamp'
+  >,
+  binding: ResolvedBinding,
+  requestId: number,
+  call: SuwayomiCallOptions
+): Promise<boolean> => {
+  await client.setRequestIndex(
+    String(requestId),
+    buildRequestIndexValue(binding),
+    call
+  );
+  const details = await client.getMangaDetails(binding.mangaId, call);
+  if (!isSameManga(details, binding)) {
+    return false;
+  }
+  const stamp = await buildRequestStamp(binding, requestId);
+  if (details.meta[REQUEST_STAMP_KEY] !== stamp) {
+    await client.setRequestStamp(binding.mangaId, stamp, call);
+  }
+  return true;
+};
+
+/** Step 4: the category, then the request notes. */
 const prepareCategory = async (
   context: DispatchContext,
   binding: ResolvedBinding,
@@ -794,20 +821,12 @@ const prepareCategory = async (
     call
   );
   await client.addMangaToCategory(binding.mangaId, category.id, call);
-  await client.setRequestIndex(
-    String(context.requestId),
-    buildRequestIndexValue(binding),
-    call
-  );
-  const details = await client.getMangaDetails(binding.mangaId, call);
-  if (!isSameManga(details, binding)) {
+  if (
+    !(await writeMangaRequestNotes(client, binding, context.requestId, call))
+  ) {
     return settle(context, MangaDispatchError.BINDING_MISSING, {
       countAttempt: true,
     });
-  }
-  const stamp = await buildRequestStamp(binding, context.requestId);
-  if (details.meta[REQUEST_STAMP_KEY] !== stamp) {
-    await client.setRequestStamp(binding.mangaId, stamp, call);
   }
   await advance(context, manifest);
   return undefined;

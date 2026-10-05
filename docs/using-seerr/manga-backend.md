@@ -982,11 +982,11 @@ on that server. For each request, SeerrNG:
 Step 4 also queues a followed chapter again when it left the download queue
 without being downloaded. Chapters that following queued are handed back like
 the others when the request ends; see [When a request ends](#when-a-request-ends).
-Following never changes the library, the **SeerrNG** category, the request
-notes, the server marker, or Suwayomi's settings, and it does not need
-Suwayomi's own automatic chapter downloads. The
-[request notes](#what-seerrng-writes-to-suwayomi) can therefore leave out a
-complete request that following opened again; SeerrNG never acts on them.
+Following never changes the library, the **SeerrNG** category, the server
+marker, or Suwayomi's settings, and it does not need Suwayomi's own automatic
+chapter downloads. When step 3 opens a complete request again, SeerrNG writes
+the request's [request notes](#what-seerrng-writes-to-suwayomi) on the manga
+again before step 4; see [Complete requests](#complete-requests).
 
 Change the job's schedule or run it now under **Settings → Jobs & Cache**.
 While the Manga category is off, the job does nothing. When a server cannot be
@@ -1033,7 +1033,14 @@ Each wait gets up to 4 more hours at random, so that checks spread out.
 When a check adds chapters to a complete request, SeerrNG opens the request
 again in the same step: the request goes back to approved, its history gets an
 **Approved** entry for the new chapters, and it shows **Downloading** until
-they are delivered. The **Manga Progress** job follows the new chapters like
+they are delivered. Before it queues the new chapters, SeerrNG writes the
+request's [request notes](#what-seerrng-writes-to-suwayomi) on the manga again,
+since the **Manga Dispatch Sweep** removes them once a request completes.
+When Suwayomi reports an error, or the manga's ID now names another manga,
+SeerrNG logs `Manga follow could not note a re-opened request` under the
+**Manga Follow** label with the request ID and the code, and queues the
+chapters anyway: the notes can then leave out the request, and SeerrNG never
+acts on them. The **Manga Progress** job follows the new chapters like
 the others. Once every chapter of the request is delivered, the request
 completes again and SeerrNG sends the **Request Available** notification
 again. New chapters use the request's approval: they need no new approval and
@@ -1062,9 +1069,11 @@ one of these codes:
 
 Under the same label, SeerrNG logs `MANGA_FOLLOW_CHAPTERS_UNMAPPED` with a
 count when Suwayomi no longer lists some followed chapters, which it skips,
-`MANGA_FOLLOW_LIST_STALE` when the source's chapter list is not fresh, and
-`MANGA_FOLLOW_INSTANCE_MISMATCH` when a server carries another marker. These
-log entries contain IDs, counts, and codes only, never titles or addresses.
+`MANGA_FOLLOW_LIST_STALE` when the source's chapter list is not fresh,
+`MANGA_FOLLOW_INSTANCE_MISMATCH` when a server carries another marker, and
+`MANGA_FOLLOW_NOTES_MISMATCH` when it cannot write a re-opened request's notes
+because the manga's ID now names another manga. These log entries contain IDs,
+counts, and codes only, never titles or addresses.
 
 ## Progress and availability
 
