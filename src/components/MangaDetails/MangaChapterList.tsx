@@ -132,7 +132,7 @@ const MangaChapterList = ({ mangaId }: { mangaId: number }) => {
         />
       ) : (
         (data || !error) && (
-          <>
+          <div className="media-chapter-list">
             {(current || !error) && (
               <Table className="media-chapter-table">
                 <thead>
@@ -167,7 +167,7 @@ const MangaChapterList = ({ mangaId }: { mangaId: number }) => {
                         <tr key={rowKey}>
                           <Table.TD>{chapterLabel(chapter)}</Table.TD>
                           <Table.TD>{chapter.name || MISSING_VALUE}</Table.TD>
-                          <Table.TD>
+                          <Table.TD className="media-chapter-date-column">
                             {uploadedLabel(chapter.uploadedAt)}
                           </Table.TD>
                           <Table.TD>
@@ -220,7 +220,7 @@ const MangaChapterList = ({ mangaId }: { mangaId: number }) => {
                 setPage(1);
               }}
             />
-          </>
+          </div>
         )
       )}
     </section>

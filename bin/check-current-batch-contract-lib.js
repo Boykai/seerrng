@@ -5704,6 +5704,49 @@ const validateCurrentBatchContract = (files) => {
     'The manga details page shows a Chapters inset card after Manga Details',
     'the style standard must govern the manga chapter list'
   );
+  requireCssRule(
+    '.media-chapter-list',
+    ['container: media-chapter-list / inline-size;'],
+    'the manga chapter list must be the size container its narrow layout follows'
+  );
+  requireText(
+    'src/components/MangaDetails/MangaChapterList.tsx',
+    'className="media-chapter-list"',
+    'the manga chapter list must be the size container its narrow layout follows'
+  );
+  for (const [selector, declarations] of [
+    ['.app-data-table.media-chapter-table', ['min-width: 17.5rem;']],
+    ['.media-chapter-table .media-chapter-date-column', ['display: none;']],
+  ]) {
+    requireCssRule(
+      selector,
+      declarations,
+      'a narrow manga chapter list must drop the Uploaded column so Status and the action column fit'
+    );
+  }
+  requireOrder(
+    'src/styles/globals.css',
+    [
+      '@container media-chapter-list (max-width: 28rem) {',
+      '.media-chapter-table .media-chapter-date-column {',
+    ],
+    'a narrow manga chapter list must drop the Uploaded column so Status and the action column fit'
+  );
+  for (const token of [
+    '<Table.TH className="media-chapter-date-column">',
+    '<Table.TD className="media-chapter-date-column">',
+  ]) {
+    requireText(
+      'src/components/MangaDetails/MangaChapterList.tsx',
+      token,
+      'a narrow manga chapter list must drop the Uploaded column so Status and the action column fit'
+    );
+  }
+  requireText(
+    'docs/maintainers/ui-style-standard.md',
+    'The chapter table and its pagination footer sit in one `media-chapter-list` size container.',
+    'the style standard must govern the narrow manga chapter list'
+  );
   requireText(
     'src/components/Settings/SettingsNetwork/index.tsx',
     'className="settings-http-warning"',
