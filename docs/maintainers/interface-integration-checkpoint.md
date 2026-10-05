@@ -614,3 +614,134 @@ acceptance. Tests used disposable SQLite and local app endpoints only; no live
 Grimmory, BookOrbit, Steam, QuestarrNG, or ROMarrNG provider was contacted.
 Release-note preview and branch push remain pending. John's human visual
 acceptance is still required before release.
+
+## v3.52.0 publication and CI repair — October 5, 2026
+
+This entry supersedes the earlier pending-release status above. The integrated
+feature candidate was released as `v3.52.0` from
+`fb50d1f70fdbe44579d89386d70bc50e9f181063`; the GitHub release is published and
+the release workflow's Discord announcement job succeeded. The release-note
+preview and changelog-tag check passed. The complete development gate on that
+integrated source passed 4,083 tests with four PostgreSQL-only skips and zero
+platform exclusions. Its production build also passed. Existing desktop/narrow
+game and reader browser flows passed 1/1 each; their rendered captures were
+inspected earlier in this work. No live Grimmory, BookOrbit, Steam, QuestarrNG
+or ROMarrNG provider round trip was performed, and John's release visual
+acceptance remains pending.
+
+Post-publication GitHub checks exposed three separate results:
+
+1. SeerrNG CI run `37258284100` failed the bundle budget at
+   `.next/static/chunks/pages/_app-98ffa76db6165a35.js` (1027.1 KB against
+   1024.0 KB). Its unit, i18n, security, and deployment jobs succeeded. A
+   separate isolated candidate removes the eager English catalog from the
+   shared app entry and has passed its complete `pnpm validate:development`
+   gate on the `fb50d1f` base (receipt:
+   `/tmp/seerrng-bundle-budget-validation-final3.log`). That candidate has not
+   yet been integrated here; its production build and `pnpm bundle:check` are
+   still pending.
+2. Cypress run `37258284096` failed two settings assertions. The Lidarr help
+   copy was present in the rendered modal, but its Cypress query was not scoped
+   to that dialog and could select the background service form. The Prowlarr
+   responsive spec returned an array for the new reader-settings API route,
+   although the rendered settings component requires the object response shape.
+   The specs now scope field-copy checks to the open dialog and return the
+   reader-settings object plus an empty grouping list from the Prowlarr fixture.
+   On the exact `v3.52.0` production build with a disposable seeded config, the
+   affected run passed 27/27 discovery tests and 1/1 Prowlarr test, with no
+   final failures, skips, or pending cases. The reader settings flow also
+   passed 1/1. One discovery test needed a retry before passing; it remains
+   recorded in `/tmp/seerrng-v352-cypress-repaired-focused.log`.
+3. Chocolatey publish run `37263774763` built the package but received HTTP 403
+   from `push.chocolatey.org`. The repository cannot establish package-owner
+   authorization through a source change. This channel is not verified as
+   published.
+
+The Cypress repairs are test-harness changes only; the visible settings UI did
+not change. They are recorded in
+`cypress/e2e/library-discover-parity.cy.ts` and
+`cypress/e2e/settings/prowlarr-responsive.cy.ts`. The follow-up Cypress checks
+used `/tmp/seerrng-v352-prowlarr-isolated`, a disposable seeded test config.
+The production server ran from the isolated build worktree
+`/home/keith/.cache/seerrng-v352-cypress-repro` at the release commit; no live
+service credentials or databases were used.
+
+After publication, `origin/main` advanced to
+`6d54a07bce12e222096a9ba5a34add8709bd39e8` for an internal YunoHost manifest
+alignment. The Cypress repair is not yet integrated on that new main tip. Before
+finalizing a follow-up candidate, preserve its source checkpoint, forward
+integrate the latest main and any completed bundle repair, then rerun the exact
+full development gate, production build, and affected browser flows. The
+Chocolatey 403 and John's visual acceptance remain explicit release limitations.
+
+## Post-release CI repairs — October 5, 2026
+
+The repair candidate is now based on the current `origin/main` tip,
+`6d54a07bce12e222096a9ba5a34add8709bd39e8`. It combines the English startup
+bundle reduction from the separately validated candidate with both Cypress
+harness fixes described above. The candidate bundle patch is present in
+`src/pages/_app.tsx`, its focused regression is in
+`src/components/ManageSlideOver/manageActions.test.mjs`, and the user-facing
+performance note is `release-notes/initial-load-performance.md`. The Cypress
+fixes are in `cypress/e2e/library-discover-parity.cy.ts` and
+`cypress/e2e/settings/prowlarr-responsive.cy.ts`.
+
+The bundle candidate's full development gate passed on its pre-integration
+`fb50d1f` base (4,083 passed, four PostgreSQL-only skips, zero failures and
+platform exclusions). The Cypress repair passed the 28 affected assertions and
+the reader-delivery settings flow on the published `v3.52.0` build, with a
+disposable seeded config. These are component evidence only; they do not replace
+verification on this combined exact source tree. A preserved source bundle is
+`/tmp/seerrng-reader-groupings-before-v352-forward-integration.bundle`; the
+integrated candidate's final validation, build, bundle budget and complete
+Cypress results will be appended here when available.
+
+The Chocolatey publish 403 and John's human visual acceptance remain
+outstanding. No provider round trips against live services were attempted.
+
+## Maintainer authorization and final repair verification — October 4, 2026
+
+The product owner explicitly approved this release and directed that John's
+individual approval not be required. This approval supersedes the earlier
+John-specific release gate recorded above. No live Grimmory or BookOrbit
+provider round trip was performed; that remains outside this release approval.
+
+The current candidate retains the two post-release Cypress fixture repairs and
+the English startup bundle reduction. The initial combined development gate on
+these code changes passed with 452/452 Vitest tests, 2,908 active of 2,912 Node
+TypeScript tests (four skips), 485/485 Node JavaScript tests, and 238/238
+tooling tests. It had zero platform exclusions. Two full gates then passed on
+the final candidate, each with the same totals and zero platform exclusions.
+Receipts: `/tmp/seerrng-v352-repair-validation-final.log` and
+`/tmp/seerrng-v352-repair-validation-final-receipt.log`.
+
+The production build passed and generated all 113 pages. `pnpm bundle:check`
+checked 305 JavaScript chunks (11.54 MB total); the shared `_app` chunk is
+662.7 KB against the 1,024 KB limit. Receipts:
+`/tmp/seerrng-v352-repair-build-final.log` and
+`/tmp/seerrng-v352-repair-bundle-check-final.log`.
+
+Focused browser runs passed on the disposable test database: library/discover
+parity 27/27 (one retry before passing), Prowlarr responsive 1/1, current batch
+layout 8/8, and reader delivery settings 1/1. The reader settings test first
+hit a 60-second Electron page-load timeout with a blank viewport; the isolated
+rerun in headless Chromium 153 passed and recorded desktop and narrow captures.
+Its checks covered saving both reader URLs and the preferred provider, generated
+catalog and Komga links, persisted settings after reload, and the responsive
+address fields. The full 43-spec Cypress suite is not claimed as passing: the
+previous broad runs were interrupted, and one attempt reached unmocked external
+provider routes. No live reader service round trip was performed.
+
+The release worktree audit confirmed that the prior reader delivery, series
+groupings, audiobook/comic/magazine delivery, game library, external request
+list sync, and request-edit work are already present in the published v3.52.0
+source. Several older worktrees contain stale or partially reverted copies of
+that work; they are preserved and are not reapplied over the shipped source.
+The remaining unique candidate changes are the startup bundle fix, its
+regression check and performance note, and the two Cypress harness repairs.
+
+Chocolatey run `37263774763` built version 3.52.0 but received HTTP 403 from
+`push.chocolatey.org`; the workflow had a credential configured. The package
+was not verified as published, and no source change can repair the package
+owner authorization. Other v3.52.0 publication channels are recorded in the
+release run. This channel limitation remains disclosed for the follow-up.
