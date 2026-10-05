@@ -45,6 +45,9 @@ describe('request status routes behind the OpenAPI validator', () => {
         olderCount: 0,
       })
     );
+    app.get('/api/v1/request/status/:requestId/downloads', (_req, res) =>
+      res.status(200).json({ results: [], hadErrors: false })
+    );
     app.use(
       (
         error: { status?: number; message?: string },
@@ -104,6 +107,7 @@ describe('request status routes behind the OpenAPI validator', () => {
         take: 100,
         skip: 0,
         requestedBy: 1,
+        mediaId: 11,
         bookFormat: 'ebook',
         timeFrame: '30d',
         sort: 'modified',
@@ -114,5 +118,14 @@ describe('request status routes behind the OpenAPI validator', () => {
       });
 
     assert.strictEqual(response.status, 200);
+  });
+
+  it('allows download-list responses to report partial provider errors', async () => {
+    const response = await request(createValidatedApp()).get(
+      '/api/v1/request/status/31/downloads'
+    );
+
+    assert.strictEqual(response.status, 200);
+    assert.deepStrictEqual(response.body, { results: [], hadErrors: false });
   });
 });

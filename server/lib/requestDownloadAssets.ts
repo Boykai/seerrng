@@ -8,6 +8,10 @@ import SonarrAPI from '@server/api/servarr/sonarr';
 import { MediaType } from '@server/constants/media';
 import { MediaIdentifierProvider } from '@server/entity/MediaIdentifier';
 import type { MediaRequest } from '@server/entity/MediaRequest';
+import type {
+  RequestDownloadAssetResponse,
+  RequestDownloadAssetsResponse,
+} from '@server/interfaces/api/requestInterfaces';
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import type { DownloadPathService } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -18,11 +22,7 @@ import { open, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
 
-export interface RequestDownloadAsset {
-  id: string;
-  name: string;
-  size?: number;
-}
+export type RequestDownloadAsset = RequestDownloadAssetResponse;
 
 export interface OpenRequestDownloadAsset {
   file?: FileHandle;
@@ -223,7 +223,8 @@ const addAsset = async (
   requestId: number,
   serviceType: DownloadPathService,
   serviceId: number,
-  remoteFilePath: string | undefined
+  remoteFilePath: string | undefined,
+  format?: 'ebook' | 'audiobook'
 ): Promise<void> => {
   if (!remoteFilePath || assets.length >= maxAssetsPerRequest) return;
   const asset = await buildResolvedAsset(
@@ -233,7 +234,7 @@ const addAsset = async (
     remoteFilePath
   );
   if (asset && !assets.some((existing) => existing.id === asset.id)) {
-    assets.push(asset);
+    assets.push({ ...asset, format });
   }
 };
 
@@ -391,30 +392,46 @@ const getBookDeliveryTargets = (
 const getReadarrAssets = async (
   request: MediaRequest,
   assets: ResolvedAsset[]
-): Promise<void> => {
+): Promise<boolean> => {
+  let hadErrors = false;
   for (const target of getBookDeliveryTargets(request)) {
     const server = getExternalRuntimeConfig().readarr.find(
       (instance) => instance.id === target.serviceId
     );
     if (!server) continue;
-    const api = new ReadarrAPI({
-      url: ReadarrAPI.buildUrl(server, '/api/v1'),
-      apiKey: server.apiKey,
-      mediaType: target.format,
-    });
-    const files = await api.getBookFiles(target.bookId);
-    for (const file of files) {
-      if (file.bookId === target.bookId && file.path) {
-        await addAsset(
-          assets,
-          request.id,
-          'readarr',
-          target.serviceId,
-          file.path
-        );
+    try {
+      const api = new ReadarrAPI({
+        url: ReadarrAPI.buildUrl(server, '/api/v1'),
+        apiKey: server.apiKey,
+        mediaType: target.format,
+      });
+      const files = await api.getBookFiles(target.bookId);
+      for (const file of files) {
+        if (file.bookId === target.bookId && file.path) {
+          await addAsset(
+            assets,
+            request.id,
+            'readarr',
+            target.serviceId,
+            file.path,
+            target.format
+          );
+        }
       }
+    } catch (error) {
+      // A combined request may target separate ebook and audiobook services.
+      // Keep any resolved copy and continue checking the other format.
+      hadErrors = true;
+      logger.warn('Unable to list book request download copies', {
+        label: 'Request Downloads',
+        requestId: request.id,
+        serviceId: target.serviceId,
+        format: target.format,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
+  return hadErrors;
 };
 
 const getLazyLibrarianAssets = async (
@@ -565,9 +582,9 @@ const getBackIssueAssets = async (
 
 const resolveRequestAssets = async (
   request: MediaRequest
-): Promise<ResolvedAsset[]> => {
+): Promise<{ assets: ResolvedAsset[]; hadErrors: boolean }> => {
   const assets: ResolvedAsset[] = [];
-  const providers: Partial<Record<MediaType, () => Promise<void>>> = {
+  const providers: Partial<Record<MediaType, () => Promise<void | boolean>>> = {
     [MediaType.MOVIE]: () => getRadarrAssets(request, assets),
     [MediaType.TV]: () => getSonarrAssets(request, assets),
     [MediaType.BOOK]: () => getReadarrAssets(request, assets),
@@ -582,11 +599,13 @@ const resolveRequestAssets = async (
     [MediaType.MAGAZINE]: () => getLazyLibrarianAssets(request, assets),
   };
   const resolve = providers[request.type];
-  if (!resolve) return assets;
+  if (!resolve) return { assets, hadErrors: false };
 
+  let hadErrors: boolean;
   try {
-    await resolve();
+    hadErrors = (await resolve()) === true;
   } catch (error) {
+    hadErrors = true;
     logger.warn('Unable to list local request download copies', {
       label: 'Request Downloads',
       requestId: request.id,
@@ -594,14 +613,22 @@ const resolveRequestAssets = async (
       errorMessage: error instanceof Error ? error.message : 'Unknown error',
     });
   }
-  return assets;
+  return { assets, hadErrors };
 };
 
 export const listRequestDownloadAssets = async (
   request: MediaRequest
-): Promise<RequestDownloadAsset[]> => {
-  const assets = await resolveRequestAssets(request);
-  return assets.map(({ id, name, size }) => ({ id, name, size }));
+): Promise<RequestDownloadAssetsResponse> => {
+  const { assets, hadErrors } = await resolveRequestAssets(request);
+  return {
+    results: assets.map(({ id, name, size, format }) => ({
+      id,
+      name,
+      size,
+      format,
+    })),
+    hadErrors,
+  };
 };
 
 export const openVerifiedMappedFile = async (
@@ -650,7 +677,8 @@ export const openRequestDownloadAsset = async (
   assetId: string
 ): Promise<OpenRequestDownloadAsset | undefined> => {
   if (!/^[A-Za-z0-9_-]{43}$/.test(assetId)) return undefined;
-  const asset = (await resolveRequestAssets(request)).find((candidate) => {
+  const { assets } = await resolveRequestAssets(request);
+  const asset = assets.find((candidate) => {
     const expected = Buffer.from(candidate.id);
     const provided = Buffer.from(assetId);
     return (

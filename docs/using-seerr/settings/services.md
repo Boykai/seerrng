@@ -128,3 +128,12 @@ rules are also applied in **Advanced Options** for movie and series requests,
 where you can review the resulting values before submission. See the
 [Override Rules guide](/using-seerr/override-rules) for setup and matching
 behavior.
+
+## Reader Apps
+
+**Settings → Services → Reader Apps** connects Grimmory or BookOrbit to your
+existing library for OPDS browsing, with additional comic and audiobook options
+depending on the service. Grimmory is selected by default. Administrators can
+also create live author and series shelves from detail pages and manage those
+shelves here. See the [reader delivery guide](/using-seerr/reader-delivery) for
+setup, supported formats, Kobo behavior, and device downloads.

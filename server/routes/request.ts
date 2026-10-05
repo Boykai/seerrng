@@ -2951,6 +2951,16 @@ requestRoutes.get<
         message: 'Request id must be a positive integer.',
       });
     }
+    const mediaId =
+      req.query.mediaId === undefined
+        ? undefined
+        : parsePositiveRouteId(req.query.mediaId, maxRequestIdValue);
+    if (req.query.mediaId !== undefined && mediaId === undefined) {
+      return next({
+        status: 400,
+        message: 'Media id must be a positive integer.',
+      });
+    }
     const requestedBy = parseOptionalPositiveInt(req.query.requestedBy);
     const parsedMediaType = parseOptionalAllowedString(req.query.mediaType, {
       fieldName: 'Media type',
@@ -3047,6 +3057,7 @@ requestRoutes.get<
           take: pageSize,
           skip,
           requestId,
+          mediaId,
           ownerId: canViewAllRequests ? (requestedBy ?? undefined) : actor.id,
           mediaType: mediaType === 'all' ? undefined : (mediaType as MediaType),
           bookFormat: parsedBookFormat.value,
@@ -3250,8 +3261,8 @@ requestRoutes.get('/status/:requestId/downloads', async (req, res, next) => {
     if (current?.stage !== RequestStatusStage.AVAILABLE) {
       return res.status(200).json({ results: [] });
     }
-    const results = await listRequestDownloadAssets(access.request);
-    return res.status(200).json({ results });
+    const downloads = await listRequestDownloadAssets(access.request);
+    return res.status(200).json(downloads);
   } catch (error) {
     if (error instanceof UserMutationActorUnauthorizedError) {
       return next({ status: 403, message: 'Access denied.' });

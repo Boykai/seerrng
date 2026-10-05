@@ -110,8 +110,21 @@ export interface RequestStatusUsersResponse extends PaginatedResponse {
   }[];
 }
 
+export interface RequestDownloadAssetResponse {
+  id: string;
+  name: string;
+  size?: number;
+  format?: 'ebook' | 'audiobook';
+}
+
+export interface RequestDownloadAssetsResponse {
+  results: RequestDownloadAssetResponse[];
+  hadErrors: boolean;
+}
+
 export type RequestStatusQuery = {
   requestId?: number;
+  mediaId?: number;
   requestedBy?: number;
   mediaType?: MediaType | 'all';
   bookFormat?: 'ebook' | 'audiobook';

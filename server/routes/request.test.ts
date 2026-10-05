@@ -1051,6 +1051,93 @@ describe('GET /request/status', () => {
     assert.strictEqual(response.body.results[0].status.stage, 'available');
   });
 
+  it('filters available ebook requests and counts by exact media ID and owner', async () => {
+    const userRepo = getRepository(User);
+    const mediaRepo = getRepository(Media);
+    const requestRepo = getRepository(MediaRequest);
+    const requestedBy = await userRepo.findOneOrFail({
+      where: { email: 'friend@seerr.dev' },
+    });
+    const admin = await userRepo.findOneOrFail({
+      where: { email: 'admin@seerr.dev' },
+    });
+    const [targetMedia, siblingMedia] = await mediaRepo.save([
+      new Media({
+        mediaType: MediaType.BOOK,
+        tmdbId: 0,
+        status: MediaStatus.AVAILABLE,
+        status4k: MediaStatus.UNKNOWN,
+        serviceId: 1,
+        externalServiceId: 101,
+      }),
+      new Media({
+        mediaType: MediaType.BOOK,
+        tmdbId: 0,
+        status: MediaStatus.AVAILABLE,
+        status4k: MediaStatus.UNKNOWN,
+        serviceId: 1,
+        externalServiceId: 102,
+      }),
+    ]);
+    const [targetRequest, siblingRequest] = await requestRepo.save([
+      new MediaRequest({
+        type: MediaType.BOOK,
+        status: MediaRequestStatus.COMPLETED,
+        media: targetMedia,
+        requestedBy,
+        is4k: false,
+        bookFormat: 'ebook',
+      }),
+      new MediaRequest({
+        type: MediaType.BOOK,
+        status: MediaRequestStatus.COMPLETED,
+        media: siblingMedia,
+        requestedBy,
+        is4k: false,
+        bookFormat: 'ebook',
+      }),
+      new MediaRequest({
+        type: MediaType.BOOK,
+        status: MediaRequestStatus.COMPLETED,
+        media: targetMedia,
+        requestedBy: admin,
+        is4k: false,
+        bookFormat: 'ebook',
+      }),
+    ]);
+
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const response = await agent.get('/request/status').query({
+      requestedBy: requestedBy.id,
+      mediaType: 'book',
+      bookFormat: 'ebook',
+      timeFrame: 'all',
+      filter: 'available',
+      mediaId: targetMedia.id,
+    });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.body.pageInfo.results, 1);
+    assert.deepStrictEqual(
+      response.body.results.map(
+        (result: { request: { id: number } }) => result.request.id
+      ),
+      [targetRequest.id]
+    );
+    assert.strictEqual(response.body.counts.total, 1);
+    assert.strictEqual(response.body.counts.completed, 1);
+    assert.notStrictEqual(targetRequest.id, siblingRequest.id);
+  });
+
+  it('rejects malformed media IDs in Request Status filters', async () => {
+    const agent = await loginAs('friend@seerr.dev', 'test1234');
+    const response = await agent
+      .get('/request/status')
+      .query({ mediaId: 'not-an-id' });
+
+    assert.strictEqual(response.status, 400);
+  });
+
   it('exposes partially fulfilled requests as incomplete', async () => {
     const mediaRequest = await seedRequest(MediaRequestStatus.APPROVED);
     await getRepository(Media).update(mediaRequest.media.id, {

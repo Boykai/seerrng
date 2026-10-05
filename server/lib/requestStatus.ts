@@ -1642,6 +1642,7 @@ const stageMatchesFilter = (
 
 const getRequestStatusCounts = async (options: {
   ownerId?: number;
+  mediaId?: number;
   mediaType?: MediaType;
   bookFormat?: 'ebook' | 'audiobook';
   since?: Date;
@@ -1677,6 +1678,11 @@ const getRequestStatusCounts = async (options: {
   if (options.ownerId) {
     query.andWhere('requestedByCount.id = :countOwnerId', {
       countOwnerId: options.ownerId,
+    });
+  }
+  if (options.mediaId) {
+    query.andWhere('mediaCount.id = :countMediaId', {
+      countMediaId: options.mediaId,
     });
   }
   if (options.since) {
@@ -1763,6 +1769,7 @@ const getRequestStatusCounts = async (options: {
 
 const getRequestStatusOlderCount = async (options: {
   ownerId?: number;
+  mediaId?: number;
   mediaType?: MediaType;
   bookFormat?: 'ebook' | 'audiobook';
   since: Date;
@@ -1770,6 +1777,7 @@ const getRequestStatusOlderCount = async (options: {
   const requestRepository = getRepository(MediaRequest);
   const query = requestRepository
     .createQueryBuilder('requestOlder')
+    .leftJoin('requestOlder.media', 'mediaOlder')
     .leftJoin('requestOlder.requestedBy', 'requestedByOlder')
     .where('requestOlder.createdAt < :olderSince', {
       olderSince: options.since,
@@ -1778,6 +1786,11 @@ const getRequestStatusOlderCount = async (options: {
   if (options.ownerId) {
     query.andWhere('requestedByOlder.id = :olderOwnerId', {
       olderOwnerId: options.ownerId,
+    });
+  }
+  if (options.mediaId) {
+    query.andWhere('mediaOlder.id = :olderMediaId', {
+      olderMediaId: options.mediaId,
     });
   }
   if (options.mediaType) {
@@ -1803,6 +1816,7 @@ export const getRequestStatusPage = async (options: {
   take: number;
   skip: number;
   requestId?: number;
+  mediaId?: number;
   ownerId?: number;
   mediaType?: MediaType;
   bookFormat?: 'ebook' | 'audiobook';
@@ -1826,6 +1840,9 @@ export const getRequestStatusPage = async (options: {
     query.andWhere('request.id = :requestId', {
       requestId: options.requestId,
     });
+  }
+  if (options.mediaId) {
+    query.andWhere('media.id = :mediaId', { mediaId: options.mediaId });
   }
   if (options.ownerId) {
     query.andWhere('requestedBy.id = :ownerId', { ownerId: options.ownerId });
@@ -1952,6 +1969,7 @@ export const getRequestStatusPage = async (options: {
   const [counts, olderCount] = await Promise.all([
     getRequestStatusCounts({
       ownerId: options.ownerId,
+      mediaId: options.mediaId,
       mediaType: options.mediaType,
       bookFormat: options.bookFormat,
       since: options.since,
@@ -1959,6 +1977,7 @@ export const getRequestStatusPage = async (options: {
     options.since && !hasStatusFilter
       ? getRequestStatusOlderCount({
           ownerId: options.ownerId,
+          mediaId: options.mediaId,
           mediaType: options.mediaType,
           bookFormat: options.bookFormat,
           since: options.since,

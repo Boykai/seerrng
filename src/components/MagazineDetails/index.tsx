@@ -3,6 +3,8 @@ import Button from '@app/components/Common/Button';
 import IndexerSearchLink from '@app/components/Common/IndexerSearchLink';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import ReaderDeliveryLink from '@app/components/Common/ReaderDeliveryLink';
+import RequestDownloadAction from '@app/components/Common/RequestDownloadAction';
 import Tooltip from '@app/components/Common/Tooltip';
 import ExternalBlocklistModal from '@app/components/ExternalBlocklistModal';
 import IssueBlock from '@app/components/IssueBlock';
@@ -344,6 +346,13 @@ const MagazineDetails = () => {
             </dl>
 
             <div className="media-primary-action-row">
+              <ReaderDeliveryLink target="magazines" />
+              {data.mediaInfo?.id && (
+                <RequestDownloadAction
+                  mediaId={data.mediaInfo.id}
+                  mediaType={MediaType.MAGAZINE}
+                />
+              )}
               {canUseBlocklist && (
                 <Tooltip
                   content={intl.formatMessage(

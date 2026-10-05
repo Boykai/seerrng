@@ -123,6 +123,7 @@ export type EmulationSystemGroup = 'retro' | 'modern';
 export interface SoftwareAcquisitionSettings {
   romarr: SoftwareProviderSettings;
   questarr: SoftwareProviderSettings;
+  steamApiKey: string;
   emulationCatalogProvider: 'questarr' | 'romarr';
   emulationSystemGroups: Record<string, EmulationSystemGroup>;
 }
@@ -537,6 +538,7 @@ export type JobId =
   | 'image-cache-cleanup'
   | 'release-calendar-history'
   | 'availability-sync'
+  | 'external-request-list-sync'
   | 'process-blocklisted-tags';
 
 export interface DiscoveryIntegrationsSettings {
@@ -545,6 +547,28 @@ export interface DiscoveryIntegrationsSettings {
   simkl: { clientId: string };
   mdblist: { apiKey: string };
 }
+
+export type ReaderDeliveryProvider = 'grimmory' | 'bookorbit';
+
+export interface ReaderDeliverySettings {
+  grimmoryUrl: string;
+  grimmoryUsername: string;
+  grimmoryPassword: string;
+  bookorbitUrl: string;
+  bookorbitUsername: string;
+  bookorbitPassword: string;
+  preferredProvider: ReaderDeliveryProvider;
+}
+
+export const defaultReaderDeliverySettings = (): ReaderDeliverySettings => ({
+  grimmoryUrl: '',
+  grimmoryUsername: '',
+  grimmoryPassword: '',
+  bookorbitUrl: '',
+  bookorbitUsername: '',
+  bookorbitPassword: '',
+  preferredProvider: 'grimmory',
+});
 
 export const defaultDiscoveryIntegrations =
   (): DiscoveryIntegrationsSettings => ({
@@ -576,6 +600,7 @@ export interface AllSettings {
   softwareAcquisition: SoftwareAcquisitionSettings;
   prowlarr: ProwlarrSettings;
   discoveryIntegrations: DiscoveryIntegrationsSettings;
+  readerDelivery: ReaderDeliverySettings;
   public: PublicSettings;
   notifications: NotificationSettings;
   jobs: Record<JobId, JobSettings>;
@@ -690,6 +715,7 @@ class Settings {
       backissue: [],
       lazylibrarian: [],
       discoveryIntegrations: defaultDiscoveryIntegrations(),
+      readerDelivery: defaultReaderDeliverySettings(),
       softwareAcquisition: {
         romarr: {
           hostname: '',
@@ -705,6 +731,7 @@ class Settings {
           baseUrl: '',
           apiKey: '',
         },
+        steamApiKey: '',
         emulationCatalogProvider: 'questarr',
         emulationSystemGroups: {},
       },
@@ -836,6 +863,9 @@ class Settings {
         },
         'plex-watchlist-sync': {
           schedule: '0 */3 * * * *',
+        },
+        'external-request-list-sync': {
+          schedule: '0 0 3 * * *',
         },
         'plex-refresh-token': {
           schedule: '0 0 5 * * *',
@@ -1167,6 +1197,10 @@ class Settings {
 
   set audiobookshelf(data: AudiobookshelfSettings | null) {
     this.data.audiobookshelf = data;
+  }
+
+  get readerDelivery(): ReaderDeliverySettings {
+    return this.data.readerDelivery;
   }
 
   get sonarr(): SonarrSettings[] {
@@ -1572,6 +1606,7 @@ class Settings {
       backissue: [],
       lazylibrarian: [],
       discoveryIntegrations: defaultDiscoveryIntegrations(),
+      readerDelivery: defaultReaderDeliverySettings(),
       softwareAcquisition: {
         romarr: {
           hostname: '',
@@ -1587,6 +1622,7 @@ class Settings {
           baseUrl: '',
           apiKey: '',
         },
+        steamApiKey: '',
         emulationCatalogProvider: 'questarr',
         emulationSystemGroups: {},
       },
@@ -1717,6 +1753,9 @@ class Settings {
         },
         'plex-watchlist-sync': {
           schedule: '0 */3 * * * *',
+        },
+        'external-request-list-sync': {
+          schedule: '0 0 3 * * *',
         },
         'plex-refresh-token': {
           schedule: '0 0 5 * * *',

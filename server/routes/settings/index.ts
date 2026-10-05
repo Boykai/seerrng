@@ -122,6 +122,7 @@ import notificationRoutes from './notifications';
 import prowlarrRoutes from './prowlarr';
 import radarrRoutes from './radarr';
 import readarrRoutes from './readarr';
+import readerDeliveryRoutes from './readerDelivery';
 import softwareAcquisitionRoutes from './softwareAcquisition';
 import sonarrRoutes from './sonarr';
 
@@ -1421,6 +1422,7 @@ settingsRoutes.use('/sonarr', sonarrRoutes);
 settingsRoutes.use('/lidarr', lidarrRoutes);
 settingsRoutes.use('/readarr', readarrRoutes);
 settingsRoutes.use('/audiobookshelf', audiobookshelfRoutes);
+settingsRoutes.use('/reader-delivery', readerDeliveryRoutes);
 settingsRoutes.use('/mylar', mylarRoutes);
 settingsRoutes.use('/kapowarr', kapowarrRoutes);
 settingsRoutes.use('/backissue', backissueRoutes);
