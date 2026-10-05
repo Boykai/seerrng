@@ -55,23 +55,28 @@ const errorName = (error: unknown) =>
 
 /**
  * Media and the title's requests follow its bindings. Runs inside the
- * caller's admissions; a failure only logs, since the binding stands.
- * Returns the requests it moved to BOUND, to queue once those admissions
- * are released.
+ * caller's admissions; a failure only logs, since the binding stands. Once
+ * `signal` is cancelled it starts no new write and rethrows a failure rather
+ * than logging it; a write or request sync already under way finishes.
+ * Returns the requests it moved to BOUND, to queue once those admissions are
+ * released.
  */
 const reconcileAfter = async (
   instanceId: number,
-  anilistId: number
+  anilistId: number,
+  signal?: AbortSignal
 ): Promise<number[]> => {
   const tally = newMangaMediaTally();
   try {
     await reconcileMangaMedia([anilistId], {
       completedInstanceIds: new Set([instanceId]),
       tally,
+      signal,
       admitted: true,
     });
     return tally.boundRequestIds;
   } catch (error) {
+    if (signal?.aborted) throw error;
     logger.warn('Manga media reconcile failed after a source binding', {
       label: LABEL,
       instanceId,
@@ -227,16 +232,22 @@ export const writeMangaResolverBinding = (
 /**
  * Lets the requests of a title that already has an ACTIVE binding catch up,
  * under the same locks as a binding write, and queues the approved ones it
- * released once those locks are released.
+ * released once those locks are released. A cancel makes it reject and queue
+ * nothing, and it starts no new write; the dispatch sweep queues any request
+ * that a request sync already under way released.
  */
 export const catchUpMangaResolverTitle = (
   snapshot: SuwayomiSettings,
-  anilistId: number
+  anilistId: number,
+  signal?: AbortSignal
 ): Promise<void> =>
   runWithRequestAdmission([getMangaAdmissionKey(anilistId)], () =>
-    runWithSuwayomiInstanceAdmission(snapshot, () =>
-      reconcileAfter(snapshot.id, anilistId)
-    )
+    runWithSuwayomiInstanceAdmission(snapshot, async () => {
+      signal?.throwIfAborted();
+      const bound = await reconcileAfter(snapshot.id, anilistId, signal);
+      signal?.throwIfAborted();
+      return bound;
+    })
   )
     .catch(translateWriteError)
     .then((bound) => enqueueMangaRequestDispatch(bound));

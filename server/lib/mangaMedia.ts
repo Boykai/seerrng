@@ -284,7 +284,10 @@ export const reconcileMangaMedia = async (
     /** Instances whose bindings are current enough to raise a status. */
     completedInstanceIds: ReadonlySet<number>;
     tally: MangaMediaTally;
-    /** Checked before each batch and inside each write. */
+    /**
+     * Checked before each batch, inside each write, and before each batch's
+     * request sync.
+     */
     signal?: AbortSignal;
     /** Each write also takes this instance's admission. */
     snapshot?: SuwayomiSettings;
@@ -333,6 +336,7 @@ export const reconcileMangaMedia = async (
         tally.uniqueConflicts += 1;
       }
     }
+    if (signal?.aborted) return;
     // Requests on these titles follow their bindings: parked ones whose
     // binding appeared are released, and ones whose binding went are parked.
     tally.boundRequestIds.push(

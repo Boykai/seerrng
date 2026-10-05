@@ -325,6 +325,40 @@ describe('manga requests', () => {
     await assertNotQueued();
   });
 
+  it('keeps a parked request parked when a reconcile is cancelled before its request sync', async () => {
+    const request = await requestManga(await requester());
+    await seedBinding(TITLE, 1, MediaStatus.AVAILABLE);
+    const controller = new AbortController();
+    const transaction = dataSource.transaction.bind(dataSource) as (
+      ...args: unknown[]
+    ) => Promise<unknown>;
+    // The cancel lands once the slice's media write commits.
+    mock.method(dataSource, 'transaction', async (...args: unknown[]) => {
+      const result = await transaction(...args);
+      controller.abort();
+      return result;
+    });
+    const tally = newMangaMediaTally();
+
+    await reconcileMangaMedia([TITLE], {
+      completedInstanceIds: new Set([1]),
+      tally,
+      signal: controller.signal,
+    });
+
+    assert.strictEqual(tally.mediaUpdated, 1);
+    assert.strictEqual(
+      (await getRepository(Media).findOneByOrFail({ id: request.media.id }))
+        .status,
+      MediaStatus.AVAILABLE
+    );
+    const manifest = await manifestOf(request);
+    assert.strictEqual(manifest.bindingState, AWAITING_BINDING);
+    assert.strictEqual(manifest.boundAt, null);
+    assert.deepStrictEqual(tally.boundRequestIds, []);
+    await assertNotQueued();
+  });
+
   it('queues auto-approved requests for dispatch, bound or not', async () => {
     await seedBinding(TITLE + 1, 1);
     const user = await createUser(

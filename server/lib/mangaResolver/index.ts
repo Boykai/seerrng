@@ -293,7 +293,11 @@ export class MangaSourceResolver {
     return { running: this.controller !== undefined };
   }
 
-  /** Aborts every call in flight; nothing is written after a cancel. */
+  /**
+   * Aborts every call in flight. After a cancel the run starts no new write,
+   * except that the media and requests of a binding it already wrote still
+   * follow that binding; a write already under way finishes.
+   */
   public cancel(): void {
     this.controller?.abort();
   }
@@ -395,7 +399,11 @@ export class MangaSourceResolver {
     };
   }
 
-  /** Searches one title and records the outcome; writes nothing on cancel. */
+  /**
+   * Searches one title and records the outcome. After a cancel it starts no
+   * new write, a catch-up's included, except that the media and requests of
+   * a binding it already wrote still follow that binding.
+   */
   private async resolveTitle(
     run: RunState,
     instance: InstanceRun,
@@ -461,7 +469,7 @@ export class MangaSourceResolver {
     if (
       await hasActiveMangaBinding(dataSource.manager, anilistId, snapshot.id)
     ) {
-      await catchUpMangaResolverTitle(snapshot, anilistId);
+      await catchUpMangaResolverTitle(snapshot, anilistId, run.signal);
       return done(bound('EXISTING_BINDING'));
     }
 
