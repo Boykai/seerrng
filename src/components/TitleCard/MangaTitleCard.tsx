@@ -1,4 +1,5 @@
 import TitleCard from '@app/components/TitleCard';
+import useCardTextVisibility from '@app/hooks/useCardTextVisibility';
 import useMangaSummaries from '@app/hooks/useMangaSummaries';
 import { getMangaImageUrl } from '@app/utils/mangaImages';
 
@@ -18,6 +19,7 @@ const MangaTitleCard = ({
   mutateParent,
 }: MangaTitleCardProps) => {
   const { summaries, isLoading, error } = useMangaSummaries(batchIds);
+  const { visibility } = useCardTextVisibility();
   const manga = summaries.get(id);
 
   if (!manga) {
@@ -39,6 +41,7 @@ const MangaTitleCard = ({
       isAddedToWatchlist={manga.mediaInfo?.watchlists?.length ?? true}
       canExpand={canExpand}
       mutateParent={mutateParent}
+      showText={visibility.manga === 'always'}
     />
   );
 };

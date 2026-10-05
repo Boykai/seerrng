@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   summaries: new Map<number, unknown>(),
   isLoading: false,
   error: undefined as unknown,
+  visibility: {} as Record<string, string | undefined>,
 }));
 vi.mock('@app/hooks/useMangaSummaries', () => ({
   default: (ids: readonly number[]) => {
@@ -21,6 +22,9 @@ vi.mock('@app/hooks/useMangaSummaries', () => ({
     };
   },
 }));
+vi.mock('@app/hooks/useCardTextVisibility', () => ({
+  default: () => ({ visibility: state.visibility }),
+}));
 vi.mock('@app/components/TitleCard', () => {
   const Card = ({
     id,
@@ -30,6 +34,7 @@ vi.mock('@app/components/TitleCard', () => {
     year,
     mediaType,
     isAddedToWatchlist,
+    showText,
   }: {
     id: number;
     image?: string;
@@ -38,6 +43,7 @@ vi.mock('@app/components/TitleCard', () => {
     year?: string;
     mediaType: string;
     isAddedToWatchlist?: number | boolean;
+    showText?: boolean;
   }) => (
     <div
       data-testid="card"
@@ -48,6 +54,7 @@ vi.mock('@app/components/TitleCard', () => {
       data-year={year}
       data-media-type={mediaType}
       data-watchlisted={String(isAddedToWatchlist)}
+      data-show-text={String(showText)}
     />
   );
   Card.Placeholder = () => <div data-testid="placeholder" />;
@@ -71,6 +78,7 @@ beforeEach(() => {
   state.summaries = new Map();
   state.isLoading = false;
   state.error = undefined;
+  state.visibility = {};
 });
 
 afterEach(async () => {
@@ -125,6 +133,21 @@ it("marks the card from the viewer's own watchlist entries", async () => {
   expect(
     host.querySelector('[data-testid="card"]')?.getAttribute('data-watchlisted')
   ).toBe('0');
+});
+
+it.each([
+  ['always', 'true'],
+  ['hover', 'false'],
+  [undefined, 'false'],
+])('follows the manga card title setting %s', async (manga, showText) => {
+  // Another type's choice must not leak into manga cards.
+  state.visibility = { manga, book: 'always' };
+  state.summaries = new Map([[30013, { id: 30013, title: 'Sample Manga' }]]);
+  await render();
+
+  expect(
+    host.querySelector('[data-testid="card"]')?.getAttribute('data-show-text')
+  ).toBe(showText);
 });
 
 it.each([

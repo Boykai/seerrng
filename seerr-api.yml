@@ -1792,6 +1792,13 @@ components:
             - always
             - hover
           example: always
+        manga:
+          type: string
+          nullable: true
+          enum:
+            - always
+            - hover
+          example: hover
     DetailDisclosurePinSettings:
       type: object
       properties:

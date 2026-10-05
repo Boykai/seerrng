@@ -269,6 +269,8 @@ const MANGA_SCHEMA_OBJECTS: readonly SchemaObject[] = [
     table: 'discovery_account',
     name,
   })),
+  // Card text visibility for manga cards.
+  { kind: 'column', table: 'user_settings', name: 'cardTextVisibilityManga' },
 ];
 
 const driver = isPgsql ? 'postgres' : 'sqlite';

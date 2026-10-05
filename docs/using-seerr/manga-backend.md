@@ -86,6 +86,14 @@ and keeps them for a day. While AniList cannot be reached, the name lists are
 empty, but filters already in the page address still apply. Each page of
 results is one AniList request.
 
+Manga cards show their titles on hover until you choose otherwise. Select
+**Title View**, next to **Clear Filters**, to show the title on every manga
+card in the results, and select it again to go back to hover. The choice is
+saved to your account. It also applies to manga cards in search results, in
+watchlists, and on Discover shelves that have a **Title View** button. While
+manga is enabled, the same choice appears as **Manga** under **Card Titles** in
+your **General** settings.
+
 ## Blocklist manga
 
 Users with permission to manage the blocklist can blocklist a manga title from

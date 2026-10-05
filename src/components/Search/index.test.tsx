@@ -77,7 +77,9 @@ vi.mock('@app/components/Discover/constants', () => ({
   prepareFilterValues: (values: Record<string, unknown>) => values,
 }));
 vi.mock('@app/components/Common/CardTextVisibilityToggle', () => ({
-  default: () => null,
+  default: ({ mediaType }: { mediaType: string | string[] }) => (
+    <span data-toggle={[mediaType].flat().join(',')} />
+  ),
 }));
 vi.mock('@app/components/Common/PageTitle', () => ({ default: () => null }));
 vi.mock('@app/components/Common/Tooltip', () => ({
@@ -148,6 +150,7 @@ it('renders manga beside other media in mixed search results', () => {
     'manga:41',
     'movie:5',
   ]);
+  expect(html).toContain('data-toggle="movie,tv,album,book,manga"');
 });
 
 it('narrows the Manga category to manga and matches alternative titles', () => {
@@ -173,4 +176,5 @@ it('hides the Manga category while manga is off and falls back to all media', ()
 
   expect(categoryButtons(html)).not.toContain('Manga');
   expect(state.discover.at(-1)?.options).toEqual({ query: 'monster' });
+  expect(html).toContain('data-toggle="movie,tv,album,book"');
 });

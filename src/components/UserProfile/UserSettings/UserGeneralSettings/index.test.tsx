@@ -237,3 +237,54 @@ it('saves the manga auto-request preference', async () => {
     watchlistSyncManga: true,
   });
 });
+
+const cardTextSelect = (field: string) =>
+  host.querySelector<HTMLSelectElement>(`#cardTextVisibility${field}`);
+
+it('offers the manga card title choice only while manga is on', async () => {
+  await render();
+  expect(cardTextSelect('Book')).not.toBeNull();
+  expect(cardTextSelect('Manga')).toBeNull();
+
+  state.enabledMediaCategories = { manga: true };
+  await render();
+  expect(
+    host.querySelector('label[for="cardTextVisibilityManga"]')?.textContent
+  ).toBe('Manga');
+  expect(cardTextSelect('Manga')?.value).toBe('hover');
+});
+
+it('loads and saves the manga card title choice', async () => {
+  state.enabledMediaCategories = { manga: true };
+  state.data = {
+    ...state.data,
+    cardTextVisibility: { movie: 'always', manga: 'always' },
+  };
+  await render();
+  expect(cardTextSelect('Manga')?.value).toBe('always');
+
+  await choose(cardTextSelect('Manga')!, 'hover');
+  await choose(cardTextSelect('Tv')!, 'always');
+  await submit();
+
+  expect(state.post.mock.calls[0][1].cardTextVisibility).toEqual({
+    movie: 'always',
+    tv: 'always',
+    album: 'always',
+    book: 'always',
+    manga: 'hover',
+  });
+});
+
+it('leaves the saved manga card title choice alone while manga is off', async () => {
+  state.data = {
+    ...state.data,
+    cardTextVisibility: { movie: 'always', manga: 'always' },
+  };
+  await render();
+  await submit();
+
+  expect(
+    JSON.parse(JSON.stringify(state.post.mock.calls[0][1])).cardTextVisibility
+  ).toEqual({ movie: 'always', tv: 'hover', album: 'always', book: 'always' });
+});

@@ -2493,6 +2493,48 @@ describe('User route input validation', () => {
     assert.strictEqual(user.settings?.cardTextVisibilityBook, 'hover');
   });
 
+  it('saves manga card text visibility while the manga category is off', async () => {
+    const settings = getSettings();
+    const priorCategories = settings.main.enabledMediaCategories;
+    settings.main.enabledMediaCategories = {
+      ...priorCategories,
+      manga: false,
+    };
+
+    try {
+      const agent = await loginAs('admin@seerr.dev', 'test1234');
+      const saveRes = await agent.post('/user/1/settings/card-text').send({
+        manga: 'always',
+      });
+
+      assert.strictEqual(saveRes.status, 200);
+      assert.deepStrictEqual(saveRes.body, { manga: 'always' });
+
+      const movieRes = await agent.post('/user/1/settings/card-text').send({
+        movie: 'hover',
+      });
+      assert.strictEqual(movieRes.status, 200);
+      assert.deepStrictEqual(movieRes.body, {
+        movie: 'hover',
+        manga: 'always',
+      });
+
+      const getRes = await agent.get('/user/1/settings/card-text');
+      assert.strictEqual(getRes.status, 200);
+      assert.deepStrictEqual(getRes.body, {
+        movie: 'hover',
+        manga: 'always',
+      });
+
+      const user = await getRepository(User).findOneOrFail({
+        where: { id: 1 },
+      });
+      assert.strictEqual(user.settings?.cardTextVisibilityManga, 'always');
+    } finally {
+      settings.main.enabledMediaCategories = priorCategories;
+    }
+  });
+
   it('persists independent detail disclosure pins per user', async () => {
     const agent = await loginAs('admin@seerr.dev', 'test1234');
     const firstSave = await agent
@@ -2710,6 +2752,36 @@ describe('User route input validation', () => {
     assert.strictEqual(user.settings?.cardTextVisibilityTv, 'always');
     assert.strictEqual(user.settings?.cardTextVisibilityAlbum, 'hover');
     assert.strictEqual(user.settings?.cardTextVisibilityBook, 'hover');
+  });
+
+  it('saves manga card text visibility through main user settings without clearing it later', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const saveRes = await agent.post('/user/1/settings/main').send({
+      username: 'admin',
+      email: 'admin@seerr.dev',
+      cardTextVisibility: { manga: 'always' },
+    });
+
+    assert.strictEqual(saveRes.status, 200);
+    assert.deepStrictEqual(saveRes.body.cardTextVisibility, {
+      manga: 'always',
+    });
+
+    const laterRes = await agent.post('/user/1/settings/main').send({
+      username: 'admin',
+      email: 'admin@seerr.dev',
+      cardTextVisibility: { tv: 'hover' },
+    });
+
+    assert.strictEqual(laterRes.status, 200);
+    assert.deepStrictEqual(laterRes.body.cardTextVisibility, {
+      tv: 'hover',
+      manga: 'always',
+    });
+    const user = await getRepository(User).findOneOrFail({
+      where: { id: 1 },
+    });
+    assert.strictEqual(user.settings?.cardTextVisibilityManga, 'always');
   });
 
   it('creates general settings for the target user and updates admin-managed quotas', async () => {
@@ -2939,6 +3011,20 @@ describe('User route input validation', () => {
 
     assert.strictEqual(res.status, 400);
     assert.match(res.body.message, /album must be "always" or "hover"/i);
+  });
+
+  it('rejects invalid manga card text visibility values', async () => {
+    const agent = await loginAs('admin@seerr.dev', 'test1234');
+    const res = await agent.post('/user/1/settings/card-text').send({
+      manga: 'sometimes',
+    });
+
+    assert.strictEqual(res.status, 400);
+    assert.match(res.body.message, /manga must be "always" or "hover"/i);
+    const user = await getRepository(User).findOneOrFail({
+      where: { id: 1 },
+    });
+    assert.equal(user.settings?.cardTextVisibilityManga ?? null, null);
   });
 
   it('rejects non-boolean detail disclosure pins', async () => {

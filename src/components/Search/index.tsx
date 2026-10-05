@@ -796,7 +796,15 @@ const Search = () => {
               }}
             />
             <CardTextVisibilityToggle
-              mediaType={['movie', 'tv', 'album', 'book']}
+              mediaType={[
+                'movie',
+                'tv',
+                'album',
+                'book',
+                ...(isConfiguredMediaCategoryEnabled('manga', currentSettings)
+                  ? (['manga'] as const)
+                  : []),
+              ]}
             />
             <ContextualSearchFilters category={category.key} />
           </div>
