@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
-import { ReaderDeliveryApi } from '@server/api/readerDelivery';
+import {
+  ReaderDeliveryApi,
+  ReaderServiceError,
+} from '@server/api/readerDelivery';
 import { getRepository } from '@server/datasource';
 import ReaderDeliveryGrouping from '@server/entity/ReaderDeliveryGrouping';
 import { User } from '@server/entity/User';
@@ -18,6 +21,9 @@ import express from 'express';
 import request from 'supertest';
 
 setupTestDb();
+
+const loginArguments = (call: { arguments: unknown }) =>
+  call.arguments as Parameters<ReaderDeliveryApi['login']>;
 
 const createApp = (permissions = Permission.ADMIN) => {
   const app = express();
@@ -226,6 +232,260 @@ describe('reader delivery settings API', () => {
       provider: 'grimmory',
       existingGroupingCount: 2,
     });
+  });
+
+  it('tests unsaved BookOrbit values with the address, username, and password from the form', async () => {
+    const app = createApp();
+    const login = mock.method(
+      ReaderDeliveryApi.prototype,
+      'login',
+      async () => 'reader-token'
+    );
+    const list = mock.method(
+      ReaderDeliveryApi.prototype,
+      'listGroupings',
+      async () => [{ id: 1, name: 'One' }]
+    );
+
+    const response = await request(app)
+      .post('/settings/reader-delivery/connection-test')
+      .send({
+        provider: 'bookorbit',
+        url: ' https://bookorbit.example.test/api/v1/opds/ ',
+        username: ' scope-owner ',
+        password: ' typed password ',
+      })
+      .expect(200);
+
+    assert.deepEqual(response.body, {
+      connected: true,
+      provider: 'bookorbit',
+      existingGroupingCount: 1,
+    });
+    const [provider, credentials] = loginArguments(login.mock.calls[0]);
+    assert.equal(provider, 'bookorbit');
+    assert.deepEqual(credentials, {
+      url: 'https://bookorbit.example.test',
+      username: 'scope-owner',
+      password: ' typed password ',
+    });
+    const [, token] = list.mock.calls[0].arguments as unknown as Parameters<
+      ReaderDeliveryApi['listGroupings']
+    >;
+    assert.equal(token, 'reader-token');
+    assert.equal(getSettings().readerDelivery.bookorbitUrl, '');
+  });
+
+  it('reuses a saved password only for the saved address and username', async () => {
+    const app = createApp();
+    await getSettings().persistSection('readerDelivery', {
+      ...defaultReaderDeliverySettings(),
+      bookorbitUrl: 'https://bookorbit.example.test',
+      bookorbitUsername: 'scope-owner',
+      bookorbitPassword: 'saved-password',
+    });
+    const login = mock.method(
+      ReaderDeliveryApi.prototype,
+      'login',
+      async () => 'reader-token'
+    );
+    mock.method(ReaderDeliveryApi.prototype, 'listGroupings', async () => []);
+    const saved = {
+      provider: 'bookorbit',
+      url: 'https://BookOrbit.example.test/',
+      username: 'scope-owner',
+    };
+
+    for (const password of ['', '[REDACTED]', undefined]) {
+      await request(app)
+        .post('/settings/reader-delivery/connection-test')
+        .send({ ...saved, password })
+        .expect(200);
+    }
+    assert.equal(login.mock.callCount(), 3);
+    for (const call of login.mock.calls) {
+      assert.equal(loginArguments(call)[1].password, 'saved-password');
+    }
+
+    for (const changed of [
+      { url: 'https://other-reader.example.test' },
+      { url: 'https://bookorbit.example.test/reader' },
+      { username: 'another-account' },
+    ]) {
+      const refused = await request(app)
+        .post('/settings/reader-delivery/connection-test')
+        .send({ ...saved, ...changed, password: '[REDACTED]' })
+        .expect(400);
+      assert.equal(
+        refused.body.error,
+        'Enter the BookOrbit password again to test a changed address or username.'
+      );
+    }
+    assert.equal(login.mock.callCount(), 3);
+  });
+
+  it('asks for the missing address, username, or password before testing', async () => {
+    const app = createApp();
+    const login = mock.method(
+      ReaderDeliveryApi.prototype,
+      'login',
+      async () => 'reader-token'
+    );
+
+    const cases: [Record<string, unknown>, string][] = [
+      [
+        { url: '', username: 'admin', password: 'secret' },
+        'Enter the Grimmory address to test the connection.',
+      ],
+      [
+        { url: 'https://grimmory.example.test', username: ' ', password: 's' },
+        'Enter the Grimmory username to test the connection.',
+      ],
+      [
+        { url: 'https://grimmory.example.test', username: 'admin' },
+        'Enter the Grimmory password to test the connection.',
+      ],
+      [
+        {
+          url: 'https://grimmory.example.test/?token=secret',
+          username: 'admin',
+          password: 'secret',
+        },
+        'Grimmory URL must be an HTTP or HTTPS URL without credentials, query parameters, or a fragment.',
+      ],
+    ];
+    for (const [fields, error] of cases) {
+      const response = await request(app)
+        .post('/settings/reader-delivery/connection-test')
+        .send({ provider: 'grimmory', ...fields })
+        .expect(400);
+      assert.equal(response.body.error, error);
+    }
+    assert.equal(login.mock.callCount(), 0);
+  });
+
+  it('names the failed step with advice and without service text', async () => {
+    const app = createApp();
+    const body = {
+      provider: 'bookorbit',
+      url: 'https://bookorbit.example.test',
+      username: 'scope-owner',
+      password: 'typed-password',
+    };
+    const cases: ['login' | 'listGroupings', ReaderServiceError, RegExp][] = [
+      [
+        'login',
+        new ReaderServiceError('sign-in', 'not-api'),
+        /^Signing in to BookOrbit failed\. The address did not answer like the BookOrbit API\. .*base-path/,
+      ],
+      [
+        'login',
+        new ReaderServiceError('sign-in', 'http', { status: 401 }),
+        /^Signing in to BookOrbit failed\. BookOrbit did not accept the username and password\./,
+      ],
+      [
+        'login',
+        new ReaderServiceError('sign-in', 'network', { code: 'ECONNABORTED' }),
+        /^Signing in to BookOrbit failed\. BookOrbit did not answer in time\./,
+      ],
+      [
+        'login',
+        new ReaderServiceError('sign-in', 'network', { code: 'ECONNREFUSED' }),
+        /^Signing in to BookOrbit failed\. SeerrNG could not reach BookOrbit\./,
+      ],
+      [
+        'listGroupings',
+        new ReaderServiceError('list', 'http', { status: 403 }),
+        /^Listing BookOrbit Smart Scopes failed\. BookOrbit refused this account access to Smart Scopes\./,
+      ],
+      [
+        'listGroupings',
+        new ReaderServiceError('list', 'unexpected'),
+        /^Listing BookOrbit Smart Scopes failed\. BookOrbit sent a response SeerrNG does not recognize\./,
+      ],
+      [
+        'listGroupings',
+        new ReaderServiceError('list', 'http', { status: 404 }),
+        /^Listing BookOrbit Smart Scopes failed\. BookOrbit does not offer the Smart Scope API at this address\./,
+      ],
+    ];
+
+    for (const [method, error, message] of cases) {
+      mock.restoreAll();
+      mock.method(ReaderDeliveryApi.prototype, 'login', async () =>
+        method === 'login' ? Promise.reject(error) : 'reader-token'
+      );
+      mock.method(ReaderDeliveryApi.prototype, 'listGroupings', async () =>
+        Promise.reject(error)
+      );
+      const response = await request(app)
+        .post('/settings/reader-delivery/connection-test')
+        .send(body)
+        .expect(502);
+      assert.match(response.body.error, message);
+      assert.doesNotMatch(response.body.error, /typed-password|scope-owner/);
+    }
+
+    mock.restoreAll();
+    mock.method(ReaderDeliveryApi.prototype, 'login', async () => {
+      throw new Error('upstream detail with typed-password');
+    });
+    const unknown = await request(app)
+      .post('/settings/reader-delivery/connection-test')
+      .send({ ...body, provider: 'grimmory' })
+      .expect(502);
+    assert.equal(
+      unknown.body.error,
+      'SeerrNG could not complete the request to Grimmory. Check the service address and try again.'
+    );
+  });
+
+  it('removes a mapping whose shelf the service already deleted, but not after a failed sign-in', async () => {
+    const app = createApp();
+    await getSettings().persistSection('readerDelivery', {
+      ...defaultReaderDeliverySettings(),
+      grimmoryUrl: 'https://grimmory.example.test',
+      grimmoryUsername: 'admin',
+      grimmoryPassword: 'password',
+    });
+    const repository = getRepository(ReaderDeliveryGrouping);
+    const grouping = await repository.save(
+      repository.create({
+        provider: 'grimmory',
+        targetType: 'author',
+        targetId: 'author-7',
+        targetName: 'Invented Author',
+        groupName: 'SeerrNG · Author · Invented Author [abcdef123456]',
+        remoteGroupId: '7',
+        isPublic: true,
+        syncToKobo: false,
+        status: 'ready',
+        lastError: null,
+      })
+    );
+
+    mock.method(ReaderDeliveryApi.prototype, 'login', async () => {
+      throw new ReaderServiceError('sign-in', 'http', { status: 404 });
+    });
+    const refused = await request(app)
+      .delete('/settings/reader-delivery/groupings/' + grouping.id)
+      .expect(502);
+    assert.match(refused.body.error, /^Signing in to Grimmory failed\./);
+    assert.equal(await repository.count(), 1);
+
+    mock.restoreAll();
+    mock.method(
+      ReaderDeliveryApi.prototype,
+      'login',
+      async () => 'reader-token'
+    );
+    mock.method(ReaderDeliveryApi.prototype, 'deleteGrouping', async () => {
+      throw new ReaderServiceError('delete', 'http', { status: 404 });
+    });
+    await request(app)
+      .delete('/settings/reader-delivery/groupings/' + grouping.id)
+      .expect(200);
+    assert.equal(await repository.count(), 0);
   });
 
   it('previews and upserts only a SeerrNG-managed grouping, then confirms its provider count', async () => {

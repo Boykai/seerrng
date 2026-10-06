@@ -4,6 +4,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import SettingsField from '@app/components/Settings/SettingsField';
 import useToasts from '@app/hooks/useToasts';
 import defineMessages from '@app/utils/defineMessages';
+import { readerDeliveryConnectionTestBody } from '@app/utils/readerDeliveryConnectionTest';
 import { getSafeHref } from '@app/utils/safeUrl';
 import type {
   ReaderDeliveryProvider,
@@ -11,7 +12,7 @@ import type {
 } from '@server/lib/settings';
 import axios from 'axios';
 import type { FormEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -23,9 +24,12 @@ const messages = defineMessages('components.ReaderDeliverySettings', {
     'Recommended. Grimmory provides an OPDS catalog for ebooks and PDFs, a Komga API for streamed comic pages, and a built-in player for M4B, M4A, and MP3 audiobooks.',
   bookorbitDescription:
     'BookOrbit has built-in readers for ebooks, PDFs, CBZ/CBR/CB7 comics, and M4B/MP3/M4A/OPUS/OGG/FLAC audiobooks. OPDS apps can browse ebooks and PDFs and download CBZ/CBR archives; import magazine issues as PDFs.',
-  address: 'Reader App Address',
-  addressDescription:
-    'Enter the address readers can open in a browser. Include a reverse-proxy base path if you use one. You can paste a full OPDS or Grimmory Komga address.',
+  grimmoryAddress: 'Grimmory Address',
+  bookorbitAddress: 'BookOrbit Address',
+  grimmoryAddressDescription:
+    'Enter the address readers open Grimmory at in a browser, including any reverse-proxy base path. You can also paste the full Grimmory OPDS or Komga API address.',
+  bookorbitAddressDescription:
+    'Enter the address readers open BookOrbit at in a browser. You can also paste the full BookOrbit OPDS address. BookOrbit has no base-path setting, so a reverse proxy that serves it under a sub-path must remove that path before forwarding requests.',
   addressPlaceholder: 'https://reader.example.com',
   catalogAddress: 'OPDS Catalog Address',
   comicCatalogAddress: 'Komga Comic Reader Address',
@@ -45,7 +49,7 @@ const messages = defineMessages('components.ReaderDeliverySettings', {
   librarySetupDescription:
     'Import or mount the same media folders into Grimmory or BookOrbit and let that service scan them. Use the path as it appears inside the reader service’s container. Scheduled scans are more reliable than filesystem watchers on some network shares.',
   opdsCredentials:
-    'Connect an administrator account so SeerrNG can preview, create, and update reader shelves. Passwords are stored in protected app settings and never returned by the API. Reader-app and OPDS credentials remain separate.',
+    'SeerrNG signs in with the account saved for each service to preview, create, and update Magic Shelves in Grimmory and Smart Scopes in BookOrbit. Passwords are stored in protected app settings and never returned by the API. Reader apps keep using their own OPDS accounts.',
   deliveryHelp:
     'For a requested item, SeerrNG can also download available files directly to the device running this browser. Audiobooks, comics, and magazine issues use their own file type and compatible reader app.',
   save: 'Save Reader Settings',
@@ -56,20 +60,32 @@ const messages = defineMessages('components.ReaderDeliverySettings', {
   saveError: 'Reader settings could not be saved.',
   grimmorySetup: 'Grimmory OPDS Setup',
   grimmoryKomgaSetup: 'Grimmory Komga API Setup',
+  grimmoryMagicShelfSetup: 'Grimmory Magic Shelves',
   bookorbitSetup: 'BookOrbit OPDS Setup',
+  bookorbitSmartScopeSetup: 'BookOrbit Smart Scopes',
   unsavedChanges:
     'Save these settings before using reader links on media detail pages.',
   komgaAddressLabel: 'Grimmory Komga comic reader address',
-  username: 'Administrator account username',
-  password: 'Administrator account password',
+  grimmoryUsername: 'Grimmory Administrator Username',
+  grimmoryPassword: 'Grimmory Administrator Password',
+  bookorbitUsername: 'BookOrbit Account Username',
+  bookorbitPassword: 'BookOrbit Account Password',
+  grimmoryAccountDescription:
+    'SeerrNG signs in with this Grimmory administrator account to preview, create, and update Magic Shelves. Use an account that signs in with a password.',
+  bookorbitAccountDescription:
+    'SeerrNG signs in with this BookOrbit account to preview, create, and update Smart Scopes. Use an account that signs in with a password, has replaced any temporary password, and can see the libraries with your books.',
   savedPassword: 'Saved; leave blank to keep it',
   clearCredentials: 'Remove saved account credentials',
-  connectionTest: 'Test grouping access',
-  connectionTesting: 'Checking reader service…',
-  connectionSuccess:
-    'Connected. SeerrNG can manage groupings; {count} existing groupings were found.',
-  connectionError: 'Reader service connection failed.',
-  testSaveFirst: 'Save settings before testing the connection.',
+  grimmoryConnectionTest: 'Test Magic Shelf Access',
+  bookorbitConnectionTest: 'Test Smart Scope Access',
+  grimmoryConnectionTesting: 'Checking Grimmory…',
+  bookorbitConnectionTesting: 'Checking BookOrbit…',
+  grimmoryConnectionSuccess:
+    'Connected. SeerrNG can manage Grimmory Magic Shelves with this account and found {count, plural, one {# Magic Shelf} other {# Magic Shelves}}.',
+  bookorbitConnectionSuccess:
+    'Connected. SeerrNG can manage BookOrbit Smart Scopes with this account and found {count, plural, one {# Smart Scope} other {# Smart Scopes}}.',
+  grimmoryConnectionError: 'Grimmory Connection Test Failed',
+  bookorbitConnectionError: 'BookOrbit Connection Test Failed',
   groupingsTitle: 'SeerrNG-managed reader shelves',
   noGroupings: 'No reader shelves have been created from SeerrNG yet.',
   groupingReady: 'Ready',
@@ -153,6 +169,8 @@ const ReaderDeliverySettings = () => {
     existingGroupingCount?: number;
     error?: string;
   }>();
+  // Counts edits per service so a test answer for older values is dropped.
+  const connectionEdits = useRef({ grimmory: 0, bookorbit: 0 });
   const {
     data: groupings,
     error: groupingsError,
@@ -168,6 +186,13 @@ const ReaderDeliverySettings = () => {
     }
   }, [data, isDirty]);
 
+  const resetConnectionTest = (provider: ReaderDeliveryProvider) => {
+    connectionEdits.current[provider] += 1;
+    setConnectionStatus((current) =>
+      current?.provider === provider ? undefined : current
+    );
+  };
+
   const updateUrl = (provider: ReaderDeliveryProvider, value: string) => {
     setDraft((current) =>
       current
@@ -180,6 +205,7 @@ const ReaderDeliverySettings = () => {
     setIsDirty(true);
     setSaveError(undefined);
     setCopyStatus(undefined);
+    resetConnectionTest(provider);
   };
 
   const updatePreferredProvider = (provider: ReaderDeliveryProvider) => {
@@ -214,28 +240,35 @@ const ReaderDeliverySettings = () => {
     setClearCredentials((current) => ({ ...current, [provider]: false }));
     setIsDirty(true);
     setSaveError(undefined);
-    setConnectionStatus(undefined);
+    resetConnectionTest(provider);
   };
 
   const testConnection = async (provider: ReaderDeliveryProvider) => {
+    if (!draft) return;
+    const edit = connectionEdits.current[provider];
     setTestingProvider(provider);
     setConnectionStatus(undefined);
     try {
       const response = await axios.post<{
         connected: boolean;
         existingGroupingCount: number;
-      }>('/api/v1/settings/reader-delivery/connection-test', { provider });
+      }>(
+        '/api/v1/settings/reader-delivery/connection-test',
+        readerDeliveryConnectionTestBody(provider, draft)
+      );
+      if (connectionEdits.current[provider] !== edit) return;
       setConnectionStatus({
         provider,
         connected: response.data.connected,
         existingGroupingCount: response.data.existingGroupingCount,
       });
     } catch (error) {
+      if (connectionEdits.current[provider] !== edit) return;
       const detail =
         axios.isAxiosError(error) &&
         typeof error.response?.data?.error === 'string'
           ? error.response.data.error
-          : intl.formatMessage(messages.connectionError);
+          : undefined;
       setConnectionStatus({ provider, connected: false, error: detail });
     } finally {
       setTestingProvider(undefined);
@@ -330,6 +363,8 @@ const ReaderDeliverySettings = () => {
     setClearCredentials({ grimmory: false, bookorbit: false });
     setSaveError(undefined);
     setCopyStatus(undefined);
+    resetConnectionTest('grimmory');
+    resetConnectionTest('bookorbit');
   };
 
   const renderProvider = (
@@ -362,7 +397,11 @@ const ReaderDeliverySettings = () => {
             </p>
             <div className="form-row">
               <label htmlFor={provider + '-url'}>
-                {intl.formatMessage(messages.address)}
+                {intl.formatMessage(
+                  isGrimmory
+                    ? messages.grimmoryAddress
+                    : messages.bookorbitAddress
+                )}
               </label>
               <div className="form-input-area">
                 <div className="form-input-field">
@@ -387,13 +426,21 @@ const ReaderDeliverySettings = () => {
                   id={provider + '-url-description'}
                   className="settings-form-row-description"
                 >
-                  {intl.formatMessage(messages.addressDescription)}
+                  {intl.formatMessage(
+                    isGrimmory
+                      ? messages.grimmoryAddressDescription
+                      : messages.bookorbitAddressDescription
+                  )}
                 </p>
               </div>
             </div>
             <div className="form-row">
               <label htmlFor={provider + '-username'}>
-                {intl.formatMessage(messages.username)}
+                {intl.formatMessage(
+                  isGrimmory
+                    ? messages.grimmoryUsername
+                    : messages.bookorbitUsername
+                )}
               </label>
               <div className="form-input-area">
                 <div className="form-input-field">
@@ -403,6 +450,7 @@ const ReaderDeliverySettings = () => {
                     autoComplete="username"
                     maxLength={256}
                     disabled={isSaving}
+                    aria-describedby={provider + '-username-description'}
                     value={username}
                     onChange={(event) =>
                       updateCredential(
@@ -413,11 +461,25 @@ const ReaderDeliverySettings = () => {
                     }
                   />
                 </div>
+                <p
+                  id={provider + '-username-description'}
+                  className="settings-form-row-description"
+                >
+                  {intl.formatMessage(
+                    isGrimmory
+                      ? messages.grimmoryAccountDescription
+                      : messages.bookorbitAccountDescription
+                  )}
+                </p>
               </div>
             </div>
             <div className="form-row">
               <label htmlFor={provider + '-password'}>
-                {intl.formatMessage(messages.password)}
+                {intl.formatMessage(
+                  isGrimmory
+                    ? messages.grimmoryPassword
+                    : messages.bookorbitPassword
+                )}
               </label>
               <div className="form-input-area">
                 <div className="form-input-field">
@@ -471,6 +533,7 @@ const ReaderDeliverySettings = () => {
                         );
                       }
                       setIsDirty(true);
+                      resetConnectionTest(provider);
                     }}
                   />
                   <span>{intl.formatMessage(messages.clearCredentials)}</span>
@@ -480,35 +543,40 @@ const ReaderDeliverySettings = () => {
             {connectionStatus?.provider === provider &&
               (connectionStatus.connected ? (
                 <Alert type="info">
-                  {intl.formatMessage(messages.connectionSuccess, {
-                    count: connectionStatus.existingGroupingCount ?? 0,
-                  })}
+                  {intl.formatMessage(
+                    isGrimmory
+                      ? messages.grimmoryConnectionSuccess
+                      : messages.bookorbitConnectionSuccess,
+                    { count: connectionStatus.existingGroupingCount ?? 0 }
+                  )}
                 </Alert>
               ) : (
                 <Alert
                   type="error"
-                  title={
-                    connectionStatus.error ??
-                    intl.formatMessage(messages.connectionError)
-                  }
-                />
+                  title={intl.formatMessage(
+                    isGrimmory
+                      ? messages.grimmoryConnectionError
+                      : messages.bookorbitConnectionError
+                  )}
+                >
+                  {connectionStatus.error}
+                </Alert>
               ))}
             <div className="settings-card-actions">
               <Button
                 type="button"
                 buttonSize="sm"
-                disabled={isSaving || !!testingProvider || isDirty}
-                disabledReason={
-                  isDirty
-                    ? intl.formatMessage(messages.testSaveFirst)
-                    : undefined
-                }
+                disabled={isSaving || !!testingProvider}
                 onClick={() => void testConnection(provider)}
               >
                 {intl.formatMessage(
                   testingProvider === provider
-                    ? messages.connectionTesting
-                    : messages.connectionTest
+                    ? isGrimmory
+                      ? messages.grimmoryConnectionTesting
+                      : messages.bookorbitConnectionTesting
+                    : isGrimmory
+                      ? messages.grimmoryConnectionTest
+                      : messages.bookorbitConnectionTest
                 )}
               </Button>
             </div>
@@ -608,6 +676,23 @@ const ReaderDeliverySettings = () => {
                 </a>
               </p>
             )}
+            <p className="settings-form-row-description">
+              <a
+                href={
+                  isGrimmory
+                    ? 'https://grimmory.org/docs/magic-shelf/'
+                    : 'https://bookorbit.app/smart-scopes'
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {intl.formatMessage(
+                  isGrimmory
+                    ? messages.grimmoryMagicShelfSetup
+                    : messages.bookorbitSmartScopeSetup
+                )}
+              </a>
+            </p>
           </div>
         </div>
       </li>

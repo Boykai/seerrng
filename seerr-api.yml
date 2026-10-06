@@ -122,6 +122,10 @@ components:
       type: object
       required: [field, operator, value]
       properties:
+        type:
+          type: string
+          enum: [rule]
+          description: Present on BookOrbit Smart Scope rules.
         field:
           type: string
         operator:
@@ -8696,7 +8700,7 @@ paths:
                 $ref: '#/components/schemas/ReaderDeliverySettings'
     put:
       summary: Update reader app connection and shelf-management settings
-      description: Stores administrator credentials in protected application settings for live shelf management. OPDS reader credentials remain configured in the reader service. Passwords are redacted on reads; clear flags remove the saved account credentials.
+      description: Stores the Grimmory and BookOrbit account credentials in protected application settings for live Magic Shelf and Smart Scope management. OPDS reader credentials remain configured in the reader service. Passwords are redacted on reads; clear flags remove the saved account credentials.
       tags:
         - settings
       requestBody:
@@ -8719,7 +8723,7 @@ paths:
   /settings/reader-delivery/connection-test:
     post:
       summary: Test reader service account access
-      description: Logs in with saved administrator credentials and verifies that SeerrNG can list the service's existing managed grouping collection.
+      description: Signs in to Grimmory or BookOrbit with the submitted address and account, which may be unsaved, and verifies that SeerrNG can list Grimmory Magic Shelves or BookOrbit Smart Scopes. Omitted fields use the saved settings.
       tags:
         - settings
       requestBody:
@@ -8728,11 +8732,24 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [provider]
               properties:
                 provider:
                   type: string
                   enum: [grimmory, bookorbit]
+                url:
+                  type: string
+                  maxLength: 2048
+                  description: Service address to test. Omit it to test the saved address.
+                username:
+                  type: string
+                  maxLength: 256
+                  description: Account username to test. Omit it to test the saved username.
+                password:
+                  type: string
+                  maxLength: 2048
+                  description: Account password to test. A blank value or the redacted marker reuses the saved password only while the address and username match the saved settings.
       responses:
         '200':
           description: Reader service login and grouping access verified
@@ -8741,11 +8758,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReaderGroupingConnectionTest'
         '400':
-          description: Provider is invalid or required account settings are missing
+          description: Provider is invalid, the address or username is missing, or the password must be entered for a changed address or username
         '403':
           description: Administrator permission required
         '502':
-          description: Reader service could not be reached or rejected the account
+          description: Reader service could not be reached or refused a step; the error names the step that failed
   /settings/reader-delivery/groupings:
     get:
       summary: List SeerrNG-managed reader shelves
