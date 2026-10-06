@@ -373,7 +373,8 @@ look up new manga and those due again.
 The scan starts its lookups at least 3 seconds apart, so at most 20 a minute.
 This leaves about a third of AniList's request budget to people using SeerrNG
 during a scan, and a first scan of a large library takes a while: about 3
-seconds for each title it searches.
+seconds for each title it searches. The scan never queues ahead of other
+AniList requests: while they use the budget, the scan waits.
 
 When AniList or MangaDex rate limits a lookup, or SeerrNG's AniList request
 budget is used up, the scan waits as long as asked and then continues.

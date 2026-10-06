@@ -402,6 +402,16 @@ const fakeClock = {
 /** The waits between lookups, without the spacing of 3 seconds. */
 const refusalWaits = () => waits.filter((ms) => ms !== MANGA_LOOKUP_SPACING_MS);
 
+/**
+ * What an AniList client does before each request: reserve a start in the
+ * process-wide budget, queueing at most as long as the client allows.
+ */
+const reserveAnilistStart = (client: AnilistAPI, signal?: AbortSignal) =>
+  anilistRateLimiter.acquire(
+    (client as unknown as { maxRateLimitWaitMs: number }).maxRateLimitWaitMs,
+    signal
+  );
+
 beforeEach(() => {
   settings.main.enabledMediaCategories = { ...categories, manga: true };
   configure();
@@ -1500,18 +1510,16 @@ describe('manga library scan: lookups', () => {
     });
     configure(instanceFor(server));
     const starts: number[] = [];
-    lookups.titles.mock.mockImplementation(
-      async (
-        _search: string,
-        _policy: unknown,
-        options?: { signal?: AbortSignal }
-      ) => {
-        // The budget every AniList request in the process shares.
-        await anilistRateLimiter.acquire(10_000, options?.signal);
-        starts.push(fakeNow);
-        return [];
-      }
-    );
+    lookups.titles.mock.mockImplementation(async function (
+      this: AnilistAPI,
+      _search: string,
+      _policy: unknown,
+      options?: { signal?: AbortSignal }
+    ) {
+      await reserveAnilistStart(this, options?.signal);
+      starts.push(fakeNow);
+      return [];
+    });
     const logs = captureLogs();
 
     const counts = await scan();
@@ -1554,20 +1562,19 @@ describe('manga library scan: lookups', () => {
     lookups.mal.mock.mockImplementationOnce(async () => {
       throw new AnilistRateLimitedError(45);
     });
-    lookups.titles.mock.mockImplementation(
-      async (
-        search: string,
-        _policy: unknown,
-        options?: { signal?: AbortSignal }
-      ) => {
-        await anilistRateLimiter.acquire(10_000, options?.signal);
-        // Meanwhile AniList refuses another request: a cooldown of 30 s.
-        if (search === 'Fake Library Title 1') {
-          anilistRateLimiter.noteRateLimited(30);
-        }
-        return [];
+    lookups.titles.mock.mockImplementation(async function (
+      this: AnilistAPI,
+      search: string,
+      _policy: unknown,
+      options?: { signal?: AbortSignal }
+    ) {
+      await reserveAnilistStart(this, options?.signal);
+      // Meanwhile AniList refuses another request: a cooldown of 30 s.
+      if (search === 'Fake Library Title 1') {
+        anilistRateLimiter.noteRateLimited(30);
       }
-    );
+      return [];
+    });
 
     const counts = await scan();
 
@@ -1584,6 +1591,38 @@ describe('manga library scan: lookups', () => {
       [2, null, false, false, true],
       [3, null, false, false, true],
     ]);
+  });
+
+  it('keeps its own AniList requests 3 s apart while others use the budget', async () => {
+    const server = await start({
+      mangas: [1, 2, 3].map((id) => fakeLibraryManga(id)),
+    });
+    configure(instanceFor(server));
+    const starts: number[] = [];
+    lookups.titles.mock.mockImplementation(async function (
+      this: AnilistAPI,
+      _search: string,
+      _policy: unknown,
+      options?: { signal?: AbortSignal }
+    ) {
+      await reserveAnilistStart(this, options?.signal);
+      starts.push(fakeNow);
+      // Other requests leave the budget closed for the next 5 s.
+      if (starts.length === 1) anilistRateLimiter.noteRateLimited(5);
+      return [];
+    });
+    const first = fakeNow;
+
+    const counts = await scan();
+
+    assert.deepEqual(counts, { ...NO_CHANGES, candidatesCreated: 3 });
+    // The scan waits for the budget itself rather than queueing in it, so
+    // the delayed request still starts a full spacing after the one before.
+    assert.deepEqual(waits, [3_000, 2_000, 1_000, 3_000]);
+    assert.deepEqual(
+      starts.map((start) => start - first),
+      [0, 6_000, 9_000]
+    );
   });
 
   for (const [name, wait] of [
@@ -1618,8 +1657,12 @@ describe('manga library scan: lookups', () => {
       await running;
 
       assert.equal(lookups.titles.mock.callCount(), 1);
-      assert.equal(mangaLibraryScanner.status().running, false);
-      assert.deepEqual(mangaLibraryScanner.status().counts, NO_CHANGES);
+      const status = mangaLibraryScanner.status();
+      assert.equal(status.running, false);
+      // Only the title searched before the pause is handled.
+      const handled = wait === MANGA_LOOKUP_SPACING_MS ? 1 : 0;
+      assert.deepEqual([status.progress, status.total], [handled, 2]);
+      assert.deepEqual(status.counts, NO_CHANGES);
       assert.deepEqual(await bindings(), []);
       assert.deepEqual(await candidates(), []);
     });

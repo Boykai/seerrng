@@ -348,8 +348,9 @@ class MangaLibraryScanner
       for (const instanceId of instanceIds) {
         if (run.signal.aborted) break;
         await this.scanInstance(run, instanceId);
-        // Titles of an instance that stopped early are done for this run too.
-        this.progress = this.listed;
+        // Titles of an instance that stopped early are done for this run
+        // too; a cancelled run keeps the count it reached.
+        if (!run.signal.aborted) this.progress = this.listed;
       }
       if (!run.signal.aborted) await this.syncRequestBindings();
       this.log(

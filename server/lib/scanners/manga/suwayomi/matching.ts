@@ -39,6 +39,12 @@ export const MANGA_LOOKUP_RECHECK_MS = 30 * 24 * 60 * 60 * 1000;
  * scan keep the rest.
  */
 export const MANGA_LOOKUP_SPACING_MS = 3_000;
+/**
+ * The scan's AniList requests never queue for the shared budget. One that
+ * would have to wait fails at once, and the scan waits instead, so its
+ * requests start when it paced them and other requests keep their turn.
+ */
+const SCAN_ANILIST_OPTIONS = { maxRateLimitWaitMs: 0 };
 /** A rate limit or cooldown asking for a longer wait ends its step. */
 export const MANGA_LOOKUP_MAX_WAIT_MS = 15 * 60 * 1000;
 /**
@@ -567,7 +573,7 @@ export const resolveLibraryMatches = async (
     pending: false,
   }));
   let client: AnilistAPI | undefined;
-  const anilist = () => (client ??= new AnilistAPI());
+  const anilist = () => (client ??= new AnilistAPI(SCAN_ANILIST_OPTIONS));
   const open = (match: Match) => !match.link && !match.pending;
   // Disagreeing tracker records allow no automatic link, only a proposal.
   const linkable = matches.filter(
