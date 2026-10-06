@@ -15,6 +15,7 @@ import {
 } from './suwayomiSettings';
 
 const PASSWORD = randomUUID();
+const SOURCE_ID = '4000000000000000001';
 
 const body = (overrides: Record<string, unknown> = {}) => ({
   name: 'Suwayomi',
@@ -24,6 +25,7 @@ const body = (overrides: Record<string, unknown> = {}) => ({
   authMode: 'UI_LOGIN',
   username: 'fake-user',
   password: PASSWORD,
+  sourceAllowlist: [SOURCE_ID],
   ...overrides,
 });
 
@@ -69,11 +71,22 @@ describe('parseSuwayomiSettings', () => {
       authMode: 'UI_LOGIN',
       username: 'fake-user',
       password: PASSWORD,
-      sourceAllowlist: [],
+      sourceAllowlist: [SOURCE_ID],
       preferredLanguages: [],
       scanlatorPreference: [],
       requireCbz: true,
     });
+  });
+
+  it('requires at least one source', () => {
+    for (const sourceAllowlist of [[], undefined, null]) {
+      const result = rejected(body({ sourceAllowlist }));
+      assert.equal(result.code, 'SUWAYOMI_SOURCES_REQUIRED');
+      assert.equal(
+        result.error,
+        'Select at least one Suwayomi source for SeerrNG to search.'
+      );
+    }
   });
 
   it('keeps credentials exactly as entered', () => {
@@ -191,8 +204,16 @@ describe('parseSuwayomiConnectionTest', () => {
       username: 'fake-user',
       password: PASSWORD,
       requireCbz: true,
-      sourceAllowlist: [],
+      sourceAllowlist: [SOURCE_ID],
     });
+  });
+
+  it('accepts a test before any source is selected', () => {
+    for (const sourceAllowlist of [[], undefined]) {
+      const result = parseSuwayomiConnectionTest(body({ sourceAllowlist }));
+      assert.ok('value' in result, JSON.stringify(result));
+      assert.deepEqual(result.value.sourceAllowlist, []);
+    }
   });
 
   it('rejects invalid IDs and addresses', () => {

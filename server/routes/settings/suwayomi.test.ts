@@ -254,6 +254,8 @@ describe('Suwayomi settings routes', () => {
       [{ hostname: 'not a host' }, 400, 'SUWAYOMI_INVALID_SETTINGS'],
       [{ port: 0 }, 400, 'SUWAYOMI_INVALID_SETTINGS'],
       [{ sourceAllowlist: ['0'] }, 400, 'SUWAYOMI_INVALID_SETTINGS'],
+      [{ sourceAllowlist: [] }, 400, 'SUWAYOMI_SOURCES_REQUIRED'],
+      [{ sourceAllowlist: undefined }, 400, 'SUWAYOMI_SOURCES_REQUIRED'],
       [{ username: '', password: '' }, 400, 'SUWAYOMI_CREDENTIALS_REQUIRED'],
       [{ password: REDACTED_SECRET }, 400, 'SUWAYOMI_PASSWORD_REQUIRED'],
       // The server assigns these.

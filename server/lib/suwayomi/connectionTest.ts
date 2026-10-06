@@ -23,9 +23,11 @@ export const SUWAYOMI_CONNECTION_TEST_MESSAGES: Record<
   SuwayomiConnectionTestErrorCode,
   string
 > = {
-  SUWAYOMI_UNREACHABLE: 'Suwayomi could not be reached.',
+  SUWAYOMI_UNREACHABLE:
+    'Suwayomi could not be reached. Check the hostname, port, SSL and URL base.',
   SUWAYOMI_TIMEOUT: 'The Suwayomi connection test did not finish in time.',
-  SUWAYOMI_NOT_SUWAYOMI: 'The address did not answer like a Suwayomi server.',
+  SUWAYOMI_NOT_SUWAYOMI:
+    'The address did not answer like a Suwayomi server. Check the port and URL base.',
   SUWAYOMI_AUTH_FAILED: 'Suwayomi rejected the username or password.',
   SUWAYOMI_CREDENTIALS_REQUIRED:
     'Suwayomi requires a login. Enter its username and password.',
@@ -34,7 +36,7 @@ export const SUWAYOMI_CONNECTION_TEST_MESSAGES: Record<
   SUWAYOMI_UNSUPPORTED_SERVER:
     'This Suwayomi server lacks features SeerrNG needs. Update Suwayomi to v2.3.2223 or later.',
   SUWAYOMI_NO_SOURCES:
-    'Suwayomi has no sources installed besides the local source.',
+    'Suwayomi has no sources installed. Install a source extension in Suwayomi, then test again.',
   SUWAYOMI_CBZ_REQUIRED:
     'Suwayomi does not save downloads as CBZ files. Enable CBZ downloads in Suwayomi or turn off Require CBZ.',
   SUWAYOMI_UPSTREAM_ERROR: 'The server reported an error during the test.',

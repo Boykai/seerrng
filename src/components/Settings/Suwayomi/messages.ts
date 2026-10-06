@@ -23,6 +23,7 @@ export const messages = defineMessages('components.Settings.Suwayomi', {
   sources: 'Sources',
   sourcesTip:
     'SeerrNG searches only the selected sources, in the order selected.',
+  sourcesRequired: 'Select at least one source.',
   runTest: 'Run a test to load the source list.',
   filterSources: 'Filter sources',
   sourceLimit: 'You can select up to {max} sources.',
@@ -59,15 +60,20 @@ export const messages = defineMessages('components.Settings.Suwayomi', {
   inUse: 'Suwayomi is used by active manga requests and cannot be deleted.',
   credentialsRequired:
     'Suwayomi requires a login. Enter its username and password.',
-  unreachable: 'Suwayomi could not be reached.',
+  sourcesRequiredError:
+    'Select at least one Suwayomi source for SeerrNG to search.',
+  testUnreachable:
+    'Suwayomi could not be reached. Check the hostname, port, SSL and URL base.',
   timeout: 'The Suwayomi connection test did not finish in time.',
-  notSuwayomi: 'The address did not answer like a Suwayomi server.',
+  notSuwayomi:
+    'The address did not answer like a Suwayomi server. Check the port and URL base.',
   authFailed: 'Suwayomi rejected the username or password.',
   simpleLogin:
     'Suwayomi uses simple login, which SeerrNG does not support. Switch Suwayomi to UI login.',
   unsupported:
     'This Suwayomi server lacks features SeerrNG needs. Update Suwayomi to v2.3.2223 or later.',
-  noSources: 'Suwayomi has no sources installed besides the local source.',
+  noSources:
+    'Suwayomi has no sources installed. Install a source extension in Suwayomi, then test again.',
   cbzRequired:
     'Suwayomi does not save downloads as CBZ files. Enable CBZ downloads in Suwayomi or turn off Require CBZ Downloads.',
   upstreamError: 'Suwayomi reported an error during the test.',
@@ -115,9 +121,10 @@ export const errorMessages: Record<SuwayomiErrorCode, MessageDescriptor> = {
   SUWAYOMI_INVALID_SETTINGS: messages.invalidSettings,
   SUWAYOMI_CREDENTIALS_REQUIRED: messages.credentialsRequired,
   SUWAYOMI_PASSWORD_REQUIRED: messages.passwordRequired,
+  SUWAYOMI_SOURCES_REQUIRED: messages.sourcesRequiredError,
   SUWAYOMI_INSTANCE_LIMIT: messages.instanceLimit,
   SUWAYOMI_IN_USE: messages.inUse,
-  SUWAYOMI_UNREACHABLE: messages.unreachable,
+  SUWAYOMI_UNREACHABLE: messages.testUnreachable,
   SUWAYOMI_TIMEOUT: messages.timeout,
   SUWAYOMI_NOT_SUWAYOMI: messages.notSuwayomi,
   SUWAYOMI_AUTH_FAILED: messages.authFailed,
