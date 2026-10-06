@@ -13,11 +13,17 @@ import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Issue from '@server/entity/Issue';
 import IssueComment from '@server/entity/IssueComment';
+import MangaSourceBinding, {
+  MangaBindingConfidence,
+  MangaBindingState,
+  hashMangaSourceUrl,
+} from '@server/entity/MangaSourceBinding';
 import Media from '@server/entity/Media';
 import MediaIdentifier, {
   MediaIdentifierProvider,
 } from '@server/entity/MediaIdentifier';
 import { User } from '@server/entity/User';
+import type { SuwayomiSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
 import express from 'express';
@@ -400,6 +406,94 @@ describe('manga discover filters through the OpenAPI contract', () => {
 
     const res = await request(createApp({ validateResponses: false })).get(
       '/api/v1/discover/manga/filters'
+    );
+
+    assert.strictEqual(res.status, 429, JSON.stringify(res.body));
+    assert.strictEqual(res.headers['retry-after'], '45');
+  });
+});
+
+describe('manga library through the OpenAPI contract', () => {
+  const LIBRARY_URL = '/api/v1/discover/manga/library';
+  const originalSuwayomi = getSettings().suwayomi;
+  const seedLibraryTitle = (key: number) =>
+    getRepository(MangaSourceBinding).save(
+      new MangaSourceBinding({
+        instanceId: 1,
+        sourceId: '1000',
+        url: `/library-item/${key}`,
+        urlHash: hashMangaSourceUrl(`/library-item/${key}`),
+        anilistId: summary.id,
+        suwayomiMangaId: key,
+        title: 'Library item',
+        confidence: MangaBindingConfidence.TRACKER_LINK,
+        matchedBy: 'anilist-tracker',
+        origin: 'library-scan',
+        state: MangaBindingState.ACTIVE,
+        inLibrary: true,
+        availability: MediaStatus.UNKNOWN,
+      })
+    );
+
+  beforeEach(() => {
+    getSettings().suwayomi = [{ id: 1, name: 'Library' } as SuwayomiSettings];
+  });
+
+  afterEach(() => {
+    getSettings().suwayomi = originalSuwayomi;
+  });
+
+  it('returns documented library pages', async () => {
+    await seedLibraryTitle(1);
+    const read = mock.method(
+      AnilistAPI.prototype,
+      'getMangaSummariesByIds',
+      async () => [summary]
+    );
+    const app = createApp();
+
+    const first = await request(app).get(LIBRARY_URL).query({ page: 1 });
+    assert.strictEqual(first.status, 200, JSON.stringify(first.body));
+    assert.deepStrictEqual(first.body, {
+      page: 1,
+      totalPages: 1,
+      totalResults: 1,
+      results: [first.body.results[0]],
+    });
+    assert.strictEqual(first.body.results[0].id, summary.id);
+    assert.strictEqual(first.body.results[0].mediaType, 'manga');
+
+    const past = await request(app).get(LIBRARY_URL).query({ page: 500 });
+    assert.strictEqual(past.status, 200, JSON.stringify(past.body));
+    assert.deepStrictEqual(past.body.results, []);
+    assert.strictEqual(read.mock.callCount(), 1);
+  });
+
+  it('rejects pages and parameters outside the documented contract', async () => {
+    const read = mock.method(AnilistAPI.prototype, 'getMangaSummariesByIds');
+    const app = createApp();
+
+    for (const query of [
+      { page: 0 },
+      { page: 501 },
+      { page: 'abc' },
+      { sortBy: 'trending' },
+      { query: 'sample' },
+    ]) {
+      const res = await request(app).get(LIBRARY_URL).query(query);
+      assert.strictEqual(res.status, 400, JSON.stringify(query));
+    }
+    assert.strictEqual(read.mock.callCount(), 0);
+  });
+
+  it('admits library requests that end in an AniList rate limit', async () => {
+    await seedLibraryTitle(2);
+    mock.method(AnilistAPI.prototype, 'getMangaSummariesByIds', async () => {
+      throw new AnilistRateLimitedError(45);
+    });
+
+    const res = await request(createApp({ validateResponses: false })).get(
+      LIBRARY_URL
     );
 
     assert.strictEqual(res.status, 429, JSON.stringify(res.body));

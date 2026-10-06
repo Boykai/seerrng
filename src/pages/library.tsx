@@ -1,10 +1,14 @@
 import Button from '@app/components/Common/Button';
+import ListView from '@app/components/Common/ListView';
 import PageTitle from '@app/components/Common/PageTitle';
 import IdentityMappingControls from '@app/components/DiscoveryIntegrations/IdentityMappingControls';
 import IdentityMappingPackControls from '@app/components/DiscoveryIntegrations/IdentityMappingPackControls';
 import TrackingControls from '@app/components/DiscoveryIntegrations/TrackingControls';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
+import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
+import { mangaLibraryPageUrl } from '@app/utils/mangaLibrary';
+import { isConfiguredMediaCategoryEnabled } from '@app/utils/serviceAvailability';
 import type { DiscoveryAccountProvider } from '@server/entity/DiscoveryAccount';
 import type {
   LibraryShelf,
@@ -14,6 +18,7 @@ import type {
   NativeLibrarySource,
   PersonalLibrarySource,
 } from '@server/lib/discoveryIntegrations/mediaServerLibrary';
+import type { MangaResult } from '@server/models/Manga';
 import axios from 'axios';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -44,6 +49,9 @@ const messages = defineMessages('library', {
   mediaServerDisconnected:
     'Link your {provider} account in Profile Settings to browse your personal media server library.',
   library: 'Media server library',
+  mangaLibrary: 'Manga library (Suwayomi)',
+  mangaEmpty: 'No manga library titles to show.',
+  mangaFailed: 'Your manga library could not be loaded. Try again.',
   loading: 'Loading your library…',
   empty: 'No titles match this shelf.',
   failed:
@@ -94,8 +102,15 @@ const isNativeSource = (
 ): source is NativeLibrarySource =>
   source === 'plex' || source === 'jellyfin' || source === 'emby';
 const base = '/api/v1/integrations/discovery';
+const mangaSourceValue = 'manga';
 const repairPageCount = 5;
 const repairRequestIntervalMs = 3100;
+interface MangaLibraryPage {
+  page: number;
+  totalPages: number;
+  totalResults: number;
+  results: MangaResult[];
+}
 interface IdentityRepairResponse {
   startPage: number;
   nextPage: number;
@@ -124,7 +139,9 @@ interface IdentityRepairProgress {
 }
 export default function LibraryPage() {
   const intl = useIntl();
+  const settings = useSettings();
   const [provider, setProvider] = useState<PersonalLibrarySource>('trakt');
+  const [mangaSelected, setMangaSelected] = useState(false);
   const [shelf, setShelf] = useState<LibraryShelf>('watched');
   const [type, setType] = useState('');
   const [libraryId, setLibraryId] = useState('');
@@ -154,21 +171,35 @@ export default function LibraryPage() {
     accounts: { provider: DiscoveryAccountProvider }[];
     mediaServer: { provider: NativeLibrarySource; connected: boolean } | null;
   }>(`${base}/accounts`);
+  const mangaAvailable =
+    isConfiguredMediaCategoryEnabled('manga', settings.currentSettings) &&
+    settings.currentSettings.suwayomiEnabled;
   useEffect(() => {
     if (initializedProvider.current || !connections) return;
     initializedProvider.current = true;
+    if (
+      mangaAvailable &&
+      !connections.mediaServer?.connected &&
+      connections.accounts.length === 0
+    ) {
+      setMangaSelected(true);
+      return;
+    }
     const first = connections.mediaServer?.connected
       ? connections.mediaServer.provider
       : (connections.accounts[0]?.provider ?? 'trakt');
     setProvider(first);
     setShelf(first === 'trakt' ? 'watched' : 'all');
     setType('');
-  }, [connections]);
+  }, [connections, mangaAvailable]);
+  const showManga = mangaSelected && mangaAvailable;
   const nativeSource = isNativeSource(provider);
-  const connected = nativeSource
-    ? connections?.mediaServer?.provider === provider &&
-      connections.mediaServer.connected
-    : connections?.accounts.some((account) => account.provider === provider);
+  const connected =
+    !showManga &&
+    (nativeSource
+      ? connections?.mediaServer?.provider === provider &&
+        connections.mediaServer.connected
+      : connections?.accounts.some((account) => account.provider === provider));
   const { data, error, isLoading, mutate } = useSWR<{
     items: PersonalLibraryItem[];
     libraries?: { id: string; name: string; type: 'show' | 'movie' }[];
@@ -183,6 +214,19 @@ export default function LibraryPage() {
       : null,
     { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
+  const {
+    data: mangaData,
+    error: mangaError,
+    isLoading: mangaLoading,
+    mutate: mutateManga,
+  } = useSWR<MangaLibraryPage>(showManga ? mangaLibraryPageUrl(page) : null, {
+    revalidateOnFocus: false,
+    dedupingInterval: 30000,
+  });
+  const pageLoading = showManga ? mangaLoading : isLoading;
+  const hasNextPage = showManga
+    ? page < (mangaData?.totalPages ?? 1)
+    : data?.hasMore;
   useEffect(() => {
     const libraries = data?.libraries;
     if (!nativeSource || !libraries?.length) return;
@@ -229,16 +273,21 @@ export default function LibraryPage() {
           <select
             id="library-source"
             className="mt-2 block w-full"
-            value={provider}
+            value={showManga ? mangaSourceValue : provider}
             onChange={(event) => {
               initializedProvider.current = true;
+              resetRepair();
+              resetPage();
+              if (event.target.value === mangaSourceValue) {
+                setMangaSelected(true);
+                return;
+              }
               const source = event.target.value as PersonalLibrarySource;
+              setMangaSelected(false);
               setProvider(source);
               setShelf(source === 'trakt' ? 'watched' : 'all');
               setType('');
               setLibraryId('');
-              resetRepair();
-              resetPage();
             }}
           >
             {connections?.mediaServer && (
@@ -251,28 +300,35 @@ export default function LibraryPage() {
                 {name}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="block" htmlFor="library-shelf">
-          {intl.formatMessage(messages.shelf)}
-          <select
-            id="library-shelf"
-            className="mt-2 block w-full"
-            value={shelf}
-            onChange={(event) => {
-              setShelf(event.target.value as LibraryShelf);
-              resetRepair();
-              resetPage();
-            }}
-          >
-            {shelves.map((value) => (
-              <option key={value} value={value}>
-                {intl.formatMessage(messages[value])}
+            {mangaAvailable && (
+              <option value={mangaSourceValue}>
+                {intl.formatMessage(messages.mangaLibrary)}
               </option>
-            ))}
+            )}
           </select>
         </label>
-        {nativeSource ? (
+        {!showManga && (
+          <label className="block" htmlFor="library-shelf">
+            {intl.formatMessage(messages.shelf)}
+            <select
+              id="library-shelf"
+              className="mt-2 block w-full"
+              value={shelf}
+              onChange={(event) => {
+                setShelf(event.target.value as LibraryShelf);
+                resetRepair();
+                resetPage();
+              }}
+            >
+              {shelves.map((value) => (
+                <option key={value} value={value}>
+                  {intl.formatMessage(messages[value])}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {showManga ? null : nativeSource ? (
           data?.libraries?.length ? (
             <label className="block" htmlFor="library-server-library">
               {intl.formatMessage(messages.library)}
@@ -502,7 +558,7 @@ export default function LibraryPage() {
           )}
         </section>
       )}
-      {connections && !connected && (
+      {connections && !connected && !showManga && (
         <p>
           {nativeSource
             ? intl.formatMessage(messages.mediaServerDisconnected, {
@@ -511,7 +567,27 @@ export default function LibraryPage() {
             : intl.formatMessage(messages.disconnected)}
         </p>
       )}
-      {isLoading && <p role="status">{intl.formatMessage(messages.loading)}</p>}
+      {pageLoading && (
+        <p role="status">{intl.formatMessage(messages.loading)}</p>
+      )}
+      {showManga && mangaError && (
+        <div role="alert">
+          <p>{intl.formatMessage(messages.mangaFailed)}</p>
+          <Button onClick={() => void mutateManga()}>
+            {intl.formatMessage(messages.retry)}
+          </Button>
+        </div>
+      )}
+      {showManga && mangaData && (
+        <ListView
+          items={mangaData.results}
+          isEmpty={mangaData.results.length === 0}
+          isLoading={mangaLoading}
+          isReachingEnd
+          onScrollBottom={() => undefined}
+          emptyMessage={intl.formatMessage(messages.mangaEmpty)}
+        />
+      )}
       {error && (
         <div role="alert">
           <p>{intl.formatMessage(messages.failed)}</p>
@@ -595,10 +671,10 @@ export default function LibraryPage() {
           </article>
         ))}
       </div>
-      {connected && (
+      {(connected || showManga) && (
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Button
-            disabled={page <= 1 || isLoading}
+            disabled={page <= 1 || pageLoading}
             onClick={() => setPage((value) => value - 1)}
           >
             {intl.formatMessage(messages.previous)}
@@ -607,9 +683,9 @@ export default function LibraryPage() {
             {intl.formatMessage(messages.page, { page })}
           </span>
           <Button
-            disabled={!data?.hasMore || isLoading}
+            disabled={!hasNextPage || pageLoading}
             onClick={() => {
-              if (nativeSource) {
+              if (nativeSource && !showManga) {
                 setNativeCursors((current) => [
                   ...current.slice(0, page),
                   data?.nextCursor ?? current[page - 1] ?? (page - 1) * 20,

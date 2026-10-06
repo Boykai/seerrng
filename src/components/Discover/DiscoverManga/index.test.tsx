@@ -32,10 +32,12 @@ const state = vi.hoisted(() => ({
     revalidate: vi.fn().mockResolvedValue(undefined),
   },
   post: vi.fn(),
+  settings: { currentSettings: { suwayomiEnabled: true } },
 }));
 vi.mock('next/router', () => ({
   useRouter: () => ({ query: state.query }),
 }));
+vi.mock('@app/hooks/useSettings', () => ({ default: () => state.settings }));
 vi.mock('@app/hooks/useUpdateQueryParams', () => ({
   useBatchUpdateQueryParams: () => state.update,
 }));
@@ -115,6 +117,7 @@ beforeEach(() => {
   state.restoration = [];
   state.activity = [];
   state.filterProps = [];
+  state.settings.currentSettings.suwayomiEnabled = true;
   state.user.user.settings.detailDisclosurePins.manga = {
     filters: true,
     sortBy: true,
@@ -168,18 +171,26 @@ const click = async (element: Element | undefined) => {
   });
 };
 
-it('shows one shelf per sort order on the landing page', async () => {
+const sliders = () =>
+  [...host.querySelectorAll('[data-slider]')].map((slider) => ({
+    key: slider.getAttribute('data-slider'),
+    url: slider.getAttribute('data-url'),
+    params: slider.getAttribute('data-params'),
+    link: slider.getAttribute('data-link'),
+    title: slider.textContent,
+  }));
+
+it('shows the library shelf and one shelf per sort order on the landing page', async () => {
   await render();
 
-  expect(
-    [...host.querySelectorAll('[data-slider]')].map((slider) => ({
-      key: slider.getAttribute('data-slider'),
-      url: slider.getAttribute('data-url'),
-      params: slider.getAttribute('data-params'),
-      link: slider.getAttribute('data-link'),
-      title: slider.textContent,
-    }))
-  ).toEqual([
+  expect(sliders()).toEqual([
+    {
+      key: 'manga-library',
+      url: '/api/v1/discover/manga/library',
+      params: null,
+      link: '/discover/manga/library',
+      title: 'Your Manga Library',
+    },
     {
       key: 'manga-trending',
       url: '/api/v1/discover/manga',
@@ -211,6 +222,17 @@ it('shows one shelf per sort order on the landing page', async () => {
     )
   ).not.toContain('Trending');
   expect(state.activity.at(-1)).toEqual([false, 'manga-discovery']);
+});
+
+it('leaves out the library shelf without a Suwayomi server', async () => {
+  state.settings.currentSettings.suwayomiEnabled = false;
+  await render();
+
+  expect(sliders().map((slider) => slider.key)).toEqual([
+    'manga-trending',
+    'manga-popular',
+    'manga-top_rated',
+  ]);
 });
 
 it('shows a sorted grid and requests the selected sort', async () => {

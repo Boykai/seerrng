@@ -98,6 +98,28 @@ watchlists, and on Discover shelves that have a **Title View** button. While
 manga is enabled, the same choice appears as **Manga** under **Card Titles** in
 your **General** settings.
 
+## Your manga library
+
+While the Manga category is on and a Suwayomi server is
+[connected](#connect-suwayomi), every signed-in user can browse the manga in
+its library:
+
+- **Your Manga Library** is the first shelf on the manga Discover page. Select
+  its heading to see the whole library, which loads more titles as you scroll.
+- **My Library** offers **Manga library (Suwayomi)** under **Library source**,
+  with the same titles as manga cards and **Previous page** and **Next page**
+  buttons. When no media server or tracking account is connected, My Library
+  opens on this source.
+
+A library title appears once the [Library scan](#library-scan) or an admin on
+the [Manga Library page](#manga-library-page) matches it to an AniList title.
+Library items without a match are not listed. Each title appears once, newest
+first by when it was first matched, 20 titles to a page.
+
+The [content switches](#choose-which-titles-appear) and the blocklist apply as
+they do in discovery. A page leaves out the titles they hide, so it can show
+fewer than 20 cards, and the page count includes them.
+
 ## Blocklist manga
 
 Users with permission to manage the blocklist can blocklist a manga title from
