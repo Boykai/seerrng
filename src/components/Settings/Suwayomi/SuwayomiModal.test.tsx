@@ -86,7 +86,7 @@ const view: SuwayomiSettingsView = {
   authMode: 'UI_LOGIN',
   username: 'reader',
   password: REDACTED_SECRET,
-  sourceAllowlist: [],
+  sourceAllowlist: ['1001'],
   preferredLanguages: [],
   scanlatorPreference: [],
   requireCbz: true,
@@ -244,12 +244,29 @@ const circle = (label: string) =>
   host.querySelector<HTMLButtonElement>(
     `.settings-library-card button[aria-label="${label}"]`
   );
+const errorAlert = (message: string) =>
+  [...host.querySelectorAll('.bg-red-600')].find((alert) =>
+    alert.textContent?.includes(message)
+  );
+const sourcesLabel = () =>
+  [...host.querySelectorAll('.group-label')].find((label) =>
+    label.textContent?.startsWith('Sources')
+  );
+const follows = (first: Node | undefined, second: Node | undefined) =>
+  !!first &&
+  !!second &&
+  !!(
+    first.compareDocumentPosition(second) &
+    dom.window.Node.DOCUMENT_POSITION_FOLLOWING
+  );
 
-it('keeps Save disabled until a test passes, then saves the detected auth mode', async () => {
+const SOURCES_REQUIRED = 'Select at least one source.';
+
+it('keeps Save disabled until a test passes and a source is selected, then saves the detected auth mode', async () => {
   const password = randomUUID();
   await render();
   expect(saveDisabled()).toBe(true);
-  expect(button('modal-secondary-button').disabled).toBe(true);
+  expect(button('modal-secondary-button').disabled).toBe(false);
   expect(field('password').type).toBe('password');
   expect(field('password').getAttribute('autocomplete')).toBe('new-password');
   expect(field('username').getAttribute('autocomplete')).toBe('off');
@@ -260,6 +277,7 @@ it('keeps Save disabled until a test passes, then saves the detected auth mode',
   await type('password', password);
   expect(button('modal-secondary-button').disabled).toBe(false);
   expect(saveDisabled()).toBe(true);
+  expect(text()).not.toContain(SOURCES_REQUIRED);
 
   state.post.mockResolvedValueOnce(
     passed({
@@ -292,6 +310,11 @@ it('keeps Save disabled until a test passes, then saves the detected auth mode',
     'Suwayomi connection established successfully!',
     expect.objectContaining({ appearance: 'success' })
   );
+  expect(text()).toContain(SOURCES_REQUIRED);
+  expect(saveDisabled()).toBe(true);
+
+  await click(circle('Source A (EN)'));
+  expect(text()).not.toContain(SOURCES_REQUIRED);
   expect(saveDisabled()).toBe(false);
 
   state.post.mockResolvedValueOnce({ data: {} });
@@ -306,7 +329,7 @@ it('keeps Save disabled until a test passes, then saves the detected auth mode',
     authMode: 'BASIC_AUTH',
     username: 'reader',
     password,
-    sourceAllowlist: [],
+    sourceAllowlist: ['1001'],
     preferredLanguages: [],
     scanlatorPreference: [],
     requireCbz: true,
@@ -412,9 +435,10 @@ it('shows only mapped text for a failed test with partial diagnostics', async ()
   }
   expect(state.addToast).toHaveBeenCalledTimes(1);
   expect(state.addToast).toHaveBeenCalledWith(
-    'Failed to connect to Suwayomi.',
+    'This Suwayomi server lacks features SeerrNG needs. Update Suwayomi to v2.3.2223 or later.',
     expect.objectContaining({ appearance: 'error' })
   );
+  expect(shown).not.toContain('Failed to connect to Suwayomi.');
   expect(saveDisabled()).toBe(true);
 });
 
@@ -449,7 +473,110 @@ it('shows the fixed message of an unknown code and a generic text without a code
   await runTest();
   expect(text()).toContain('Failed to connect to Suwayomi.');
   expect(text()).not.toContain('Network Error');
-  expect(state.addToast).toHaveBeenCalledTimes(3);
+  expect(state.addToast.mock.calls.map(([message]) => message)).toEqual([
+    'A fixed English message.',
+    'Failed to connect to Suwayomi.',
+    'Failed to connect to Suwayomi.',
+  ]);
+});
+
+it('marks invalid connection fields instead of testing', async () => {
+  await render();
+
+  await runTest();
+  expect(state.post).not.toHaveBeenCalled();
+  expect(text()).toContain('You must provide a valid hostname or IP address');
+  expect(text()).not.toContain('You must provide a valid port number');
+  // A test does not need a name, so its error waits for Save.
+  expect(text()).not.toContain('You must provide a value.');
+
+  await type('hostname', 'suwayomi.test');
+  await type('port', '');
+  await runTest();
+  expect(state.post).not.toHaveBeenCalled();
+  expect(text()).not.toContain(
+    'You must provide a valid hostname or IP address'
+  );
+  expect(text()).toContain('You must provide a valid port number');
+
+  await type('port', '4567');
+  state.post.mockResolvedValueOnce(passed());
+  await runTest();
+  expect(state.post).toHaveBeenCalledTimes(1);
+  expect(text()).not.toContain('You must provide a valid port number');
+});
+
+it('marks an empty name on Save instead of saving', async () => {
+  await render();
+  await type('hostname', 'suwayomi.test');
+  state.post.mockResolvedValueOnce(passed());
+  await runTest();
+  await click(circle('Source A (EN)'));
+  expect(saveDisabled()).toBe(false);
+  expect(text()).not.toContain('You must provide a value.');
+
+  await save();
+  expect(state.post).toHaveBeenCalledTimes(1);
+  expect(text()).toContain('You must provide a value.');
+  expect(state.onSave).not.toHaveBeenCalled();
+});
+
+it.each([
+  [
+    'SUWAYOMI_NO_SOURCES',
+    'Suwayomi has no sources installed. Install a source extension in Suwayomi, then test again.',
+  ],
+  [
+    'SUWAYOMI_CREDENTIALS_REQUIRED',
+    'Suwayomi requires a login. Enter its username and password.',
+  ],
+  ['SUWAYOMI_AUTH_FAILED', 'Suwayomi rejected the username or password.'],
+  [
+    'SUWAYOMI_UNREACHABLE',
+    'Suwayomi could not be reached. Check the hostname, port, SSL and URL base.',
+  ],
+])(
+  'names the %s reason in the toast and next to the buttons',
+  async (code, message) => {
+    await render();
+    await type('hostname', 'suwayomi.test');
+    state.post.mockRejectedValueOnce(
+      rejected(502, { success: false, code, message: 'Fixed.', warnings: [] })
+    );
+    await runTest();
+
+    expect(state.addToast).toHaveBeenCalledTimes(1);
+    expect(state.addToast).toHaveBeenCalledWith(
+      message,
+      expect.objectContaining({ appearance: 'error' })
+    );
+    expect(follows(sourcesLabel(), errorAlert(message))).toBe(true);
+    expect(text()).not.toContain('Fixed.');
+    expect(text()).not.toContain('Failed to connect to Suwayomi.');
+    expect(saveDisabled()).toBe(true);
+  }
+);
+
+it('requires a source after a test passes', async () => {
+  await render({ ...view, sourceAllowlist: [] });
+  expect(text()).toContain(SOURCES_REQUIRED);
+  expect(text()).toContain('Run a test to load the source list.');
+  expect(saveDisabled()).toBe(true);
+
+  state.post.mockResolvedValueOnce(passed());
+  await runTest();
+  expect(text()).toContain(SOURCES_REQUIRED);
+  expect(saveDisabled()).toBe(true);
+
+  await click(circle('Source B'));
+  expect(text()).not.toContain(SOURCES_REQUIRED);
+  expect(saveDisabled()).toBe(false);
+
+  await click(circle('Source B'));
+  expect(text()).toContain(SOURCES_REQUIRED);
+  expect(saveDisabled()).toBe(true);
+  await save();
+  expect(state.put).not.toHaveBeenCalled();
 });
 
 it('maps a refused test request to its code', async () => {
@@ -486,22 +613,21 @@ it('shows disabled authentication as its own error ahead of the other warnings',
   );
   await runTest();
 
-  const authAlert = [...host.querySelectorAll('.bg-red-600')].find((alert) =>
-    alert.textContent?.includes('Authentication is disabled')
-  );
+  const authAlert = errorAlert('Authentication is disabled');
   expect(authAlert?.textContent).toContain('No Authentication');
-  const items = [...host.querySelectorAll('li')].map(
+  const items = [...host.querySelectorAll('ul.list-disc li')].map(
     (item) => item.textContent
   );
-  expect(items.slice(0, 3)).toEqual([
+  expect(items).toEqual([
     'Suwayomi does not save downloads as CBZ files. CBZ downloads are recommended.',
     '2 downloads in the Suwayomi queue failed.',
     'Updates are available for: Source B.',
   ]);
-  expect(
-    authAlert!.compareDocumentPosition(host.querySelector('li')!) &
-      dom.window.Node.DOCUMENT_POSITION_FOLLOWING
-  ).toBeTruthy();
+  expect(follows(authAlert, host.querySelector('ul.list-disc li')!)).toBe(true);
+  expect(follows(sourcesLabel(), authAlert)).toBe(true);
+  expect(saveDisabled()).toBe(true);
+
+  await click(circle('Source A (EN)'));
   expect(saveDisabled()).toBe(false);
 
   state.post.mockResolvedValueOnce({ data: {} });
@@ -629,6 +755,15 @@ it('reports a refused save by its code or a generic text', async () => {
   await save();
   expect(state.addToast).toHaveBeenLastCalledWith(
     'Only one Suwayomi server can be configured.',
+    expect.objectContaining({ appearance: 'error' })
+  );
+
+  state.put.mockRejectedValueOnce(
+    rejected(400, { code: 'SUWAYOMI_SOURCES_REQUIRED', message: 'Fixed.' })
+  );
+  await save();
+  expect(state.addToast).toHaveBeenLastCalledWith(
+    'Select at least one Suwayomi source for SeerrNG to search.',
     expect.objectContaining({ appearance: 'error' })
   );
 

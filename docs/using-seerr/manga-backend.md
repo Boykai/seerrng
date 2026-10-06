@@ -121,10 +121,19 @@ for what SeerrNG changes in Suwayomi.
 3. Enter Suwayomi's username and password if it requires a login.
 4. Select **Test**. The test detects how Suwayomi authenticates, checks its
    version and the features SeerrNG needs, and loads its installed sources.
-   **Add Server** stays unavailable until a test succeeds, and changing the
-   address, SSL, credentials, or **Require CBZ Downloads** asks for a new test.
-5. Optionally list preferred languages and scanlators, select the sources
-   SeerrNG may search (the selection order is their priority), and save.
+   If a required field is missing or invalid, the field shows why instead of
+   testing. **Add Server** stays unavailable until a test succeeds, and
+   changing the address, SSL, credentials, or **Require CBZ Downloads** asks
+   for a new test.
+5. Select at least one source for SeerrNG to search; the selection order is
+   their priority. **Add Server** stays unavailable until a source is
+   selected. Optionally list preferred languages and scanlators, then save.
+
+A failed test names its reason in the notification and above the buttons, for
+example that Suwayomi requires a login, rejected the credentials, could not be
+reached, or has no sources installed. A test needs at least one installed
+source besides Suwayomi's local source: install a source extension in Suwayomi,
+then test again.
 
 The test result lists warnings, most urgent first. SeerrNG warns when it
 detects no authentication or empty configured credentials; in that case, check

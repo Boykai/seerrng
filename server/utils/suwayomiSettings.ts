@@ -36,7 +36,6 @@ const MAX_SCANLATOR_LENGTH = 128;
 const SOURCE_ID_PATTERN = /^[1-9]\d{0,18}$/;
 const MAX_SOURCE_ID = '9223372036854775807';
 const LANGUAGE_PATTERN = /^[A-Za-z0-9_-]{1,35}$/;
-// eslint-disable-next-line no-control-regex
 const CREDENTIAL_LINE_BREAKS = /[\r\n\0]/;
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/;
@@ -47,6 +46,8 @@ export const SUWAYOMI_SETTINGS_MESSAGES = {
   SUWAYOMI_PASSWORD_REQUIRED:
     'Enter the password again: the server address or username changed.',
   SUWAYOMI_INSTANCE_LIMIT: 'Only one Suwayomi server can be configured.',
+  SUWAYOMI_SOURCES_REQUIRED:
+    'Select at least one Suwayomi source for SeerrNG to search.',
 } as const;
 
 export type SuwayomiParseResult<T> =
@@ -274,6 +275,13 @@ export const parseSuwayomiSettings = (
 
   const sourceAllowlist = parseSourceAllowlist(settings.sourceAllowlist);
   if ('error' in sourceAllowlist) return sourceAllowlist;
+  // The resolver searches only the selected sources.
+  if (sourceAllowlist.value.length === 0) {
+    return {
+      error: SUWAYOMI_SETTINGS_MESSAGES.SUWAYOMI_SOURCES_REQUIRED,
+      code: 'SUWAYOMI_SOURCES_REQUIRED',
+    };
+  }
   const preferredLanguages = parseList(
     settings.preferredLanguages,
     'preferredLanguages',

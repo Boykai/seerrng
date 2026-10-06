@@ -76,6 +76,15 @@ const FieldError = ({ name }: { name: keyof SuwayomiFormValues }) => {
   ) : null;
 };
 
+/** The fields a connection test sends; each must be valid before a test. */
+const TEST_FIELDS: readonly (keyof SuwayomiFormValues)[] = [
+  'hostname',
+  'port',
+  'baseUrl',
+  'username',
+  'password',
+];
+
 const TestResultPanel = ({ result }: { result: TestOutcome }) => {
   const intl = useIntl();
   const sourceNames = new Map(
@@ -204,11 +213,14 @@ const SourceBadges = ({
 const SourcePicker = ({
   sources,
   selected,
+  required,
   onChange,
 }: {
   /** Undefined until a test succeeds. */
   sources?: SuwayomiConnectionTestSource[];
   selected: string[];
+  /** Shows an error while no source is selected. */
+  required: boolean;
   onChange: (selected: string[]) => void;
 }) => {
   const intl = useIntl();
@@ -227,6 +239,7 @@ const SourcePicker = ({
     <div className="form-row">
       <span className="group-label">
         {intl.formatMessage(messages.sources)}
+        <span className="label-required">*</span>
       </span>
       <div className="form-input-area">
         {sources && (
@@ -239,6 +252,11 @@ const SourcePicker = ({
               aria-label={intl.formatMessage(messages.filterSources)}
               onChange={(e) => setQuery(e.target.value)}
             />
+          </div>
+        )}
+        {required && selected.length === 0 && (
+          <div className="error">
+            {intl.formatMessage(messages.sourcesRequired)}
           </div>
         )}
       </div>
@@ -343,10 +361,14 @@ const SuwayomiModal = ({ suwayomi, onClose, onSave }: SuwayomiModalProps) => {
         ...(readTestFailure(error) ?? { warnings: [] }),
         error: readSuwayomiError(error),
       });
-      addToast(intl.formatMessage(messages.testFailure), {
-        appearance: 'error',
-        autoDismiss: true,
-      });
+      addToast(
+        describeSuwayomiError(
+          intl,
+          readSuwayomiError(error),
+          messages.testFailure
+        ),
+        { appearance: 'error', autoDismiss: true }
+      );
     } finally {
       if (testRequest.current === controller) {
         testRequest.current = null;
@@ -413,7 +435,7 @@ const SuwayomiModal = ({ suwayomi, onClose, onSave }: SuwayomiModalProps) => {
         initialValues={suwayomiFormValues(suwayomi)}
         validationSchema={schema}
         onSubmit={async (values) => {
-          if (!authMode) return;
+          if (!authMode || values.sourceAllowlist.length === 0) return;
           try {
             const submission = buildSaveRequest(values, authMode);
             if (suwayomi) {
@@ -437,7 +459,14 @@ const SuwayomiModal = ({ suwayomi, onClose, onSave }: SuwayomiModalProps) => {
           }
         }}
       >
-        {({ values, handleSubmit, setFieldValue, isSubmitting, isValid }) => {
+        {({
+          values,
+          handleSubmit,
+          setFieldValue,
+          setFieldTouched,
+          validateForm,
+          isSubmitting,
+        }) => {
           const changeField = (
             field: keyof SuwayomiFormValues,
             value: unknown
@@ -457,6 +486,17 @@ const SuwayomiModal = ({ suwayomi, onClose, onSave }: SuwayomiModalProps) => {
             }
           };
 
+          // Marks the missing or invalid test fields instead of testing.
+          const startTest = async () => {
+            const errors = await validateForm();
+            const invalid = TEST_FIELDS.filter((field) => errors[field]);
+            if (invalid.length > 0) {
+              invalid.forEach((field) => setFieldTouched(field, true, false));
+              return;
+            }
+            await testConnection(values);
+          };
+
           return (
             <Modal
               onCancel={() => {
@@ -474,19 +514,17 @@ const SuwayomiModal = ({ suwayomi, onClose, onSave }: SuwayomiModalProps) => {
               okDisabled={
                 !isValidated ||
                 !authMode ||
+                values.sourceAllowlist.length === 0 ||
                 isSubmitting ||
-                isTesting ||
-                !isValid
+                isTesting
               }
               onOk={() => handleSubmit()}
               secondaryButtonType="warning"
               secondaryText={intl.formatMessage(
                 isTesting ? globalMessages.testing : globalMessages.test
               )}
-              secondaryDisabled={
-                !values.hostname || !values.port || isTesting || isSubmitting
-              }
-              onSecondary={() => testConnection(values)}
+              secondaryDisabled={isTesting || isSubmitting}
+              onSecondary={() => void startTest()}
               title={intl.formatMessage(
                 suwayomi ? messages.editServer : messages.addServer
               )}
@@ -648,7 +686,6 @@ const SuwayomiModal = ({ suwayomi, onClose, onSave }: SuwayomiModalProps) => {
                     {intl.formatMessage(messages.requireCbzTip)}
                   </span>
                 </div>
-                {result && <TestResultPanel result={result} />}
                 <div className="form-row">
                   <label htmlFor="preferredLanguages" className="text-label">
                     {intl.formatMessage(messages.languages)}
@@ -689,8 +726,10 @@ const SuwayomiModal = ({ suwayomi, onClose, onSave }: SuwayomiModalProps) => {
                 <SourcePicker
                   sources={result?.sources}
                   selected={values.sourceAllowlist}
+                  required={isValidated}
                   onChange={(ids) => setFieldValue('sourceAllowlist', ids)}
                 />
+                {result && <TestResultPanel result={result} />}
               </div>
             </Modal>
           );
