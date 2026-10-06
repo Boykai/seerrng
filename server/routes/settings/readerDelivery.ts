@@ -2,11 +2,13 @@ import type {
   ReaderGroupingProvider,
   ReaderGroupingTarget,
   ReaderGroupingTargetType,
+  ReaderServiceStep,
 } from '@server/api/readerDelivery';
 import {
   buildReaderGroupingFilter,
   describeReaderGroupingRule,
   ReaderDeliveryApi,
+  ReaderServiceError,
 } from '@server/api/readerDelivery';
 import { getRepository } from '@server/datasource';
 import ReaderDeliveryGrouping from '@server/entity/ReaderDeliveryGrouping';
@@ -19,14 +21,18 @@ import {
   defaultReaderDeliverySettings,
   getSettings,
 } from '@server/lib/settings';
+import logger from '@server/logger';
 import { authorizedMutation } from '@server/middleware/authorizedMutation';
+import {
+  getComparableReaderServiceUrl,
+  normalizeReaderServiceUrl,
+} from '@server/utils/readerServiceUrl';
 import {
   isValidApplicationUrl,
   preserveRedactedSecrets,
   REDACTED_SECRET,
   redactSecrets,
 } from '@server/utils/security';
-import axios from 'axios';
 import { Router } from 'express';
 import { createHash } from 'node:crypto';
 
@@ -54,10 +60,7 @@ const parseServiceUrl = (
     };
   }
 
-  const normalizedUrl = trimmed.replace(/\/+$/, '');
-  return {
-    value: normalizedUrl.replace(/\/(?:api\/v1\/opds|komga\/api)$/i, ''),
-  };
+  return { value: normalizeReaderServiceUrl(trimmed) };
 };
 
 const parsePreferredProvider = (
@@ -131,38 +134,340 @@ type ReaderLoginResult =
     }
   | { error: string };
 
+const getProviderName = (provider: ReaderGroupingProvider) =>
+  provider === 'grimmory' ? 'Grimmory' : 'BookOrbit';
+
+const getGroupingName = (provider: ReaderGroupingProvider) =>
+  provider === 'grimmory' ? 'Grimmory Magic Shelf' : 'BookOrbit Smart Scope';
+
+const getStepLabel = (
+  provider: ReaderGroupingProvider,
+  step: ReaderServiceStep
+): string => {
+  switch (step) {
+    case 'sign-in':
+      return 'Signing in to ' + getProviderName(provider);
+    case 'list':
+      return provider === 'grimmory'
+        ? 'Listing Grimmory Magic Shelves'
+        : 'Listing BookOrbit Smart Scopes';
+    case 'preview':
+      return 'Previewing matching ' + getProviderName(provider) + ' books';
+    case 'create':
+      return 'Creating the ' + getGroupingName(provider);
+    case 'update':
+      return 'Updating the ' + getGroupingName(provider);
+    case 'count':
+      return 'Counting the books in the ' + getGroupingName(provider);
+    case 'delete':
+      return 'Removing the ' + getGroupingName(provider);
+  }
+};
+
+const TIMEOUT_CODES = new Set(['ECONNABORTED', 'ETIMEDOUT']);
+const TLS_CODE =
+  /^(?:CERT_|ERR_TLS_|ERR_SSL_|UNABLE_TO_|DEPTH_ZERO_SELF_SIGNED_CERT$|SELF_SIGNED_CERT_IN_CHAIN$|EPROTO$)/;
+
+const getFailureDetail = (
+  error: ReaderServiceError,
+  provider: ReaderGroupingProvider
+): string => {
+  const providerName = getProviderName(provider);
+  const { step, reason, status, code } = error;
+  const isSignIn = step === 'sign-in';
+  const tooLarge =
+    providerName +
+    ' sent a response that SeerrNG could not read completely or that was too large to process safely.';
+
+  if (
+    reason === 'not-api' ||
+    (isSignIn && (status === 404 || status === 405))
+  ) {
+    return provider === 'grimmory'
+      ? 'The address did not answer like the Grimmory API. Enter the address you open Grimmory at, including any reverse-proxy base path.'
+      : 'The address did not answer like the BookOrbit API. Enter the address you open BookOrbit at. BookOrbit has no base-path setting, so a reverse proxy that serves it under a sub-path must remove that path before forwarding requests.';
+  }
+  if (reason === 'unexpected') {
+    return (
+      providerName +
+      ' sent a response SeerrNG does not recognize. Check that the address points to ' +
+      providerName +
+      ' and that ' +
+      providerName +
+      ' is up to date.'
+    );
+  }
+  if (reason === 'request') {
+    return (
+      'SeerrNG did not send the request. Check that the ' +
+      providerName +
+      ' address is a valid http or https address.'
+    );
+  }
+  if (reason === 'network') {
+    if (code && TIMEOUT_CODES.has(code)) {
+      return (
+        providerName +
+        ' did not answer in time. Check that it is running and reachable from the SeerrNG server.'
+      );
+    }
+    if (code && TLS_CODE.test(code)) {
+      return (
+        'SeerrNG could not make a secure connection to ' +
+        providerName +
+        '. Check whether the address should start with http or https, and that the SeerrNG server trusts its certificate.'
+      );
+    }
+    if (code === 'ERR_BAD_RESPONSE') return tooLarge;
+    return (
+      'SeerrNG could not reach ' +
+      providerName +
+      '. Check the address and that ' +
+      providerName +
+      ' is running and reachable from the SeerrNG server.'
+    );
+  }
+
+  if (status !== undefined && status >= 300 && status < 400) {
+    return (
+      'The address redirected the request. Enter the final ' +
+      providerName +
+      ' address, and let API requests past any sign-in page in front of it.'
+    );
+  }
+  if (status === 401) {
+    return isSignIn
+      ? providerName +
+          ' did not accept the username and password. Check them, and check that the account is active and not locked.'
+      : providerName +
+          ' did not accept the sign-in on the next request. If a reverse proxy is in front of ' +
+          providerName +
+          ', make sure it forwards the Authorization header.';
+  }
+  if (status === 403) {
+    if (isSignIn) {
+      return provider === 'grimmory'
+        ? 'Grimmory refused password sign-in for this account. If Grimmory allows only single sign-on, use a Grimmory administrator account.'
+        : 'BookOrbit refused password sign-in for this account. Allow password sign-in in BookOrbit, or use an account that signs in with a password.';
+    }
+    return provider === 'grimmory'
+      ? 'Grimmory refused this account access to Magic Shelves. Use a Grimmory administrator account.'
+      : 'BookOrbit refused this account access to Smart Scopes. Sign in to BookOrbit with it once to replace any temporary password. To change a Smart Scope, use the BookOrbit account that created it.';
+  }
+  if (status === 404 || status === 405) {
+    if (step === 'list' || step === 'preview' || step === 'create') {
+      return (
+        providerName +
+        ' does not offer the ' +
+        (provider === 'grimmory' ? 'Magic Shelf' : 'Smart Scope') +
+        ' API at this address. Update ' +
+        providerName +
+        ', and make sure any reverse proxy forwards every /api path.'
+      );
+    }
+    return (
+      providerName +
+      ' could not find the ' +
+      getGroupingName(provider) +
+      '. If it was removed in ' +
+      providerName +
+      ', remove the SeerrNG-managed shelf and create it again. If not, update ' +
+      providerName +
+      ', and make sure any reverse proxy forwards every /api path.'
+    );
+  }
+  if (status === 413) return tooLarge;
+  if (status === 429) {
+    return (
+      providerName +
+      ' is limiting requests from SeerrNG. Wait a minute and try again.'
+    );
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return (
+      providerName +
+      ' or a proxy in front of it is unavailable (HTTP ' +
+      status +
+      '). Check that ' +
+      providerName +
+      ' is running.'
+    );
+  }
+  if (status !== undefined && status >= 500) {
+    return (
+      providerName +
+      ' reported an internal error (HTTP ' +
+      status +
+      '). Check the ' +
+      providerName +
+      ' logs.'
+    );
+  }
+  if (isSignIn && status === 400) {
+    return (
+      providerName +
+      ' did not accept the sign-in request. Check the username and password.'
+    );
+  }
+  return (
+    providerName +
+    ' refused the request (HTTP ' +
+    status +
+    '). Check that ' +
+    providerName +
+    ' is up to date.'
+  );
+};
+
+/**
+ * Builds the user-facing message for a failed reader-service call. Only the
+ * provider, step, status, and error code are logged, never response text.
+ */
 const getProviderError = (
   error: unknown,
   provider: ReaderGroupingProvider
 ): string => {
-  const providerName = provider === 'grimmory' ? 'Grimmory' : 'BookOrbit';
-  const status = axios.isAxiosError(error) ? error.response?.status : undefined;
-  if (status === 401 || status === 403) {
+  if (!(error instanceof ReaderServiceError)) {
+    logger.warn('Reader service request failed.', {
+      label: 'Reader Delivery',
+      provider,
+    });
     return (
-      providerName +
-      ' rejected these credentials or the account cannot manage groupings. Check the username, password, and account permissions.'
+      'SeerrNG could not complete the request to ' +
+      getProviderName(provider) +
+      '. Check the service address and try again.'
     );
   }
-  if (status === 404) {
-    return (
-      providerName +
-      ' did not recognize the grouping API. Check that the service version and address are correct.'
-    );
-  }
-  if (
-    status === 413 ||
-    (axios.isAxiosError(error) && error.code === 'ERR_BAD_RESPONSE')
-  ) {
-    return (
-      providerName +
-      ' returned a response that was too large to process safely.'
-    );
-  }
+  logger.warn('Reader service request failed.', {
+    label: 'Reader Delivery',
+    provider,
+    step: error.step,
+    reason: error.reason,
+    status: error.status,
+    code: error.code,
+  });
   return (
-    'SeerrNG could not complete the request to ' +
-    providerName +
-    '. Check the service address and try again.'
+    getStepLabel(provider, error.step) +
+    ' failed. ' +
+    getFailureDetail(error, provider)
   );
+};
+
+/**
+ * Decides what a submitted password stands for. A blank or redacted password
+ * means the saved one, but only for the saved address and username, so the
+ * saved credential is never sent to a different service or account.
+ */
+const getSavedPasswordUse = (
+  saved: ReturnType<typeof getProviderConfig>,
+  url: string,
+  username: string,
+  password: string
+): 'typed' | 'saved' | 'none' | 'changed' => {
+  if (password && password !== REDACTED_SECRET) return 'typed';
+  if (!saved.password) return 'none';
+  return saved.url &&
+    getComparableReaderServiceUrl(url) ===
+      getComparableReaderServiceUrl(saved.url) &&
+    username === saved.username
+    ? 'saved'
+    : 'changed';
+};
+
+/**
+ * The password Save stores. A password is kept only with an address and
+ * username, since it could never be used without them.
+ */
+const getPasswordToSave = (
+  provider: ReaderGroupingProvider,
+  saved: ReturnType<typeof getProviderConfig>,
+  url: string,
+  username: string,
+  password: string
+): { value: string } | { error: string } => {
+  if (!url || !username) return { value: '' };
+  const use = getSavedPasswordUse(saved, url, username, password);
+  if (use === 'typed') return { value: password };
+  if (use === 'saved') return { value: saved.password };
+  if (use === 'changed') {
+    return {
+      error:
+        'Enter the ' +
+        getProviderName(provider) +
+        ' password again to save a changed address or username.',
+    };
+  }
+  return { value: '' };
+};
+
+/**
+ * Reads the address and account a connection test should use. Fields left
+ * out fall back to the saved settings, and the password follows the same
+ * rule as Save.
+ */
+const getConnectionTestConfig = (
+  provider: ReaderGroupingProvider,
+  body: Record<string, unknown>,
+  settings: ReaderDeliverySettings
+): { config: ReturnType<typeof getProviderConfig> } | { error: string } => {
+  const providerName = getProviderName(provider);
+  const saved = getProviderConfig(provider, settings);
+  const url =
+    body.url === undefined
+      ? { value: saved.url }
+      : parseServiceUrl(body.url, providerName + ' URL');
+  if ('error' in url) return url;
+  if (!url.value) {
+    return {
+      error: 'Enter the ' + providerName + ' address to test the connection.',
+    };
+  }
+  const username =
+    body.username === undefined
+      ? { value: saved.username }
+      : parseCredentialText(body.username, providerName + ' username', 256);
+  if ('error' in username) return username;
+  if (!username.value) {
+    return {
+      error: 'Enter the ' + providerName + ' username to test the connection.',
+    };
+  }
+  const password =
+    body.password === undefined
+      ? { value: '' }
+      : parseCredentialText(
+          body.password,
+          providerName + ' password',
+          2048,
+          false
+        );
+  if ('error' in password) return password;
+  const use = getSavedPasswordUse(
+    saved,
+    url.value,
+    username.value,
+    password.value
+  );
+  if (use === 'none') {
+    return {
+      error: 'Enter the ' + providerName + ' password to test the connection.',
+    };
+  }
+  if (use === 'changed') {
+    return {
+      error:
+        'Enter the ' +
+        providerName +
+        ' password again to test a changed address or username.',
+    };
+  }
+  return {
+    config: {
+      url: url.value,
+      username: username.value,
+      password: use === 'typed' ? password.value : saved.password,
+    },
+  };
 };
 
 const parseTarget = (
@@ -312,18 +617,15 @@ readerDeliveryRoutes.put(
       'BookOrbit username',
       256
     );
+    // An omitted password keeps the saved one, like the redacted marker.
     const grimmoryPassword = parseCredentialText(
-      req.body.grimmoryPassword === REDACTED_SECRET
-        ? current.grimmoryPassword
-        : (req.body.grimmoryPassword ?? current.grimmoryPassword),
+      req.body.grimmoryPassword ?? REDACTED_SECRET,
       'Grimmory password',
       2048,
       false
     );
     const bookorbitPassword = parseCredentialText(
-      req.body.bookorbitPassword === REDACTED_SECRET
-        ? current.bookorbitPassword
-        : (req.body.bookorbitPassword ?? current.bookorbitPassword),
+      req.body.bookorbitPassword ?? REDACTED_SECRET,
       'BookOrbit password',
       2048,
       false
@@ -340,17 +642,38 @@ readerDeliveryRoutes.put(
     const clearGrimmoryCredentials = req.body.clearGrimmoryCredentials === true;
     const clearBookorbitCredentials =
       req.body.clearBookorbitCredentials === true;
+    const grimmorySecret = clearGrimmoryCredentials
+      ? { value: '' }
+      : getPasswordToSave(
+          'grimmory',
+          getProviderConfig('grimmory', current),
+          grimmoryUrl.value,
+          grimmoryUsername.value,
+          grimmoryPassword.value
+        );
+    if ('error' in grimmorySecret)
+      return res.status(400).json({ error: grimmorySecret.error });
+    const bookorbitSecret = clearBookorbitCredentials
+      ? { value: '' }
+      : getPasswordToSave(
+          'bookorbit',
+          getProviderConfig('bookorbit', current),
+          bookorbitUrl.value,
+          bookorbitUsername.value,
+          bookorbitPassword.value
+        );
+    if ('error' in bookorbitSecret)
+      return res.status(400).json({ error: bookorbitSecret.error });
+
     const candidate: ReaderDeliverySettings = {
       grimmoryUrl: grimmoryUrl.value,
       grimmoryUsername: clearGrimmoryCredentials ? '' : grimmoryUsername.value,
-      grimmoryPassword: clearGrimmoryCredentials ? '' : grimmoryPassword.value,
+      grimmoryPassword: grimmorySecret.value,
       bookorbitUrl: bookorbitUrl.value,
       bookorbitUsername: clearBookorbitCredentials
         ? ''
         : bookorbitUsername.value,
-      bookorbitPassword: clearBookorbitCredentials
-        ? ''
-        : bookorbitPassword.value,
+      bookorbitPassword: bookorbitSecret.value,
       preferredProvider: requestedPreferred,
     };
     const safeCandidate = preserveRedactedSecrets(candidate, current);
@@ -366,18 +689,19 @@ readerDeliveryRoutes.put(
 readerDeliveryRoutes.post(
   '/connection-test',
   authorizedMutation(Permission.ADMIN, async (req, res) => {
-    const provider = parseProvider(
-      isRecord(req.body) ? req.body.provider : undefined
-    );
+    const body = isRecord(req.body) ? req.body : {};
+    const provider = parseProvider(body.provider);
     if (!provider) {
       return res.status(400).json({ error: 'Choose Grimmory or BookOrbit.' });
     }
     const settings =
       getSettings().readerDelivery ?? defaultReaderDeliverySettings();
+    const tested = getConnectionTestConfig(provider, body, settings);
+    if ('error' in tested) return res.status(400).json(tested);
     try {
-      const result = await performLogin(provider, settings);
-      if ('error' in result) return res.status(400).json(result);
-      const groupings = await result.api.listGroupings(provider, result.token);
+      const api = new ReaderDeliveryApi(tested.config.url);
+      const token = await api.login(provider, tested.config);
+      const groupings = await api.listGroupings(provider, token);
       return res.status(200).json({
         connected: true,
         provider,
@@ -489,7 +813,7 @@ readerDeliveryRoutes.post(
     ) {
       return res.status(409).json({
         error:
-          'BookOrbit sets scope visibility when the scope is created. Change this grouping’s visibility in BookOrbit, or remove the SeerrNG-managed scope and create it again.',
+          'SeerrNG sets a BookOrbit Smart Scope’s visibility only when it creates the Smart Scope. Change this Smart Scope’s visibility in BookOrbit, or remove the SeerrNG-managed Smart Scope and create it again.',
       });
     }
     if (
@@ -594,9 +918,15 @@ readerDeliveryRoutes.post(
           remoteGroupId
         );
         countVerified = true;
-      } catch {
+      } catch (error) {
         warning =
-          'The grouping was saved, but the reader service did not confirm its final item count. Open the service and refresh this grouping to check it.';
+          'The ' +
+          getGroupingName(provider) +
+          ' was saved, but SeerrNG could not confirm its final item count. ' +
+          getProviderError(error, provider) +
+          ' Open ' +
+          getProviderName(provider) +
+          ' and refresh this grouping to check it.';
       }
 
       grouping.status = 'ready';
@@ -649,7 +979,12 @@ readerDeliveryRoutes.delete(
           grouping.remoteGroupId
         );
       } catch (error) {
-        if (!(axios.isAxiosError(error) && error.response?.status === 404)) {
+        // A grouping already removed in the reader service counts as removed.
+        const alreadyRemoved =
+          error instanceof ReaderServiceError &&
+          error.step === 'delete' &&
+          error.status === 404;
+        if (!alreadyRemoved) {
           return res.status(502).json({
             error: getProviderError(error, grouping.provider),
           });

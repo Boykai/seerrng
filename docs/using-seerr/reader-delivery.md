@@ -46,20 +46,28 @@ rename files unless you also update the manager's paths.
 
 Create OPDS reader accounts in Grimmory or BookOrbit and enter those
 credentials in the reading app. To let SeerrNG manage live reader shelves,
-also configure a reader-service administrator account in SeerrNG. These are
-separate credentials: SeerrNG needs the service account to create a grouping;
-reader apps still use their OPDS credentials.
+also save a service account in SeerrNG: a Grimmory administrator account for
+Grimmory Magic Shelves, or a BookOrbit account for BookOrbit Smart Scopes.
+These are separate credentials: SeerrNG uses the service account to manage
+Magic Shelves and Smart Scopes; reader apps still use their OPDS credentials.
 
 See the [Grimmory OPDS guide](https://grimmory.org/docs/integration/opds/),
 [Grimmory Komga API guide](https://grimmory.org/docs/integration/komga-api/),
-and [BookOrbit OPDS guide](https://bookorbit.app/opds) for their setup steps.
+[Grimmory Magic Shelves guide](https://grimmory.org/docs/magic-shelf/),
+[BookOrbit OPDS guide](https://bookorbit.app/opds), and
+[BookOrbit Smart Scopes guide](https://bookorbit.app/smart-scopes) for their
+setup steps.
 
 ## 2. Configure Reader Apps in SeerrNG
 
 Open **Settings > Services > Reader Apps**.
 
-1. Enter an address the reading device can reach. Include any reverse-proxy
-   base path. You can paste either the service address or its full OPDS address.
+1. Enter an address the reading device can reach. For Grimmory, include any
+   reverse-proxy base path; you can paste the service address or its full OPDS
+   or Komga API address. For BookOrbit, you can paste the service address or
+   its full OPDS address. BookOrbit has no base-path setting, so a reverse
+   proxy that serves it under a sub-path must remove that path before
+   forwarding requests.
 2. Configure Grimmory, BookOrbit, or both. Choose a preferred service. If it
    has no address, SeerrNG uses the other configured service.
 3. Save the settings. Copy the generated OPDS address into an ebook app. For
@@ -70,12 +78,27 @@ another device. localhost and Docker-only service names generally refer to the
 reading device itself. The device must resolve the host and trust its HTTPS
 certificate.
 
-For SeerrNG-managed shelves, enter the reader-service administrator username
-and password for each configured service, then save and use **Test grouping
-access**. SeerrNG stores the password in its private settings file and
-redacts it from settings API responses. Clear **Remove saved account
-credentials** and save to remove it. The saved account is used for shelf
-management; it is not the OPDS account used by readers.
+For SeerrNG-managed shelves, enter an account for each configured service:
+
+- **Grimmory**: a Grimmory administrator account that signs in with a
+  password. SeerrNG previews, creates, and updates Grimmory Magic Shelves with
+  it.
+- **BookOrbit**: a BookOrbit account that signs in with a password and can see
+  the libraries with your books. If BookOrbit gave the account a temporary
+  password, sign in to BookOrbit with it once to replace that password.
+  SeerrNG creates BookOrbit Smart Scopes as this account, so keep using the
+  same account to update or remove them.
+
+Use **Test Magic Shelf Access** or **Test Smart Scope Access** to check the
+address and account before or after saving. The test uses the values in the
+form. Leave the password blank to test or keep the saved password; this works
+only while the address and username stay the same, so enter the password again
+after you change either one. A failed test names the step that failed, such as
+signing in or listing Magic Shelves or Smart Scopes, and what to check. SeerrNG
+stores the password in its private settings file and redacts it from settings
+API responses. Select **Remove saved account credentials** and save to remove
+it. The saved account is used for shelf management; it is not the OPDS account
+used by readers.
 
 The Grimmory Komga API must be enabled under its OPDS settings before a comic
 app can use that address. Grimmory's OPDS and Komga APIs share reader
@@ -94,9 +117,10 @@ library files when it creates a shelf.
 Keep **Show this grouping to other reader-service users** on when your reader
 or OPDS account belongs to a different reader-service user than the account
 connected in SeerrNG. The reader account also needs access to the matching
-library. BookOrbit public scopes appear in OPDS feeds; private scopes are only
-visible to their owner. BookOrbit locks a scope's visibility when it is
-created, so SeerrNG cannot change that choice later. For BookOrbit v2.2 or
+library. BookOrbit public Smart Scopes appear in OPDS feeds; private Smart
+Scopes are only visible to their owner. SeerrNG sets a BookOrbit Smart Scope's
+visibility only when it creates the Smart Scope and leaves it unchanged when it
+updates the Smart Scope, so change it later in BookOrbit. For BookOrbit v2.2 or
 later, **Sync this BookOrbit scope to the connected Kobo account** enables
 sync for the service account configured in SeerrNG. Grimmory's Kobo inclusion
 shelf is separate and is left unchanged. SeerrNG reports the saved grouping

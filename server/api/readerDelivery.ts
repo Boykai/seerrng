@@ -1,6 +1,8 @@
 import ExternalAPI, {
   DEFAULT_EXTERNAL_API_TIMEOUT_MS,
 } from '@server/api/externalapi';
+import type { AxiosResponse } from 'axios';
+import axios from 'axios';
 
 export type ReaderGroupingProvider = 'grimmory' | 'bookorbit';
 export type ReaderGroupingTargetType =
@@ -13,10 +15,72 @@ export interface ReaderGroupingTarget {
 }
 
 export interface ReaderGroupingRule {
+  type?: 'rule';
   field: string;
   operator: string;
   value: string | string[];
 }
+
+/** The reader-service request that was running when a call failed. */
+export type ReaderServiceStep =
+  'sign-in' | 'list' | 'preview' | 'create' | 'update' | 'count' | 'delete';
+
+/**
+ * - `http`: the service answered with an error status.
+ * - `network`: no usable answer arrived (refused, timed out, TLS, too large).
+ * - `not-api`: the answer was not JSON, such as a web page.
+ * - `unexpected`: the JSON answer did not have the expected shape.
+ * - `request`: SeerrNG did not send the request.
+ */
+export type ReaderServiceFailure =
+  'http' | 'network' | 'not-api' | 'unexpected' | 'request';
+
+/**
+ * A reader-service failure reduced to its step, status, and error code. It
+ * never carries the service's response body or the request's credentials.
+ */
+export class ReaderServiceError extends Error {
+  public readonly step: ReaderServiceStep;
+  public readonly reason: ReaderServiceFailure;
+  public readonly status?: number;
+  public readonly code?: string;
+
+  public constructor(
+    step: ReaderServiceStep,
+    reason: ReaderServiceFailure,
+    details: { status?: number; code?: string } = {}
+  ) {
+    super(
+      'Reader service ' +
+        step +
+        ' request failed (' +
+        (details.status !== undefined
+          ? 'HTTP ' + details.status
+          : (details.code ?? reason)) +
+        ').'
+    );
+    this.name = 'ReaderServiceError';
+    this.step = step;
+    this.reason = reason;
+    this.status = details.status;
+    this.code = details.code;
+  }
+}
+
+const toReaderServiceError = (
+  step: ReaderServiceStep,
+  error: unknown
+): ReaderServiceError => {
+  if (error instanceof ReaderServiceError) return error;
+  if (axios.isAxiosError(error)) {
+    const code = typeof error.code === 'string' ? error.code : undefined;
+    const status = error.response?.status;
+    return typeof status === 'number' && (status < 200 || status >= 300)
+      ? new ReaderServiceError(step, 'http', { status, code })
+      : new ReaderServiceError(step, 'network', { code });
+  }
+  return new ReaderServiceError(step, 'request');
+};
 
 export interface ReaderGroupingFilter {
   type: 'group';
@@ -139,10 +203,13 @@ export const buildReaderGroupingFilter = (
 ): ReaderGroupingFilter => {
   const comicFormats =
     provider === 'grimmory' ? ['CBR', 'CBZ', 'CB7'] : ['cbr', 'cbz', 'cb7'];
+  // BookOrbit validates each rule's type; Grimmory rules do not carry one.
+  const ruleType = provider === 'bookorbit' ? { type: 'rule' as const } : {};
   const rules: ReaderGroupingRule[] =
     target.type === 'author'
       ? [
           {
+            ...ruleType,
             field: provider === 'grimmory' ? 'authors' : 'author',
             operator: provider === 'grimmory' ? 'includes_any' : 'includesAny',
             value: [target.name],
@@ -150,6 +217,7 @@ export const buildReaderGroupingFilter = (
         ]
       : [
           {
+            ...ruleType,
             field: provider === 'grimmory' ? 'seriesName' : 'series',
             operator: provider === 'grimmory' ? 'equals' : 'eq',
             value: target.name,
@@ -157,6 +225,7 @@ export const buildReaderGroupingFilter = (
           ...(target.type === 'comic-series'
             ? [
                 {
+                  ...ruleType,
                   field: provider === 'grimmory' ? 'fileType' : 'format',
                   operator:
                     provider === 'grimmory' ? 'includes_any' : 'includesAny',
@@ -172,6 +241,13 @@ export const buildReaderGroupingFilter = (
     rules,
   };
 };
+
+/**
+ * Spring turns a single query value into a list by splitting it on commas,
+ * so a value that contains a comma is repeated to keep it whole.
+ */
+const grimmoryQueryList = (value: string): string[] =>
+  value.includes(',') ? [value, value] : [value];
 
 export const describeReaderGroupingRule = (
   target: ReaderGroupingTarget
@@ -198,17 +274,33 @@ export class ReaderDeliveryApi extends ExternalAPI {
   }
 
   private async call<T>(
+    step: ReaderServiceStep,
     method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     endpoint: string,
     token?: string,
     body?: unknown,
     params?: Record<string, unknown>
   ): Promise<T> {
-    const response = await this.request<T>(method, endpoint, body, {
-      headers: token ? { Authorization: 'Bearer ' + token } : undefined,
-      params,
-      maxRedirects: 0,
-    });
+    let response: AxiosResponse<T>;
+    try {
+      response = await this.request<T>(method, endpoint, body, {
+        headers: token ? { Authorization: 'Bearer ' + token } : undefined,
+        params,
+        // Lists are sent as repeated keys (a=1&a=2), the form Spring binds.
+        paramsSerializer: { indexes: null },
+        maxRedirects: 0,
+      });
+    } catch (error) {
+      throw toReaderServiceError(step, error);
+    }
+    // A text answer, such as a web page, means the address is not the API.
+    // Only DELETE may answer with an empty body.
+    if (
+      typeof response.data === 'string' &&
+      (method !== 'DELETE' || response.data.trim() !== '')
+    ) {
+      throw new ReaderServiceError(step, 'not-api');
+    }
     return response.data;
   }
 
@@ -216,24 +308,46 @@ export class ReaderDeliveryApi extends ExternalAPI {
     provider: ReaderGroupingProvider,
     credentials: ReaderGroupingCredentials
   ): Promise<string> {
-    const payload =
-      provider === 'bookorbit'
-        ? {
-            ...credentials,
-            clientKind: 'native',
-            deviceLabel: 'SeerrNG',
-          }
-        : credentials;
-    const response = await this.call<unknown>(
-      'POST',
-      '/api/v1/auth/login',
-      undefined,
-      payload
-    );
+    const account = {
+      username: credentials.username,
+      password: credentials.password,
+    };
+    let response: unknown;
+    if (provider === 'bookorbit') {
+      try {
+        response = await this.call<unknown>(
+          'sign-in',
+          'POST',
+          '/api/v1/auth/login',
+          undefined,
+          { ...account, clientKind: 'native', deviceLabel: 'SeerrNG' }
+        );
+      } catch (error) {
+        // BookOrbit releases before 3.0 accept only a username and password.
+        if (!(error instanceof ReaderServiceError && error.status === 400)) {
+          throw error;
+        }
+        response = await this.call<unknown>(
+          'sign-in',
+          'POST',
+          '/api/v1/auth/login',
+          undefined,
+          account
+        );
+      }
+    } else {
+      response = await this.call<unknown>(
+        'sign-in',
+        'POST',
+        '/api/v1/auth/login',
+        undefined,
+        account
+      );
+    }
     const record = asRecord(response);
     const token = record?.accessToken ?? asRecord(record?.data)?.accessToken;
     if (typeof token !== 'string' || !token) {
-      throw new Error('Reader service did not return an access token.');
+      throw new ReaderServiceError('sign-in', 'unexpected');
     }
     return token;
   }
@@ -244,10 +358,9 @@ export class ReaderDeliveryApi extends ExternalAPI {
   ): Promise<unknown[]> {
     const endpoint =
       provider === 'grimmory' ? '/api/magic-shelves' : '/api/v1/smart-scopes';
-    const response = await this.call<unknown>('GET', endpoint, token);
+    const response = await this.call<unknown>('list', 'GET', endpoint, token);
     const values = getCollection(response);
-    if (!values)
-      throw new Error('Reader service returned an invalid grouping list.');
+    if (!values) throw new ReaderServiceError('list', 'unexpected');
     return values;
   }
 
@@ -259,14 +372,16 @@ export class ReaderDeliveryApi extends ExternalAPI {
     if (provider === 'grimmory') {
       const params: Record<string, unknown> = { page: 0, size: 5 };
       if (target.type === 'author') {
-        params.authors = JSON.stringify([target.name]);
+        params.authors = grimmoryQueryList(target.name);
       } else {
-        params.series = JSON.stringify([target.name]);
+        params.series = grimmoryQueryList(target.name);
       }
       if (target.type === 'comic-series') {
-        params.fileType = JSON.stringify(['CBR', 'CBZ', 'CB7']);
+        // Grimmory files CBR, CBZ, and CB7 archives under one CBX type.
+        params.fileType = ['CBX'];
       }
       const response = await this.call<unknown>(
+        'preview',
         'GET',
         '/api/v1/app/books',
         token,
@@ -275,13 +390,14 @@ export class ReaderDeliveryApi extends ExternalAPI {
       );
       const preview = parseReaderGroupingPreview(response, false);
       if (!preview) {
-        throw new Error('Grimmory returned an invalid match count.');
+        throw new ReaderServiceError('preview', 'unexpected');
       }
       return preview;
     }
 
     const filter = buildReaderGroupingFilter(provider, target);
     const response = await this.call<unknown>(
+      'preview',
       'POST',
       '/api/v1/books/query',
       token,
@@ -289,7 +405,7 @@ export class ReaderDeliveryApi extends ExternalAPI {
     );
     const preview = parseReaderGroupingPreview(response, false);
     if (!preview) {
-      throw new Error('BookOrbit returned an invalid match count.');
+      throw new ReaderServiceError('preview', 'unexpected');
     }
     return preview;
   }
@@ -319,7 +435,10 @@ export class ReaderDeliveryApi extends ExternalAPI {
             name: group.name,
             icon: 'books',
             filter: group.filter,
-            isPublic: group.isPublic,
+            // Visibility is set only on a new Smart Scope, so an update keeps
+            // the visibility chosen in BookOrbit. BookOrbit releases before
+            // 3.0 also require a default sort on a new Smart Scope.
+            ...(group.id ? {} : { defaultSort: [], isPublic: group.isPublic }),
             syncToKobo: group.syncToKobo,
           };
     const endpoint =
@@ -328,7 +447,9 @@ export class ReaderDeliveryApi extends ExternalAPI {
         : group.id
           ? '/api/v1/smart-scopes/' + encodeURIComponent(group.id)
           : '/api/v1/smart-scopes';
+    const step = group.id ? 'update' : 'create';
     const response = await this.call<unknown>(
+      step,
       provider === 'grimmory' ? 'POST' : group.id ? 'PATCH' : 'POST',
       endpoint,
       token,
@@ -336,7 +457,7 @@ export class ReaderDeliveryApi extends ExternalAPI {
     );
     const remoteId = getReaderGroupingRemoteId(response) ?? group.id;
     if (!remoteId) {
-      throw new Error('Reader service did not return a grouping ID.');
+      throw new ReaderServiceError(step, 'unexpected');
     }
     return remoteId;
   }
@@ -362,6 +483,7 @@ export class ReaderDeliveryApi extends ExternalAPI {
         ? '/api/v1/app/shelves/magic/' + encodeURIComponent(remoteId) + '/books'
         : '/api/v1/smart-scopes/' + encodeURIComponent(remoteId) + '/books';
     const response = await this.call<unknown>(
+      'count',
       'GET',
       endpoint,
       token,
@@ -370,7 +492,7 @@ export class ReaderDeliveryApi extends ExternalAPI {
     );
     const count = getCount(response, false);
     if (count === undefined) {
-      throw new Error('Reader service did not return a grouping count.');
+      throw new ReaderServiceError('count', 'unexpected');
     }
     return count;
   }
@@ -384,6 +506,6 @@ export class ReaderDeliveryApi extends ExternalAPI {
       provider === 'grimmory'
         ? '/api/magic-shelves/' + encodeURIComponent(remoteId)
         : '/api/v1/smart-scopes/' + encodeURIComponent(remoteId);
-    await this.call<unknown>('DELETE', endpoint, token);
+    await this.call<unknown>('delete', 'DELETE', endpoint, token);
   }
 }
