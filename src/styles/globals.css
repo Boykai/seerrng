@@ -4946,31 +4946,51 @@
   /* Untyped and other text-entry inputs use the theme control tokens so their
      text stays readable in every palette and mode. Zero specificity lets
      settings, owner and utility rules keep precedence. */
-  input:where(
-    :not([type]),
-    [type='number'],
-    [type='url'],
-    [type='email'],
-    [type='tel']
+  :where(
+    input:not([type]),
+    input[type='number'],
+    input[type='url'],
+    input[type='email'],
+    input[type='tel']
   ) {
-    @apply rounded-md border transition duration-150 ease-in-out sm:text-sm;
+    border-width: 1px;
+    border-style: solid;
     border-color: rgb(var(--theme-control-border) / 0.75);
+    border-radius: var(--control-corner-radius);
     background-color: rgb(var(--theme-control-surface) / 0.78);
     color: rgb(var(--theme-control-text));
+    transition:
+      color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  input:where(
-      :not([type]),
-      [type='number'],
-      [type='url'],
-      [type='email'],
-      [type='tel'],
-      [type='search']
-    )::placeholder {
+  @media (min-width: 640px) {
+    :where(
+      input:not([type]),
+      input[type='number'],
+      input[type='url'],
+      input[type='email'],
+      input[type='tel']
+    ) {
+      font-size: var(--text-sm);
+      line-height: 1.25rem;
+    }
+  }
+
+  :where(
+    input:not([type]),
+    input[type='number'],
+    input[type='url'],
+    input[type='email'],
+    input[type='tel'],
+    input[type='search']
+  )::placeholder {
     color: rgb(var(--theme-control-text) / 0.85);
   }
 
-  input:where([type='search']) {
+  :where(input[type='search']) {
     background-color: rgb(var(--theme-control-surface) / 0.78);
     color: rgb(var(--theme-control-text));
   }

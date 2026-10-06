@@ -7,15 +7,47 @@ const css = readFileSync(new URL('./globals.css', import.meta.url), 'utf8');
 const contract = styleContract(css);
 
 const textEntry =
-  "input:where( :not([type]), [type='number'], [type='url'], [type='email'], [type='tel'] )";
+  ":where( input:not([type]), input[type='number'], input[type='url'], input[type='email'], input[type='tel'] )";
 const textEntryPlaceholder =
-  "input:where( :not([type]), [type='number'], [type='url'], [type='email'], [type='tel'], [type='search'] )::placeholder";
-const search = "input:where([type='search'])";
+  ":where( input:not([type]), input[type='number'], input[type='url'], input[type='email'], input[type='tel'], input[type='search'] )::placeholder";
+const search = ":where(input[type='search'])";
 const settingsInput =
   ".settings-page-content input:not([type='checkbox']):not([type='radio'])";
 
+const inMedia = (rule, params) =>
+  rule.parent?.type === 'atrule' &&
+  rule.parent.name === 'media' &&
+  rule.parent.params === params;
+
+const baseRules = (selector) =>
+  contract.rulesFor(selector).filter((rule) => rule.parent?.name !== 'media');
+
+const declarationIn = (rules, property) =>
+  rules
+    .flatMap((rule) => rule.nodes)
+    .filter((node) => node.type === 'decl' && node.prop === property)
+    .at(-1)?.value;
+
+// Removes top-level :where() groups; what remains carries specificity.
+const outsideWhere = (selector) => {
+  let rest = '';
+  let depth = 0;
+  for (let i = 0; i < selector.length; i += 1) {
+    if (depth === 0 && selector.startsWith(':where(', i)) {
+      depth = 1;
+      i += ':where('.length - 1;
+    } else if (depth > 0) {
+      if (selector[i] === '(') depth += 1;
+      if (selector[i] === ')') depth -= 1;
+    } else {
+      rest += selector[i];
+    }
+  }
+  return rest.trim();
+};
+
 test('untyped, number, url, email and tel inputs use the theme control colors', () => {
-  assert.equal(contract.rulesFor(textEntry).length, 1);
+  assert.equal(baseRules(textEntry).length, 1);
   assert.equal(
     contract.declaration(textEntry, 'color'),
     'rgb(var(--theme-control-text))'
@@ -28,21 +60,61 @@ test('untyped, number, url, email and tel inputs use the theme control colors', 
     contract.declaration(textEntry, 'border-color'),
     'rgb(var(--theme-control-border) / 0.75)'
   );
-  const applied = contract.applies(textEntry);
-  for (const utility of ['rounded-md', 'border', 'transition', 'sm:text-sm']) {
-    assert.ok(applied.has(utility), `${utility} is applied`);
-  }
 });
 
-test('the text-entry rule leaves layout and owners in control', () => {
-  const applied = contract.applies(textEntry);
-  for (const utility of ['block', 'w-full', 'flex-1', 'sm:leading-5']) {
-    assert.ok(!applied.has(utility), `${utility} is not applied`);
+test('text-entry inputs share the control border, corner and transition', () => {
+  const rules = baseRules(textEntry);
+  assert.equal(declarationIn(rules, 'border-width'), '1px');
+  assert.equal(declarationIn(rules, 'border-style'), 'solid');
+  assert.equal(
+    declarationIn(rules, 'border-radius'),
+    'var(--control-corner-radius)'
+  );
+  const transition = declarationIn(rules, 'transition');
+  for (const property of [
+    'color',
+    'background-color',
+    'border-color',
+    'box-shadow',
+  ]) {
+    assert.match(
+      transition,
+      new RegExp(
+        `(^|,)\\s*${property} 150ms cubic-bezier\\(0\\.4, 0, 0\\.2, 1\\)`
+      ),
+      `${property} transitions over 150ms`
+    );
   }
-  for (const property of ['display', 'width', 'height', 'padding']) {
-    assert.equal(contract.declaration(textEntry, property), undefined);
+  assert.equal(declarationIn(rules, 'font-size'), undefined);
+  assert.equal(declarationIn(rules, 'line-height'), undefined);
+
+  const wide = contract
+    .rulesFor(textEntry)
+    .filter((rule) => inMedia(rule, '(min-width: 640px)'));
+  assert.equal(wide.length, 1);
+  assert.equal(declarationIn(wide, 'font-size'), 'var(--text-sm)');
+  assert.equal(declarationIn(wide, 'line-height'), '1.25rem');
+});
+
+test('the text-entry rules are authored CSS with zero specificity and no layout', () => {
+  for (const selector of [textEntry, textEntryPlaceholder, search]) {
+    const rules = contract.rulesFor(selector);
+    assert.ok(rules.length > 0, selector);
+    assert.equal(contract.applies(selector).size, 0, `${selector} uses @apply`);
+    for (const property of [
+      'display',
+      'width',
+      'flex',
+      'height',
+      'padding',
+      'margin',
+    ]) {
+      assert.equal(declarationIn(rules, property), undefined, property);
+    }
   }
-  // Zero specificity: owner classes and settings rules keep precedence.
+  assert.equal(outsideWhere(textEntry), '');
+  assert.equal(outsideWhere(search), '');
+  assert.equal(outsideWhere(textEntryPlaceholder), '::placeholder');
   for (const selector of [
     'input:not([type])',
     "input[type='number']",
@@ -67,7 +139,6 @@ test('text-entry and search placeholders stay readable on the control surface', 
     'rgb(var(--theme-control-text))'
   );
   assert.equal(contract.declaration(search, 'border-color'), undefined);
-  assert.equal(contract.applies(search).size, 0);
   assert.equal(
     contract.declaration('.app-filter-search-input::placeholder', 'color'),
     'rgb(var(--color-gray-500))'
@@ -75,9 +146,10 @@ test('text-entry and search placeholders stay readable on the control surface', 
 });
 
 test('typed text inputs and settings inputs keep their own owners', () => {
-  const typed = contract.applies("input[type='text']");
-  for (const utility of ['block', 'w-full', 'bg-gray-700', 'text-white']) {
-    assert.ok(typed.has(utility), `${utility} stays on typed text inputs`);
+  assert.equal(contract.rulesFor("input[type='text']").length, 1);
+  assert.equal(contract.rulesFor("input[type='password']").length, 1);
+  for (const selector of [textEntry, textEntryPlaceholder, search]) {
+    assert.doesNotMatch(selector, /type='(text|password)'/, selector);
   }
   assert.equal(
     contract.declaration(settingsInput, 'background-color'),
