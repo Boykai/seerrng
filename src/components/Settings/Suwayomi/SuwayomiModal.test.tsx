@@ -506,6 +506,42 @@ it('marks invalid connection fields instead of testing', async () => {
   expect(text()).not.toContain('You must provide a valid port number');
 });
 
+it('starts no test for values edited while the fields validate', async () => {
+  await render();
+  await type('hostname', 'old.test');
+  const hostname = field('hostname');
+
+  await act(async () => {
+    button('modal-secondary-button').dispatchEvent(
+      new dom.window.MouseEvent('click', { bubbles: true })
+    );
+    Object.getOwnPropertyDescriptor(
+      dom.window.HTMLInputElement.prototype,
+      'value'
+    )!.set!.call(hostname, 'new.test');
+    hostname.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  });
+  await flush();
+  expect(state.post).not.toHaveBeenCalled();
+  expect(saveDisabled()).toBe(true);
+
+  state.post.mockResolvedValue(passed());
+  await act(async () => {
+    for (let i = 0; i < 2; i += 1) {
+      button('modal-secondary-button').dispatchEvent(
+        new dom.window.MouseEvent('click', { bubbles: true })
+      );
+    }
+  });
+  await flush();
+  expect(state.post).toHaveBeenCalledTimes(1);
+  expect(state.post).toHaveBeenCalledWith(
+    '/api/v1/settings/suwayomi/test',
+    expect.objectContaining({ hostname: 'new.test' }),
+    expect.anything()
+  );
+});
+
 it('marks an empty name on Save instead of saving', async () => {
   await render();
   await type('hostname', 'suwayomi.test');

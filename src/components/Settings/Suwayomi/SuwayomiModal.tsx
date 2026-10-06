@@ -331,9 +331,10 @@ const SuwayomiModal = ({ suwayomi, onClose, onSave }: SuwayomiModalProps) => {
 
   useEffect(() => () => testRequest.current?.abort(), []);
 
-  const testConnection = async (values: SuwayomiFormValues) => {
-    const controller = new AbortController();
-    testRequest.current = controller;
+  const testConnection = async (
+    values: SuwayomiFormValues,
+    controller: AbortController
+  ) => {
     setIsTesting(true);
     try {
       const { data } = await axios.post<unknown>(
@@ -486,15 +487,22 @@ const SuwayomiModal = ({ suwayomi, onClose, onSave }: SuwayomiModalProps) => {
             }
           };
 
-          // Marks the missing or invalid test fields instead of testing.
+          // Marks the missing or invalid test fields instead of testing. The
+          // attempt is registered first, so an edit, Cancel or another Test
+          // during validation aborts it before any request starts.
           const startTest = async () => {
+            abortTest();
+            const controller = new AbortController();
+            testRequest.current = controller;
             const errors = await validateForm();
+            if (controller.signal.aborted) return;
             const invalid = TEST_FIELDS.filter((field) => errors[field]);
             if (invalid.length > 0) {
+              testRequest.current = null;
               invalid.forEach((field) => setFieldTouched(field, true, false));
               return;
             }
-            await testConnection(values);
+            await testConnection(values, controller);
           };
 
           return (
