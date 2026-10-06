@@ -36,9 +36,11 @@ export type MangaResolveListStatus =
 export type MangaResolveReason =
   // BOUND
   | 'EXACT_LINK'
+  | 'LIBRARY_MATCH'
   | 'EXISTING_BINDING'
   | 'ADMIN_BIND'
   // NEEDS_PICK
+  | 'LIBRARY_UNCONFIRMED'
   | 'MANGADEX_AMBIGUOUS'
   | 'EXACT_IN_LIBRARY'
   | 'EXACT_BOUND_ELSEWHERE'

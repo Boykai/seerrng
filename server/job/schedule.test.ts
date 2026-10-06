@@ -1,9 +1,12 @@
 import { MediaServerType } from '@server/constants/server';
 import downloadRecovery from '@server/lib/downloadRecovery';
 import episodeWatchAhead from '@server/lib/episodeWatchAhead';
+import { mangaSourceResolver } from '@server/lib/mangaResolver';
+import { wakeMangaSourceResolve } from '@server/lib/mangaResolver/wake';
 import requestAdmissionCoordinator, {
   RequestAdmissionCoordinator,
 } from '@server/lib/requestAdmission';
+import { mangaLibraryScanner } from '@server/lib/scanners/manga/suwayomi';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { setupTestDb } from '@server/test/db';
@@ -12,7 +15,14 @@ import assert from 'node:assert/strict';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { afterEach, describe, it, mock } from 'node:test';
 import type { DataSource, QueryRunner } from 'typeorm';
-import { runTrackedJob, scheduledJobs, startJobs, stopJobs } from './schedule';
+import {
+  isTrackedJobRunning,
+  runTrackedJob,
+  scheduledJobs,
+  startJobs,
+  startScheduledJobNow,
+  stopJobs,
+} from './schedule';
 
 setupTestDb();
 
@@ -149,6 +159,48 @@ describe('scheduled job lifecycle', () => {
     assert.equal(resolveJob.cronSchedule, '0 */10 * * * *');
     assert.equal(typeof resolveJob.cancelFn, 'function');
     assert.equal(resolveJob.running?.(), false);
+  });
+
+  it('starts an enabled job at once unless it is already running', async () => {
+    const settings = getSettings();
+    const job = settings.jobs['manga-library-scan'];
+    const previous = job.enabled;
+    let finish: () => void = () => undefined;
+    let scans = 0;
+    let resolves = 0;
+    mock.method(mangaLibraryScanner, 'run', () => {
+      scans += 1;
+      return new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    });
+    mock.method(mangaSourceResolver, 'run', async () => {
+      resolves += 1;
+    });
+
+    try {
+      assert.equal(startScheduledJobNow('manga-library-scan'), false);
+      wakeMangaSourceResolve();
+      startJobs();
+
+      assert.equal(startScheduledJobNow('manga-library-scan'), true);
+      await waitFor(() => scans === 1);
+      assert.equal(startScheduledJobNow('manga-library-scan'), false);
+      finish();
+      await waitFor(() => !isTrackedJobRunning('Manga Library Scan'));
+      job.enabled = false;
+      assert.equal(startScheduledJobNow('manga-library-scan'), false);
+      assert.equal(scans, 1);
+
+      // An approved request wakes the source resolve the same way.
+      wakeMangaSourceResolve();
+      await waitFor(() => resolves === 1);
+      assert.equal(resolves, 1);
+    } finally {
+      finish();
+      if (previous === undefined) delete job.enabled;
+      else job.enabled = previous;
+    }
   });
 
   it('registers the manga dispatch sweep as a five-minute process task', () => {

@@ -366,6 +366,7 @@ it('posts each scope with exactly its own fields', async () => {
       mediaType: 'manga',
       mediaId: 30013,
       mangaScope: { scope: MangaRequestScope.ALL_AT_DISPATCH },
+      mangaFollow: true,
     },
   ]);
   expect(posted()).toStrictEqual([
@@ -765,22 +766,21 @@ const followedRequest = (
     ...values,
   });
 
-it('offers following new chapters Off by default and sends nothing for it', async () => {
+it('offers following new chapters On by default and sends it with the request', async () => {
   state.post.mockResolvedValue({ data: {} });
   await render();
 
   expect(followListbox()?.dataset.label).toBe('Follow New Chapters');
-  expect(followListbox()?.dataset.value).toBe('off');
+  expect(followListbox()?.dataset.value).toBe('on');
   expect(followOptions()).toEqual(['off', 'on']);
-  expect(text()).toContain(
-    'This option is Off by default for every manga request.'
-  );
+  expect(text()).toContain('The request form starts with this option On.');
   await submit();
 
   expect(state.post).toHaveBeenCalledExactlyOnceWith('/api/v1/request', {
     mediaType: 'manga',
     mediaId: 30013,
     mangaScope: { scope: MangaRequestScope.ALL_AT_DISPATCH },
+    mangaFollow: true,
   });
 });
 
@@ -788,13 +788,13 @@ it('sends the requester’s choice to follow new chapters with the request', asy
   state.post.mockResolvedValue({ data: {} });
   await render();
 
-  await chooseFollow('on');
-  expect(followListbox()?.dataset.value).toBe('on');
+  await chooseFollow('off');
+  expect(followListbox()?.dataset.value).toBe('off');
   await click(radio('Latest chapters'));
   await type('Number of chapters', '5');
   await submit();
 
-  await chooseFollow('off');
+  await chooseFollow('on');
   await submit();
 
   expect(state.post.mock.calls.map((call) => call[1])).toStrictEqual([
@@ -802,12 +802,12 @@ it('sends the requester’s choice to follow new chapters with the request', asy
       mediaType: 'manga',
       mediaId: 30013,
       mangaScope: { scope: MangaRequestScope.LATEST_N, latestCount: 5 },
-      mangaFollow: true,
     },
     {
       mediaType: 'manga',
       mediaId: 30013,
       mangaScope: { scope: MangaRequestScope.LATEST_N, latestCount: 5 },
+      mangaFollow: true,
     },
   ]);
   expect(state.put).not.toHaveBeenCalled();

@@ -32,12 +32,18 @@ export const MANGA_BINDING_ORIGIN_ADMIN = 'admin';
 export const MANGA_MATCHED_BY_ANILIST_TRACKER = 'anilist-tracker';
 export const MANGA_MATCHED_BY_MAL_TRACKER = 'mal-tracker';
 export const MANGA_MATCHED_BY_MANGADEX_LINK = 'mangadex-link';
-/** An admin confirmed the title proposal. */
+/**
+ * An admin confirmed the title proposal; with the resolver's origin, the
+ * requested title had one clear match in the library.
+ */
 export const MANGA_MATCHED_BY_TITLE = 'title';
 /** An admin chose the AniList title. */
 export const MANGA_MATCHED_BY_MANUAL = 'manual';
 
-/** The source resolver bound a requested title through an exact link. */
+/**
+ * The source resolver bound a requested title: through an exact link, or to
+ * a library manga that a tracker record or one clear title match names.
+ */
 export const MANGA_BINDING_ORIGIN_RESOLVER = 'resolver';
 
 /** The `urlHash` of bindings and candidates: SHA-256 of the URL, in hex. */

@@ -31,6 +31,7 @@ export const messages = defineMessages('components.Settings.MangaLibrary', {
   malTracker: 'MyAnimeList Tracker Link',
   mangadexLink: 'Matched with data from <link>MangaDex</link>',
   confirmedByAdmin: 'Confirmed by an Admin',
+  matchedForRequest: 'Title Match for a Request',
   chosenByAdmin: 'Chosen by an Admin',
   bindTip:
     'Search AniList and choose the title that matches this library title.',

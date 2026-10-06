@@ -600,6 +600,25 @@ describe('MangaLibrary', () => {
     expect(host.querySelector('img')).toBeNull();
   });
 
+  it('says when a title match was made for a request', async () => {
+    state.responses.set(
+      BINDINGS,
+      page([
+        binding(4, {
+          matchedBy: 'title',
+          confidence: 'HIGH',
+          origin: 'resolver',
+        }),
+      ])
+    );
+    state.responses.set('/api/v1/manga?ids=204', summaries([204]));
+    await render();
+
+    expect(
+      rows(1).map((row) => row.querySelectorAll('td')[2].textContent)
+    ).toEqual(['Title Match for a RequestHigh Confidence']);
+  });
+
   it('shows availability and the actions each binding state allows', async () => {
     await render();
 

@@ -5,6 +5,7 @@ import {
   mangaTitleSimilarity,
   normalizeMangaTitle,
   proposeMangaMatch,
+  scoreMangaTitle,
 } from '@server/lib/mangaTitleMatch';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -242,4 +243,29 @@ describe('proposeMangaMatch', () => {
       assert.deepEqual(proposeMangaMatch(title, results, rejected), expected)
     );
   }
+});
+
+describe('scoreMangaTitle', () => {
+  const title = result(1, 'Gousei Taitoru', {
+    titles: { romaji: 'Gousei Taitoru', english: 'Synthetic Title' },
+    synonyms: ['Synthetic Synonym, Might & More'],
+  });
+
+  it('scores a library title against the best name or synonym', () => {
+    assert.equal(scoreMangaTitle('Synthetic Title (2018)', title), 1000);
+    assert.equal(scoreMangaTitle('GOUSEI TAITORU', title), 1000);
+    assert.equal(
+      scoreMangaTitle('Synthetic Synonym, Might & More', title),
+      1000
+    );
+    assert.equal(
+      scoreMangaTitle('Synthetic Synonym Might and More', title),
+      875
+    );
+    assert.equal(scoreMangaTitle('Unrelated Words', title) < 750, true);
+  });
+
+  it('scores a title without letters or digits as 0', () => {
+    assert.equal(scoreMangaTitle('(2018) ...', title), 0);
+  });
 });

@@ -12,6 +12,7 @@ import { mangaFollowPoller } from '@server/lib/mangaFollow';
 import { mangaPlanningImporter } from '@server/lib/mangaPlanningImport';
 import { mangaProgressPoller } from '@server/lib/mangaProgress';
 import { mangaSourceResolver } from '@server/lib/mangaResolver';
+import { setMangaSourceResolveStarter } from '@server/lib/mangaResolver/wake';
 import refreshToken from '@server/lib/refreshToken';
 import { captureReleaseCalendarHistory } from '@server/lib/releaseCalendar/history';
 import { reconcileActiveRequests } from '@server/lib/requestStatus';
@@ -145,6 +146,34 @@ export const isTrackedJobRunning = (name: string): boolean =>
   activeJobRunsByName.has(name);
 
 let stopJobsPromise: Promise<void> | undefined;
+
+/**
+ * Starts a loaded, enabled job now, as Run Now does, unless it is already
+ * running. Returns whether it started. Never waits for the run, which starts
+ * in the jobs' own async scope, outside the caller's admissions.
+ */
+export const startScheduledJobNow = (id: JobId): boolean => {
+  const scheduledJob = scheduledJobs.find((job) => job.id === id);
+  if (
+    stopJobsPromise ||
+    !scheduledJob ||
+    getSettings().jobs[id]?.enabled === false ||
+    scheduledJob.running?.() ||
+    isTrackedJobRunning(scheduledJob.name)
+  ) {
+    return false;
+  }
+  try {
+    jobScope.runInAsyncScope(() => scheduledJob.job.invoke());
+    return true;
+  } catch (error) {
+    logger.warn(`Scheduled job could not start: ${scheduledJob.name}`, {
+      label: 'Jobs',
+      errorName: error instanceof Error ? error.name : 'UNKNOWN',
+    });
+    return false;
+  }
+};
 
 export const stopJobs = (): Promise<void> => {
   if (stopJobsPromise) {
@@ -522,7 +551,8 @@ export const startJobs = (): void => {
     cancelFn: () => mangaLibraryScanner.cancel(),
   });
 
-  // Binds requested manga to Suwayomi sources; only exact links bind alone.
+  // Binds requested manga to the library or to Suwayomi sources; only exact
+  // evidence or one clear library title match binds alone.
   scheduledJobs.push({
     id: 'manga-source-resolve',
     name: 'Manga Source Resolve',
@@ -539,6 +569,9 @@ export const startJobs = (): void => {
     }),
     running: () => mangaSourceResolver.status().running,
     cancelFn: () => mangaSourceResolver.cancel(),
+  });
+  setMangaSourceResolveStarter(() => {
+    startScheduledJobNow('manga-source-resolve');
   });
 
   scheduledJobs.push({

@@ -296,6 +296,21 @@ it('shows request managers the waiting-for-a-source hint', async () => {
   );
 });
 
+it('shows what an administrator needs to do for a waiting request that needs attention', async () => {
+  state.granted = [Permission.MANAGE_REQUESTS];
+  const item = mangaItem({ mangaScope: scope({ awaitingBinding: true }) });
+  const message =
+    'An administrator needs to select sources under Settings → Services → Suwayomi.';
+  Object.assign(item.status, { message, needsAttention: true });
+
+  await render(item);
+
+  expect(chip()?.textContent).toBe('Waiting for a source');
+  expect(chip()?.getAttribute('aria-label')).toBe(
+    `Waiting for a source: ${message}`
+  );
+});
+
 const sourceButton = () =>
   host.querySelector(
     '.request-status-action-row a[href^="/settings/manga-sources"]'

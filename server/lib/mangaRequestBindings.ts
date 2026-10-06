@@ -1,4 +1,7 @@
-import { MangaRequestBindingState } from '@server/constants/mangaRequest';
+import {
+  MANGA_PARKED_CODES,
+  MangaRequestBindingState,
+} from '@server/constants/mangaRequest';
 import { MediaRequestStatus, MediaType } from '@server/constants/media';
 import dataSource from '@server/datasource';
 import MangaRequestManifest from '@server/entity/MangaRequestManifest';
@@ -68,6 +71,16 @@ const bindSlice = async (
       .execute();
     if (result.affected === 1) {
       moved.push(Number(requestId));
+      // A bound request no longer waits for an administrator.
+      await manager
+        .createQueryBuilder()
+        .update(MangaRequestManifest)
+        .set({ lastError: null })
+        .where('"id" = :id', { id: Number(id) })
+        .andWhere('"lastError" IN (:...parked)', {
+          parked: [...MANGA_PARKED_CODES],
+        })
+        .execute();
     }
   }
   return moved;

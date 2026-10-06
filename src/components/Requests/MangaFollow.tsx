@@ -23,7 +23,7 @@ import { useIntl } from 'react-intl';
 const messages = defineMessages('components.Requests.MangaFollow', {
   label: 'Follow New Chapters',
   description:
-    'This option is Off by default for every manga request. If you turn it on, SeerrNG checks for new chapters that fit this request and queues them for download, so a completed request goes back to downloading while they arrive. Only the requester can turn it on; the requester or a user who can manage requests can turn it off. New chapters use this request’s approval and do not count against your request quota. Turning it off stops future additions but does not cancel chapters already added.',
+    'The request form starts with this option On. While it is on, SeerrNG checks for new chapters that fit this request and queues them for download, so a completed request goes back to downloading while they arrive. Only the requester can turn it on; the requester or a user who can manage requests can turn it off. New chapters use this request’s approval and do not count against your request quota. Turning it off stops future additions but does not cancel chapters already added.',
   off: 'Off',
   on: 'On',
   updated: 'Following new chapters updated.',
@@ -275,8 +275,8 @@ interface MangaFollowFieldProps {
 }
 
 /**
- * The choice in a new manga request: Off by default, and sent with the
- * request only when the requester turns it on.
+ * The choice in a new manga request: On by default, and sent with the
+ * request only while it is on.
  */
 export const MangaFollowField = ({
   enabled,

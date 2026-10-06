@@ -28,6 +28,9 @@ export const messages = defineMessages('components.Settings.MangaSources', {
   excluded: 'Excluded',
   bound: 'Bound',
   existingBinding: 'The title already had a library match.',
+  libraryMatch: 'The title was found in the Suwayomi library.',
+  libraryUnconfirmed:
+    'The Suwayomi library may have this title. Confirm the match on the Manga Library page.',
   mangadexAmbiguous: 'Several MangaDex entries list this title.',
   exactInLibrary: 'The exact match is already in the Suwayomi library.',
   exactBoundElsewhere: 'The exact match is used by another title.',
@@ -125,6 +128,8 @@ const reasonMessages: Record<
   MessageDescriptor
 > = {
   EXISTING_BINDING: messages.existingBinding,
+  LIBRARY_MATCH: messages.libraryMatch,
+  LIBRARY_UNCONFIRMED: messages.libraryUnconfirmed,
   MANGADEX_AMBIGUOUS: messages.mangadexAmbiguous,
   EXACT_IN_LIBRARY: messages.exactInLibrary,
   EXACT_BOUND_ELSEWHERE: messages.exactBoundElsewhere,

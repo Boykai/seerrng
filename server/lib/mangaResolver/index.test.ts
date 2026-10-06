@@ -15,6 +15,7 @@ import {
   MediaType,
 } from '@server/constants/media';
 import dataSource, { getRepository } from '@server/datasource';
+import MangaMatchCandidate from '@server/entity/MangaMatchCandidate';
 import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import MangaSourceBinding, {
   MangaBindingConfidence,
@@ -33,6 +34,7 @@ import {
   findMangaMedia,
   getMangaAdmissionKey,
 } from '@server/lib/mangaMedia';
+import { syncMangaRequestBindings } from '@server/lib/mangaRequestBindings';
 import { DEFAULT_MANGA_REQUEST_SCOPE } from '@server/lib/mangaRequests';
 import {
   MangaSourceResolver,
@@ -51,10 +53,12 @@ import { invalidateSuwayomiClients } from '@server/lib/suwayomi/clientFactory';
 import { setupTestDb } from '@server/test/db';
 import {
   capabilitiesData,
+  fakeLibraryManga,
   graphqlData,
   graphqlErrors,
   startFakeSuwayomi,
   syntheticFailure,
+  type FakeLibraryManga,
   type FakeReply,
   type FakeSuwayomi,
 } from '@server/test/fakeSuwayomi';
@@ -204,11 +208,14 @@ const serve = async ({
   search = () => [],
   capabilities = capabilitiesData(),
   instance = {},
+  library = [],
 }: {
   sources: FakeSource[];
   search?: (sourceId: string, query: string) => SearchReply;
   capabilities?: FakeReply;
   instance?: Partial<SuwayomiSettings>;
+  /** The server's library; empty by default. */
+  library?: FakeLibraryManga[] | FakeReply;
 }): Promise<FakeSuwayomi> => {
   const server = await startFakeSuwayomi({
     mode: 'NONE',
@@ -219,6 +226,41 @@ const serve = async ({
   server.onOperation('Capabilities', () => {
     outside('suwayomi');
     return capabilities;
+  });
+  server.onOperation('LibraryPage', () => {
+    outside('suwayomi');
+    if (!Array.isArray(library)) return library;
+    return graphqlData({
+      mangas: {
+        totalCount: library.length,
+        pageInfo: { hasNextPage: false, endCursor: null },
+        nodes: library.map((manga) => ({
+          id: manga.id,
+          sourceId: manga.sourceId,
+          url: manga.url,
+          title: manga.title,
+          downloadCount: 0,
+          hasDuplicateChapters: false,
+          chapters: { totalCount: 0 },
+        })),
+      },
+    });
+  });
+  server.onOperation('LibraryTrackRecords', (sent) => {
+    outside('suwayomi');
+    const ids = new Set(
+      (Array.isArray(sent.variables.ids) ? sent.variables.ids : []).map(Number)
+    );
+    return graphqlData({
+      mangas: {
+        nodes: (Array.isArray(library) ? library : [])
+          .filter((manga) => ids.has(manga.id))
+          .map((manga) => ({
+            id: manga.id,
+            trackRecords: { nodes: manga.trackRecords ?? [] },
+          })),
+      },
+    });
   });
   server.onOperation('Sources', () => {
     outside('suwayomi');
@@ -1803,5 +1845,383 @@ describe('manga source resolver: probe memory', () => {
         [T2, '1002'],
       ]
     );
+  });
+});
+
+describe('manga source resolver: library', () => {
+  const trackerCapabilities = capabilitiesData({
+    mangaFields: ['id', 'title', 'trackRecords'],
+  });
+  const libraryState = async () =>
+    (await bindings()).map(
+      ({
+        anilistId,
+        sourceId,
+        url,
+        suwayomiMangaId,
+        confidence,
+        matchedBy,
+        origin,
+        state,
+        inLibrary,
+      }) => ({
+        anilistId,
+        sourceId,
+        url,
+        suwayomiMangaId,
+        confidence,
+        matchedBy,
+        origin,
+        state,
+        inLibrary,
+      })
+    );
+  const proposals = async () =>
+    (
+      await getRepository(MangaMatchCandidate).find({
+        order: { suwayomiMangaId: 'ASC' },
+      })
+    ).map(
+      ({
+        suwayomiMangaId,
+        proposedAnilistId,
+        proposalConfidence,
+        proposalScore,
+      }) => ({
+        suwayomiMangaId,
+        proposedAnilistId,
+        proposalConfidence,
+        proposalScore,
+      })
+    );
+  const manifest = (requestId: number) =>
+    getRepository(MangaRequestManifest).findOneByOrFail({ requestId });
+  const boundToLibrary = {
+    status: 'BOUND',
+    reason: 'LIBRARY_MATCH',
+    mangadexUuid: null,
+    attempts: 0,
+    nextAttemptAt: null,
+    lastError: null,
+  };
+
+  // An exact link on a selected source must not take a title away from its
+  // library copy, which the request would otherwise wait on as "searching".
+  it('binds a library copy that the title clearly matches before any source search', async () => {
+    const requestId = await seedRequest(T1);
+    link(T1, U1);
+    await serve({
+      sources: [{ id: '1001' }],
+      search: probeFinds(U1, exactHit(101, U1)),
+      library: [
+        fakeLibraryManga(501, {
+          sourceId: '2001',
+          title: `${englishOf(T1)} (2018)`,
+        }),
+        fakeLibraryManga(502),
+      ],
+    });
+    queued = [];
+
+    await resolver().run();
+
+    assert.deepEqual([mangadexCalls, searches], [[], []]);
+    assert.deepEqual(await libraryState(), [
+      {
+        anilistId: T1,
+        sourceId: '2001',
+        url: '/fake-library/501',
+        suwayomiMangaId: 501,
+        confidence: 'HIGH',
+        matchedBy: 'title',
+        origin: 'resolver',
+        state: 'ACTIVE',
+        inLibrary: true,
+      },
+    ]);
+    assert.equal(await manifestOf(requestId), BOUND);
+    assert.deepEqual(queued, [{ requestId, depth: 0 }]);
+    assert.deepEqual(await stateOf(T1), boundToLibrary);
+    assert.deepEqual(await proposals(), []);
+  });
+
+  // With no source selected, the request would otherwise stay "approved".
+  it('binds a library copy when no source is selected', async () => {
+    const requestId = await seedRequest(T1);
+    anilistReplies.set(
+      T1,
+      details(T1, { synonyms: ['Synthetic Synonym, Might & More'] })
+    );
+    await serve({
+      sources: [],
+      library: [
+        fakeLibraryManga(501, { title: 'Synthetic Synonym, Might & More' }),
+      ],
+    });
+
+    await resolver().run();
+
+    assert.deepEqual(searches, []);
+    assert.equal((await libraryState())[0]?.suwayomiMangaId, 501);
+    assert.equal(await manifestOf(requestId), BOUND);
+    assert.equal((await manifest(requestId)).lastError, null);
+    assert.deepEqual(await stateOf(T1), boundToLibrary);
+  });
+
+  it('binds the entry whose AniList tracker record names the title', async () => {
+    const requestId = await seedRequest(T1);
+    await serve({
+      sources: [{ id: '1001' }],
+      capabilities: trackerCapabilities,
+      library: [
+        fakeLibraryManga(501, { title: englishOf(T1) }),
+        fakeLibraryManga(502, {
+          title: 'Synthetic Unrelated Name',
+          trackRecords: [{ trackerId: 2, remoteId: String(T1) }],
+        }),
+      ],
+    });
+
+    await resolver().run();
+
+    assert.deepEqual(searches, []);
+    const [binding] = await libraryState();
+    assert.deepEqual(
+      [binding?.suwayomiMangaId, binding?.confidence, binding?.matchedBy],
+      [502, 'TRACKER_LINK', 'anilist-tracker']
+    );
+    assert.equal(await manifestOf(requestId), BOUND);
+  });
+
+  it('never binds an entry that a tracker record gives to another title', async () => {
+    await seedRequest(T1);
+    await serve({
+      sources: [{ id: '1001' }],
+      capabilities: trackerCapabilities,
+      library: [
+        fakeLibraryManga(501, {
+          title: englishOf(T1),
+          trackRecords: [{ trackerId: 2, remoteId: String(OTHER_TITLE) }],
+        }),
+      ],
+    });
+
+    await resolver().run();
+
+    assert.deepEqual(await bindings(), []);
+    assert.deepEqual(await proposals(), []);
+    assert.notDeepEqual(searches, []);
+    assert.equal((await stateOf(T1)).reason, 'NO_CANDIDATES');
+  });
+
+  it('never binds an entry whose pair with the title was rejected', async () => {
+    const requestId = await seedRequest(T1);
+    await seedBinding(T1, '/fake-library/501', {
+      sourceId: '0',
+      suwayomiMangaId: 501,
+      state: MangaBindingState.REJECTED,
+      inLibrary: false,
+    });
+    await serve({
+      sources: [],
+      library: [fakeLibraryManga(501, { title: englishOf(T1) })],
+    });
+
+    await resolver().run();
+
+    assert.deepEqual(
+      (await bindings()).map(({ state }) => state),
+      [MangaBindingState.REJECTED]
+    );
+    assert.deepEqual(await proposals(), []);
+    assert.equal(await manifestOf(requestId), AWAITING_BINDING);
+  });
+
+  it('asks an admin to confirm a library match that is not clear', async () => {
+    const requestId = await seedRequest(T1);
+    await serve({
+      sources: [{ id: '1001' }],
+      library: [
+        fakeLibraryManga(501, { title: englishOf(T1) }),
+        fakeLibraryManga(502, {
+          sourceId: '2002',
+          title: `${englishOf(T1)} [Digital]`,
+        }),
+        fakeLibraryManga(503, { title: 'Synthetic Tale 910001' }),
+      ],
+    });
+
+    await resolver().run();
+
+    assert.deepEqual([mangadexCalls, searches], [[], []]);
+    assert.deepEqual(await bindings(), []);
+    assert.deepEqual(await proposals(), [
+      {
+        suwayomiMangaId: 501,
+        proposedAnilistId: T1,
+        proposalConfidence: 'HIGH',
+        proposalScore: 1000,
+      },
+      {
+        suwayomiMangaId: 502,
+        proposedAnilistId: T1,
+        proposalConfidence: 'HIGH',
+        proposalScore: 1000,
+      },
+      {
+        suwayomiMangaId: 503,
+        proposedAnilistId: T1,
+        proposalConfidence: 'MEDIUM',
+        proposalScore: 909,
+      },
+    ]);
+    assert.deepEqual(await stateOf(T1), {
+      status: 'NEEDS_PICK',
+      reason: 'LIBRARY_UNCONFIRMED',
+      mangadexUuid: null,
+      attempts: 0,
+      nextAttemptAt: clock + HOUR,
+      lastError: null,
+    });
+    const waiting = await manifest(requestId);
+    assert.deepEqual(
+      [waiting.bindingState, waiting.lastError],
+      [AWAITING_BINDING, 'MANGA_LIBRARY_UNCONFIRMED']
+    );
+  });
+
+  it('proposes a weak library match instead of binding it', async () => {
+    const requestId = await seedRequest(T1);
+    await serve({
+      sources: [],
+      library: [fakeLibraryManga(501, { title: 'Synthetic Tale 910001' })],
+    });
+
+    await resolver().run();
+
+    assert.deepEqual(await bindings(), []);
+    assert.deepEqual(
+      (await proposals()).map(({ suwayomiMangaId }) => suwayomiMangaId),
+      [501]
+    );
+    assert.equal(
+      (await manifest(requestId)).lastError,
+      'MANGA_LIBRARY_UNCONFIRMED'
+    );
+  });
+
+  it('says when no source is selected for a title outside the library, until one is', async () => {
+    const requestId = await seedRequest(T1);
+    await serve({
+      sources: [{ id: '1001' }],
+      instance: { sourceAllowlist: [] },
+      library: [fakeLibraryManga(501)],
+    });
+    const run = resolver();
+
+    await run.run();
+
+    assert.deepEqual([mangadexCalls, searches], [[], []]);
+    assert.deepEqual(await stateOf(T1), {
+      status: 'NO_MATCH',
+      reason: 'NO_ELIGIBLE_SOURCES',
+      mangadexUuid: null,
+      attempts: 1,
+      nextAttemptAt: clock + HOUR,
+      lastError: null,
+    });
+    const parked = await manifest(requestId);
+    assert.deepEqual(
+      [parked.bindingState, parked.lastError],
+      [AWAITING_BINDING, 'MANGA_NO_SOURCES_SELECTED']
+    );
+
+    // Selecting a source makes the title due at once.
+    configure({ ...settings.suwayomi[0], sourceAllowlist: ['1001'] });
+    await run.run();
+
+    assert.notDeepEqual(searches, []);
+    assert.equal((await stateOf(T1)).reason, 'NO_CANDIDATES');
+    assert.equal((await manifest(requestId)).lastError, null);
+  });
+
+  it('keeps every title without a source due after a selection until a run searches it', async () => {
+    const requestIds = [await seedRequest(T1), await seedRequest(T2)];
+    await serve({
+      sources: [{ id: '1001' }],
+      instance: { sourceAllowlist: [] },
+    });
+    const run = resolver({ titlesPerRun: 1 });
+    const reasons = async () => [
+      (await stateOf(T1)).reason,
+      (await stateOf(T2)).reason,
+    ];
+
+    await run.run();
+    await run.run();
+    assert.deepEqual(await reasons(), [
+      'NO_ELIGIBLE_SOURCES',
+      'NO_ELIGIBLE_SOURCES',
+    ]);
+
+    // Each run searches one title; the second stays due for the next run.
+    configure({ ...settings.suwayomi[0], sourceAllowlist: ['1001'] });
+    await run.run();
+    assert.deepEqual(await reasons(), ['NO_CANDIDATES', 'NO_ELIGIBLE_SOURCES']);
+    await run.run();
+
+    assert.deepEqual(await reasons(), ['NO_CANDIDATES', 'NO_CANDIDATES']);
+    for (const requestId of requestIds) {
+      assert.equal((await manifest(requestId)).lastError, null);
+    }
+  });
+
+  it('stops for an instance whose address or login changes before a library proposal', async () => {
+    await seedRequest(T1);
+    const server = await serve({
+      sources: [],
+      library: [fakeLibraryManga(501, { title: 'Synthetic Tale 910001' })],
+    });
+    server.onOperation('Capabilities', () => {
+      configure({ ...settings.suwayomi[0], username: 'changed-user' });
+      return capabilitiesData();
+    });
+
+    await resolver().run();
+
+    assert.deepEqual(await proposals(), []);
+    assert.equal((await stateOf(T1)).lastError, 'SUWAYOMI_UNAVAILABLE');
+  });
+
+  it('searches the sources without a notice when the library cannot be read', async () => {
+    const requestId = await seedRequest(T1);
+    await serve({
+      sources: [],
+      library: graphqlErrors([syntheticFailure()]),
+    });
+
+    await resolver().run();
+
+    assert.equal((await stateOf(T1)).reason, 'NO_ELIGIBLE_SOURCES');
+    assert.equal((await manifest(requestId)).lastError, null);
+  });
+
+  it('clears the notice when the title gets a binding', async () => {
+    const requestId = await seedRequest(T1);
+    await serve({
+      sources: [],
+      library: [fakeLibraryManga(501, { title: 'Synthetic Tale 910001' })],
+    });
+    await resolver().run();
+    assert.equal(
+      (await manifest(requestId)).lastError,
+      'MANGA_LIBRARY_UNCONFIRMED'
+    );
+
+    await seedBinding(T1, '/fake-title/701');
+    await syncMangaRequestBindings(dataSource.manager, [T1]);
+
+    const bound = await manifest(requestId);
+    assert.deepEqual([bound.bindingState, bound.lastError], [BOUND, null]);
   });
 });

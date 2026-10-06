@@ -109,6 +109,26 @@ const titlesOf = (candidate: MangaTitleCandidate): string[] =>
     .map(normalizeMangaTitle)
     .filter((title) => title.length > 0);
 
+const bestScore = (target: string, candidate: MangaTitleCandidate): number =>
+  Math.max(
+    0,
+    ...titlesOf(candidate).map((title) =>
+      Math.round(mangaTitleSimilarity(target, title) * 1000)
+    )
+  );
+
+/**
+ * Per-mille similarity of a library title to the best of an AniList title's
+ * names and synonyms, 0 to 1000; 0 for a title with no letters or digits.
+ */
+export const scoreMangaTitle = (
+  libraryTitle: string,
+  candidate: MangaTitleCandidate
+): number => {
+  const target = normalizeMangaTitle(libraryTitle);
+  return target ? bestScore(target, candidate) : 0;
+};
+
 /**
  * The best AniList result for a library title, never a rejected one. The
  * confidence only orders the review queue: no proposal binds by itself.
@@ -127,13 +147,7 @@ export const proposeMangaMatch = (
     if (rejected.has(candidate.id) || scores.has(candidate.id)) {
       return;
     }
-    const best = Math.max(
-      0,
-      ...titlesOf(candidate).map((title) =>
-        Math.round(mangaTitleSimilarity(target, title) * 1000)
-      )
-    );
-    scores.set(candidate.id, { score: best, rank });
+    scores.set(candidate.id, { score: bestScore(target, candidate), rank });
   });
   const ranked = [...scores].sort(
     ([idA, a], [idB, b]) => b.score - a.score || a.rank - b.rank || idA - idB

@@ -1442,8 +1442,11 @@ export const RequestStatusCard = ({
   const statusLabel = awaitingSource
     ? intl.formatMessage(mangaScopeMessages.waitingForSource)
     : getStageLabel(intl, currentStage);
+  // A code that needs an administrator says what to do instead of the hint.
   const statusMessage =
-    awaitingSource && hasPermission(Permission.MANAGE_REQUESTS)
+    awaitingSource &&
+    !current.needsAttention &&
+    hasPermission(Permission.MANAGE_REQUESTS)
       ? intl.formatMessage(mangaScopeMessages.waitingForSourceHint)
       : current.message;
   const releaseDate = getReleaseDate(details, item);
