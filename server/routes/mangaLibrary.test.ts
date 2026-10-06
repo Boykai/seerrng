@@ -711,13 +711,14 @@ describe('manga library review: reject', () => {
   it('rejects a proposal, and a rescan never proposes it again', async () => {
     const manga = fakeLibraryManga(1, { chapterCount: 1 });
     await serve({ mangas: [manga] });
+    // A close match, below the confidence a scan binds by itself.
     lookups.titles.mock.mockImplementation(async () => [
-      anilistManga(201, manga.title),
+      anilistManga(201, `${manga.title} Extra`),
     ]);
     await scan();
     const [scanned] = await candidates();
     assert.equal(scanned.proposedAnilistId, 201);
-    assert.equal(scanned.proposalConfidence, 'HIGH');
+    assert.equal(scanned.proposalConfidence, 'MEDIUM');
     const agent = await asAdmin();
     const reject = () =>
       agent.post(`${BASE}/reject`).send({ ...itemKey(manga), anilistId: 201 });

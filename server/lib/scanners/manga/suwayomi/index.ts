@@ -47,7 +47,8 @@ import { chunk } from '@server/utils/chunk';
 import { isUniqueConstraintError } from '@server/utils/databaseError';
 import { In, type EntityManager } from 'typeorm';
 import type {
-  LookupBudget,
+  LookupRun,
+  LookupStep,
   MatchInput,
   MatchLink,
   MatchTarget,
@@ -56,8 +57,7 @@ import type {
 } from './matching';
 import {
   hasTrackerConflict,
-  lookupShare,
-  newLookupBudget,
+  newLookupRun,
   resolveLibraryMatches,
 } from './matching';
 
@@ -67,6 +67,8 @@ const IDS_PER_READ = 100;
 const CHAPTER_ROWS_PER_READ = 5_000;
 const KEYS_PER_WRITE = 100;
 const MAX_TRACKER_ID = 2_147_483_647;
+/** A progress line is logged each time this many more titles are handled. */
+const PROGRESS_LOG_STEP = 50;
 const NO_EVIDENCE: TrackerEvidence = {
   anilistIds: new Set(),
   malIds: new Set(),
@@ -108,6 +110,30 @@ export type MangaLibraryScanStatus = StatusBase & {
   counts: MangaLibraryScanCounts;
 };
 
+/** Titles by outcome, from the plans of the instances written in full. */
+interface ScanTotals {
+  /** Titles with a live binding, by how they were matched. */
+  bound: Record<string, number>;
+  /** Unbound titles with a proposal waiting for review. */
+  proposed: number;
+  /** Unbound titles without a proposal, or whose tracker read failed. */
+  unmatched: number;
+}
+
+const emptyTotals = (): ScanTotals => ({
+  bound: {},
+  proposed: 0,
+  unmatched: 0,
+});
+
+const addTotals = (into: ScanTotals, from: ScanTotals): void => {
+  for (const [matchedBy, count] of Object.entries(from.bound)) {
+    into.bound[matchedBy] = (into.bound[matchedBy] ?? 0) + count;
+  }
+  into.proposed += from.proposed;
+  into.unmatched += from.unmatched;
+};
+
 interface ScanRun {
   signal: AbortSignal;
   counts: MangaLibraryScanCounts;
@@ -115,10 +141,9 @@ interface ScanRun {
   completed: Set<number>;
   /** AniList IDs with a failed chapter-state read: no reconcile this run. */
   unreadable: Set<number>;
-  /** Lookup calls left in this run, shared by every instance. */
-  lookups: LookupBudget;
-  /** Instances still to scan in this run, the current one included. */
-  instancesLeft: number;
+  /** Lookup pacing and stopped steps, shared by every instance. */
+  lookups: LookupRun;
+  totals: ScanTotals;
 }
 
 interface StoredRows {
@@ -272,7 +297,8 @@ class MangaLibraryScanner
   implements RunnableScanner<MangaLibraryScanStatus>
 {
   private controller?: AbortController;
-  private instanceCount = 0;
+  /** Titles listed so far in this run; `progress` counts those handled. */
+  private listed = 0;
   private counts = emptyCounts();
 
   constructor() {
@@ -283,12 +309,12 @@ class MangaLibraryScanner
     return {
       running: this.running,
       progress: this.progress,
-      total: this.instanceCount,
+      total: this.listed,
       counts: this.counts,
     };
   }
 
-  /** Also aborts the read in flight; no write follows a cancel. */
+  /** Also aborts the read or wait in flight; no write follows a cancel. */
   public cancel(): void {
     super.cancel();
     this.controller?.abort();
@@ -307,8 +333,8 @@ class MangaLibraryScanner
       counts: emptyCounts(),
       completed: new Set(),
       unreadable: new Set(),
-      lookups: newLookupBudget(),
-      instancesLeft: 0,
+      lookups: newLookupRun(),
+      totals: emptyTotals(),
     };
     this.controller = controller;
     this.counts = run.counts;
@@ -317,13 +343,13 @@ class MangaLibraryScanner
         .suwayomi.map(({ id }) => id)
         .sort((a, b) => a - b);
       this.progress = 0;
-      this.instanceCount = instanceIds.length;
+      this.listed = 0;
       await this.orphanRemovedInstances(run, new Set(instanceIds));
-      for (const [index, instanceId] of instanceIds.entries()) {
+      for (const instanceId of instanceIds) {
         if (run.signal.aborted) break;
-        run.instancesLeft = instanceIds.length - index;
         await this.scanInstance(run, instanceId);
-        this.progress += 1;
+        // Titles of an instance that stopped early are done for this run too.
+        this.progress = this.listed;
       }
       if (!run.signal.aborted) await this.syncRequestBindings();
       this.log(
@@ -331,7 +357,7 @@ class MangaLibraryScanner
           ? 'Manga library scan cancelled'
           : 'Manga library scan complete',
         'info',
-        { ...run.counts }
+        { ...run.counts, listed: this.listed, ...run.totals }
       );
     } catch (error) {
       this.log('Manga library scan interrupted', 'error', {
@@ -340,6 +366,19 @@ class MangaLibraryScanner
     } finally {
       if (this.controller === controller) this.controller = undefined;
       this.endRun(sessionId);
+    }
+  }
+
+  /** Counts handled titles, with a log line every 50 of them. */
+  private addHandled(count: number): void {
+    if (count <= 0) return;
+    const before = Math.floor(this.progress / PROGRESS_LOG_STEP);
+    this.progress += count;
+    if (Math.floor(this.progress / PROGRESS_LOG_STEP) > before) {
+      this.log('Manga library scan progress', 'info', {
+        handled: this.progress,
+        listed: this.listed,
+      });
     }
   }
 
@@ -469,6 +508,7 @@ class MangaLibraryScanner
       const plan = this.planInstance(run, instanceId, reads);
       if (!(await this.writeInstance(run, snapshot, plan.keys))) return;
       run.completed.add(instanceId);
+      addTotals(run.totals, plan.totals);
       await this.reconcileMedia(run, plan.anilistIds, snapshot);
     } catch (error) {
       run.completed.delete(instanceId);
@@ -501,6 +541,7 @@ class MangaLibraryScanner
     // listing taken before the add; the write skips it as changed instead.
     const stored = await loadRows(dataSource.manager, instanceId);
     const listing = await client.listLibrary(options);
+    this.listed += listing.items.length;
     if (!listing.consistent) this.warn(run, 'INCONSISTENT_LISTING', instanceId);
     if (listing.skippedUrls > 0) {
       this.warn(run, 'SKIPPED_URL', instanceId, listing.skippedUrls);
@@ -552,17 +593,18 @@ class MangaLibraryScanner
     if (conflicts > 0) {
       this.warn(run, 'AMBIGUOUS_TRACKER_LINK', instanceId, conflicts);
     }
-    const deferred: Partial<LookupBudget> = {};
+    this.addHandled(listing.items.length - unmatched.length);
+    const deferred: Partial<Record<LookupStep, number>> = {};
     const matches = await resolveLibraryMatches(
       {
         signal: run.signal,
         lookups: run.lookups,
-        share: lookupShare(run.lookups, run.instancesLeft),
         warn: (code, count, cause) =>
           this.warn(run, code, instanceId, count, cause),
         defer: (step, count) => {
           deferred[step] = (deferred[step] ?? 0) + count;
         },
+        handled: (count) => this.addHandled(count),
       },
       unmatched
     );
@@ -652,12 +694,16 @@ class MangaLibraryScanner
     run: ScanRun,
     instanceId: number,
     { listing, stored, targets, chapterStates }: InstanceReads
-  ): { keys: KeyPlan[]; anilistIds: number[] } {
+  ): { keys: KeyPlan[]; anilistIds: number[]; totals: ScanTotals } {
     const keys: KeyPlan[] = [];
     const listed = new Set<string>();
     const anilistIds = new Set(
       [...stored.bindings.values()].flat().map(({ anilistId }) => anilistId)
     );
+    const totals = emptyTotals();
+    const countBound = (matchedBy: string) => {
+      totals.bound[matchedBy] = (totals.bound[matchedBy] ?? 0) + 1;
+    };
     let unreadable = 0;
     for (const item of listing.items) {
       const { sourceId, url } = item;
@@ -668,7 +714,16 @@ class MangaLibraryScanner
       const urlHash = hashMangaSourceUrl(url);
       const ops: WriteOp[] = [];
       listed.add(key);
+      if (target.kind === 'live') countBound(target.binding.matchedBy);
+      if (target.kind === 'link') countBound(target.matchedBy);
+      if (target.kind === 'unresolved') totals.unmatched += 1;
       if (target.kind === 'candidate') {
+        const proposed =
+          'proposedAnilistId' in target.progress
+            ? target.progress.proposedAnilistId
+            : candidate?.proposedAnilistId;
+        if (typeof proposed === 'number') totals.proposed += 1;
+        else totals.unmatched += 1;
         const values = {
           suwayomiMangaId: Number(item.id),
           title: item.title,
@@ -811,7 +866,7 @@ class MangaLibraryScanner
         }
       }
     }
-    return { keys, anilistIds: [...anilistIds] };
+    return { keys, anilistIds: [...anilistIds], totals };
   }
 
   /**

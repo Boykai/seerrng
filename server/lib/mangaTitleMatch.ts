@@ -24,7 +24,8 @@ export interface MangaTitleProposal {
 export type MangaTitleCandidate = Pick<
   AnilistMangaSummary,
   'id' | 'titles' | 'synonyms'
->;
+> &
+  Partial<Pick<AnilistMangaSummary, 'format'>>;
 
 const BRACKETED = /\([^()]*\)|\[[^[\]]*\]|\{[^{}]*\}|【[^【】]*】/gu;
 
@@ -130,8 +131,10 @@ export const scoreMangaTitle = (
 };
 
 /**
- * The best AniList result for a library title, never a rejected one. The
- * confidence only orders the review queue: no proposal binds by itself.
+ * The best AniList result for a library title, never a rejected one. HIGH
+ * needs a lead over every other result, though a novel never counts against
+ * a manga or one-shot, and a novel is at most MEDIUM. The library scan binds
+ * a HIGH proposal by itself; the other confidences order the review queue.
  */
 export const proposeMangaMatch = (
   libraryTitle: string,
@@ -142,27 +145,41 @@ export const proposeMangaMatch = (
   if (!target) {
     return null;
   }
-  const scores = new Map<number, { score: number; rank: number }>();
+  const scores = new Map<
+    number,
+    { score: number; rank: number; novel: boolean }
+  >();
   results.forEach((candidate, rank) => {
     if (rejected.has(candidate.id) || scores.has(candidate.id)) {
       return;
     }
-    scores.set(candidate.id, { score: bestScore(target, candidate), rank });
+    scores.set(candidate.id, {
+      score: bestScore(target, candidate),
+      rank,
+      novel: candidate.format === 'NOVEL',
+    });
   });
   const ranked = [...scores].sort(
-    ([idA, a], [idB, b]) => b.score - a.score || a.rank - b.rank || idA - idB
+    ([idA, a], [idB, b]) =>
+      b.score - a.score ||
+      Number(a.novel) - Number(b.novel) ||
+      a.rank - b.rank ||
+      idA - idB
   );
   if (ranked.length === 0) {
     return null;
   }
-  const [anilistId, { score }] = ranked[0];
-  const runnerUp = ranked[1]?.[1].score ?? 0;
+  const [anilistId, best] = ranked[0];
+  const runnerUp =
+    ranked.slice(1).find(([, other]) => best.novel || !other.novel)?.[1]
+      .score ?? 0;
   const confidence =
-    score >= MANGA_TITLE_HIGH_SCORE &&
-    score - runnerUp >= MANGA_TITLE_HIGH_MARGIN
+    !best.novel &&
+    best.score >= MANGA_TITLE_HIGH_SCORE &&
+    best.score - runnerUp >= MANGA_TITLE_HIGH_MARGIN
       ? MangaBindingConfidence.HIGH
-      : score >= MANGA_TITLE_MEDIUM_SCORE
+      : best.score >= MANGA_TITLE_MEDIUM_SCORE
         ? MangaBindingConfidence.MEDIUM
         : MangaBindingConfidence.LOW;
-  return { anilistId, confidence, score };
+  return { anilistId, confidence, score: best.score };
 };

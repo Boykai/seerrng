@@ -6,7 +6,7 @@ import type { IntlShape, MessageDescriptor } from 'react-intl';
 export const messages = defineMessages('components.Settings.MangaLibrary', {
   queue: 'Review Queue',
   queueDescription:
-    'Suwayomi library titles without an AniList match. Proposals are suggestions: nothing is matched until you confirm one or choose a title.',
+    'Suwayomi library titles the library scan could not match by itself. Proposals are suggestions: confirm one or choose a title to match it.',
   matches: 'Library Matches',
   matchesDescription:
     'Suwayomi library titles and the AniList titles they are matched to.',
@@ -21,7 +21,7 @@ export const messages = defineMessages('components.Settings.MangaLibrary', {
   reject: 'Reject',
   emptyQueue: 'No Titles to Review',
   scanTip:
-    'Title proposals arrive with each library scan; a large library takes several scans. Run the Manga Library Scan job in <link>Jobs & Cache</link> to get them sooner.',
+    'Each library scan checks the whole library: it matches the titles it is sure of and proposes matches for the rest. Run the Manga Library Scan job in <link>Jobs & Cache</link> to scan sooner.',
   unknownTitle: 'AniList ID {id} (details unavailable)',
   aniListTitle: 'AniList Title',
   match: 'Match',
@@ -32,6 +32,7 @@ export const messages = defineMessages('components.Settings.MangaLibrary', {
   mangadexLink: 'Matched with data from <link>MangaDex</link>',
   confirmedByAdmin: 'Confirmed by an Admin',
   matchedForRequest: 'Title Match for a Request',
+  matchedByTitle: 'Matched by Title',
   chosenByAdmin: 'Chosen by an Admin',
   bindTip:
     'Search AniList and choose the title that matches this library title.',
@@ -80,8 +81,8 @@ const proposalStrengths: Record<ProposalStrength, ProposalStrengthLabel> = {
 };
 
 /**
- * The label for a proposal's strength. On a binding, HIGH, MEDIUM or LOW is
- * the strength of the proposal an admin confirmed.
+ * The label for a proposal's strength. On a title binding, HIGH, MEDIUM or
+ * LOW is the strength of the proposal it was made from.
  */
 export const getProposalStrength = (
   confidence: string

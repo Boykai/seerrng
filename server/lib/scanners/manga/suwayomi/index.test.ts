@@ -1,9 +1,14 @@
 import AnilistAPI, {
   AnilistBadResponseError,
   AnilistGraphQLError,
+  AnilistOutageError,
   AnilistRateLimitedError,
 } from '@server/api/anilist';
 import type { AnilistMangaSummary } from '@server/api/anilist/manga';
+import {
+  anilistRateLimiter,
+  resetAnilistRateLimiterForTests,
+} from '@server/api/anilist/rateLimiter';
 import MangaDexAPI, { MangaDexRateLimitedError } from '@server/api/mangadex';
 import { SUWAYOMI_TRACKER_IDS } from '@server/api/suwayomi';
 import { MangaRequestBindingState } from '@server/constants/mangaRequest';
@@ -58,6 +63,10 @@ import net from 'node:net';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 import { inspect } from 'node:util';
 import { mangaLibraryScanner } from './index';
+import {
+  MANGA_LOOKUP_SPACING_MS,
+  setMangaLookupClockForTests,
+} from './matching';
 
 setupTestDb();
 
@@ -279,13 +288,15 @@ const malTracked = (
 const anilistManga = (
   id: number,
   romaji: string,
-  synonyms: string[] = []
+  synonyms: string[] = [],
+  extra: Partial<AnilistMangaSummary> = {}
 ): AnilistMangaSummary => ({
   id,
   titles: { romaji },
   synonyms,
   isAdult: false,
   genres: [],
+  ...extra,
 });
 
 type MalPage = { hasNextPage: boolean; links: [number, number][] };
@@ -344,7 +355,7 @@ const proposals = async () =>
     candidate.proposalScore,
   ]);
 
-/** Per instance: the MAL, MangaDex and title lookups the cap left over. */
+/** Per instance: the MAL, MangaDex and title lookups a stopped step left. */
 const deferredLookups = (logs: unknown[]) =>
   (logs as [string, Record<string, unknown>][])
     .filter(
@@ -352,14 +363,60 @@ const deferredLookups = (logs: unknown[]) =>
     )
     .map(([, meta]) => [meta.instanceId, meta.mal, meta.mangadex, meta.title]);
 
+/** The handled and listed titles of each progress line. */
+const progressLines = (logs: unknown[]) =>
+  (logs as [string, Record<string, unknown>][])
+    .filter(([message]) => message === 'Manga library scan progress')
+    .map(([, meta]) => [meta.handled, meta.listed]);
+
+/** The counts and totals of the run's completion line. */
+const completion = (logs: unknown[]) => {
+  const line = (logs as [string, Record<string, unknown>][]).find(
+    ([message]) => message === 'Manga library scan complete'
+  );
+  return (
+    line &&
+    Object.fromEntries(
+      Object.entries(line[1]).filter(([key]) => key !== 'label')
+    )
+  );
+};
+
+/**
+ * The lookup clock is fake: a wait passes at once and is recorded, unless
+ * a test holds it.
+ */
+let waits: number[] = [];
+let fakeNow = 0;
+let holdWait: ((ms: number, signal: AbortSignal) => Promise<void>) | undefined;
+const fakeClock = {
+  now: () => fakeNow,
+  sleep: async (ms: number, signal?: AbortSignal) => {
+    signal?.throwIfAborted();
+    waits.push(ms);
+    if (holdWait && signal) await holdWait(ms, signal);
+    fakeNow += ms;
+  },
+};
+
+/** The waits between lookups, without the spacing of 3 seconds. */
+const refusalWaits = () => waits.filter((ms) => ms !== MANGA_LOOKUP_SPACING_MS);
+
 beforeEach(() => {
   settings.main.enabledMediaCategories = { ...categories, manga: true };
   configure();
+  waits = [];
+  fakeNow = Date.UTC(2030, 0, 1);
+  holdWait = undefined;
+  setMangaLookupClockForTests(fakeClock);
+  resetAnilistRateLimiterForTests(fakeClock);
   lookups = stubLookups();
 });
 
 afterEach(async () => {
   mock.restoreAll();
+  setMangaLookupClockForTests();
+  resetAnilistRateLimiterForTests();
   settings.main.enabledMediaCategories = categories;
   configure();
   await Promise.all(servers.splice(0).map((server) => server.close()));
@@ -787,6 +844,9 @@ describe('manga library scan: lookups', () => {
       binding.matchedBy,
       binding.origin,
     ]);
+  /** The bindings the scan made, without the admin's rejections. */
+  const scanLinks = async () =>
+    (await exactLinks()).filter(([, , , , origin]) => origin !== 'admin');
 
   it('reads every page of a MAL lookup before it binds an exact link', async () => {
     const server = await start({
@@ -868,9 +928,10 @@ describe('manga library scan: lookups', () => {
     assertReadsOnly(server);
   });
 
-  for (const [name, failure, cause] of [
-    ['rate-limited', () => new AnilistRateLimitedError(60), 'RATE_LIMITED'],
-    ['malformed', () => new AnilistBadResponseError(), 'BAD_RESPONSE'],
+  for (const [name, failure, cause, calls] of [
+    // AniList refuses the page three times, each after the wait it asked.
+    ['rate-limited', () => new AnilistRateLimitedError(60), 'RATE_LIMITED', 5],
+    ['malformed', () => new AnilistBadResponseError(), 'BAD_RESPONSE', 3],
   ] as const) {
     it(`leaves a batch unchecked after a ${name} page`, async () => {
       // 51 MAL IDs make two batches: the first is read in full, the second
@@ -902,18 +963,23 @@ describe('manga library scan: lookups', () => {
         candidatesCreated: 51,
         warnings: { MAL_LOOKUP_FAILED: 1 },
       });
-      assert.equal(lookups.mal.mock.callCount(), 3);
+      assert.equal(lookups.mal.mock.callCount(), calls);
+      assert.deepEqual(
+        refusalWaits(),
+        name === 'rate-limited' ? [60_000, 60_000] : []
+      );
       const rows = await progress();
       assert.equal(rows.filter(([, , malChecked]) => malChecked).length, 50);
       assert.deepEqual(rows[50], [51, null, false, false, false]);
-      // Step 3 failed for item 51 alone; the title step still ran.
-      assert.equal(titleSearches().length, 10);
+      // Step 3 failed for item 51 alone; the title step still searched
+      // every other title.
+      assert.equal(titleSearches().length, 50);
       assert.equal(titleSearches().includes('Fake Library Title 51'), false);
       assert.match(inspect(logs, { depth: 8 }), new RegExp(cause));
     });
   }
 
-  it('stops at the call cap and leaves the batch for a later run', async () => {
+  it('fails a MAL lookup whose pages never end, and searches no title', async () => {
     const server = await start({ mangas: [malTracked(1, 55)] });
     configure(instanceFor(server));
     lookups.mal.mock.mockImplementation(async () => ({
@@ -925,11 +991,14 @@ describe('manga library scan: lookups', () => {
     const counts = await scan();
 
     assert.equal(lookups.mal.mock.callCount(), 10);
-    assert.deepEqual(counts, { ...NO_CHANGES, candidatesCreated: 1 });
+    assert.deepEqual(counts, {
+      ...NO_CHANGES,
+      candidatesCreated: 1,
+      warnings: { MAL_LOOKUP_FAILED: 1 },
+    });
     assert.deepEqual(await progress(), [[1, null, false, false, false]]);
     assert.deepEqual(titleSearches(), []);
-    // The cap is not a warning, but the deferred work is logged.
-    assert.deepEqual(deferredLookups(logs), [[1, 1, undefined, undefined]]);
+    assert.match(inspect(logs, { depth: 8 }), /BAD_RESPONSE/);
   });
 
   it('sends MangaDex only the UUID of a /manga/<uuid> URL', async () => {
@@ -1006,7 +1075,7 @@ describe('manga library scan: lookups', () => {
     assertReadsOnly(server);
   });
 
-  it('leaves MangaDex items unchecked when MangaDex refuses', async () => {
+  it('leaves MangaDex items unchecked during a cooldown of over 15 minutes', async () => {
     const server = await start({
       mangas: [
         fakeLibraryManga(1, { url: `/manga/${uuid(1)}` }),
@@ -1016,7 +1085,7 @@ describe('manga library scan: lookups', () => {
     });
     configure(instanceFor(server));
     lookups.mangadex.mock.mockImplementation(async () => {
-      throw new MangaDexRateLimitedError(60, true);
+      throw new MangaDexRateLimitedError(3_600, true);
     });
     const logs = captureLogs();
 
@@ -1027,6 +1096,8 @@ describe('manga library scan: lookups', () => {
       candidatesCreated: 3,
       warnings: { MANGADEX_LOOKUP_FAILED: 2 },
     });
+    assert.equal(lookups.mangadex.mock.callCount(), 1);
+    assert.deepEqual(refusalWaits(), []);
     assert.deepEqual(await progress(), [
       [1, null, false, false, false],
       [2, null, false, false, false],
@@ -1040,7 +1111,43 @@ describe('manga library scan: lookups', () => {
     }
   });
 
-  it('stores the best title match for review and never binds it', async () => {
+  it('waits out a MangaDex rate limit and links the batch', async () => {
+    const server = await start({
+      mangas: [
+        fakeLibraryManga(1, { url: `/manga/${uuid(1)}` }),
+        fakeLibraryManga(2, { url: `/manga/${uuid(2)}` }),
+      ],
+    });
+    configure(instanceFor(server));
+    lookups.mangadex.mock.mockImplementationOnce(async () => {
+      throw new MangaDexRateLimitedError(20, true);
+    }, 0);
+    lookups.mangadex.mock.mockImplementationOnce(async () => {
+      throw new MangaDexRateLimitedError(5, false);
+    }, 1);
+    lookups.mangadex.mock.mockImplementation(
+      async () =>
+        new Map([
+          [uuid(1), 301],
+          [uuid(2), 302],
+        ])
+    );
+
+    const counts = await scan();
+
+    assert.deepEqual(counts, { ...NO_CHANGES, bindingsCreated: 2 });
+    assert.equal(lookups.mangadex.mock.callCount(), 3);
+    assert.deepEqual(refusalWaits(), [20_000, 5_000]);
+    assert.deepEqual(
+      (await exactLinks()).map(([id, anilistId]) => [id, anilistId]),
+      [
+        [1, 301],
+        [2, 302],
+      ]
+    );
+  });
+
+  it('binds a confident title match and stores any other for review', async () => {
     const server = await start({
       mangas: [1, 2, 3, 4].map((id) =>
         fakeLibraryManga(id, { chapterCount: 1, downloadCount: 1 })
@@ -1069,22 +1176,26 @@ describe('manga library scan: lookups', () => {
       settings.main.mangaIncludeAdult = mangaIncludeAdult;
     });
 
-    assert.deepEqual(counts, { ...NO_CHANGES, candidatesCreated: 4 });
-    assert.deepEqual(await bindings(), []);
-    assert.deepEqual(await getRepository(Media).find(), []);
-    const stored = await proposals();
-    assert.deepEqual(stored.slice(0, 2), [
-      [1, 401, MangaBindingConfidence.HIGH, 1000],
-      [2, 403, MangaBindingConfidence.MEDIUM, 1000],
+    assert.deepEqual(counts, {
+      ...NO_CHANGES,
+      bindingsCreated: 1,
+      candidatesCreated: 3,
+      mediaCreated: 1,
+    });
+    assert.deepEqual(await exactLinks(), [
+      [1, 401, MangaBindingConfidence.HIGH, 'title', 'library-scan'],
     ]);
+    assert.equal(await mediaStatus(401), AVAILABLE);
+    const stored = await proposals();
+    assert.deepEqual(stored[0], [2, 403, MangaBindingConfidence.MEDIUM, 1000]);
     // The best weak match is kept, ranked LOW.
-    assert.deepEqual(stored[2].slice(0, 3), [
+    assert.deepEqual(stored[1].slice(0, 3), [
       3,
       405,
       MangaBindingConfidence.LOW,
     ]);
-    assert.ok((stored[2][3] as number) < 750);
-    assert.deepEqual(stored[3], [4, null, null, null]);
+    assert.ok((stored[1][3] as number) < 750);
+    assert.deepEqual(stored[2], [4, null, null, null]);
     assert.equal(policy.includeAdult, true);
     assert.deepEqual(
       lookups.titles.mock.calls.map(({ arguments: [search, used] }) => [
@@ -1099,10 +1210,11 @@ describe('manga library scan: lookups', () => {
     const library = { mangas: [fakeLibraryManga(1), fakeLibraryManga(2)] };
     const server = await start(library);
     configure(instanceFor(server));
+    // Close matches: neither is confident enough to bind.
     const results: Record<string, AnilistMangaSummary[]> = {
-      'Fake Library Title 1': [anilistManga(401, 'Fake Library Title 1')],
+      'Fake Library Title 1': [anilistManga(401, 'Fake Library Title 1 Extra')],
       'Fake Library Title 2': [
-        anilistManga(402, 'Fake Library Title 2'),
+        anilistManga(402, 'Fake Library Title 2 Extra'),
         anilistManga(403, 'Fake Library Title 2 Remake'),
       ],
     };
@@ -1110,23 +1222,29 @@ describe('manga library scan: lookups', () => {
     lookups.titles.mock.mockImplementation(search);
     await scan();
     const proposed = async () =>
-      (await proposals()).map(([id, anilistId]) => [id, anilistId]);
+      (await proposals()).map(([id, anilistId, confidence]) => [
+        id,
+        anilistId,
+        confidence,
+      ]);
     assert.deepEqual(await proposed(), [
-      [1, 401],
-      [2, 402],
+      [1, 401, MangaBindingConfidence.MEDIUM],
+      [2, 402, MangaBindingConfidence.MEDIUM],
     ]);
 
-    // While AniList refuses every search, both stale proposals still go.
+    // While AniList is down, both stale proposals still go.
     await getRepository(MangaSourceBinding).insert(rejectedRow(2, 402));
     library.mangas[0] = fakeLibraryManga(1, { title: 'Fake Library Title 1b' });
     lookups.titles.mock.mockImplementation(async () => {
-      throw new AnilistRateLimitedError(60);
+      throw new AnilistOutageError();
     });
+    const logs = captureLogs();
 
     const counts = await scan();
 
     assert.deepEqual(counts.warnings, { TITLE_SEARCH_FAILED: 1 });
     assert.equal(lookups.titles.mock.callCount(), 3);
+    assert.deepEqual(deferredLookups(logs), [[1, undefined, undefined, 1]]);
     assert.deepEqual(await proposals(), [
       [1, null, null, null],
       [2, null, null, null],
@@ -1140,9 +1258,13 @@ describe('manga library scan: lookups', () => {
     lookups.titles.mock.mockImplementation(search);
     await scan();
     assert.deepEqual(await proposed(), [
-      [1, null],
-      [2, 403],
+      [1, null, null],
+      [2, 403, MangaBindingConfidence.LOW],
     ]);
+    assert.deepEqual(
+      (await bindings()).map(({ state }) => state),
+      [MangaBindingState.REJECTED]
+    );
   });
 
   it('never links or proposes a pair an admin rejected', async () => {
@@ -1271,22 +1393,26 @@ describe('manga library scan: lookups', () => {
     assert.equal(lookups.titles.mock.callCount(), 0);
   });
 
-  it('searches never-checked titles first and each again after 30 days', async () => {
-    const server = await start({
+  it('searches every due title in one run, never-checked first, and again after 30 days', async () => {
+    const library = {
       mangas: Array.from({ length: 12 }, (_, index) =>
         fakeLibraryManga(index + 1)
       ),
-    });
+    };
+    const server = await start(library);
     configure(instanceFor(server));
     const titles = (...ids: number[]) =>
       ids.map((id) => `Fake Library Title ${id}`);
 
     await scan();
-    assert.deepEqual(titleSearches(), titles(1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+    assert.deepEqual(
+      titleSearches(),
+      titles(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+    );
 
     lookups.titles.mock.resetCalls();
     await scan();
-    assert.deepEqual(titleSearches(), titles(11, 12));
+    assert.deepEqual(titleSearches(), []);
 
     const daysAgo = (days: number) =>
       new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -1300,9 +1426,10 @@ describe('manga library scan: lookups', () => {
         { titleCheckedAt: daysAgo(days) }
       );
     }
+    library.mangas.push(fakeLibraryManga(13));
     lookups.titles.mock.resetCalls();
     await scan();
-    assert.deepEqual(titleSearches(), titles(3, 1));
+    assert.deepEqual(titleSearches(), titles(13, 3, 1));
   });
 
   it('skips only a title whose own search failed', async () => {
@@ -1364,6 +1491,345 @@ describe('manga library scan: lookups', () => {
       assert.deepEqual(await candidates(), []);
     });
   }
+
+  it('handles 60 unmatched titles in one run, at most 20 lookups a minute', async () => {
+    const server = await start({
+      mangas: Array.from({ length: 60 }, (_, index) =>
+        fakeLibraryManga(index + 1)
+      ),
+    });
+    configure(instanceFor(server));
+    const starts: number[] = [];
+    lookups.titles.mock.mockImplementation(
+      async (
+        _search: string,
+        _policy: unknown,
+        options?: { signal?: AbortSignal }
+      ) => {
+        // The budget every AniList request in the process shares.
+        await anilistRateLimiter.acquire(10_000, options?.signal);
+        starts.push(fakeNow);
+        return [];
+      }
+    );
+    const logs = captureLogs();
+
+    const counts = await scan();
+
+    assert.deepEqual(counts, { ...NO_CHANGES, candidatesCreated: 60 });
+    assert.equal(starts.length, 60);
+    assert.deepEqual(
+      waits,
+      Array.from({ length: 59 }, () => MANGA_LOOKUP_SPACING_MS)
+    );
+    for (const first of starts) {
+      const minute = starts.filter(
+        (other) => other >= first && other < first + 60_000
+      );
+      assert.ok(minute.length <= 20, String(minute.length));
+    }
+    assert.equal(
+      (await progress()).filter(([, , , , titleChecked]) => titleChecked)
+        .length,
+      60
+    );
+    const { progress: handled, total } = mangaLibraryScanner.status();
+    assert.deepEqual([handled, total], [60, 60]);
+    assert.deepEqual(progressLines(logs), [[50, 60]]);
+    assert.deepEqual(completion(logs), {
+      ...counts,
+      listed: 60,
+      bound: {},
+      proposed: 0,
+      unmatched: 60,
+    });
+    assert.equal(inspect(logs, { depth: 8 }).includes('Fake Library'), false);
+  });
+
+  it('waits out rate limits and cooldowns mid-run and goes on', async () => {
+    const server = await start({
+      mangas: [malTracked(1, 55), fakeLibraryManga(2), fakeLibraryManga(3)],
+    });
+    configure(instanceFor(server));
+    lookups.mal.mock.mockImplementationOnce(async () => {
+      throw new AnilistRateLimitedError(45);
+    });
+    lookups.titles.mock.mockImplementation(
+      async (
+        search: string,
+        _policy: unknown,
+        options?: { signal?: AbortSignal }
+      ) => {
+        await anilistRateLimiter.acquire(10_000, options?.signal);
+        // Meanwhile AniList refuses another request: a cooldown of 30 s.
+        if (search === 'Fake Library Title 1') {
+          anilistRateLimiter.noteRateLimited(30);
+        }
+        return [];
+      }
+    );
+
+    const counts = await scan();
+
+    assert.deepEqual(counts, { ...NO_CHANGES, candidatesCreated: 3 });
+    assert.equal(lookups.mal.mock.callCount(), 2);
+    // The search for title 2 found the budget closed for 27 more seconds.
+    assert.deepEqual(refusalWaits(), [45_000, 27_000]);
+    assert.deepEqual(
+      titleSearches(),
+      [1, 2, 2, 3].map((id) => `Fake Library Title ${id}`)
+    );
+    assert.deepEqual(await progress(), [
+      [1, 55, true, false, true],
+      [2, null, false, false, true],
+      [3, null, false, false, true],
+    ]);
+  });
+
+  for (const [name, wait] of [
+    ['a rate-limit wait', 600_000],
+    ['the pause between lookups', MANGA_LOOKUP_SPACING_MS],
+  ] as const) {
+    it(`stops at once when cancelled during ${name} and writes nothing`, async () => {
+      const server = await start({
+        mangas: [fakeLibraryManga(1), fakeLibraryManga(2)],
+      });
+      configure(instanceFor(server));
+      if (wait !== MANGA_LOOKUP_SPACING_MS) {
+        lookups.titles.mock.mockImplementation(async () => {
+          throw new AnilistRateLimitedError(wait / 1000);
+        });
+      }
+      let reached!: () => void;
+      const waiting = new Promise<void>((resolve) => (reached = resolve));
+      holdWait = async (ms, signal) => {
+        if (ms !== wait) return;
+        reached();
+        await new Promise<never>((_, reject) =>
+          signal.addEventListener('abort', () => reject(signal.reason), {
+            once: true,
+          })
+        );
+      };
+
+      const running = mangaLibraryScanner.run();
+      await waiting;
+      mangaLibraryScanner.cancel();
+      await running;
+
+      assert.equal(lookups.titles.mock.callCount(), 1);
+      assert.equal(mangaLibraryScanner.status().running, false);
+      assert.deepEqual(mangaLibraryScanner.status().counts, NO_CHANGES);
+      assert.deepEqual(await bindings(), []);
+      assert.deepEqual(await candidates(), []);
+    });
+  }
+
+  it('never binds a title match that the item argues against', async () => {
+    const titled = (id: number, extra: Partial<AnilistMangaSummary> = {}) =>
+      anilistManga(600 + id, `Fake Library Title ${id}`, [], extra);
+    const server = await start({
+      mangas: [
+        fakeLibraryManga(1),
+        fakeLibraryManga(2, {
+          trackRecords: [
+            { trackerId: aniList, remoteId: '101' },
+            { trackerId: aniList, remoteId: '102' },
+          ],
+        }),
+        tracked(3, 103),
+        malTracked(4, 77),
+        malTracked(5, 78),
+        malTracked(6, 79),
+        fakeLibraryManga(7),
+      ],
+    });
+    configure(instanceFor(server));
+    await getRepository(MangaSourceBinding).insert([
+      rejectedRow(1, 601),
+      rejectedRow(3, 103),
+    ]);
+    const results: Record<string, AnilistMangaSummary[]> = {
+      // The rejected title is never proposed, so the weak match is.
+      'Fake Library Title 1': [
+        titled(1),
+        anilistManga(611, 'Fake Library Title 1 Remake'),
+      ],
+      // Its own tracker records disagree.
+      'Fake Library Title 2': [titled(2)],
+      // Its AniList tracker names another title an admin rejected here.
+      'Fake Library Title 3': [titled(3)],
+      // Its MyAnimeList tracker names another title.
+      'Fake Library Title 4': [titled(4, { idMal: 87 })],
+      // The result does not say which MyAnimeList title it is.
+      'Fake Library Title 5': [titled(5)],
+      // The result is the title its MyAnimeList tracker names.
+      'Fake Library Title 6': [titled(6, { idMal: 79 })],
+      'Fake Library Title 7': [titled(7, { format: 'NOVEL' })],
+    };
+    lookups.titles.mock.mockImplementation(
+      async (search: string) => results[search] ?? []
+    );
+
+    const counts = await scan();
+
+    assert.deepEqual(counts, {
+      ...NO_CHANGES,
+      bindingsCreated: 1,
+      candidatesCreated: 6,
+      warnings: { AMBIGUOUS_TRACKER_LINK: 1 },
+    });
+    assert.deepEqual(await scanLinks(), [
+      [6, 606, MangaBindingConfidence.HIGH, 'title', 'library-scan'],
+    ]);
+    const { HIGH, MEDIUM, LOW } = MangaBindingConfidence;
+    assert.deepEqual(
+      (await proposals()).map(([id, anilistId, confidence]) => [
+        id,
+        anilistId,
+        confidence,
+      ]),
+      [
+        [1, 611, LOW],
+        [2, 602, HIGH],
+        [3, 603, HIGH],
+        [4, 604, HIGH],
+        [5, 605, HIGH],
+        [7, 607, MEDIUM],
+      ]
+    );
+
+    // A stored HIGH proposal of an item with tracker records waits for its
+    // next search.
+    lookups.titles.mock.resetCalls();
+    assert.deepEqual(await scan(), {
+      ...NO_CHANGES,
+      warnings: { AMBIGUOUS_TRACKER_LINK: 1 },
+    });
+    assert.deepEqual(titleSearches(), []);
+    assert.equal((await scanLinks()).length, 1);
+  });
+
+  describe('a stored proposal', () => {
+    const checked = () => new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const storedProposal = (
+      id: number,
+      proposedAnilistId: number,
+      proposalConfidence: MangaBindingConfidence,
+      title = `Fake Library Title ${id}`
+    ) => ({
+      instanceId: 1,
+      sourceId: '0',
+      url: `/fake-library/${id}`,
+      urlHash: hashMangaSourceUrl(`/fake-library/${id}`),
+      suwayomiMangaId: id,
+      title,
+      proposedAnilistId,
+      proposalConfidence,
+      proposalScore: 1000,
+      titleCheckedAt: checked(),
+    });
+    const { HIGH, MEDIUM } = MangaBindingConfidence;
+
+    it('is searched again when it is HIGH, and the new result decides', async () => {
+      const server = await start({
+        mangas: [1, 2, 3, 4, 5, 6].map((id) =>
+          fakeLibraryManga(id, { chapterCount: 1, downloadCount: 1 })
+        ),
+      });
+      configure(instanceFor(server));
+      await getRepository(MangaMatchCandidate).insert([
+        storedProposal(1, 501, HIGH),
+        storedProposal(2, 502, HIGH, 'An Older Invented Title'),
+        storedProposal(3, 503, HIGH),
+        storedProposal(4, 504, MEDIUM),
+        storedProposal(6, 506, HIGH),
+      ]);
+      await getRepository(MangaSourceBinding).insert(rejectedRow(3, 503));
+      const results: Record<string, AnilistMangaSummary[]> = {
+        'Fake Library Title 1': [anilistManga(501, 'Fake Library Title 1')],
+        // Two equal results make the new match MEDIUM.
+        'Fake Library Title 6': [
+          anilistManga(506, 'Fake Library Title 6'),
+          anilistManga(516, 'Fake Library Title 6'),
+        ],
+      };
+      lookups.titles.mock.mockImplementation(
+        async (search: string) => results[search] ?? []
+      );
+
+      const counts = await scan();
+
+      // A changed title or a rejection drops the proposal, so the item is
+      // searched again like a stored HIGH proposal; a MEDIUM one waits.
+      assert.deepEqual(
+        titleSearches(),
+        [2, 3, 5, 1, 6].map((id) => `Fake Library Title ${id}`)
+      );
+      assert.deepEqual(counts, {
+        ...NO_CHANGES,
+        bindingsCreated: 1,
+        candidatesCreated: 1,
+        candidatesUpdated: 3,
+        candidatesDeleted: 1,
+        mediaCreated: 1,
+      });
+      assert.deepEqual(await scanLinks(), [
+        [1, 501, HIGH, 'title', 'library-scan'],
+      ]);
+      assert.equal(await mediaStatus(501), AVAILABLE);
+      assert.deepEqual(
+        (await proposals()).map(([id, anilistId, confidence]) => [
+          id,
+          anilistId,
+          confidence,
+        ]),
+        [
+          [2, null, null],
+          [3, null, null],
+          [4, 504, MEDIUM],
+          [6, 506, MEDIUM],
+          [5, null, null],
+        ]
+      );
+
+      // The MEDIUM result waits for its next recheck.
+      lookups.titles.mock.resetCalls();
+      assert.deepEqual(await scan(), NO_CHANGES);
+      assert.deepEqual(titleSearches(), []);
+    });
+
+    it('stays a proposal when the new search finds a novel', async () => {
+      const { mangaIncludeNovels } = settings.main;
+      settings.main.mangaIncludeNovels = true;
+      try {
+        const server = await start({ mangas: [fakeLibraryManga(1)] });
+        configure(instanceFor(server));
+        await getRepository(MangaMatchCandidate).insert(
+          storedProposal(1, 501, HIGH)
+        );
+        lookups.titles.mock.mockImplementation(async () => [
+          anilistManga(501, 'Fake Library Title 1', [], { format: 'NOVEL' }),
+        ]);
+
+        const counts = await scan();
+
+        assert.deepEqual(titleSearches(), ['Fake Library Title 1']);
+        assert.deepEqual(counts, { ...NO_CHANGES, candidatesUpdated: 1 });
+        assert.deepEqual(await scanLinks(), []);
+        assert.deepEqual(
+          (await proposals()).map(([id, anilistId, confidence]) => [
+            id,
+            anilistId,
+            confidence,
+          ]),
+          [[1, 501, MEDIUM]]
+        );
+      } finally {
+        settings.main.mangaIncludeNovels = mangaIncludeNovels;
+      }
+    });
+  });
 });
 
 describe('manga library scan: availability', () => {
@@ -1820,7 +2286,7 @@ describe('manga library scan: several instances', () => {
     assert.equal(await mediaStatus(101), PARTIALLY_AVAILABLE);
   });
 
-  it("shares each run's lookups between the instances", async () => {
+  it('looks up every title of every instance in one run', async () => {
     const library = (from: number, count: number) => ({
       mangas: Array.from({ length: count }, (_, index) =>
         fakeLibraryManga(from + index)
@@ -1830,29 +2296,41 @@ describe('manga library scan: several instances', () => {
     const two = await start(library(21, 2));
     const three = await start(library(31, 12));
     configure(instanceFor(one, 1), instanceFor(two, 2), instanceFor(three, 3));
+    lookups.titles.mock.mockImplementation(async (search: string) =>
+      search === 'Fake Library Title 22'
+        ? [anilistManga(422, 'Fake Library Title 22 Extra')]
+        : []
+    );
     const logs = captureLogs();
 
-    await scan();
+    const counts = await scan();
 
-    // Of 10 searches, the first of three instances gets 4, the second needs
-    // only 2 of its 3, and the last gets the 4 left.
+    const ids = [
+      ...Array.from({ length: 12 }, (_, index) => 1 + index),
+      21,
+      22,
+      ...Array.from({ length: 12 }, (_, index) => 31 + index),
+    ];
     assert.deepEqual(
       titleSearches(),
-      [1, 2, 3, 4, 21, 22, 31, 32, 33, 34].map(
-        (id) => `Fake Library Title ${id}`
-      )
+      ids.map((id) => `Fake Library Title ${id}`)
     );
-    assert.deepEqual(deferredLookups(logs), [
-      [1, undefined, undefined, 8],
-      [3, undefined, undefined, 8],
-    ]);
+    assert.deepEqual(deferredLookups(logs), []);
+    const { progress: handled, total } = mangaLibraryScanner.status();
+    assert.deepEqual([handled, total], [26, 26]);
+    assert.deepEqual(completion(logs), {
+      ...counts,
+      listed: 26,
+      bound: {},
+      proposed: 1,
+      unmatched: 25,
+    });
   });
 
-  it('lets a started MAL lookup finish on the calls left in the run', async () => {
+  it('reads every page of each MAL lookup, instance after instance', async () => {
     const one = await start({ mangas: [malTracked(1, 55)] });
     const two = await start({ mangas: [malTracked(2, 56)] });
     configure(instanceFor(one, 1), instanceFor(two, 2));
-    // Instance 1's share is 5 calls, but its lookup has 7 pages.
     lookups.mal.mock.mockImplementation(
       async (malIds: readonly number[], page: number) => ({
         hasNextPage: malIds.includes(55) && page < 7,
@@ -2300,5 +2778,21 @@ describe('manga library scan: requests', () => {
 
     assert.deepEqual(await manifests(), [[101, 2, AWAITING_BINDING, false]]);
     assert.equal(await getRepository(RequestDispatchOutbox).count(), 0);
+  });
+
+  it('releases a parked request once a confident title match binds its title', async () => {
+    const server = await start({
+      mangas: [fakeLibraryManga(1, { chapterCount: 2, downloadCount: 1 })],
+    });
+    configure(instanceFor(server));
+    lookups.titles.mock.mockImplementation(async () => [
+      anilistManga(401, 'Fake Library Title 1'),
+    ]);
+    const released = await recordRequest(401);
+
+    await scan();
+
+    assert.deepEqual(await manifests(), [[401, 1, BOUND, true]]);
+    assert.deepEqual(await outbox(), [released]);
   });
 });
