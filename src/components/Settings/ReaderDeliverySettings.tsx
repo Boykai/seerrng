@@ -13,6 +13,10 @@ import type {
   ReaderDeliveryProvider,
   ReaderDeliverySettings as ReaderDeliverySettingsType,
 } from '@server/lib/settings';
+import {
+  getComparableReaderServiceUrl,
+  normalizeReaderServiceUrl,
+} from '@server/utils/readerServiceUrl';
 import axios from 'axios';
 import type { FormEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -386,7 +390,10 @@ const ReaderDeliverySettings = () => {
       !clearCredentials[provider] &&
       (password === '' || password === '[REDACTED]') &&
       savedPassword === '[REDACTED]' &&
-      serviceUrl.trim() === savedUrl?.trim() &&
+      serviceUrl.trim() !== '' &&
+      username.trim() !== '' &&
+      getComparableReaderServiceUrl(normalizeReaderServiceUrl(serviceUrl)) ===
+        getComparableReaderServiceUrl(savedUrl ?? '') &&
       username.trim() === savedUsername?.trim();
     const catalogUrl = getCatalogUrl(serviceUrl);
     const comicCatalogUrl = isGrimmory ? getKomgaUrl(serviceUrl) : '';

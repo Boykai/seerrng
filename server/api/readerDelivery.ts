@@ -435,9 +435,10 @@ export class ReaderDeliveryApi extends ExternalAPI {
             name: group.name,
             icon: 'books',
             filter: group.filter,
-            // Required when creating a scope on BookOrbit releases before 3.0.
-            ...(group.id ? {} : { defaultSort: [] }),
-            isPublic: group.isPublic,
+            // Visibility is set only on a new Smart Scope, so an update keeps
+            // the visibility chosen in BookOrbit. BookOrbit releases before
+            // 3.0 also require a default sort on a new Smart Scope.
+            ...(group.id ? {} : { defaultSort: [], isPublic: group.isPublic }),
             syncToKobo: group.syncToKobo,
           };
     const endpoint =

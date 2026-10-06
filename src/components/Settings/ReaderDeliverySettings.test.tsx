@@ -254,6 +254,18 @@ it('offers to keep the saved password only for the saved address and username', 
   expect(placeholder()).toBe('');
   await type('grimmory-url', 'https://grimmory.example.test');
   expect(placeholder()).toBe('Saved; leave blank to keep it');
+  for (const sameService of [
+    'HTTPS://Grimmory.Example.Test/',
+    'https://grimmory.example.test:443',
+    'https://grimmory.example.test/api/v1/opds',
+    'https://grimmory.example.test/komga/api/',
+  ]) {
+    await type('grimmory-url', sameService);
+    expect(placeholder(), sameService).toBe('Saved; leave blank to keep it');
+  }
+  await type('grimmory-url', 'https://grimmory.example.test/reader');
+  expect(placeholder()).toBe('');
+  await type('grimmory-url', 'https://grimmory.example.test');
   await type('grimmory-username', 'other-admin');
   expect(placeholder()).toBe('');
   expect(

@@ -119,8 +119,8 @@ or OPDS account belongs to a different reader-service user than the account
 connected in SeerrNG. The reader account also needs access to the matching
 library. BookOrbit public Smart Scopes appear in OPDS feeds; private Smart
 Scopes are only visible to their owner. SeerrNG sets a BookOrbit Smart Scope's
-visibility only when it creates the Smart Scope, so change it later in
-BookOrbit. For BookOrbit v2.2 or
+visibility only when it creates the Smart Scope and leaves it unchanged when it
+updates the Smart Scope, so change it later in BookOrbit. For BookOrbit v2.2 or
 later, **Sync this BookOrbit scope to the connected Kobo account** enables
 sync for the service account configured in SeerrNG. Grimmory's Kobo inclusion
 shelf is separate and is left unchanged. SeerrNG reports the saved grouping

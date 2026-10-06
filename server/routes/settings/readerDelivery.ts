@@ -24,6 +24,10 @@ import {
 import logger from '@server/logger';
 import { authorizedMutation } from '@server/middleware/authorizedMutation';
 import {
+  getComparableReaderServiceUrl,
+  normalizeReaderServiceUrl,
+} from '@server/utils/readerServiceUrl';
+import {
   isValidApplicationUrl,
   preserveRedactedSecrets,
   REDACTED_SECRET,
@@ -56,10 +60,7 @@ const parseServiceUrl = (
     };
   }
 
-  const normalizedUrl = trimmed.replace(/\/+$/, '');
-  return {
-    value: normalizedUrl.replace(/\/(?:api\/v1\/opds|komga\/api)$/i, ''),
-  };
+  return { value: normalizeReaderServiceUrl(trimmed) };
 };
 
 const parsePreferredProvider = (
@@ -352,15 +353,6 @@ const getProviderError = (
   );
 };
 
-const getComparableUrl = (value: string) => {
-  try {
-    const url = new URL(value);
-    return url.protocol + '//' + url.host + url.pathname.replace(/\/+$/, '');
-  } catch {
-    return value;
-  }
-};
-
 /**
  * Decides what a submitted password stands for. A blank or redacted password
  * means the saved one, but only for the saved address and username, so the
@@ -375,7 +367,8 @@ const getSavedPasswordUse = (
   if (password && password !== REDACTED_SECRET) return 'typed';
   if (!saved.password) return 'none';
   return saved.url &&
-    getComparableUrl(url) === getComparableUrl(saved.url) &&
+    getComparableReaderServiceUrl(url) ===
+      getComparableReaderServiceUrl(saved.url) &&
     username === saved.username
     ? 'saved'
     : 'changed';
@@ -820,7 +813,7 @@ readerDeliveryRoutes.post(
     ) {
       return res.status(409).json({
         error:
-          'BookOrbit sets scope visibility when the scope is created. Change this grouping’s visibility in BookOrbit, or remove the SeerrNG-managed scope and create it again.',
+          'SeerrNG sets a BookOrbit Smart Scope’s visibility only when it creates the Smart Scope. Change this Smart Scope’s visibility in BookOrbit, or remove the SeerrNG-managed Smart Scope and create it again.',
       });
     }
     if (

@@ -508,7 +508,6 @@ describe('ReaderDeliveryApi groupings', () => {
       name: 'SeerrNG series',
       icon: 'books',
       filter: scopeFilter,
-      isPublic: false,
       syncToKobo: true,
     });
 
