@@ -1,5 +1,6 @@
 import { MediaStatus } from '@server/constants/media';
 import dataSource from '@server/datasource';
+import MangaMatchCandidate from '@server/entity/MangaMatchCandidate';
 import MangaSourceBinding, {
   MANGA_BINDING_ORIGIN_ADMIN,
   MANGA_BINDING_ORIGIN_RESOLVER,
@@ -31,7 +32,10 @@ import { isUniqueConstraintError } from '@server/utils/databaseError';
 
 const LABEL = 'Manga Source Resolve';
 
-/** A source manga outside the Suwayomi library, read before any lock. */
+/**
+ * A source manga, read before any lock: one outside the Suwayomi library, or
+ * with `library`, one in it.
+ */
 export interface MangaResolverItem {
   snapshot: SuwayomiSettings;
   anilistId: number;
@@ -41,6 +45,8 @@ export interface MangaResolverItem {
   title: string;
   /** Matched through an exact MangaDex link, not chosen by hand. */
   exact: boolean;
+  /** A manga in the library, and how it was matched to the title. */
+  library?: { confidence: MangaBindingConfidence; matchedBy: string };
 }
 
 export type MangaResolverBindResult =
@@ -100,7 +106,8 @@ const reconcileAfter = async (
   }
 };
 
-const translateWriteError = (error: unknown): never => {
+/** Turns a resolver write's settings race or unique conflict into its code. */
+export const translateWriteError = (error: unknown): never => {
   if (error instanceof SuwayomiInstanceChangedError) {
     throw new MangaResolveError('MANGA_INSTANCE_CHANGED');
   }
@@ -111,8 +118,9 @@ const translateWriteError = (error: unknown): never => {
 };
 
 /**
- * Binds a source manga outside the library to the title, as an ACTIVE row
- * that is not in the library yet. Takes the title's request admission, then
+ * Binds a source manga to the title as an ACTIVE row: one outside the
+ * library is not in it yet, and a library manga's match row for review
+ * goes, as when a scan binds it. Takes the title's request admission, then
  * the instance's, then one transaction that re-reads every row it decides
  * on; no outside call happens under them. Approved requests the binding
  * released are queued for dispatch once both admissions are released.
@@ -165,24 +173,36 @@ export const writeMangaResolverBinding = (
             return { outcome: 'skipped', reason: 'REJECTED' };
           }
           const values = {
-            confidence: item.exact
-              ? MangaBindingConfidence.EXACT_LINK
-              : MangaBindingConfidence.MANUAL,
-            matchedBy: item.exact
-              ? MANGA_MATCHED_BY_MANGADEX_LINK
-              : MANGA_MATCHED_BY_MANUAL,
+            confidence:
+              item.library?.confidence ??
+              (item.exact
+                ? MangaBindingConfidence.EXACT_LINK
+                : MangaBindingConfidence.MANUAL),
+            matchedBy:
+              item.library?.matchedBy ??
+              (item.exact
+                ? MANGA_MATCHED_BY_MANGADEX_LINK
+                : MANGA_MATCHED_BY_MANUAL),
             origin:
               mode === 'auto'
                 ? MANGA_BINDING_ORIGIN_RESOLVER
                 : MANGA_BINDING_ORIGIN_ADMIN,
             state: MangaBindingState.ACTIVE,
-            inLibrary: false,
+            inLibrary: item.library !== undefined,
             availability: MediaStatus.UNKNOWN,
             chapterCount: null,
             downloadCount: null,
             suwayomiMangaId: item.suwayomiMangaId,
             title: item.title,
           };
+          if (item.library) {
+            await manager.delete(MangaMatchCandidate, {
+              instanceId,
+              sourceId,
+              urlHash,
+              url,
+            });
+          }
           if (pair) {
             await manager.update(MangaSourceBinding, pair.id, values);
             return {

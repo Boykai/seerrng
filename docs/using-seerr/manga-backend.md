@@ -135,6 +135,13 @@ reached, or has no sources installed. A test needs at least one installed
 source besides Suwayomi's local source: install a source extension in Suwayomi,
 then test again.
 
+Saving a new server, or a new address or login, starts the
+[Manga Library Scan](#library-scan) right away unless it is already running,
+so the library is matched without waiting for the nightly run. Saving a new
+source selection starts the [Manga Source Resolve](#source-resolution) job the
+same way. A job that is turned off under **Settings → Jobs & Cache** does not
+start.
+
 The test result lists warnings, most urgent first. SeerrNG warns when it
 detects no authentication or empty configured credentials; in that case, check
 Suwayomi's authentication settings. SeerrNG does not support Suwayomi's simple
@@ -181,7 +188,7 @@ to request:
   starting number onward. Chapter numbers go from 0 to 1,000,000 and may have
   decimals, such as 10.5.
 
-The form also offers **Follow New Chapters**, which is **Off** by default; see
+The form also offers **Follow New Chapters**, which is **On** by default; see
 [Follow new chapters](#follow-new-chapters).
 
 SeerrNG chooses the chapters when it sends the request to Suwayomi, not when
@@ -220,11 +227,21 @@ does not need to do anything. It shows **Processing** or **Approved** again
 once the title is matched: by a library scan, on the
 [Manga Library page](#manga-library-page), or by the **Manga Source Resolve**
 job; see [Source resolution](#source-resolution). The job matches a title by
-itself only when it finds an exact link; otherwise an administrator chooses a
-source, as in [Resolve sources by hand](#resolve-sources-by-hand). Request
+itself only when it finds the title in the Suwayomi library or an exact link;
+otherwise an administrator confirms a library match or chooses a source, as in
+[Resolve sources by hand](#resolve-sources-by-hand). Request
 managers also see that an administrator may need to choose a source. For
 administrators, **Choose Source** opens the title on the **Manga Sources**
 page.
+
+The request is marked as needing attention, with one of these messages, when
+it cannot go on without an administrator:
+
+- The title seems to be in the Suwayomi library already, but SeerrNG can't
+  confirm the match by itself. Confirm it in the **Review Queue** under
+  **Settings → Manga Library**.
+- The title isn't in the Suwayomi library, and no sources are selected to
+  search. Select sources under **Settings → Services → Suwayomi**.
 
 SeerrNG sends the request to Suwayomi once the title has a match it can use;
 see [Which match a request uses](#which-match-a-request-uses). While the
@@ -274,9 +291,10 @@ limiting or unavailable, the job tries again on its next run.
 
 The **Manga Library Scan** job reads the library of the connected Suwayomi
 server. It records which AniList title each manga in that library is and how
-much of it Suwayomi has downloaded. The job runs every day at 05:45; change its
-schedule or run it now under **Settings → Jobs & Cache**. It does nothing
-while the Manga category is off.
+much of it Suwayomi has downloaded. The job runs every day at 05:45, and right
+after you save a new Suwayomi server, address or login; change its schedule or
+run it now under **Settings → Jobs & Cache**. It does nothing while the Manga
+category is off.
 
 The scan only reads from Suwayomi and never changes anything there. It covers
 every manga in the Suwayomi library, whichever sources you selected for
@@ -474,6 +492,8 @@ again.
 
 Proposals arrive with each library scan, so a large library gets them over
 several runs; see [Lookups on AniList and MangaDex](#lookups-on-anilist-and-mangadex).
+The **Manga Source Resolve** job also proposes a requested title for library
+manga that likely are that title; see [Library first](#library-first).
 While the queue is empty or lists manga without a proposal, the page suggests
 running the **Manga Library Scan** job under **Settings → Jobs & Cache** to
 get proposals sooner.
@@ -492,6 +512,9 @@ column says how each match was made:
   this text wherever it shows such a match.
 - **Confirmed by an Admin**: an administrator confirmed a proposal; the badge
   shows how the proposal was ranked.
+- **Title Match for a Request**: the **Manga Source Resolve** job matched a
+  requested title to the manga by its title, as in
+  [Library first](#library-first); the badge shows how it was ranked.
 - **Chosen by an Admin**: an administrator chose the title.
 
 The **Status** column shows **Available**, **Partially Available**, or **In
@@ -537,14 +560,16 @@ Movies, Series, and Manga categories that is on.
 ## Source resolution
 
 To download a requested manga through Suwayomi, SeerrNG needs a match between
-the AniList title and a manga in one of the sources you selected for
-Suwayomi. The **Manga Source Resolve** job looks for these matches. It runs
-every 10 minutes; change its schedule or run it now under **Settings → Jobs &
-Cache**. It does nothing while the Manga category is off or no Suwayomi
-server is configured.
+the AniList title and a manga in the Suwayomi library or in one of the sources
+you selected for Suwayomi. The **Manga Source Resolve** job looks for these
+matches. It runs every 10 minutes, and right after a request is approved or
+you save a new source selection; change its schedule or run it now under
+**Settings → Jobs & Cache**. It does nothing while the Manga category is off
+or no Suwayomi server is configured.
 
-The job only matches by itself when it finds an exact link through MangaDex.
-Everything else waits for an administrator.
+The job only matches by itself when it finds the title in the Suwayomi
+library, as in [Library first](#library-first), or an exact link through
+MangaDex. Everything else waits for an administrator.
 
 ### What the job searches
 
@@ -561,6 +586,33 @@ then the rest, oldest request first.
   request stays as it is.
 - A title that already has a match on the server is not searched again; its
   request is marked as matched.
+
+### Library first
+
+Before it searches any source, the job looks for the title in the Suwayomi
+library, whichever sources you selected:
+
+1. A library manga that Suwayomi tracks with the title's AniList ID is
+   matched, as step 1 of [Matching](#matching) does.
+2. Otherwise SeerrNG compares the title's romaji, English, native, and
+   alternative titles with the title of every library manga, as in
+   [Matching](#matching). When exactly one library manga ranks High, leading
+   every other library manga by the same margin, and no tracker record names
+   another title for it, SeerrNG matches the title to it with `matchedBy`
+   `title`. The request's AniList ID confirms the match. The
+   [Manga Library page](#manga-library-page) shows it as
+   **Title Match for a Request**, and an administrator can reject it there.
+3. Library manga that likely are the title but fall short of that, such as
+   two close matches or a Medium one, go to the **Review Queue** as proposals
+   for the title. The title shows **Needs Pick** on the **Manga Sources**
+   page, its requests ask an administrator to confirm the match, and the job
+   checks the library again every hour.
+
+A title matched in the library needs no source search, and its request
+continues as a title that is already in the library. The job never matches a
+library manga that has a match to another title, or whose match to this
+title an administrator rejected. When the job cannot read the library, it
+searches the sources as before.
 
 ### Exact links
 
@@ -625,7 +677,7 @@ administrator asks for a search.
 | --- | --- | --- |
 | **Awaiting Approval** | Only pending requests wait, and no search that an administrator asked for is open. | When a request is approved or an administrator asks for a search. |
 | **Queued** | Not searched yet, asked for by an administrator, or waiting for a source again after losing its match. | The next run, or within an hour after a search that failed. |
-| **Needs Pick** | Suggestions wait for an administrator. | After 7 days, or after 1 hour when MangaDex or a source failed during the search. |
+| **Needs Pick** | Suggestions or library proposals wait for an administrator. | After 7 days, or after 1 hour when MangaDex or a source failed during the search or the title waits for a library match. |
 | **No Match** | No source returned a usable result. | After 1 hour, 6 hours, and 24 hours, then every 7 days. |
 | **Excluded** | The **Manga Content** switches hide the title, or AniList no longer lists it. | After 24 hours. |
 | **Bound** | The title has a match on the server. | None. |
@@ -637,7 +689,9 @@ administrator asks for a search.
   a longer wait.
 - A title that no selected source may search, because none of them is
   installed or **Include Adult Manga** leaves none, waits as **No Match**
-  does.
+  does. When no source is selected at all and the title is not in the
+  library, its requests ask an administrator to select sources. Saving a new
+  source selection makes such titles due at once.
 - An administrator's search request resets the wait, and the next run
   searches the title. When that run cannot search it, the request stays open
   and the title waits as any other does: until the next run after a rate
@@ -969,8 +1023,10 @@ A request gets the chapters chosen for it when SeerrNG sends it; see
 [Which chapters a request gets](#which-chapters-a-request-gets). When its
 requester sets **Follow New Chapters** to **On**, SeerrNG also adds the
 chapters that the source lists later and that fit the request's scope, and
-queues them for download. Following is off for every request until its
-requester turns it on.
+queues them for download. The request form starts with **On**. A request made
+with **Off**, an automatic watchlist request, and an API request without
+`mangaFollow: true` do not follow new chapters until the requester turns
+following on.
 
 ### Turn following on or off
 
@@ -1231,7 +1287,9 @@ usually **Downloading**, and its status explains the code. Either way, the
 request until the code clears, and the **Active** filter leaves it out. The
 same applies while a step of [Dispatch](#dispatch) has failed for an approved
 request and waits to be tried again; see
-[Dispatch sweep and retries](#dispatch-sweep-and-retries).
+[Dispatch sweep and retries](#dispatch-sweep-and-retries), and while a request
+that waits for a source needs an administrator; see
+[Waiting for a source](#waiting-for-a-source).
 
 ### Retry chapters
 

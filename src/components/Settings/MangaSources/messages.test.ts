@@ -48,6 +48,9 @@ describe('getReasonMessage', () => {
   it('gives every reason one fixed message', () => {
     const expected: Record<string, string> = {
       EXISTING_BINDING: 'The title already had a library match.',
+      LIBRARY_MATCH: 'The title was found in the Suwayomi library.',
+      LIBRARY_UNCONFIRMED:
+        'The Suwayomi library may have this title. Confirm the match on the Manga Library page.',
       MANGADEX_AMBIGUOUS: 'Several MangaDex entries list this title.',
       EXACT_IN_LIBRARY: 'The exact match is already in the Suwayomi library.',
       EXACT_BOUND_ELSEWHERE: 'The exact match is used by another title.',

@@ -54,6 +54,7 @@ import {
   writeMangaResolverBinding,
 } from '@server/lib/mangaResolver/bind';
 import { findWaitingMangaTitles } from '@server/lib/mangaResolver/titles';
+import { setMangaSourceResolveStarter } from '@server/lib/mangaResolver/wake';
 import * as mediaMutation from '@server/lib/mediaMutation';
 import requestDispatchManager from '@server/lib/requestDispatch';
 import { mangaLibraryScanner } from '@server/lib/scanners/manga/suwayomi';
@@ -1881,13 +1882,33 @@ describe('manga dispatch: guards', () => {
     const { request: disabled } = await seedDispatchRequest({
       anilistId: 9004,
     });
+    const { request: parkedPending } = await seedDispatchRequest({
+      anilistId: 9005,
+      status: MediaRequestStatus.PENDING,
+      manifest: { bindingState: AWAITING_BINDING, boundAt: null },
+    });
+    const woken: number[] = [];
+    let current = 0;
+    setMangaSourceResolveStarter(() => woken.push(current));
 
-    for (const request of [pending, parked, unmanifested]) {
-      assert.deepStrictEqual(await run(request.id, fake), { delivered: true });
+    try {
+      for (const request of [pending, parked, unmanifested, parkedPending]) {
+        current = request.id;
+        assert.deepStrictEqual(await run(request.id, fake), {
+          delivered: true,
+        });
+      }
+      settings.main.enabledMediaCategories = { ...categories, manga: false };
+      current = disabled.id;
+      assert.deepStrictEqual(await run(disabled.id, fake), { delivered: true });
+      current = parked.id + 1_000;
+      assert.deepStrictEqual(await run(parked.id, fake), { delivered: true });
+    } finally {
+      setMangaSourceResolveStarter(undefined);
     }
-    settings.main.enabledMediaCategories = { ...categories, manga: false };
-    assert.deepStrictEqual(await run(disabled.id, fake), { delivered: true });
 
+    // Only the approved request that waits for its title wakes the resolver.
+    assert.deepStrictEqual(woken, [parked.id]);
     assert.deepStrictEqual(fake.server.requests, []);
     for (const request of [pending, parked, disabled]) {
       const manifest = await manifestOf(request.id);

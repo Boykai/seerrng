@@ -1,6 +1,8 @@
 import {
+  MANGA_PARKED_CODES,
   MangaAttentionCode,
   MangaDispatchError,
+  MangaParkedCode,
   MangaRequestBindingState,
   MangaRequestCheckpoint,
 } from '@server/constants/mangaRequest';
@@ -410,6 +412,10 @@ const MANGA_CODE_MESSAGES: Readonly<Record<string, string>> = {
     'The manga service this request was sent to was removed from SeerrNG, so SeerrNG stopped checking its progress. An administrator can delete this request so the title can be requested again.',
   [MangaAttentionCode.BINDING_ORPHANED]:
     'The connected manga service no longer has the manga this request was sent to, or its match was rejected. SeerrNG keeps checking by itself; an administrator can review the match under Settings → Manga Library.',
+  [MangaParkedCode.LIBRARY_UNCONFIRMED]:
+    "This title seems to be in the Suwayomi library already, but SeerrNG can't confirm the match by itself. An administrator needs to confirm the match under Settings → Manga Library.",
+  [MangaParkedCode.NO_SOURCES]:
+    "This title isn't in the Suwayomi library, and SeerrNG has no selected sources to search on the Suwayomi server. An administrator needs to select sources under Settings → Services → Suwayomi.",
 };
 
 const MANGA_ATTENTION_MESSAGE =
@@ -447,7 +453,8 @@ const isMangaProgressComplete = (
 /**
  * The code that makes an approved manga request need an administrator while
  * it is still under way. The poll owns the attention code, dispatch owns
- * lastError.
+ * lastError; while the request waits for a binding, only the source resolve
+ * job's codes count.
  */
 const getMangaAttentionCode = (
   requestStatus: MediaRequestStatus,
@@ -467,10 +474,14 @@ const getMangaAttentionCode = (
   if (
     requestStatus !== MediaRequestStatus.APPROVED ||
     !progress ||
-    progress.bindingState === MangaRequestBindingState.AWAITING_BINDING ||
     isMangaProgressComplete(progress)
   ) {
     return null;
+  }
+  if (progress.bindingState === MangaRequestBindingState.AWAITING_BINDING) {
+    return progress.lastError && MANGA_PARKED_CODES.includes(progress.lastError)
+      ? progress.lastError
+      : null;
   }
   const enqueued =
     progress.checkpoint === MangaRequestCheckpoint.CHAPTERS_ENQUEUED;
@@ -1042,10 +1053,13 @@ const getMangaStage = (
     return { ...settled, stage: RequestStatusStage.APPROVED };
   }
   if (progress.bindingState === MangaRequestBindingState.AWAITING_BINDING) {
+    const parked = getMangaAttentionCode(request.status, progress);
     return {
       ...settled,
       stage: RequestStatusStage.APPROVED,
-      message: MANGA_PARKED_MESSAGE,
+      ...(parked
+        ? { needsAttention: true, message: getMangaCodeMessage(parked) }
+        : { message: MANGA_PARKED_MESSAGE }),
     };
   }
 

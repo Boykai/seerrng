@@ -2,9 +2,13 @@ import type {
   SuwayomiSettingsErrorCode,
   SuwayomiSettingsErrorResponse,
 } from '@server/interfaces/api/suwayomiInterfaces';
+import { startScheduledJobNow } from '@server/job/schedule';
 import { getExternalRuntimeConfig } from '@server/lib/externalRuntimeConfig';
 import { Permission } from '@server/lib/permissions';
-import { runWithServarrServiceCollectionMutationAdmission } from '@server/lib/serviceAdmission';
+import {
+  hasSameServarrServiceAuthority,
+  runWithServarrServiceCollectionMutationAdmission,
+} from '@server/lib/serviceAdmission';
 import {
   allocateServarrServiceId,
   assertServarrServiceCanBeRemoved,
@@ -64,6 +68,26 @@ const sendRouteError = (res: Response, error: unknown): boolean => {
   return false;
 };
 
+/**
+ * A new server, address or login starts a library scan at once, and a new
+ * source selection a source search, instead of waiting for their schedules.
+ * Called after the save's admission is released; neither run is awaited.
+ */
+const startMangaJobsAfterSave = (
+  saved: SuwayomiSettings,
+  previous?: SuwayomiSettings
+): void => {
+  if (!previous || !hasSameServarrServiceAuthority(saved, previous)) {
+    startScheduledJobNow('manga-library-scan');
+  }
+  if (
+    previous &&
+    saved.sourceAllowlist.join('\n') !== previous.sourceAllowlist.join('\n')
+  ) {
+    startScheduledJobNow('manga-source-resolve');
+  }
+};
+
 const suwayomiRoutes = Router();
 
 suwayomiRoutes.get('/', (_req, res) => {
@@ -112,6 +136,7 @@ suwayomiRoutes.post(
         }
       );
       invalidateSuwayomiClients(created.id);
+      startMangaJobsAfterSave(created);
       return res.status(201).json(suwayomiSettingsView(created));
     } catch (error) {
       if (sendRouteError(res, error)) return;
@@ -177,6 +202,7 @@ suwayomiRoutes.put<{ id: string }>(
       }
 
       try {
+        let previous: SuwayomiSettings | undefined;
         const updated = await runWithServarrServiceCollectionMutationAdmission(
           'suwayomi',
           async () => {
@@ -187,6 +213,7 @@ suwayomiRoutes.put<{ id: string }>(
                 if (!stored) {
                   throw new SuwayomiInstanceMissingError();
                 }
+                previous = stored;
                 const password = resolveSuwayomiPassword(parsed.value, stored);
                 if ('error' in password) {
                   throw new SuwayomiSettingsRouteError(
@@ -229,6 +256,7 @@ suwayomiRoutes.put<{ id: string }>(
         if (!updated) {
           return next(NOT_FOUND);
         }
+        startMangaJobsAfterSave(updated, previous);
         return res.status(200).json(suwayomiSettingsView(updated));
       } catch (error) {
         if (error instanceof SuwayomiInstanceMissingError) {

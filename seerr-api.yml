@@ -4366,8 +4366,10 @@ components:
           description: Why the title has its status.
           enum:
             - EXACT_LINK
+            - LIBRARY_MATCH
             - EXISTING_BINDING
             - ADMIN_BIND
+            - LIBRARY_UNCONFIRMED
             - MANGADEX_AMBIGUOUS
             - EXACT_IN_LIBRARY
             - EXACT_BOUND_ELSEWHERE

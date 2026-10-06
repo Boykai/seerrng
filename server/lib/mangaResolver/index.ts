@@ -13,11 +13,18 @@ import {
   type SuwayomiErrorCode,
 } from '@server/api/suwayomi/errors';
 import type {
+  SuwayomiCapabilities,
   SuwayomiMangaSummary,
   SuwayomiSearchPage,
   SuwayomiSource,
 } from '@server/api/suwayomi/types';
+import {
+  MANGA_PARKED_CODES,
+  MangaParkedCode,
+  MangaRequestBindingState,
+} from '@server/constants/mangaRequest';
 import dataSource from '@server/datasource';
+import MangaRequestManifest from '@server/entity/MangaRequestManifest';
 import {
   hashMangaSourceUrl,
   MANGA_MATCHED_BY_MANGADEX_LINK,
@@ -39,9 +46,16 @@ import { getMangaAdmissionKey } from '@server/lib/mangaMedia';
 import { hasActiveMangaBinding } from '@server/lib/mangaRequestBindings';
 import {
   catchUpMangaResolverTitle,
+  translateWriteError,
   writeMangaResolverBinding,
 } from '@server/lib/mangaResolver/bind';
 import { MangaResolveError } from '@server/lib/mangaResolver/errors';
+import {
+  matchMangaLibrary,
+  proposeMangaLibraryMatches,
+  readMangaLibrary,
+  type MangaLibraryEntry,
+} from '@server/lib/mangaResolver/library';
 import {
   languageRank,
   mangadexQueries,
@@ -66,6 +80,7 @@ import { getSuwayomiClient } from '@server/lib/suwayomi/clientFactory';
 import { snapshotSuwayomiInstance } from '@server/lib/suwayomi/instanceAdmission';
 import logger from '@server/logger';
 import { AsyncResource } from 'node:async_hooks';
+import { IsNull, Not } from 'typeorm';
 
 const LABEL = 'Manga Source Resolve';
 const HOUR_MS = 3_600_000;
@@ -190,7 +205,10 @@ interface RunState {
 interface InstanceRun {
   snapshot: SuwayomiSettings;
   client: SuwayomiAPI;
+  capabilities?: SuwayomiCapabilities;
   sources?: RankedSource[];
+  /** 'unread' when the library could not be read this run. */
+  library?: MangaLibraryEntry[] | 'unread';
   searches: number;
 }
 
@@ -208,6 +226,11 @@ interface TitleResult {
   searched?: boolean;
   /** The run answered an admin's search request. */
   answered: boolean;
+  /**
+   * Why the title's waiting requests need an admin. A decided title without
+   * one clears it from them.
+   */
+  parked?: MangaParkedCode;
 }
 
 type Next = 'continue' | 'stop-instance' | 'stop-run';
@@ -264,10 +287,13 @@ const runPool = async <Item>(
 };
 
 /**
- * Finds a Suwayomi source manga for each requested manga title that waits
- * for a binding. It binds by itself only through an exact MangaDex link that
- * an allowlisted source confirms; everything else waits for an admin. Its
- * only Suwayomi write is the source search, which stores what it finds.
+ * Finds a Suwayomi manga for each requested manga title that waits for a
+ * binding. The instance's library comes first: an entry that a tracker
+ * record or one clear title match proves is bound, and a likely one waits
+ * for an admin. Then the allowlisted sources are searched; a source manga
+ * binds by itself only through an exact MangaDex link that an allowlisted
+ * source confirms, and everything else waits for an admin. Its only
+ * Suwayomi write is the source search, which stores what it finds.
  */
 export class MangaSourceResolver {
   private controller?: AbortController;
@@ -281,6 +307,8 @@ export class MangaSourceResolver {
     string,
     { positive: boolean; recheckAt: number }
   >();
+  /** Each instance's allowlist at its last run. */
+  private readonly allowlists = new Map<number, string>();
 
   constructor(
     options: { limits?: Partial<MangaResolverLimits>; now?: () => number } = {}
@@ -355,6 +383,7 @@ export class MangaSourceResolver {
     const snapshot = snapshotSuwayomiInstance(instanceId);
     const client = snapshot && getSuwayomiClient(instanceId);
     if (!snapshot || !client) return 'continue';
+    await this.recheckWithoutSources(run, snapshot);
     const now = new Date(this.now());
     const waiting = await findWaitingMangaTitles(dataSource.manager, {
       instanceId,
@@ -381,6 +410,39 @@ export class MangaSourceResolver {
       if (next !== 'continue') return next;
     }
     return 'continue';
+  }
+
+  /**
+   * A title that had no source to search is due again once the instance's
+   * allowlist changes, and at its first run after a restart. The wait is
+   * cleared in the database, under each title's request admission, so the
+   * titles that a run does not reach stay due for the next runs.
+   */
+  private async recheckWithoutSources(
+    run: RunState,
+    snapshot: SuwayomiSettings
+  ): Promise<void> {
+    const allowlist = snapshot.sourceAllowlist.join('\n');
+    if (this.allowlists.get(snapshot.id) === allowlist) return;
+    const where = {
+      instanceId: snapshot.id,
+      reason: 'NO_ELIGIBLE_SOURCES',
+      nextAttemptAt: Not(IsNull()),
+    };
+    const rows = await dataSource.manager.find(MangaSourceResolution, {
+      where,
+    });
+    for (const { anilistId } of rows) {
+      if (run.signal.aborted) return;
+      await runWithRequestAdmission([getMangaAdmissionKey(anilistId)], () =>
+        dataSource.manager.update(
+          MangaSourceResolution,
+          { ...where, anilistId },
+          { nextAttemptAt: null }
+        )
+      );
+    }
+    this.allowlists.set(snapshot.id, allowlist);
   }
 
   /**
@@ -505,6 +567,22 @@ export class MangaSourceResolver {
       });
     }
 
+    // A title in the library needs no source search.
+    const library = await this.checkLibrary(run, instance, details);
+    if (library === 'bound') return done(bound('LIBRARY_MATCH'));
+    if (library === 'existing') return done(bound('EXISTING_BINDING'));
+    if (library === 'unconfirmed') {
+      return done({
+        status: MangaResolutionStatus.NEEDS_PICK,
+        reason: 'LIBRARY_UNCONFIRMED',
+        attempts: 0,
+        nextAttemptAt: new Date(this.now() + SHORT_RETRY_MS),
+        lastError: null,
+        answered: true,
+        parked: MangaParkedCode.LIBRARY_UNCONFIRMED,
+      });
+    }
+
     const sources = await this.sourcesOf(run, instance);
     // Fuzzy searches follow the content policy. Exact probes need not: a hit
     // must carry the exact link of a title that passed it.
@@ -534,6 +612,10 @@ export class MangaSourceResolver {
         lastError: null,
         candidates: [],
         answered: true,
+        ...(library === 'absent' &&
+          instance.snapshot.sourceAllowlist.length === 0 && {
+            parked: MangaParkedCode.NO_SOURCES,
+          }),
       });
     }
 
@@ -762,23 +844,41 @@ export class MangaSourceResolver {
     return [...found].slice(0, this.limits.ambiguousUuids);
   }
 
+  /** The server's capabilities, read once a run; an unusable server fails. */
+  private async capabilitiesOf(
+    run: RunState,
+    instance: InstanceRun
+  ): Promise<SuwayomiCapabilities> {
+    if (instance.capabilities) return instance.capabilities;
+    try {
+      const capabilities = await instance.client.getCapabilities({
+        signal: run.signal,
+      });
+      if (!capabilities.supported || capabilities.perUserDownloadState) {
+        throw new InstanceFailure('UNSUPPORTED_SERVER');
+      }
+      instance.capabilities = capabilities;
+      return capabilities;
+    } catch (error) {
+      if (run.signal.aborted || error instanceof InstanceFailure) throw error;
+      throw new InstanceFailure(
+        error instanceof SuwayomiError ? error.code : 'UNKNOWN'
+      );
+    }
+  }
+
   /** Allowlisted, installed sources in allowlist order, read once a run. */
   private async sourcesOf(
     run: RunState,
     instance: InstanceRun
   ): Promise<RankedSource[]> {
     if (instance.sources) return instance.sources;
+    await this.capabilitiesOf(run, instance);
     try {
-      const options = { signal: run.signal };
-      const capabilities = await instance.client.getCapabilities(options);
-      if (!capabilities.supported || capabilities.perUserDownloadState) {
-        throw new InstanceFailure('UNSUPPORTED_SERVER');
-      }
       const installed = new Map(
-        (await instance.client.getSources(options)).map((source) => [
-          source.id,
-          source,
-        ])
+        (await instance.client.getSources({ signal: run.signal })).map(
+          (source) => [source.id, source]
+        )
       );
       instance.sources = instance.snapshot.sourceAllowlist.flatMap(
         (id, rank) => {
@@ -793,6 +893,86 @@ export class MangaSourceResolver {
         error instanceof SuwayomiError ? error.code : 'UNKNOWN'
       );
     }
+  }
+
+  /**
+   * The library and its tracker records, read once a run. A read that fails
+   * for the library alone leaves the check out for this run.
+   */
+  private async libraryOf(
+    run: RunState,
+    instance: InstanceRun
+  ): Promise<MangaLibraryEntry[] | 'unread'> {
+    if (instance.library) return instance.library;
+    const { trackRecords } = await this.capabilitiesOf(run, instance);
+    try {
+      instance.library = await readMangaLibrary(
+        instance.client,
+        trackRecords,
+        run.signal
+      );
+    } catch (error) {
+      if (run.signal.aborted) throw error;
+      if (error instanceof SuwayomiError && INSTANCE_FAILURES.has(error.code)) {
+        throw new InstanceFailure(error.code);
+      }
+      logger.warn('Manga source resolve could not read the library', {
+        label: LABEL,
+        instanceId: instance.snapshot.id,
+        code: error instanceof SuwayomiError ? error.code : 'UNKNOWN',
+      });
+      instance.library = 'unread';
+    }
+    return instance.library;
+  }
+
+  /**
+   * Looks for the title in the instance's library before any source search:
+   * a match that exact evidence or one clear title match proves is bound,
+   * and likely entries wait for an admin on the Manga Library page.
+   */
+  private async checkLibrary(
+    run: RunState,
+    instance: InstanceRun,
+    details: AnilistMangaDetails
+  ): Promise<'bound' | 'existing' | 'unconfirmed' | 'absent' | 'unread'> {
+    const entries = await this.libraryOf(run, instance);
+    if (entries === 'unread') return 'unread';
+    const { snapshot } = instance;
+    const match = await matchMangaLibrary(
+      dataSource.manager,
+      snapshot.id,
+      entries,
+      details
+    );
+    run.signal.throwIfAborted();
+    if (match.kind === 'none') return 'absent';
+    if (match.kind === 'unconfirmed') {
+      await proposeMangaLibraryMatches(
+        snapshot,
+        details.id,
+        match.proposals,
+        run.signal
+      ).catch(translateWriteError);
+      return 'unconfirmed';
+    }
+    const { item, suwayomiMangaId } = match.entry;
+    const write = await writeMangaResolverBinding(
+      {
+        snapshot,
+        anilistId: details.id,
+        sourceId: item.sourceId,
+        url: item.url,
+        suwayomiMangaId,
+        title: item.title,
+        exact: false,
+        library: { confidence: match.confidence, matchedBy: match.matchedBy },
+      },
+      'auto',
+      run.signal
+    );
+    if (write.outcome !== 'skipped') return 'bound';
+    return write.reason === 'EXISTING_BINDING' ? 'existing' : 'absent';
   }
 
   /**
@@ -972,6 +1152,31 @@ export class MangaSourceResolver {
           }
         }
         await manager.save(row);
+        // The title's waiting requests show why they need an admin, if
+        // they do.
+        const parked =
+          row.status === MangaResolutionStatus.BOUND
+            ? null
+            : (next.parked ?? (next.status === undefined ? undefined : null));
+        if (parked !== undefined) {
+          const waiting = manager
+            .createQueryBuilder()
+            .update(MangaRequestManifest)
+            .set({ lastError: parked })
+            .where('"anilistId" = :anilistId', { anilistId })
+            .andWhere('"instanceId" = :instanceId', { instanceId })
+            .andWhere('"bindingState" = :awaiting', {
+              awaiting: MangaRequestBindingState.AWAITING_BINDING,
+            })
+            .andWhere('"frozenAt" IS NULL');
+          await (
+            parked === null
+              ? waiting.andWhere('"lastError" IN (:...parkedCodes)', {
+                  parkedCodes: [...MANGA_PARKED_CODES],
+                })
+              : waiting
+          ).execute();
+        }
         if (next.candidates !== undefined) {
           await manager.delete(MangaSourceCandidate, { instanceId, anilistId });
           if (next.candidates.length > 0) {

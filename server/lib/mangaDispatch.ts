@@ -55,6 +55,7 @@ import {
   selectMangaManifestChapters,
   type MangaChapterCandidate,
 } from '@server/lib/mangaRequests';
+import { wakeMangaSourceResolve } from '@server/lib/mangaResolver/wake';
 import { isMediaCategoryEnabled } from '@server/lib/mediaCategories';
 import type { RequestDispatchOutcome } from '@server/lib/requestDispatch';
 import { hasSameServarrServiceAuthority } from '@server/lib/serviceAdmission';
@@ -1152,6 +1153,15 @@ export const dispatchMangaRequest = async (
   const manifest = await getRepository(MangaRequestManifest).findOne({
     where: { requestId: request.id },
   });
+  if (
+    manifest?.bindingState === MangaRequestBindingState.AWAITING_BINDING &&
+    request.status === MediaRequestStatus.APPROVED &&
+    isMediaCategoryEnabled('manga')
+  ) {
+    // The title is looked for at once, in the library first.
+    wakeMangaSourceResolve();
+    return DELIVERED;
+  }
   if (
     !manifest ||
     request.status !== MediaRequestStatus.APPROVED ||

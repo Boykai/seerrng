@@ -1,6 +1,7 @@
 import {
   MangaAttentionCode,
   MangaDispatchError,
+  MangaParkedCode,
   MangaRequestBindingState,
   MangaRequestCheckpoint,
 } from '@server/constants/mangaRequest';
@@ -921,6 +922,46 @@ test('manga stages follow the manifest through dispatch and delivery', () => {
   assert.equal(
     mangaStatus(mangaProgress(), { status: MediaRequestStatus.DECLINED }).stage,
     RequestStatusStage.DECLINED
+  );
+});
+
+test('a waiting manga request says why an administrator is needed', () => {
+  const waiting = (lastError: string | null) =>
+    mangaStatus(
+      mangaProgress({
+        bindingState: MangaRequestBindingState.AWAITING_BINDING,
+        checkpoint: null,
+        lastError,
+      })
+    );
+
+  const unconfirmed = waiting(MangaParkedCode.LIBRARY_UNCONFIRMED);
+  assert.equal(unconfirmed.stage, RequestStatusStage.APPROVED);
+  assert.equal(unconfirmed.needsAttention, true);
+  assert.equal(unconfirmed.retryable, false);
+  assert.match(unconfirmed.message, /in the Suwayomi library already/);
+  assert.match(unconfirmed.message, /Settings → Manga Library/);
+
+  const noSources = waiting(MangaParkedCode.NO_SOURCES);
+  assert.equal(noSources.stage, RequestStatusStage.APPROVED);
+  assert.equal(noSources.needsAttention, true);
+  assert.match(noSources.message, /Settings → Services → Suwayomi/);
+
+  for (const lastError of [null, MangaDispatchError.BINDING_MISSING]) {
+    const quiet = waiting(lastError);
+    assert.equal(quiet.needsAttention, false, String(lastError));
+    assert.match(quiet.message, /matched on the connected manga service/);
+  }
+  assert.equal(
+    mangaStatus(
+      mangaProgress({
+        bindingState: MangaRequestBindingState.AWAITING_BINDING,
+        checkpoint: null,
+        lastError: MangaParkedCode.NO_SOURCES,
+      }),
+      { status: MediaRequestStatus.PENDING }
+    ).needsAttention,
+    false
   );
 });
 

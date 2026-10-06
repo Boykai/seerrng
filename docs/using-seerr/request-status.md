@@ -57,6 +57,9 @@ a source. A manga request whose status says that it needs an administrator
 counts under **Needs Attention** instead of **Active**, even while it shows
 **Downloading**; see
 [Requests that need attention](./manga-backend.md#requests-that-need-attention).
+A request that waits for a source counts there too when its title needs an
+administrator to confirm its match in the Suwayomi library or to select
+sources; its status says which.
 
 ## Follow new chapters
 
@@ -64,7 +67,7 @@ A manga request gets the matching chapters that its source lists when SeerrNG
 sends it. To also get matching chapters that the source adds later, the
 requester can set **Follow New Chapters** to **On** when requesting, on the
 request's card, or in the request's window, which **View Request** on the
-title's page opens. It is **Off** by default. SeerrNG then checks for new
+title's page opens. The request form starts with **On**. SeerrNG then checks for new
 chapters from time to time and queues them for download. A completed request
 shows **Downloading** again while new chapters arrive, and SeerrNG sends the
 **Request Available** notification again once they are delivered. New chapters

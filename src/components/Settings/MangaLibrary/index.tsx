@@ -131,7 +131,8 @@ export const ConfidenceBadge = ({ confidence }: { confidence: string }) => {
 export const MatchedBy = ({
   binding,
 }: {
-  binding: Pick<MangaLibraryBinding, 'matchedBy' | 'confidence'>;
+  binding: Pick<MangaLibraryBinding, 'matchedBy' | 'confidence'> &
+    Partial<Pick<MangaLibraryBinding, 'origin'>>;
 }) => {
   const intl = useIntl();
 
@@ -160,7 +161,13 @@ export const MatchedBy = ({
     case 'title':
       return (
         <div className="settings-manga-library-stack">
-          <span>{intl.formatMessage(messages.confirmedByAdmin)}</span>
+          <span>
+            {intl.formatMessage(
+              binding.origin === 'resolver'
+                ? messages.matchedForRequest
+                : messages.confirmedByAdmin
+            )}
+          </span>
           <ConfidenceBadge confidence={binding.confidence} />
         </div>
       );

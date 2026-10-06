@@ -54,6 +54,21 @@ export enum MangaDispatchError {
   DISPATCH_ERROR = 'MANGA_DISPATCH_ERROR',
 }
 
+/**
+ * Why a request that waits for its title's binding needs an administrator.
+ * The source resolve job sets one on the waiting manifests' `lastError`, and
+ * it clears once its cause does or the title is bound.
+ */
+export enum MangaParkedCode {
+  /** The library may have the title, but no match is confirmed yet. */
+  LIBRARY_UNCONFIRMED = 'MANGA_LIBRARY_UNCONFIRMED',
+  /** Not in the library, and the server has no selected source to search. */
+  NO_SOURCES = 'MANGA_NO_SOURCES_SELECTED',
+}
+
+export const MANGA_PARKED_CODES: readonly string[] =
+  Object.values(MangaParkedCode);
+
 const HOUR_MS = 60 * 60 * 1_000;
 
 /** How long dispatch waits before the sweep retries, per reason. */

@@ -8,8 +8,9 @@ import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { initI18n } from '@server/i18n';
+import { scheduledJobs, type ScheduledJob } from '@server/job/schedule';
 import { Permission } from '@server/lib/permissions';
-import type { SuwayomiSettings } from '@server/lib/settings';
+import type { JobId, SuwayomiSettings } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
 import {
   getSuwayomiClient,
@@ -398,6 +399,61 @@ describe('Suwayomi settings routes', () => {
     assert.equal((await request(app).delete(`${BASE}/1`)).status, 200);
     getSettings().suwayomi = [storedInstance({ name: 'Renamed' })];
     assert.notEqual(getSuwayomiClient(1), updated);
+  });
+
+  it('starts a library scan for a new server, address or login, and a source search for new sources', async () => {
+    const started: string[] = [];
+    const fakeJob = (id: JobId, name: string): ScheduledJob => ({
+      id,
+      name,
+      type: 'process',
+      interval: 'minutes',
+      cronSchedule: '',
+      job: {
+        invoke: () => started.push(id),
+        cancel: () => true,
+      } as unknown as ScheduledJob['job'],
+      running: () => false,
+    });
+    scheduledJobs.push(
+      fakeJob('manga-library-scan', 'Manga Library Scan'),
+      fakeJob('manga-source-resolve', 'Manga Source Resolve')
+    );
+    const app = createApp();
+    const save = async (status: number, body: Record<string, unknown>) => {
+      started.length = 0;
+      const res = await (
+        getSettings().suwayomi.length === 0
+          ? request(app).post(BASE)
+          : request(app).put(`${BASE}/0`)
+      ).send(settingsBody(body));
+      assert.equal(res.status, status, inspect(res.body));
+      return [...started];
+    };
+
+    try {
+      assert.deepEqual(await save(201, {}), ['manga-library-scan']);
+      assert.deepEqual(
+        await save(200, { name: 'Renamed', password: REDACTED_SECRET }),
+        []
+      );
+      assert.deepEqual(await save(200, { port: 4568 }), ['manga-library-scan']);
+      assert.deepEqual(
+        await save(200, { port: 4568, password: randomUUID() }),
+        ['manga-library-scan']
+      );
+      const password = getSettings().suwayomi[0].password;
+      assert.deepEqual(
+        await save(200, {
+          port: 4568,
+          password,
+          sourceAllowlist: [SOURCE_ID, '4000000000000000002'],
+        }),
+        ['manga-source-resolve']
+      );
+    } finally {
+      scheduledJobs.length = 0;
+    }
   });
 
   it('saves and removes instances without contacting Suwayomi', async () => {

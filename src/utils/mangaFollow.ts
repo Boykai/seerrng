@@ -19,9 +19,9 @@ export const buildMangaFollowBody = (
 ): MangaFollowRequestBody => ({ enabled });
 
 /**
- * The `mangaFollow` field of `POST /api/v1/request`. It is sent only when the
- * requester turns following on, so a request made with following off carries
- * exactly the body it had before the field existed.
+ * The `mangaFollow` field of `POST /api/v1/request`. It is sent only while
+ * following is on, so a request made with following off carries exactly the
+ * body it had before the field existed.
  */
 export const buildMangaFollowCreateField = (
   follow: boolean
