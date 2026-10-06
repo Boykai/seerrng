@@ -118,7 +118,9 @@ first by when it was first matched, 20 titles to a page.
 
 The [content switches](#choose-which-titles-appear) and the blocklist apply as
 they do in discovery. A page leaves out the titles they hide, so it can show
-fewer than 20 cards, and the page count includes them.
+fewer than 20 cards, and the page count includes them. Titles with downloaded
+chapters stay listed while
+[Hide Available Media](./settings/general.md#hide-available-media) is on.
 
 ## Blocklist manga
 

@@ -74,18 +74,23 @@ vi.mock('@app/components/MediaSlider', () => ({
     url,
     extraParams,
     linkUrl,
+    hideAvailable,
   }: {
     sliderKey: string;
     title: string;
     url: string;
     extraParams: string;
     linkUrl: string;
+    hideAvailable?: boolean;
   }) => (
     <section
       data-slider={sliderKey}
       data-url={url}
       data-params={extraParams}
       data-link={linkUrl}
+      data-hide-available={
+        hideAvailable === undefined ? undefined : String(hideAvailable)
+      }
     >
       {title}
     </section>
@@ -177,6 +182,7 @@ const sliders = () =>
     url: slider.getAttribute('data-url'),
     params: slider.getAttribute('data-params'),
     link: slider.getAttribute('data-link'),
+    hideAvailable: slider.getAttribute('data-hide-available'),
     title: slider.textContent,
   }));
 
@@ -189,6 +195,7 @@ it('shows the library shelf and one shelf per sort order on the landing page', a
       url: '/api/v1/discover/manga/library',
       params: null,
       link: '/discover/manga/library',
+      hideAvailable: 'false',
       title: 'Your Manga Library',
     },
     {
@@ -196,6 +203,7 @@ it('shows the library shelf and one shelf per sort order on the landing page', a
       url: '/api/v1/discover/manga',
       params: 'sortBy=trending',
       link: '/discover/manga?sortBy=trending',
+      hideAvailable: null,
       title: 'Trending Manga',
     },
     {
@@ -203,6 +211,7 @@ it('shows the library shelf and one shelf per sort order on the landing page', a
       url: '/api/v1/discover/manga',
       params: 'sortBy=popular',
       link: '/discover/manga?sortBy=popular',
+      hideAvailable: null,
       title: 'Popular Manga',
     },
     {
@@ -210,6 +219,7 @@ it('shows the library shelf and one shelf per sort order on the landing page', a
       url: '/api/v1/discover/manga',
       params: 'sortBy=top_rated',
       link: '/discover/manga?sortBy=top_rated',
+      hideAvailable: null,
       title: 'Top Rated Manga',
     },
   ]);

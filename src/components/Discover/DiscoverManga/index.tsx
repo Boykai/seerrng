@@ -249,6 +249,7 @@ const DiscoverManga = () => {
               title={intl.formatMessage(messages.mangaLibrary)}
               url={MANGA_LIBRARY_URL}
               linkUrl={MANGA_LIBRARY_PAGE_PATH}
+              hideAvailable={false}
             />
           )}
           {MANGA_SHELVES.map((shelf) => (

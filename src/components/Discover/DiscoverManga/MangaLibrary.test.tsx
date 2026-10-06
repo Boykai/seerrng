@@ -93,7 +93,11 @@ it('lists the manga library with infinite scroll', async () => {
   expect(state.discoverCalls.at(-1)).toEqual([
     '/api/v1/discover/manga/library',
     {},
-    { showErrorToast: false, hideErrorWithResults: false },
+    {
+      hideAvailable: false,
+      showErrorToast: false,
+      hideErrorWithResults: false,
+    },
   ]);
   expect(host.querySelector('[data-testid="list"]')?.textContent).toBe('3,1');
   expect(state.listProps.at(-1)).toMatchObject({

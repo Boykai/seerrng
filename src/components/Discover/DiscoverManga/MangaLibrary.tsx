@@ -23,7 +23,11 @@ const MangaLibrary = () => {
   const discover = useDiscover<MangaResult>(
     MANGA_LIBRARY_URL,
     {},
-    { showErrorToast: false, hideErrorWithResults: false }
+    {
+      hideAvailable: false,
+      showErrorToast: false,
+      hideErrorWithResults: false,
+    }
   );
   useDiscoverScrollRestoration({
     mediaType: 'manga',
