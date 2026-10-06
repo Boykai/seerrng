@@ -4943,6 +4943,38 @@
     @apply block w-full min-w-0 flex-1 rounded-md border border-gray-500 bg-gray-700 text-white transition duration-150 ease-in-out sm:text-sm sm:leading-5;
   }
 
+  /* Untyped and other text-entry inputs use the theme control tokens so their
+     text stays readable in every palette and mode. Zero specificity lets
+     settings, owner and utility rules keep precedence. */
+  input:where(
+    :not([type]),
+    [type='number'],
+    [type='url'],
+    [type='email'],
+    [type='tel']
+  ) {
+    @apply rounded-md border transition duration-150 ease-in-out sm:text-sm;
+    border-color: rgb(var(--theme-control-border) / 0.75);
+    background-color: rgb(var(--theme-control-surface) / 0.78);
+    color: rgb(var(--theme-control-text));
+  }
+
+  input:where(
+      :not([type]),
+      [type='number'],
+      [type='url'],
+      [type='email'],
+      [type='tel'],
+      [type='search']
+    )::placeholder {
+    color: rgb(var(--theme-control-text) / 0.85);
+  }
+
+  input:where([type='search']) {
+    background-color: rgb(var(--theme-control-surface) / 0.78);
+    color: rgb(var(--theme-control-text));
+  }
+
   input.rounded-l-only,
   select.rounded-l-only,
   textarea.rounded-l-only {
