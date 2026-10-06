@@ -152,8 +152,10 @@ const getStepLabel = (
         : 'Listing BookOrbit Smart Scopes';
     case 'preview':
       return 'Previewing matching ' + getProviderName(provider) + ' books';
-    case 'save':
-      return 'Saving the ' + getGroupingName(provider);
+    case 'create':
+      return 'Creating the ' + getGroupingName(provider);
+    case 'update':
+      return 'Updating the ' + getGroupingName(provider);
     case 'count':
       return 'Counting the books in the ' + getGroupingName(provider);
     case 'delete':
@@ -252,7 +254,7 @@ const getFailureDetail = (
       : 'BookOrbit refused this account access to Smart Scopes. Sign in to BookOrbit with it once to replace any temporary password. To change a Smart Scope, use the BookOrbit account that created it.';
   }
   if (status === 404 || status === 405) {
-    if (step === 'list' || step === 'preview') {
+    if (step === 'list' || step === 'preview' || step === 'create') {
       return (
         providerName +
         ' does not offer the ' +
@@ -263,9 +265,14 @@ const getFailureDetail = (
       );
     }
     return (
-      'The ' +
+      providerName +
+      ' could not find the ' +
       getGroupingName(provider) +
-      ' no longer exists. Remove the SeerrNG-managed shelf and create it again.'
+      '. If it was removed in ' +
+      providerName +
+      ', remove the SeerrNG-managed shelf and create it again. If not, update ' +
+      providerName +
+      ', and make sure any reverse proxy forwards every /api path.'
     );
   }
   if (status === 413) return tooLarge;
@@ -375,8 +382,8 @@ const getSavedPasswordUse = (
 };
 
 /**
- * The password Save stores. Without an address or username the saved
- * password could never be reused, so it is removed instead of kept.
+ * The password Save stores. A password is kept only with an address and
+ * username, since it could never be used without them.
  */
 const getPasswordToSave = (
   provider: ReaderGroupingProvider,
@@ -385,10 +392,11 @@ const getPasswordToSave = (
   username: string,
   password: string
 ): { value: string } | { error: string } => {
+  if (!url || !username) return { value: '' };
   const use = getSavedPasswordUse(saved, url, username, password);
   if (use === 'typed') return { value: password };
   if (use === 'saved') return { value: saved.password };
-  if (use === 'changed' && url && username) {
+  if (use === 'changed') {
     return {
       error:
         'Enter the ' +
@@ -917,9 +925,15 @@ readerDeliveryRoutes.post(
           remoteGroupId
         );
         countVerified = true;
-      } catch {
+      } catch (error) {
         warning =
-          'The grouping was saved, but the reader service did not confirm its final item count. Open the service and refresh this grouping to check it.';
+          'The ' +
+          getGroupingName(provider) +
+          ' was saved, but SeerrNG could not confirm its final item count. ' +
+          getProviderError(error, provider) +
+          ' Open ' +
+          getProviderName(provider) +
+          ' and refresh this grouping to check it.';
       }
 
       grouping.status = 'ready';

@@ -523,7 +523,7 @@ describe('ReaderDeliveryApi groupings', () => {
           syncToKobo: false,
         }
       ),
-      { step: 'save', reason: 'unexpected' }
+      { step: 'create', reason: 'unexpected' }
     );
   });
 
@@ -569,6 +569,44 @@ describe('ReaderDeliveryApi groupings', () => {
         '5'
       ),
       { step: 'delete', reason: 'http', status: 404 }
+    );
+    await new InspectReaderDeliveryApi([undefined]).deleteGrouping(
+      'grimmory',
+      'token',
+      '5'
+    );
+    await assert.rejects(
+      new InspectReaderDeliveryApi([
+        '<!doctype html><title>Sign in</title>',
+      ]).deleteGrouping('grimmory', 'token', '5'),
+      { step: 'delete', reason: 'not-api' }
+    );
+  });
+
+  it('names the create or update step of a failed grouping save', async () => {
+    const filter = buildReaderGroupingFilter('bookorbit', seriesTarget);
+    const group = {
+      name: 'SeerrNG series',
+      filter,
+      isPublic: false,
+      syncToKobo: false,
+    };
+
+    await assert.rejects(
+      new InspectReaderDeliveryApi([httpError(404)]).saveGrouping(
+        'bookorbit',
+        'token',
+        group
+      ),
+      { step: 'create', reason: 'http', status: 404 }
+    );
+    await assert.rejects(
+      new InspectReaderDeliveryApi([httpError(404)]).saveGrouping(
+        'bookorbit',
+        'token',
+        { ...group, id: '9' }
+      ),
+      { step: 'update', reason: 'http', status: 404 }
     );
   });
 });

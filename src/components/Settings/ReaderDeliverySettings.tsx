@@ -4,7 +4,10 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import SettingsField from '@app/components/Settings/SettingsField';
 import useToasts from '@app/hooks/useToasts';
 import defineMessages from '@app/utils/defineMessages';
-import { readerDeliveryConnectionTestBody } from '@app/utils/readerDeliveryConnectionTest';
+import {
+  readerDeliveryConnectionTestBody,
+  readerDeliverySaveBody,
+} from '@app/utils/readerDeliveryRequestBodies';
 import { getSafeHref } from '@app/utils/safeUrl';
 import type {
   ReaderDeliveryProvider,
@@ -331,11 +334,7 @@ const ReaderDeliverySettings = () => {
     try {
       const response = await axios.put<ReaderDeliverySettingsType>(
         '/api/v1/settings/reader-delivery',
-        {
-          ...draft,
-          clearGrimmoryCredentials: clearCredentials.grimmory,
-          clearBookorbitCredentials: clearCredentials.bookorbit,
-        }
+        readerDeliverySaveBody(draft, clearCredentials)
       );
       setDraft(response.data);
       setClearCredentials({ grimmory: false, bookorbit: false });

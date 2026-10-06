@@ -8,7 +8,10 @@ import express from 'express';
 import * as OpenApiValidator from 'express-openapi-validator';
 import request from 'supertest';
 
-import { readerDeliveryConnectionTestBody } from './readerDeliveryConnectionTest';
+import {
+  readerDeliveryConnectionTestBody,
+  readerDeliverySaveBody,
+} from './readerDeliveryRequestBodies';
 
 const createValidatedApp = (): Express => {
   const app = express();
@@ -21,6 +24,9 @@ const createValidatedApp = (): Express => {
     })
   );
   app.post('/api/v1/settings/reader-delivery/connection-test', (_req, res) =>
+    res.status(200).json({})
+  );
+  app.put('/api/v1/settings/reader-delivery', (_req, res) =>
     res.status(200).json({})
   );
   app.use(
@@ -139,4 +145,45 @@ describe('reader app connection-test bodies behind the OpenAPI validator', () =>
       assert.equal(response.status, 400, JSON.stringify(fields));
     }
   });
+});
+
+describe('reader app Save bodies behind the OpenAPI validator', () => {
+  const app = createValidatedApp();
+
+  it('sends every reader setting and both remove-credential choices', () => {
+    assert.deepEqual(
+      readerDeliverySaveBody(draft({ bookorbitPassword: '[REDACTED]' }), {
+        grimmory: false,
+        bookorbit: true,
+      }),
+      {
+        grimmoryUrl: 'https://grimmory.example.test/reader',
+        grimmoryUsername: 'shelf-admin',
+        grimmoryPassword: 'invented-grimmory-password',
+        bookorbitUrl: 'https://bookorbit.example.test',
+        bookorbitUsername: 'scope-owner',
+        bookorbitPassword: '[REDACTED]',
+        preferredProvider: 'grimmory',
+        clearGrimmoryCredentials: false,
+        clearBookorbitCredentials: true,
+      }
+    );
+  });
+
+  for (const [name, fields] of drafts) {
+    for (const clear of [false, true]) {
+      it(`accepts Save with ${name}${clear ? ' while removing credentials' : ''}`, async () => {
+        const response = await request(app)
+          .put('/api/v1/settings/reader-delivery')
+          .send(
+            readerDeliverySaveBody(draft(fields), {
+              grimmory: clear,
+              bookorbit: clear,
+            })
+          );
+
+        assert.equal(response.status, 200, JSON.stringify(response.body));
+      });
+    }
+  }
 });

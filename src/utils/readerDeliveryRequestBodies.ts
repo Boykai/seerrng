@@ -32,3 +32,28 @@ export const readerDeliveryConnectionTestBody = (
         username: draft.bookorbitUsername,
         password: draft.bookorbitPassword,
       };
+
+export interface ReaderDeliverySaveBody extends ReaderDeliverySettings {
+  clearGrimmoryCredentials: boolean;
+  clearBookorbitCredentials: boolean;
+}
+
+/**
+ * The Save body for the whole form. A blank or redacted password keeps the
+ * saved password, which the server does only while that service's address
+ * and username are unchanged.
+ */
+export const readerDeliverySaveBody = (
+  draft: ReaderDeliverySettings,
+  clearCredentials: Record<ReaderDeliveryProvider, boolean>
+): ReaderDeliverySaveBody => ({
+  grimmoryUrl: draft.grimmoryUrl,
+  grimmoryUsername: draft.grimmoryUsername,
+  grimmoryPassword: draft.grimmoryPassword,
+  bookorbitUrl: draft.bookorbitUrl,
+  bookorbitUsername: draft.bookorbitUsername,
+  bookorbitPassword: draft.bookorbitPassword,
+  preferredProvider: draft.preferredProvider,
+  clearGrimmoryCredentials: clearCredentials.grimmory,
+  clearBookorbitCredentials: clearCredentials.bookorbit,
+});

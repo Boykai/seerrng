@@ -295,6 +295,20 @@ describe('reader delivery settings API', () => {
       .expect(200);
     assert.equal(getSettings().readerDelivery.grimmoryUsername, '');
     assert.equal(getSettings().readerDelivery.grimmoryPassword, '');
+
+    await request(app)
+      .put('/settings/reader-delivery')
+      .send({
+        grimmoryUrl: 'https://grimmory.example',
+        grimmoryUsername: '',
+        grimmoryPassword: 'typed-without-account',
+        bookorbitUrl: '',
+        bookorbitUsername: 'orbit-admin',
+        bookorbitPassword: 'typed-without-address',
+      })
+      .expect(200);
+    assert.equal(getSettings().readerDelivery.grimmoryPassword, '');
+    assert.equal(getSettings().readerDelivery.bookorbitPassword, '');
   });
 
   it('tests provider account access by logging in and listing manageable groupings', async () => {
@@ -651,6 +665,69 @@ describe('reader delivery settings API', () => {
     assert.equal(managed.body.length, 1);
     assert.equal(managed.body[0].targetName, 'Earthsea');
     assert.equal(managed.body[0].remoteGroupId, '47');
+  });
+
+  it('names a failed create or update, and keeps a save whose count fails', async () => {
+    const app = createApp();
+    await getSettings().persistSection('readerDelivery', {
+      ...defaultReaderDeliverySettings(),
+      grimmoryUrl: 'https://grimmory.example',
+      grimmoryUsername: 'admin',
+      grimmoryPassword: 'password',
+    });
+    mock.method(
+      ReaderDeliveryApi.prototype,
+      'login',
+      async () => 'reader-token'
+    );
+    mock.method(ReaderDeliveryApi.prototype, 'preview', async () => ({
+      matchedCount: 2,
+      sampleTitles: [],
+    }));
+    mock.method(
+      ReaderDeliveryApi.prototype,
+      'findGroupingIdByName',
+      async () => undefined
+    );
+    const target = {
+      type: 'book-series',
+      id: 'bookshelf:series-42',
+      name: 'Invented Series',
+    };
+    const save = () =>
+      request(app)
+        .post('/settings/reader-delivery/groupings')
+        .send({ provider: 'grimmory', target, isPublic: true });
+
+    mock.method(ReaderDeliveryApi.prototype, 'saveGrouping', async () => {
+      throw new ReaderServiceError('create', 'http', { status: 404 });
+    });
+    const created = await save().expect(502);
+    assert.match(
+      created.body.error,
+      /^Creating the Grimmory Magic Shelf failed\. Grimmory does not offer the Magic Shelf API at this address\./
+    );
+
+    mock.method(ReaderDeliveryApi.prototype, 'saveGrouping', async () => '47');
+    mock.method(ReaderDeliveryApi.prototype, 'getGroupingCount', async () => {
+      throw new ReaderServiceError('count', 'network', { code: 'ETIMEDOUT' });
+    });
+    const counted = await save().expect(200);
+    assert.equal(counted.body.grouping.status, 'ready');
+    assert.equal(counted.body.grouping.countVerified, false);
+    assert.equal(
+      counted.body.warning,
+      'The Grimmory Magic Shelf was saved, but SeerrNG could not confirm its final item count. Counting the books in the Grimmory Magic Shelf failed. Grimmory did not answer in time. Check that it is running and reachable from the SeerrNG server. Open Grimmory and refresh this grouping to check it.'
+    );
+
+    mock.method(ReaderDeliveryApi.prototype, 'saveGrouping', async () => {
+      throw new ReaderServiceError('update', 'http', { status: 404 });
+    });
+    const updated = await save().expect(502);
+    assert.match(
+      updated.body.error,
+      /^Updating the Grimmory Magic Shelf failed\. Grimmory could not find the Grimmory Magic Shelf\. If it was removed in Grimmory, remove the SeerrNG-managed shelf and create it again\./
+    );
   });
 
   it('keeps provider shelf names within the provider 255-character limit', async () => {

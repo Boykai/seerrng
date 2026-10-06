@@ -23,7 +23,7 @@ export interface ReaderGroupingRule {
 
 /** The reader-service request that was running when a call failed. */
 export type ReaderServiceStep =
-  'sign-in' | 'list' | 'preview' | 'save' | 'count' | 'delete';
+  'sign-in' | 'list' | 'preview' | 'create' | 'update' | 'count' | 'delete';
 
 /**
  * - `http`: the service answered with an error status.
@@ -294,7 +294,11 @@ export class ReaderDeliveryApi extends ExternalAPI {
       throw toReaderServiceError(step, error);
     }
     // A text answer, such as a web page, means the address is not the API.
-    if (method !== 'DELETE' && typeof response.data === 'string') {
+    // Only DELETE may answer with an empty body.
+    if (
+      typeof response.data === 'string' &&
+      (method !== 'DELETE' || response.data.trim() !== '')
+    ) {
       throw new ReaderServiceError(step, 'not-api');
     }
     return response.data;
@@ -442,8 +446,9 @@ export class ReaderDeliveryApi extends ExternalAPI {
         : group.id
           ? '/api/v1/smart-scopes/' + encodeURIComponent(group.id)
           : '/api/v1/smart-scopes';
+    const step = group.id ? 'update' : 'create';
     const response = await this.call<unknown>(
-      'save',
+      step,
       provider === 'grimmory' ? 'POST' : group.id ? 'PATCH' : 'POST',
       endpoint,
       token,
@@ -451,7 +456,7 @@ export class ReaderDeliveryApi extends ExternalAPI {
     );
     const remoteId = getReaderGroupingRemoteId(response) ?? group.id;
     if (!remoteId) {
-      throw new ReaderServiceError('save', 'unexpected');
+      throw new ReaderServiceError(step, 'unexpected');
     }
     return remoteId;
   }
