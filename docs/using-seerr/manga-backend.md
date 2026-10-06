@@ -113,8 +113,11 @@ its library:
 
 A library title appears once the [Library scan](#library-scan) or an admin on
 the [Manga Library page](#manga-library-page) matches it to an AniList title.
-Library items without a match are not listed. Each title appears once, newest
-first by when it was first matched, 20 titles to a page.
+Library items without a match are not listed. Each title appears once, 20
+titles to a page, newest first by the date SeerrNG first paired one of its
+library items with the title. That date stays the same when an admin confirms
+a pairing they rejected earlier, or when the item joins the library after the
+pairing.
 
 The [content switches](#choose-which-titles-appear) and the blocklist apply as
 they do in discovery. A page leaves out the titles they hide, so it can show

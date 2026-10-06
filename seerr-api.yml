@@ -13882,7 +13882,7 @@ paths:
   /discover/manga/library:
     get:
       summary: List the manga library
-      description: Returns the AniList titles in the Suwayomi library as manga cards, most recently added first; the lower AniList ID breaks ties. A title is in the library when the Manga Library Scan or an administrator matched a library item on a configured Suwayomi instance to it, and the library still lists that item. A title's added date is its earliest such match. Each page covers the next 20 library titles. Titles that AniList does not return, and adult titles and light novels unless an administrator enables them, are left out of their page, so a page can hold fewer than 20 titles. totalResults and totalPages count library titles before that filter. Requires the manga category; returns 404 while it is disabled.
+      description: Returns the AniList titles in the Suwayomi library as manga cards, most recently added first; the lower AniList ID breaks ties. A title is in the library when the Manga Library Scan or an administrator matched a library item on a configured Suwayomi instance to it, and the library still lists that item. A title's added date is the date SeerrNG first recorded the pairing behind its earliest such match, even when that pairing became an active library match later. Each page covers the next 20 library titles. Titles that AniList does not return, and adult titles and light novels unless an administrator enables them, are left out of their page, so a page can hold fewer than 20 titles. totalResults and totalPages count library titles before that filter. Requires the manga category; returns 404 while it is disabled.
       tags:
         - search
       parameters:

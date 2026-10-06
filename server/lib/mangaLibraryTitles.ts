@@ -16,8 +16,9 @@ export interface MangaLibraryTitlePage {
 /**
  * One page of the distinct AniList titles in a configured Suwayomi library:
  * titles with an active binding that the library lists. A title's added date
- * is its earliest such binding; newer titles come first and the lower AniList
- * ID breaks ties.
+ * is the creation time of its earliest such binding, which can predate the
+ * binding becoming an active library match. Newer titles come first and the
+ * lower AniList ID breaks ties.
  */
 export const findMangaLibraryTitles = async (
   page: number
