@@ -237,6 +237,47 @@ describe('proposeMangaMatch', () => {
       none,
       null,
     ],
+    [
+      'a novel of the same title is no runner-up for a manga',
+      'The Invented Tale',
+      [
+        result(126, 'The Invented Tale', { format: 'NOVEL' }),
+        result(127, 'The Invented Tale', { format: 'MANGA' }),
+      ],
+      none,
+      { anilistId: 127, confidence: HIGH, score: 1000 },
+    ],
+    [
+      'a novel of the same title is no runner-up for a one-shot',
+      'The Invented Tale',
+      [
+        result(128, 'The Invented Tale', { format: 'ONE_SHOT' }),
+        result(129, 'The Invented Tale', { format: 'NOVEL' }),
+      ],
+      none,
+      { anilistId: 128, confidence: HIGH, score: 1000 },
+    ],
+    [
+      'a novel is at most MEDIUM',
+      'The Invented Tale',
+      [
+        result(130, 'The Invented Tale', { format: 'NOVEL' }),
+        result(131, 'Another Story'),
+      ],
+      none,
+      { anilistId: 130, confidence: MEDIUM, score: 1000 },
+    ],
+    [
+      'two manga of the same title still tie beside a novel',
+      'The Invented Tale',
+      [
+        result(132, 'The Invented Tale', { format: 'NOVEL' }),
+        result(133, 'The Invented Tale', { format: 'MANGA' }),
+        result(134, 'The Invented Tale'),
+      ],
+      none,
+      { anilistId: 133, confidence: MEDIUM, score: 1000 },
+    ],
   ];
   for (const [name, title, results, rejected, expected] of cases) {
     it(name, () =>

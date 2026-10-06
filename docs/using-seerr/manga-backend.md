@@ -312,9 +312,9 @@ The scan tries these steps in order and stops at the first that matches:
    title that AniList lists for that MyAnimeList ID.
 3. **MangaDex link:** for a manga whose address in Suwayomi has the form
    `/manga/<UUID>`, the AniList link that MangaDex lists for that UUID.
-4. **Title proposal:** SeerrNG searches AniList for the manga's title and keeps
-   the closest result as a proposal for an administrator. A proposal never
-   matches a manga by itself.
+4. **Title match:** SeerrNG searches AniList for the manga's title. A result
+   ranked High matches the manga by itself, as a **title** match. Otherwise
+   SeerrNG keeps the closest result as a proposal for an administrator.
 
 - When step 1 finds no match and the manga's tracker records disagree, naming
   two different AniList titles or two different MyAnimeList IDs, steps 2 and 3
@@ -322,6 +322,12 @@ The scan tries these steps in order and stops at the first that matches:
 - When AniList lists two or more titles for one MyAnimeList ID, step 2 matches
   nothing, even when an administrator rejected all but one of them, and steps
   3 and 4 still run.
+- A High result stays a proposal when the manga's tracker records disagree,
+  or when the manga is tracked with AniList or MyAnimeList and that tracking
+  does not name the result.
+- A manga without tracker records that already holds a High proposal gets a
+  new title search on the next scan, and the new result decides whether it
+  matches.
 - SeerrNG never matches or proposes a title that an administrator rejected for
   that manga.
 - A match stays in place on later scans, even if the manga's tracker records
@@ -334,7 +340,8 @@ A proposal is ranked by how closely the manga's title matches the result's
 romaji, English, native, or alternative titles:
 
 - **High:** at least 92% similar and at least 5 percentage points ahead of the
-  next result.
+  next result. A novel never counts as the next result for a manga or
+  one-shot, and a novel is never ranked High.
 - **Medium:** at least 75% similar, but not High.
 - **Low:** less than 75% similar; SeerrNG keeps the best of these as a weak
   guess.
@@ -357,19 +364,30 @@ To match manga, the scan sends:
 These lookups cannot be turned off yet, other than by turning off the Manga
 category.
 
-Each run sends at most 10 requests of each kind: MyAnimeList lookups (up to 50
-IDs each), MangaDex lookups (up to 100 UUIDs each), and title searches (one
-title each). With several Suwayomi servers, each server gets an equal part of
-the requests left in the run, and a server that needs fewer leaves the rest to
-the servers scanned after it; a MyAnimeList lookup that a server has started
-can still read its last pages. The scan logs how many manga each server left
-for a later run. A large library is therefore matched over several runs: with
-the daily schedule, up to 10 manga get a title proposal each day. Run the job
-by hand to speed this up. Manga that were never looked up go first, and a
-finished lookup is repeated after 30 days. A lookup that fails or is rate
-limited is retried on a later run, and the manga waits for its later steps
-until then. When MangaDex rate limits or refuses requests, SeerrNG pauses
-MangaDex lookups for up to an hour. MangaDex answers are cached for a day.
+Each run looks up every manga that needs it, on every Suwayomi server:
+MyAnimeList lookups (up to 50 IDs each), MangaDex lookups (up to 100 UUIDs
+each), and title searches (one title each). Manga that were never looked up go
+first, and a finished lookup is repeated after 30 days, so later runs only
+look up new manga and those due again.
+
+The scan starts its lookups at least 3 seconds apart, so at most 20 a minute.
+This leaves about a third of AniList's request budget to people using SeerrNG
+during a scan, and a first scan of a large library takes a while: about 3
+seconds for each title it searches. The scan never queues ahead of other
+AniList requests: while they use the budget, the scan waits.
+
+When AniList or MangaDex rate limits a lookup, or SeerrNG's AniList request
+budget is used up, the scan waits as long as asked and then continues.
+Cancelling the job stops it at once, also during a wait, and nothing more is
+written. A lookup step ends for the run when a wait would take longer than 15
+minutes, for example while SeerrNG pauses MangaDex lookups for an hour after
+MangaDex refuses requests, or when the same lookup is rate limited three times
+in a row. A lookup that fails for any other reason is retried on a later run,
+and the manga waits for its later steps until then. A failed title search
+skips only that title, but when AniList is unreachable or unavailable, or its
+authorization expired, the remaining searches wait for a later run. The
+scan logs how many manga a step left for a later run. MangaDex answers are
+cached for a day.
 
 ### Review matches
 
@@ -386,7 +404,8 @@ Manga category is off, they return the normal not-found response.
 | `POST /bind` | Match a manga to an AniList title by hand. Name the manga by its Suwayomi ID, or by its source ID and its address in Suwayomi. |
 | `POST /reject` | Reject an AniList title for a manga. |
 
-- SeerrNG never confirms a proposal by itself, whatever its ranking.
+- Apart from the High-ranked title matches described in
+  [Matching](#matching), SeerrNG never confirms a proposal by itself.
 - A manual match replaces the manga's current match, and the replaced title
   then counts as rejected for that manga.
 - A rejected title is never proposed or matched for that manga again; only a
@@ -410,7 +429,9 @@ Manga category is off, they return the normal not-found response.
   scan, it returns HTTP `409`; reload the manga and decide again.
 
 Each match records how it was made in `matchedBy`: `anilist-tracker`,
-`mal-tracker`, `mangadex-link`, `title` (a confirmed proposal), or `manual`. A
+`mal-tracker`, `mangadex-link`, `title` (a title match that the scan or the
+**Manga Source Resolve** job made, or a proposal an administrator confirmed),
+or `manual`. A
 `mangadex-link` match uses data from [MangaDex](https://mangadex.org/); credit
 MangaDex wherever you show it. Decisions are logged with IDs only, never
 titles or addresses. The request and response schemas and every error code
@@ -446,8 +467,13 @@ title. If the library changes while a scan reads it, that run marks no manga
 as gone; the next run does.
 
 Each run logs how many matches and statuses it changed, and a code for each
-warning, under the **Manga Library Scan** label. These log entries contain
-counts, IDs, and codes only, never titles or addresses.
+warning, under the **Manga Library Scan** label. About every 50 manga, it logs
+how many of the listed manga it has handled so far. When it finishes, it logs
+how many manga it listed, how many are matched by each method, how many have a
+proposal waiting for review, and how many are still unmatched. A manga whose
+matches changed elsewhere while the scan ran is not in these totals; it counts
+toward a warning instead. These log entries contain counts, IDs, and codes
+only, never titles or addresses.
 
 ## Manga Library page
 
@@ -463,14 +489,16 @@ page never shows a manga's address in Suwayomi. An AniList title that the
 
 ### Review queue
 
-The **Review Queue** lists the manga in your Suwayomi library that have no
-AniList match yet, with the title SeerrNG proposes for each:
+The **Review Queue** lists the manga in your Suwayomi library that the library
+scan could not match by itself, with the title SeerrNG proposes for each:
 
 - **High Confidence**, **Medium Confidence**, and **Weak Guess** are the High,
-  Medium, and Low rankings described in [Matching](#matching). They rank a
-  proposal only: nothing is matched until an administrator confirms a proposal
-  or chooses a title. No proposal is preselected, and there is no way to
-  confirm proposals in bulk.
+  Medium, and Low rankings described in [Matching](#matching). The scan
+  matches a High-ranked title by itself, so a High proposal stays in the queue
+  only when the manga's tracker records argue against it, or until the next
+  scan searches its title again. Medium and Low proposals wait for an administrator to
+  confirm one or choose a title. No proposal is preselected, and there is no
+  way to confirm proposals in bulk.
 - **No Proposal** means the manga has no proposal right now, for example
   because no scan has searched its title yet or its last proposal was
   rejected.
@@ -490,13 +518,14 @@ decision fails, the page says why and nothing changes; for example, when a
 scan replaced the proposal in the meantime, check the new proposal and try
 again.
 
-Proposals arrive with each library scan, so a large library gets them over
-several runs; see [Lookups on AniList and MangaDex](#lookups-on-anilist-and-mangadex).
+Each library scan checks the whole library, so a new manga gets its match or
+proposal on the next run; see
+[Lookups on AniList and MangaDex](#lookups-on-anilist-and-mangadex).
 The **Manga Source Resolve** job also proposes a requested title for library
 manga that likely are that title; see [Library first](#library-first).
 While the queue is empty or lists manga without a proposal, the page suggests
 running the **Manga Library Scan** job under **Settings → Jobs & Cache** to
-get proposals sooner.
+scan sooner.
 
 ### Library matches
 
@@ -510,6 +539,8 @@ column says how each match was made:
 - **Matched with data from MangaDex**: from the AniList link that MangaDex
   lists for the manga. SeerrNG credits [MangaDex](https://mangadex.org/) in
   this text wherever it shows such a match.
+- **Matched by Title**: the library scan matched the manga by a High-ranked
+  title match; see [Matching](#matching).
 - **Confirmed by an Admin**: an administrator confirmed a proposal; the badge
   shows how the proposal was ranked.
 - **Title Match for a Request**: the **Manga Source Resolve** job matched a
@@ -528,7 +559,8 @@ administrator rejected or replaced.
   the match. Manga that are no longer in the library cannot be matched.
 - **Reject** rejects the match. A manga that is still in the library returns
   to the review queue, and SeerrNG never proposes or matches that title for it
-  again unless you choose it.
+  again unless you choose it. This also undoes a match the scan made by
+  itself.
 
 ### Availability on manga pages
 

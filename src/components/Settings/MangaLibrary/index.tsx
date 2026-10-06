@@ -163,9 +163,11 @@ export const MatchedBy = ({
         <div className="settings-manga-library-stack">
           <span>
             {intl.formatMessage(
-              binding.origin === 'resolver'
-                ? messages.matchedForRequest
-                : messages.confirmedByAdmin
+              binding.origin === 'library-scan'
+                ? messages.matchedByTitle
+                : binding.origin === 'resolver'
+                  ? messages.matchedForRequest
+                  : messages.confirmedByAdmin
             )}
           </span>
           <ConfidenceBadge confidence={binding.confidence} />

@@ -33,8 +33,9 @@ export const MANGA_MATCHED_BY_ANILIST_TRACKER = 'anilist-tracker';
 export const MANGA_MATCHED_BY_MAL_TRACKER = 'mal-tracker';
 export const MANGA_MATCHED_BY_MANGADEX_LINK = 'mangadex-link';
 /**
- * An admin confirmed the title proposal; with the resolver's origin, the
- * requested title had one clear match in the library.
+ * A title match. With the library scan's origin, the scan found one confident
+ * match; with the admin's, an admin confirmed the title proposal; with the
+ * resolver's, the requested title had one clear match in the library.
  */
 export const MANGA_MATCHED_BY_TITLE = 'title';
 /** An admin chose the AniList title. */

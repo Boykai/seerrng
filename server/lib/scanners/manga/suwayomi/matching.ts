@@ -5,6 +5,7 @@ import AnilistAPI, {
   AnilistOutageError,
   AnilistRateLimitedError,
 } from '@server/api/anilist';
+import type { AnilistMangaSummary } from '@server/api/anilist/manga';
 import { ANILIST_MAL_LOOKUP_PAGE_SIZE } from '@server/api/anilist/manga';
 import MangaDexAPI, {
   MANGADEX_MAX_IDS_PER_REQUEST,
@@ -16,10 +17,11 @@ import type MangaMatchCandidate from '@server/entity/MangaMatchCandidate';
 import {
   MANGA_MATCHED_BY_MAL_TRACKER,
   MANGA_MATCHED_BY_MANGADEX_LINK,
+  MANGA_MATCHED_BY_TITLE,
   MangaBindingConfidence,
 } from '@server/entity/MangaSourceBinding';
 import { getMangaContentPolicy } from '@server/lib/mangaCatalog';
-import type { MangaTitleCandidate } from '@server/lib/mangaTitleMatch';
+import type { MangaTitleProposal } from '@server/lib/mangaTitleMatch';
 import {
   mangaTitleSearchText,
   normalizeMangaTitle,
@@ -27,46 +29,70 @@ import {
 } from '@server/lib/mangaTitleMatch';
 import { chunk } from '@server/utils/chunk';
 import axios from 'axios';
+import { setTimeout as delay } from 'node:timers/promises';
 
-export interface LookupBudget {
-  mal: number;
-  mangadex: number;
-  title: number;
-}
-
-/** Calls each lookup may make in one scan run, across every instance. */
-export const MANGA_LOOKUP_CALLS_PER_RUN: Readonly<LookupBudget> = {
-  mal: 10,
-  mangadex: 10,
-  title: 10,
-};
 /** A concluded lookup is due again after 30 days. */
 export const MANGA_LOOKUP_RECHECK_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * Scan lookups start at least 3 seconds apart: at most 20 a minute, about
+ * two-thirds of AniList's shared budget, so people using SeerrNG during a
+ * scan keep the rest.
+ */
+export const MANGA_LOOKUP_SPACING_MS = 3_000;
+/**
+ * The scan's AniList requests never queue for the shared budget. One that
+ * would have to wait fails at once, and the scan waits instead, so its
+ * requests start when it paced them and other requests keep their turn.
+ */
+const SCAN_ANILIST_OPTIONS = { maxRateLimitWaitMs: 0 };
+/** A rate limit or cooldown asking for a longer wait ends its step. */
+export const MANGA_LOOKUP_MAX_WAIT_MS = 15 * 60 * 1000;
+/**
+ * The third time AniList or MangaDex refuses the same lookup in a row ends
+ * its step for the run. Waits for the shared request budget never count.
+ */
+export const MANGA_LOOKUP_MAX_REFUSALS = 3;
+/** A MyAnimeList batch with more result pages than this counts as failed. */
+export const MAL_LOOKUP_MAX_PAGES = 10;
 
 // Recognized by shape alone, whichever source the item comes from.
 const MANGADEX_URL =
   /^\/manga\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
-export const newLookupBudget = (): LookupBudget => ({
-  ...MANGA_LOOKUP_CALLS_PER_RUN,
+export type LookupStep = 'mal' | 'mangadex' | 'title';
+
+/** One scan run's lookup state, shared by every instance. */
+export interface LookupRun {
+  /** The earliest start of the next lookup, in epoch milliseconds. */
+  nextCallAt: number;
+  /** Steps a failure ended for the rest of the run. */
+  stopped: Set<LookupStep>;
+}
+
+export const newLookupRun = (): LookupRun => ({
+  nextCallAt: 0,
+  stopped: new Set(),
 });
 
-/**
- * An instance's part of the calls left in a run: an equal split between the
- * instances still to scan, so one large library cannot use every call. What an
- * instance leaves unused goes to the instances scanned after it.
- */
-export const lookupShare = (
-  left: Readonly<LookupBudget>,
-  instancesLeft: number
-): LookupBudget => {
-  const split = (calls: number) =>
-    Math.ceil(calls / Math.max(1, instancesLeft));
-  return {
-    mal: split(left.mal),
-    mangadex: split(left.mangadex),
-    title: split(left.title),
-  };
+/** Waits `ms`, or rejects as soon as `signal` aborts. */
+type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
+
+interface LookupClock {
+  now: () => number;
+  sleep: Sleep;
+}
+
+const systemClock: LookupClock = {
+  now: () => Date.now(),
+  sleep: (ms, signal) => delay(ms, undefined, { signal }),
+};
+let clock = systemClock;
+
+/** Test helper: replaces the lookup clock; no options restore the real one. */
+export const setMangaLookupClockForTests = (
+  options: Partial<LookupClock> = {}
+): void => {
+  clock = { ...systemClock, ...options };
 };
 
 export type MatchingWarning =
@@ -119,13 +145,13 @@ export interface MatchInput {
 
 export interface MatchingContext {
   signal: AbortSignal;
-  /** Calls left in this run, across every instance. */
-  lookups: LookupBudget;
-  /** This instance's part of `lookups`. */
-  share: LookupBudget;
+  /** Pacing and stopped steps, shared by every instance in the run. */
+  lookups: LookupRun;
   warn: (code: MatchingWarning, count: number, cause?: string) => void;
-  /** Items the call cap left for a later run; the cap is not a warning. */
-  defer: (step: keyof LookupBudget, count: number) => void;
+  /** Items a step stopped earlier in the run left for a later run. */
+  defer: (step: LookupStep, count: number) => void;
+  /** Items whose matching is finished for this run. */
+  handled: (count: number) => void;
 }
 
 interface Match {
@@ -183,38 +209,59 @@ const byAge =
     (checkedAt(a)?.getTime() ?? 0) - (checkedAt(b)?.getTime() ?? 0) ||
     Number(a.input.item.id) - Number(b.input.item.id);
 
+/** Holds a lookup until the spacing since the run's previous one passed. */
+const pace = async ({ lookups, signal }: MatchingContext): Promise<void> => {
+  const wait = lookups.nextCallAt - clock.now();
+  if (wait > 0) await clock.sleep(wait, signal);
+  signal.throwIfAborted();
+  lookups.nextCallAt = clock.now() + MANGA_LOOKUP_SPACING_MS;
+};
+
+/** A rate limit or cooldown, which asks for a wait before the next send. */
+const refusalOf = (error: unknown) =>
+  error instanceof AnilistRateLimitedError ||
+  error instanceof MangaDexRateLimitedError
+    ? error
+    : undefined;
+
 /**
- * One call against the step's budgets: the run's and the instance's share. A
- * call that `continues` a started lookup needs only the run's, so a lookup of
- * several pages can finish. An exhausted budget returns no cause, since the
- * cap is not a failure. A failure ends the step for the run unless `stops`
- * says it concerns this call alone. A cancel always throws.
+ * One paced lookup of a step. A rate limit or cooldown waits as long as asked
+ * and sends again, unless the wait would pass 15 minutes or the service
+ * refused the lookup three times in a row; those end the step for the run,
+ * as any other failure does unless `stops` says it concerns this call alone.
+ * A stopped step returns no cause. A cancel always throws, during a wait too.
  */
 const call = async <T>(
   context: MatchingContext,
-  step: keyof LookupBudget,
+  step: LookupStep,
   send: () => Promise<T>,
-  {
-    stops = () => true,
-    continues = false,
-  }: { stops?: (error: unknown) => boolean; continues?: boolean } = {}
+  stops: (error: unknown) => boolean = () => true
 ): Promise<CallResult<T>> => {
-  const { lookups, share } = context;
-  if (lookups[step] <= 0 || (!continues && share[step] <= 0)) return {};
-  context.signal.throwIfAborted();
-  lookups[step] -= 1;
-  share[step] = Math.max(0, share[step] - 1);
-  try {
-    const value = await send();
-    context.signal.throwIfAborted();
-    return { value };
-  } catch (error) {
-    if (context.signal.aborted) throw error;
-    if (stops(error)) {
-      lookups[step] = 0;
-      share[step] = 0;
+  const { lookups, signal } = context;
+  if (lookups.stopped.has(step)) return {};
+  let refusals = 0;
+  for (;;) {
+    await pace(context);
+    try {
+      const value = await send();
+      signal.throwIfAborted();
+      return { value };
+    } catch (error) {
+      if (signal.aborted) throw error;
+      const refusal = refusalOf(error);
+      if (refusal?.requestSent) refusals += 1;
+      const wait = Math.max(1, refusal?.retryAfterSeconds || 1) * 1000;
+      if (
+        refusal &&
+        wait <= MANGA_LOOKUP_MAX_WAIT_MS &&
+        refusals < MANGA_LOOKUP_MAX_REFUSALS
+      ) {
+        await clock.sleep(wait, signal);
+        continue;
+      }
+      if (refusal || stops(error)) lookups.stopped.add(step);
+      return { cause: lookupFailureCode(error) };
     }
-    return { cause: lookupFailureCode(error) };
   }
 };
 
@@ -281,15 +328,11 @@ const matchMalIds = async (
       // One MAL ID can name several AniList manga, so every page is read
       // before any ID in the batch is decided.
       const found = new Map<number, Set<number>>();
-      for (let page = 1; ; page += 1) {
-        const result = await call(
-          context,
-          'mal',
-          () =>
-            anilist().getMangaIdsByMalIds(malIds, page, {
-              signal: context.signal,
-            }),
-          { continues: page > 1 }
+      for (let page = 1; page <= MAL_LOOKUP_MAX_PAGES; page += 1) {
+        const result = await call(context, 'mal', () =>
+          anilist().getMangaIdsByMalIds(malIds, page, {
+            signal: context.signal,
+          })
         );
         if (!('value' in result)) return result;
         for (const { anilistId, malId } of result.value.links) {
@@ -297,6 +340,9 @@ const matchMalIds = async (
         }
         if (!result.value.hasNextPage) return found;
       }
+      // Pages without end are no answer, and no later batch would do better.
+      context.lookups.stopped.add('mal');
+      return { cause: 'BAD_RESPONSE' };
     },
     (match, found, malId) => {
       // Several AniList manga for one MAL ID bind nothing, even when an admin
@@ -370,8 +416,54 @@ const stopsTitleSearch = (error: unknown) =>
   error instanceof AnilistAuthError ||
   (axios.isAxiosError(error) && !error.response);
 
-/** Step 5: a title proposal for admin review; it never binds. */
-const proposeTitles = async (
+const titleLink = (anilistId: number): MatchLink =>
+  linkTo(anilistId, MangaBindingConfidence.HIGH, MANGA_MATCHED_BY_TITLE);
+
+/**
+ * A HIGH proposal binds unless the result is a novel or the item's own
+ * tracker records disagree or name another title. A rejected title is never
+ * proposed in the first place.
+ */
+const bindsByTitle = (
+  { evidence, rejected }: MatchInput,
+  proposal: MangaTitleProposal,
+  results: readonly AnilistMangaSummary[]
+): boolean => {
+  const best = results.find(({ id }) => id === proposal.anilistId);
+  return (
+    proposal.confidence === MangaBindingConfidence.HIGH &&
+    best !== undefined &&
+    best.format !== 'NOVEL' &&
+    !rejected.has(best.id) &&
+    !hasTrackerConflict(evidence) &&
+    [...evidence.anilistIds].every((id) => id === best.id) &&
+    (evidence.malIds.size === 0 ||
+      (best.idMal !== undefined && evidence.malIds.has(best.idMal)))
+  );
+};
+
+/**
+ * The item holds a HIGH proposal for its current title that no admin refused,
+ * and has no tracker records that could argue against it.
+ */
+const hasStoredHighProposal = ({ input }: Match): boolean => {
+  const { item, candidate, evidence, rejected } = input;
+  const anilistId = candidate?.proposedAnilistId;
+  return (
+    candidate?.title === item.title &&
+    candidate.proposalConfidence === MangaBindingConfidence.HIGH &&
+    typeof anilistId === 'number' &&
+    !rejected.has(anilistId) &&
+    evidence.anilistIds.size === 0 &&
+    evidence.malIds.size === 0
+  );
+};
+
+/**
+ * Step 5: an AniList title search. A HIGH match binds; any other best match
+ * is stored as a proposal for admin review.
+ */
+const matchTitles = async (
   context: MatchingContext,
   matches: readonly Match[],
   now: Date,
@@ -381,16 +473,22 @@ const proposeTitles = async (
     'titleCheckedAt' in progress
       ? progress.titleCheckedAt
       : input.candidate?.titleCheckedAt;
-  const due = matches
-    .filter((match) => isDue(checkedAt(match), now))
-    .sort(byAge(checkedAt));
   const policy = getMangaContentPolicy();
+  // A stored HIGH proposal may come from the Manga Source Resolve job, which
+  // ranks library titles by score alone, or predate the current rules and
+  // content settings. It is searched again at once, and the new result
+  // decides whether the item binds.
+  const due = matches.filter(
+    (match) => hasStoredHighProposal(match) || isDue(checkedAt(match), now)
+  );
+  context.handled(matches.length - due.length);
+  due.sort(byAge(checkedAt));
   let failed = 0;
   let deferred = 0;
   let firstCause: string | undefined;
   for (const match of due) {
     const { item, rejected } = match.input;
-    let results: MangaTitleCandidate[] = [];
+    let results: AnilistMangaSummary[] = [];
     // A title with no letters or digits concludes without a search.
     if (normalizeMangaTitle(item.title)) {
       const result = await call(
@@ -404,7 +502,7 @@ const proposeTitles = async (
               signal: context.signal,
             }
           ),
-        { stops: stopsTitleSearch }
+        stopsTitleSearch
       );
       if (!('value' in result)) {
         if (result.cause) {
@@ -413,17 +511,23 @@ const proposeTitles = async (
         } else {
           deferred += 1;
         }
+        context.handled(1);
         continue;
       }
       results = result.value;
     }
     const proposal = proposeMangaMatch(item.title, results, rejected);
-    Object.assign(match.progress, {
-      proposedAnilistId: proposal?.anilistId ?? null,
-      proposalConfidence: proposal?.confidence ?? null,
-      proposalScore: proposal?.score ?? null,
-      titleCheckedAt: now,
-    });
+    if (proposal && bindsByTitle(match.input, proposal, results)) {
+      match.link = titleLink(proposal.anilistId);
+    } else {
+      Object.assign(match.progress, {
+        proposedAnilistId: proposal?.anilistId ?? null,
+        proposalConfidence: proposal?.confidence ?? null,
+        proposalScore: proposal?.score ?? null,
+        titleCheckedAt: now,
+      });
+    }
+    context.handled(1);
   }
   if (failed > 0) context.warn('TITLE_SEARCH_FAILED', failed, firstCause);
   if (deferred > 0) context.defer('title', deferred);
@@ -431,7 +535,7 @@ const proposeTitles = async (
 
 /**
  * A proposal for an older title, or one an admin has since refused, is
- * cleared at once, whether or not a new search fits in this run.
+ * cleared at once, whether or not a new search succeeds in this run.
  */
 const staleProposal = ({
   item,
@@ -455,7 +559,8 @@ const staleProposal = ({
  * with every network call made before any write. Step 3 resolves the item's
  * MyAnimeList tracker ID through AniList and step 4 the AniList link MangaDex
  * keeps for a `/manga/<uuid>` URL; both bind only an unambiguous, unrejected
- * exact link. Step 5 stores a title proposal, which an admin must confirm.
+ * exact link. Step 5 binds a confident title match, or stores a proposal an
+ * admin must confirm. Every due item is looked up in the same run.
  */
 export const resolveLibraryMatches = async (
   context: MatchingContext,
@@ -468,7 +573,7 @@ export const resolveLibraryMatches = async (
     pending: false,
   }));
   let client: AnilistAPI | undefined;
-  const anilist = () => (client ??= new AnilistAPI());
+  const anilist = () => (client ??= new AnilistAPI(SCAN_ANILIST_OPTIONS));
   const open = (match: Match) => !match.link && !match.pending;
   // Disagreeing tracker records allow no automatic link, only a proposal.
   const linkable = matches.filter(
@@ -476,7 +581,9 @@ export const resolveLibraryMatches = async (
   );
   await matchMalIds(context, linkable, now, anilist);
   await matchMangaDexLinks(context, linkable.filter(open), now);
-  await proposeTitles(context, matches.filter(open), now, anilist);
+  // A linked item is done, and a pending one waits for a later run.
+  context.handled(matches.filter((match) => !open(match)).length);
+  await matchTitles(context, matches.filter(open), now, anilist);
   return new Map(
     matches.map((match) => [
       match.input.item.id,

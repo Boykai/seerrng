@@ -52,7 +52,10 @@ class MangaMatchCandidate {
   @DbAwareColumn({ type: 'datetime', nullable: true })
   public titleCheckedAt: Date | null;
 
-  /** The best title match, waiting for an admin; never bound automatically. */
+  /**
+   * The best title match, waiting for an admin. The scan binds a HIGH one by
+   * itself unless the item argues against it.
+   */
   @Column({ type: 'integer', nullable: true })
   public proposedAnilistId: number | null;
 

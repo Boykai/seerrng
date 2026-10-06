@@ -600,7 +600,7 @@ describe('MangaLibrary', () => {
     expect(host.querySelector('img')).toBeNull();
   });
 
-  it('says when a title match was made for a request', async () => {
+  it('says whether a request or the library scan made a title match', async () => {
     state.responses.set(
       BINDINGS,
       page([
@@ -609,14 +609,26 @@ describe('MangaLibrary', () => {
           confidence: 'HIGH',
           origin: 'resolver',
         }),
+        binding(5, {
+          matchedBy: 'title',
+          confidence: 'HIGH',
+          origin: 'library-scan',
+        }),
       ])
     );
-    state.responses.set('/api/v1/manga?ids=204', summaries([204]));
+    state.responses.set('/api/v1/manga?ids=204%2C205', summaries([204, 205]));
     await render();
 
     expect(
       rows(1).map((row) => row.querySelectorAll('td')[2].textContent)
-    ).toEqual(['Title Match for a RequestHigh Confidence']);
+    ).toEqual([
+      'Title Match for a RequestHigh Confidence',
+      'Matched by TitleHigh Confidence',
+    ]);
+    expect(labels(rows(1)[1].querySelectorAll('td')[4])).toEqual([
+      'Choose Title',
+      'Reject',
+    ]);
   });
 
   it('shows availability and the actions each binding state allows', async () => {

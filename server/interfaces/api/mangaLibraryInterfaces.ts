@@ -26,7 +26,7 @@ export interface MangaLibraryErrorResponse {
   suwayomiCode?: SuwayomiErrorCode;
 }
 
-/** A title match waiting for an admin; never bound automatically. */
+/** A title match waiting for an admin. */
 export interface MangaLibraryProposal {
   anilistId: number;
   confidence:
