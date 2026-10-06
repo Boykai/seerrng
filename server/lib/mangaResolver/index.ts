@@ -612,7 +612,10 @@ export class MangaSourceResolver {
         lastError: null,
         candidates: [],
         answered: true,
-        ...(library === 'absent' && { parked: MangaParkedCode.NO_SOURCES }),
+        ...(library === 'absent' &&
+          instance.snapshot.sourceAllowlist.length === 0 && {
+            parked: MangaParkedCode.NO_SOURCES,
+          }),
       });
     }
 

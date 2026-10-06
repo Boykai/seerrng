@@ -2145,6 +2145,25 @@ describe('manga source resolver: library', () => {
     assert.equal((await manifest(requestId)).lastError, null);
   });
 
+  it('does not ask for a selection when the selected sources are not installed', async () => {
+    const requestId = await seedRequest(T1);
+    await serve({
+      sources: [{ id: '1001' }],
+      instance: { sourceAllowlist: ['2002'] },
+      library: [fakeLibraryManga(501)],
+    });
+
+    await resolver().run();
+
+    assert.deepEqual([mangadexCalls, searches], [[], []]);
+    assert.equal((await stateOf(T1)).reason, 'NO_ELIGIBLE_SOURCES');
+    const waiting = await manifest(requestId);
+    assert.deepEqual(
+      [waiting.bindingState, waiting.lastError],
+      [AWAITING_BINDING, null]
+    );
+  });
+
   it('keeps every title without a source due after a selection until a run searches it', async () => {
     const requestIds = [await seedRequest(T1), await seedRequest(T2)];
     await serve({

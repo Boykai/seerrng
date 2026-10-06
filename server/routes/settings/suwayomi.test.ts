@@ -442,7 +442,11 @@ describe('Suwayomi settings routes', () => {
       );
       const password = getSettings().suwayomi[0].password;
       assert.deepEqual(
-        await save(200, { port: 4568, password, sourceAllowlist: [] }),
+        await save(200, {
+          port: 4568,
+          password,
+          sourceAllowlist: [SOURCE_ID, '4000000000000000002'],
+        }),
         ['manga-source-resolve']
       );
     } finally {
