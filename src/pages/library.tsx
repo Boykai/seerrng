@@ -174,8 +174,11 @@ export default function LibraryPage() {
   const mangaAvailable =
     isConfiguredMediaCategoryEnabled('manga', settings.currentSettings) &&
     settings.currentSettings.suwayomiEnabled;
+  const settingsLoaded = settings.currentSettings.initialized;
   useEffect(() => {
-    if (initializedProvider.current || !connections) return;
+    if (initializedProvider.current || !connections || !settingsLoaded) {
+      return;
+    }
     initializedProvider.current = true;
     if (
       mangaAvailable &&
@@ -191,7 +194,7 @@ export default function LibraryPage() {
     setProvider(first);
     setShelf(first === 'trakt' ? 'watched' : 'all');
     setType('');
-  }, [connections, mangaAvailable]);
+  }, [connections, mangaAvailable, settingsLoaded]);
   const showManga = mangaSelected && mangaAvailable;
   const nativeSource = isNativeSource(provider);
   const connected =

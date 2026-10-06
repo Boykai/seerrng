@@ -109,6 +109,7 @@ beforeEach(() => {
   state.listProps = [];
   state.connections = { accounts: [], mediaServer: null };
   state.settings = {
+    initialized: true,
     enabledMediaCategories: { manga: true },
     suwayomiEnabled: true,
   };
@@ -184,6 +185,28 @@ it('selects the manga library when the media server is linked but not connected'
   expect(source().value).toBe('manga');
 });
 
+it('waits for public settings before choosing the default source', async () => {
+  state.settings = {
+    initialized: false,
+    enabledMediaCategories: { manga: true },
+    suwayomiEnabled: false,
+  };
+  await render();
+
+  expect(mangaOption()).toBeNull();
+  expect(mangaKeys()).toEqual([]);
+
+  state.settings = {
+    initialized: true,
+    enabledMediaCategories: { manga: true },
+    suwayomiEnabled: true,
+  };
+  await render();
+
+  expect(source().value).toBe('manga');
+  expect(mangaKeys().at(-1)).toBe(`${MANGA_PREFIX}?page=1`);
+});
+
 it('keeps the connected media server as the default source', async () => {
   state.connections = {
     accounts: [{ provider: 'anilist' }],
@@ -210,7 +233,11 @@ it.each([
 ])(
   'leaves the manga library out when %s',
   async (_label, enabledMediaCategories, suwayomiEnabled) => {
-    state.settings = { enabledMediaCategories, suwayomiEnabled };
+    state.settings = {
+      initialized: true,
+      enabledMediaCategories,
+      suwayomiEnabled,
+    };
     await render();
 
     expect(mangaOption()).toBeNull();
