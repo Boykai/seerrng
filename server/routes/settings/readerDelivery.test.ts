@@ -205,6 +205,98 @@ describe('reader delivery settings API', () => {
     );
   });
 
+  it('keeps a saved password on save only for the same address and username', async () => {
+    const app = createApp();
+    await getSettings().persistSection('readerDelivery', {
+      ...defaultReaderDeliverySettings(),
+      grimmoryUrl: 'https://grimmory.example',
+      grimmoryUsername: 'shelf-admin',
+      grimmoryPassword: 'grimmory-secret',
+      bookorbitUrl: 'https://bookorbit.example',
+      bookorbitUsername: 'orbit-admin',
+      bookorbitPassword: 'bookorbit-secret',
+      preferredProvider: 'grimmory',
+    });
+
+    await request(app)
+      .put('/settings/reader-delivery')
+      .send({
+        grimmoryUrl: 'https://grimmory.example/komga/api',
+        grimmoryUsername: 'shelf-admin',
+        grimmoryPassword: '',
+      })
+      .expect(200);
+    assert.equal(
+      getSettings().readerDelivery.grimmoryPassword,
+      'grimmory-secret'
+    );
+
+    const changedAddress = await request(app)
+      .put('/settings/reader-delivery')
+      .send({
+        grimmoryUrl: 'https://other-grimmory.example',
+        grimmoryUsername: 'shelf-admin',
+        grimmoryPassword: '[REDACTED]',
+        preferredProvider: 'bookorbit',
+      })
+      .expect(400);
+    assert.equal(
+      changedAddress.body.error,
+      'Enter the Grimmory password again to save a changed address or username.'
+    );
+    const changedUsername = await request(app)
+      .put('/settings/reader-delivery')
+      .send({ bookorbitUsername: 'other-admin' })
+      .expect(400);
+    assert.equal(
+      changedUsername.body.error,
+      'Enter the BookOrbit password again to save a changed address or username.'
+    );
+    assert.deepEqual(getSettings().readerDelivery, {
+      grimmoryUrl: 'https://grimmory.example',
+      grimmoryUsername: 'shelf-admin',
+      grimmoryPassword: 'grimmory-secret',
+      bookorbitUrl: 'https://bookorbit.example',
+      bookorbitUsername: 'orbit-admin',
+      bookorbitPassword: 'bookorbit-secret',
+      preferredProvider: 'grimmory',
+    });
+
+    await request(app)
+      .put('/settings/reader-delivery')
+      .send({
+        grimmoryUrl: 'https://other-grimmory.example',
+        grimmoryPassword: 'new-grimmory-secret',
+      })
+      .expect(200);
+    assert.equal(
+      getSettings().readerDelivery.grimmoryUrl,
+      'https://other-grimmory.example'
+    );
+    assert.equal(
+      getSettings().readerDelivery.grimmoryPassword,
+      'new-grimmory-secret'
+    );
+
+    await request(app)
+      .put('/settings/reader-delivery')
+      .send({ bookorbitUsername: '' })
+      .expect(200);
+    assert.equal(getSettings().readerDelivery.bookorbitUsername, '');
+    assert.equal(getSettings().readerDelivery.bookorbitPassword, '');
+
+    await request(app)
+      .put('/settings/reader-delivery')
+      .send({
+        grimmoryUsername: 'shelf-admin',
+        grimmoryPassword: '[REDACTED]',
+        clearGrimmoryCredentials: true,
+      })
+      .expect(200);
+    assert.equal(getSettings().readerDelivery.grimmoryUsername, '');
+    assert.equal(getSettings().readerDelivery.grimmoryPassword, '');
+  });
+
   it('tests provider account access by logging in and listing manageable groupings', async () => {
     const app = createApp();
     await getSettings().persistSection('readerDelivery', {

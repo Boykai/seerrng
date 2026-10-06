@@ -82,7 +82,7 @@ components:
         grimmoryPassword:
           type: string
           maxLength: 2048
-          description: Responses always redact configured passwords. Send the redacted marker to preserve a saved password.
+          description: Responses always redact configured passwords. Send an empty string or the redacted marker to keep the saved password while the Grimmory address and username are unchanged; otherwise send the password.
         bookorbitUrl:
           type: string
           maxLength: 2048
@@ -92,7 +92,7 @@ components:
         bookorbitPassword:
           type: string
           maxLength: 2048
-          description: Responses always redact configured passwords. Send the redacted marker to preserve a saved password.
+          description: Responses always redact configured passwords. Send an empty string or the redacted marker to keep the saved password while the BookOrbit address and username are unchanged; otherwise send the password.
         preferredProvider:
           type: string
           enum: [grimmory, bookorbit]
@@ -8688,7 +8688,7 @@ paths:
   /settings/reader-delivery:
     get:
       summary: Get reader app connection and shelf-management settings
-      description: Returns administrator-configured service addresses and usernames. Passwords are redacted and can be preserved by sending the redacted marker back unchanged.
+      description: Returns administrator-configured service addresses and usernames. Passwords are redacted; sending the redacted marker back keeps the saved password while the address and username are unchanged.
       tags:
         - settings
       responses:
@@ -8700,7 +8700,7 @@ paths:
                 $ref: '#/components/schemas/ReaderDeliverySettings'
     put:
       summary: Update reader app connection and shelf-management settings
-      description: Stores the Grimmory and BookOrbit account credentials in protected application settings for live Magic Shelf and Smart Scope management. OPDS reader credentials remain configured in the reader service. Passwords are redacted on reads; clear flags remove the saved account credentials.
+      description: Stores the Grimmory and BookOrbit account credentials in protected application settings for live Magic Shelf and Smart Scope management. OPDS reader credentials remain configured in the reader service. Passwords are redacted on reads; a blank or redacted password keeps the saved password only while that service's address and username are unchanged. Clear flags remove the saved account credentials.
       tags:
         - settings
       requestBody:
@@ -8717,7 +8717,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReaderDeliverySettings'
         '400':
-          description: Invalid service URL, provider, or credentials
+          description: Invalid service URL, provider, or credentials, or a changed address or username without the password
         '403':
           description: Administrator permission required
   /settings/reader-delivery/connection-test:

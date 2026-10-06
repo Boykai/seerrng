@@ -375,6 +375,20 @@ const ReaderDeliverySettings = () => {
   ) => {
     const isGrimmory = provider === 'grimmory';
     const serviceName = isGrimmory ? 'Grimmory' : 'BookOrbit';
+    const savedUrl = isGrimmory ? data?.grimmoryUrl : data?.bookorbitUrl;
+    const savedUsername = isGrimmory
+      ? data?.grimmoryUsername
+      : data?.bookorbitUsername;
+    const savedPassword = isGrimmory
+      ? data?.grimmoryPassword
+      : data?.bookorbitPassword;
+    // A blank password keeps the saved one only for the saved address and username.
+    const keepsSavedPassword =
+      !clearCredentials[provider] &&
+      (password === '' || password === '[REDACTED]') &&
+      savedPassword === '[REDACTED]' &&
+      serviceUrl.trim() === savedUrl?.trim() &&
+      username.trim() === savedUsername?.trim();
     const catalogUrl = getCatalogUrl(serviceUrl);
     const comicCatalogUrl = isGrimmory ? getKomgaUrl(serviceUrl) : '';
     const copyResult =
@@ -491,7 +505,7 @@ const ReaderDeliverySettings = () => {
                     disabled={isSaving}
                     value={password === '[REDACTED]' ? '' : password}
                     placeholder={
-                      password === '[REDACTED]'
+                      keepsSavedPassword
                         ? intl.formatMessage(messages.savedPassword)
                         : ''
                     }

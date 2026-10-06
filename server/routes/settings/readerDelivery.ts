@@ -355,10 +355,54 @@ const getComparableUrl = (value: string) => {
 };
 
 /**
+ * Decides what a submitted password stands for. A blank or redacted password
+ * means the saved one, but only for the saved address and username, so the
+ * saved credential is never sent to a different service or account.
+ */
+const getSavedPasswordUse = (
+  saved: ReturnType<typeof getProviderConfig>,
+  url: string,
+  username: string,
+  password: string
+): 'typed' | 'saved' | 'none' | 'changed' => {
+  if (password && password !== REDACTED_SECRET) return 'typed';
+  if (!saved.password) return 'none';
+  return saved.url &&
+    getComparableUrl(url) === getComparableUrl(saved.url) &&
+    username === saved.username
+    ? 'saved'
+    : 'changed';
+};
+
+/**
+ * The password Save stores. Without an address or username the saved
+ * password could never be reused, so it is removed instead of kept.
+ */
+const getPasswordToSave = (
+  provider: ReaderGroupingProvider,
+  saved: ReturnType<typeof getProviderConfig>,
+  url: string,
+  username: string,
+  password: string
+): { value: string } | { error: string } => {
+  const use = getSavedPasswordUse(saved, url, username, password);
+  if (use === 'typed') return { value: password };
+  if (use === 'saved') return { value: saved.password };
+  if (use === 'changed' && url && username) {
+    return {
+      error:
+        'Enter the ' +
+        getProviderName(provider) +
+        ' password again to save a changed address or username.',
+    };
+  }
+  return { value: '' };
+};
+
+/**
  * Reads the address and account a connection test should use. Fields left
- * out fall back to the saved settings. A blank or redacted password reuses
- * the saved password only for the saved address and username, so the saved
- * credential is never sent to a different service or account.
+ * out fall back to the saved settings, and the password follows the same
+ * rule as Save.
  */
 const getConnectionTestConfig = (
   provider: ReaderGroupingProvider,
@@ -397,25 +441,18 @@ const getConnectionTestConfig = (
           false
         );
   if ('error' in password) return password;
-  if (password.value && password.value !== REDACTED_SECRET) {
-    return {
-      config: {
-        url: url.value,
-        username: username.value,
-        password: password.value,
-      },
-    };
-  }
-  if (!saved.password) {
+  const use = getSavedPasswordUse(
+    saved,
+    url.value,
+    username.value,
+    password.value
+  );
+  if (use === 'none') {
     return {
       error: 'Enter the ' + providerName + ' password to test the connection.',
     };
   }
-  if (
-    !saved.url ||
-    getComparableUrl(url.value) !== getComparableUrl(saved.url) ||
-    username.value !== saved.username
-  ) {
+  if (use === 'changed') {
     return {
       error:
         'Enter the ' +
@@ -427,7 +464,7 @@ const getConnectionTestConfig = (
     config: {
       url: url.value,
       username: username.value,
-      password: saved.password,
+      password: use === 'typed' ? password.value : saved.password,
     },
   };
 };
@@ -579,18 +616,15 @@ readerDeliveryRoutes.put(
       'BookOrbit username',
       256
     );
+    // An omitted password keeps the saved one, like the redacted marker.
     const grimmoryPassword = parseCredentialText(
-      req.body.grimmoryPassword === REDACTED_SECRET
-        ? current.grimmoryPassword
-        : (req.body.grimmoryPassword ?? current.grimmoryPassword),
+      req.body.grimmoryPassword ?? REDACTED_SECRET,
       'Grimmory password',
       2048,
       false
     );
     const bookorbitPassword = parseCredentialText(
-      req.body.bookorbitPassword === REDACTED_SECRET
-        ? current.bookorbitPassword
-        : (req.body.bookorbitPassword ?? current.bookorbitPassword),
+      req.body.bookorbitPassword ?? REDACTED_SECRET,
       'BookOrbit password',
       2048,
       false
@@ -607,17 +641,38 @@ readerDeliveryRoutes.put(
     const clearGrimmoryCredentials = req.body.clearGrimmoryCredentials === true;
     const clearBookorbitCredentials =
       req.body.clearBookorbitCredentials === true;
+    const grimmorySecret = clearGrimmoryCredentials
+      ? { value: '' }
+      : getPasswordToSave(
+          'grimmory',
+          getProviderConfig('grimmory', current),
+          grimmoryUrl.value,
+          grimmoryUsername.value,
+          grimmoryPassword.value
+        );
+    if ('error' in grimmorySecret)
+      return res.status(400).json({ error: grimmorySecret.error });
+    const bookorbitSecret = clearBookorbitCredentials
+      ? { value: '' }
+      : getPasswordToSave(
+          'bookorbit',
+          getProviderConfig('bookorbit', current),
+          bookorbitUrl.value,
+          bookorbitUsername.value,
+          bookorbitPassword.value
+        );
+    if ('error' in bookorbitSecret)
+      return res.status(400).json({ error: bookorbitSecret.error });
+
     const candidate: ReaderDeliverySettings = {
       grimmoryUrl: grimmoryUrl.value,
       grimmoryUsername: clearGrimmoryCredentials ? '' : grimmoryUsername.value,
-      grimmoryPassword: clearGrimmoryCredentials ? '' : grimmoryPassword.value,
+      grimmoryPassword: grimmorySecret.value,
       bookorbitUrl: bookorbitUrl.value,
       bookorbitUsername: clearBookorbitCredentials
         ? ''
         : bookorbitUsername.value,
-      bookorbitPassword: clearBookorbitCredentials
-        ? ''
-        : bookorbitPassword.value,
+      bookorbitPassword: bookorbitSecret.value,
       preferredProvider: requestedPreferred,
     };
     const safeCandidate = preserveRedactedSecrets(candidate, current);

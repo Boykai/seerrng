@@ -91,13 +91,14 @@ For SeerrNG-managed shelves, enter an account for each configured service:
 
 Use **Test Magic Shelf Access** or **Test Smart Scope Access** to check the
 address and account before or after saving. The test uses the values in the
-form. Leave the password blank to test the saved password; after you change
-the address or username, enter the password again. A failed test names the
-step that failed, such as signing in or listing Magic Shelves or Smart Scopes,
-and what to check. SeerrNG stores the password in its private settings file
-and redacts it from settings API responses. Select **Remove saved account
-credentials** and save to remove it. The saved account is used for shelf
-management; it is not the OPDS account used by readers.
+form. Leave the password blank to test or keep the saved password; this works
+only while the address and username stay the same, so enter the password again
+after you change either one. A failed test names the step that failed, such as
+signing in or listing Magic Shelves or Smart Scopes, and what to check. SeerrNG
+stores the password in its private settings file and redacts it from settings
+API responses. Select **Remove saved account credentials** and save to remove
+it. The saved account is used for shelf management; it is not the OPDS account
+used by readers.
 
 The Grimmory Komga API must be enabled under its OPDS settings before a comic
 app can use that address. Grimmory's OPDS and Komga APIs share reader
