@@ -13879,6 +13879,65 @@ paths:
                 maximum: 3600
         '503':
           description: AniList is unavailable
+  /discover/manga/library:
+    get:
+      summary: List the manga library
+      description: Returns the AniList titles in the Suwayomi library as manga cards, most recently added first; the lower AniList ID breaks ties. A title is in the library when the Manga Library Scan or an administrator matched a library item on a configured Suwayomi instance to it, and the library still lists that item. A title's added date is the date SeerrNG first recorded the pairing behind its earliest such match, even when that pairing became an active library match later. Each page covers the next 20 library titles. Titles that AniList does not return, and adult titles and light novels unless an administrator enables them, are left out of their page, so a page can hold fewer than 20 titles. totalResults and totalPages count library titles before that filter. Requires the manga category; returns 404 while it is disabled.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 1
+      responses:
+        '200':
+          description: One page of the manga library
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - page
+                  - totalPages
+                  - totalResults
+                  - results
+                properties:
+                  page:
+                    type: integer
+                    minimum: 1
+                    example: 1
+                  totalPages:
+                    type: integer
+                    minimum: 1
+                    maximum: 500
+                    example: 3
+                  totalResults:
+                    type: integer
+                    minimum: 0
+                    example: 45
+                  results:
+                    type: array
+                    maxItems: 20
+                    items:
+                      $ref: '#/components/schemas/MangaResult'
+        '400':
+          description: The page is invalid
+        '404':
+          description: The manga category is disabled
+        '429':
+          description: AniList rate limit reached. Retry-After gives the wait in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+        '503':
+          description: AniList is unavailable
   /discover/keyword/{keywordId}/movies:
     get:
       summary: Get movies from keyword

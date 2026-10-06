@@ -13,8 +13,13 @@ import useDebouncedState from '@app/hooks/useDebouncedState';
 import useDiscover from '@app/hooks/useDiscover';
 import useDiscoverScrollRestoration from '@app/hooks/useDiscoverScrollRestoration';
 import { useSearchActivityReporter } from '@app/hooks/useSearchActivity';
+import useSettings from '@app/hooks/useSettings';
 import { useBatchUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
 import defineMessages from '@app/utils/defineMessages';
+import {
+  MANGA_LIBRARY_PAGE_PATH,
+  MANGA_LIBRARY_URL,
+} from '@app/utils/mangaLibrary';
 import {
   BarsArrowDownIcon,
   BarsArrowUpIcon,
@@ -46,6 +51,7 @@ const messages = defineMessages('components.Discover.DiscoverManga', {
   trendingManga: 'Trending Manga',
   popularManga: 'Popular Manga',
   topRatedManga: 'Top Rated Manga',
+  mangaLibrary: 'Your Manga Library',
   unavailable: 'Manga discovery is unavailable right now.',
 });
 
@@ -76,6 +82,7 @@ const getMangaSort = (value: unknown): string | undefined =>
 const DiscoverManga = () => {
   const intl = useIntl();
   const router = useRouter();
+  const settings = useSettings();
   const update = useBatchUpdateQueryParams({});
   const query =
     typeof router.query.query === 'string' ? router.query.query.trim() : '';
@@ -235,16 +242,27 @@ const DiscoverManga = () => {
         />
       </div>
       {showShelves ? (
-        MANGA_SHELVES.map((shelf) => (
-          <MediaSlider
-            key={shelf.sort}
-            sliderKey={`manga-${shelf.sort}`}
-            title={intl.formatMessage(messages[shelf.title])}
-            url="/api/v1/discover/manga"
-            extraParams={`sortBy=${shelf.sort}`}
-            linkUrl={`/discover/manga?sortBy=${shelf.sort}`}
-          />
-        ))
+        <>
+          {settings.currentSettings.suwayomiEnabled && (
+            <MediaSlider
+              sliderKey="manga-library"
+              title={intl.formatMessage(messages.mangaLibrary)}
+              url={MANGA_LIBRARY_URL}
+              linkUrl={MANGA_LIBRARY_PAGE_PATH}
+              hideAvailable={false}
+            />
+          )}
+          {MANGA_SHELVES.map((shelf) => (
+            <MediaSlider
+              key={shelf.sort}
+              sliderKey={`manga-${shelf.sort}`}
+              title={intl.formatMessage(messages[shelf.title])}
+              url="/api/v1/discover/manga"
+              extraParams={`sortBy=${shelf.sort}`}
+              linkUrl={`/discover/manga?sortBy=${shelf.sort}`}
+            />
+          ))}
+        </>
       ) : (
         <>
           {discover.error && (

@@ -24,6 +24,10 @@ import {
   parseMangaChapterPaging,
 } from '@server/lib/mangaChapterBrowser';
 import { parseMangaDiscoverFilters } from '@server/lib/mangaDiscoverFilters';
+import {
+  MANGA_LIBRARY_PAGE_SIZE,
+  findMangaLibraryTitles,
+} from '@server/lib/mangaLibraryTitles';
 import { Permission } from '@server/lib/permissions';
 import {
   UserMutationActorUnauthorizedError,
@@ -395,6 +399,55 @@ mangaDiscoverRoutes.get('/filters', async (_req, res) => {
       errorName: e instanceof Error ? e.name : 'UnknownError',
       ...(errorCode ? { errorCode } : {}),
       ...(failureStatus ? { status: failureStatus } : {}),
+    });
+    return sendAnilistFailure(
+      res,
+      e,
+      'AniList, the service used for manga discovery, timed out or is unavailable. Please try again.'
+    );
+  }
+});
+
+// The Suwayomi library as catalog cards. Each page covers the next 20 library
+// titles, most recently added first, with one AniList request at most. Titles
+// that AniList does not return or that the content policy excludes are left
+// out of their page; the totals count library titles before that filter.
+mangaDiscoverRoutes.get('/library', async (req, res) => {
+  const page = parsePositiveInt(req.query.page, 1, MAX_MANGA_PAGE);
+
+  try {
+    const { anilistIds, totalResults } = await findMangaLibraryTitles(page);
+    const totalPages = Math.min(
+      MAX_MANGA_PAGE,
+      Math.max(1, Math.ceil(totalResults / MANGA_LIBRARY_PAGE_SIZE))
+    );
+    if (anilistIds.length === 0) {
+      return res
+        .status(200)
+        .json({ page, totalPages, totalResults, results: [] });
+    }
+
+    const policy = getMangaContentPolicy();
+    const visible = new Map(
+      (await new AnilistAPI().getMangaSummariesByIds(anilistIds))
+        .filter((manga) => !isAnilistMangaExcluded(manga, policy))
+        .map((manga) => [manga.id, manga])
+    );
+    const mediaByAnilistId = await findMangaMediaByAnilistIds(
+      [...visible.keys()],
+      req.user
+    );
+    const results = anilistIds.flatMap((id) => {
+      const manga = visible.get(id);
+      return manga ? [mapMangaResult(manga, mediaByAnilistId.get(id))] : [];
+    });
+    const body = { page, totalPages, totalResults, results };
+    enqueueImageCacheWarm(extractImageCacheUrls(body));
+    return res.status(200).json(filterEntityResponse(body, req.user));
+  } catch (e) {
+    logger.error('Failed to retrieve the manga library', {
+      label: 'Discover Manga',
+      ...getHttpErrorDetails(e),
     });
     return sendAnilistFailure(
       res,

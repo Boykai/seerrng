@@ -81,6 +81,8 @@ interface MediaSliderProps {
   linkUrl?: string;
   sliderKey: string;
   hideWhenEmpty?: boolean;
+  /** Set false to keep available titles while Hide Available Media is on. */
+  hideAvailable?: boolean;
   extraParams?: string;
   onNewTitles?: (titleCount: number) => void;
   randomizeOrder?: boolean;
@@ -107,6 +109,7 @@ const MediaSlider = ({
   extraParams,
   sliderKey,
   hideWhenEmpty = false,
+  hideAvailable = true,
   onNewTitles,
   randomizeOrder = false,
   prioritizeFirstRow = false,
@@ -330,6 +333,7 @@ const MediaSlider = ({
         resultKeys.add(resultKey);
 
         if (
+          hideAvailable &&
           settings.currentSettings.hideAvailable &&
           'mediaInfo' in item &&
           item.mediaInfo &&
@@ -361,6 +365,7 @@ const MediaSlider = ({
     return filteredTitles;
   }, [
     data,
+    hideAvailable,
     settings.currentSettings.hideAvailable,
     settings.currentSettings.hideRequested,
   ]);

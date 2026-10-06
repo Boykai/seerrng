@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   pages: [] as unknown[],
   keys: [] as unknown[],
   visibility: {} as Record<string, string | undefined>,
+  settings: {} as Record<string, unknown>,
 }));
 vi.mock('swr/infinite', () => ({
   default: (getKey: (index: number, previous: null) => unknown) => {
@@ -82,7 +83,7 @@ vi.mock('@app/hooks/useDiscoverHomeManifest', () => ({
   default: () => ({ manifest: undefined }),
 }));
 vi.mock('@app/hooks/useSettings', () => ({
-  default: () => ({ currentSettings: {} }),
+  default: () => ({ currentSettings: state.settings }),
 }));
 vi.mock('@app/hooks/useUser', () => ({
   useUser: () => ({ user: { id: 1, permissions: 2, settings: {} } }),
@@ -131,6 +132,7 @@ beforeEach(() => {
   vi.stubGlobal('React', React);
   state.keys = [];
   state.visibility = {};
+  state.settings = {};
 });
 
 it('renders manga cards in sliders, hides blocklisted manga and requests the sorted page', () => {
@@ -208,5 +210,55 @@ it.each([
       `data-card="manga:30013" data-image="/imageproxy/anilist/file/cover.jpg" data-year="1994" data-show-text="${showText}"`
     );
     expect(html).toContain('data-toggle="manga"');
+  }
+);
+
+it.each([
+  [undefined, false],
+  [false, true],
+])(
+  'with Hide Available Media on, hideAvailable=%s keeps available titles: %s',
+  (hideAvailable, keepsAvailable) => {
+    state.settings = { hideAvailable: true };
+    state.pages = [
+      {
+        page: 1,
+        totalPages: 1,
+        totalResults: 3,
+        results: [
+          manga(),
+          manga({
+            id: 2,
+            title: 'Downloaded Manga',
+            mediaInfo: {
+              status: MediaStatus.AVAILABLE,
+            } as MangaResult['mediaInfo'],
+          }),
+          manga({
+            id: 3,
+            title: 'Partly Downloaded Manga',
+            mediaInfo: {
+              status: MediaStatus.PARTIALLY_AVAILABLE,
+            } as MangaResult['mediaInfo'],
+          }),
+        ],
+      },
+    ];
+
+    const html = renderToStaticMarkup(
+      <IntlProvider locale="en">
+        <MediaSlider
+          title="Your Manga Library"
+          url="/api/v1/discover/manga/library"
+          linkUrl="/discover/manga/library"
+          sliderKey="manga-library"
+          hideAvailable={hideAvailable}
+        />
+      </IntlProvider>
+    );
+
+    expect(html).toContain('data-card="manga:30013"');
+    expect(html.includes('data-card="manga:2"')).toBe(keepsAvailable);
+    expect(html.includes('data-card="manga:3"')).toBe(keepsAvailable);
   }
 );
