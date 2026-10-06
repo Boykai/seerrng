@@ -2502,6 +2502,7 @@ describe('manga library scan: guards', () => {
         mangas: { nodes: [{ id: 1, trackRecords: { nodes: [] } }] },
       });
     });
+    const logs = captureLogs();
 
     const counts = await scan();
 
@@ -2510,6 +2511,14 @@ describe('manga library scan: guards', () => {
       bindingsUpdated: 1,
       mediaUpdated: 1,
       warnings: { ROW_CHANGED: 1 },
+    });
+    // The skipped title is in the warnings, not in the totals.
+    assert.deepEqual(completion(logs), {
+      ...counts,
+      listed: 2,
+      bound: { 'anilist-tracker': 1 },
+      proposed: 0,
+      unmatched: 0,
     });
     assert.equal((await candidates())[0].title, 'Edited Elsewhere');
     assert.equal(await mediaStatus(102), AVAILABLE);
@@ -2625,6 +2634,7 @@ describe('manga library scan: guards', () => {
         },
       });
     });
+    const logs = captureLogs();
 
     const counts = await scan();
 
@@ -2633,6 +2643,13 @@ describe('manga library scan: guards', () => {
       bindingsCreated: 1,
       mediaCreated: 1,
       warnings: { UNIQUE_CONFLICT: 1 },
+    });
+    assert.deepEqual(completion(logs), {
+      ...counts,
+      listed: 2,
+      bound: { 'anilist-tracker': 1 },
+      proposed: 0,
+      unmatched: 0,
     });
     assert.deepEqual(
       (await candidates()).map(({ suwayomiMangaId }) => suwayomiMangaId),

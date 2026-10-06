@@ -110,7 +110,7 @@ export type MangaLibraryScanStatus = StatusBase & {
   counts: MangaLibraryScanCounts;
 };
 
-/** Titles by outcome, from the plans of the instances written in full. */
+/** Titles by outcome, as stored by the instances written in full. */
 interface ScanTotals {
   /** Titles with a live binding, by how they were matched. */
   bound: Record<string, number>;
@@ -120,11 +120,23 @@ interface ScanTotals {
   unmatched: number;
 }
 
+/** What a listed title ends up as once its plan is stored. */
+type Outcome = { matchedBy: string } | 'proposed' | 'unmatched';
+
 const emptyTotals = (): ScanTotals => ({
   bound: {},
   proposed: 0,
   unmatched: 0,
 });
+
+const countOutcome = (totals: ScanTotals, outcome: Outcome): void => {
+  if (outcome === 'proposed') totals.proposed += 1;
+  else if (outcome === 'unmatched') totals.unmatched += 1;
+  else {
+    const { matchedBy } = outcome;
+    totals.bound[matchedBy] = (totals.bound[matchedBy] ?? 0) + 1;
+  }
+};
 
 const addTotals = (into: ScanTotals, from: ScanTotals): void => {
   for (const [matchedBy, count] of Object.entries(from.bound)) {
@@ -176,6 +188,8 @@ interface KeyPlan {
   /** Fingerprint of the stored rows the plan was made from. */
   loaded: string;
   ops: WriteOp[];
+  /** A listed title's outcome, counted once its writes are stored. */
+  outcome?: Outcome;
 }
 
 const emptyCounts = (): MangaLibraryScanCounts => ({
@@ -370,7 +384,10 @@ class MangaLibraryScanner
     }
   }
 
-  /** Counts handled titles, with a log line every 50 of them. */
+  /**
+   * Counts handled titles. Logs a line each time the count passes a multiple
+   * of 50; one update that passes several logs once.
+   */
   private addHandled(count: number): void {
     if (count <= 0) return;
     const before = Math.floor(this.progress / PROGRESS_LOG_STEP);
@@ -507,7 +524,13 @@ class MangaLibraryScanner
       const reads = await this.readInstance(run, client, instanceId);
       if (!reads) return;
       const plan = this.planInstance(run, instanceId, reads);
-      if (!(await this.writeInstance(run, snapshot, plan.keys))) return;
+      const written = await this.writeInstance(
+        run,
+        snapshot,
+        plan.keys,
+        plan.totals
+      );
+      if (!written) return;
       run.completed.add(instanceId);
       addTotals(run.totals, plan.totals);
       await this.reconcileMedia(run, plan.anilistIds, snapshot);
@@ -702,9 +725,6 @@ class MangaLibraryScanner
       [...stored.bindings.values()].flat().map(({ anilistId }) => anilistId)
     );
     const totals = emptyTotals();
-    const countBound = (matchedBy: string) => {
-      totals.bound[matchedBy] = (totals.bound[matchedBy] ?? 0) + 1;
-    };
     let unreadable = 0;
     for (const item of listing.items) {
       const { sourceId, url } = item;
@@ -715,16 +735,17 @@ class MangaLibraryScanner
       const urlHash = hashMangaSourceUrl(url);
       const ops: WriteOp[] = [];
       listed.add(key);
-      if (target.kind === 'live') countBound(target.binding.matchedBy);
-      if (target.kind === 'link') countBound(target.matchedBy);
-      if (target.kind === 'unresolved') totals.unmatched += 1;
+      let outcome: Outcome = 'unmatched';
+      if (target.kind === 'live') {
+        outcome = { matchedBy: target.binding.matchedBy };
+      }
+      if (target.kind === 'link') outcome = { matchedBy: target.matchedBy };
       if (target.kind === 'candidate') {
         const proposed =
           'proposedAnilistId' in target.progress
             ? target.progress.proposedAnilistId
             : candidate?.proposedAnilistId;
-        if (typeof proposed === 'number') totals.proposed += 1;
-        else totals.unmatched += 1;
+        if (typeof proposed === 'number') outcome = 'proposed';
         const values = {
           suwayomiMangaId: Number(item.id),
           title: item.title,
@@ -821,7 +842,9 @@ class MangaLibraryScanner
       }
       if (ops.length > 0) {
         const loaded = fingerprint(rows, candidate);
-        keys.push({ sourceId, url, urlHash, loaded, ops });
+        keys.push({ sourceId, url, urlHash, loaded, ops, outcome });
+      } else {
+        countOutcome(totals, outcome);
       }
     }
     if (unreadable > 0) {
@@ -873,13 +896,15 @@ class MangaLibraryScanner
   /**
    * Writes the plan in batches, each under the instance's admission and in
    * one transaction. A source manga whose rows changed since they were read
-   * is skipped, as is one whose write hits a unique key. Returns false when
-   * the writes stopped early.
+   * is skipped, as is one whose write hits a unique key. The outcome of each
+   * listed title whose writes are stored is added to `totals`. Returns false
+   * when the writes stopped early.
    */
   private async writeInstance(
     run: ScanRun,
     snapshot: SuwayomiSettings,
-    keys: readonly KeyPlan[]
+    keys: readonly KeyPlan[],
+    totals: ScanTotals
   ): Promise<boolean> {
     let changed = 0;
     let conflicts = 0;
@@ -894,6 +919,7 @@ class MangaLibraryScanner
               batch.map(({ urlHash }) => urlHash)
             );
             const counters: ChangeCounter[] = [];
+            const outcomes: Outcome[] = [];
             let skipped = 0;
             let failed = 0;
             for (const plan of batch) {
@@ -914,15 +940,17 @@ class MangaLibraryScanner
                   for (const op of plan.ops) await op.apply(savepoint);
                 });
                 counters.push(...plan.ops.map((op) => op.counter));
+                if (plan.outcome) outcomes.push(plan.outcome);
               } catch (error) {
                 if (!isUniqueConstraintError(error)) throw error;
                 failed += 1;
               }
             }
-            return { counters, skipped, failed };
+            return { counters, outcomes, skipped, failed };
           })
         );
         for (const counter of result.counters) run.counts[counter] += 1;
+        for (const outcome of result.outcomes) countOutcome(totals, outcome);
         changed += result.skipped;
         conflicts += result.failed;
       }

@@ -467,11 +467,13 @@ title. If the library changes while a scan reads it, that run marks no manga
 as gone; the next run does.
 
 Each run logs how many matches and statuses it changed, and a code for each
-warning, under the **Manga Library Scan** label. Every 50 manga, it logs how
-many of the listed manga it has handled so far. When it finishes, it logs how
-many manga it listed, how many are matched by each method, how many have a
-proposal waiting for review, and how many are still unmatched. These log
-entries contain counts, IDs, and codes only, never titles or addresses.
+warning, under the **Manga Library Scan** label. About every 50 manga, it logs
+how many of the listed manga it has handled so far. When it finishes, it logs
+how many manga it listed, how many are matched by each method, how many have a
+proposal waiting for review, and how many are still unmatched. A manga whose
+matches changed elsewhere while the scan ran is not in these totals; it counts
+toward a warning instead. These log entries contain counts, IDs, and codes
+only, never titles or addresses.
 
 ## Manga Library page
 
